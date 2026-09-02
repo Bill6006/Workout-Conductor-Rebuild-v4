@@ -17,12 +17,12 @@ const STROKE_PROPS = {
 export function NavIcon({ id }: NavIconProps) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" {...STROKE_PROPS}>
-      {ICON_PATHS[id]}
+      {ICON_PATHS[id] ?? null}
     </svg>
   );
 }
 
-const ICON_PATHS: Record<RouteId, ReactNode> = {
+const ICON_PATHS: Partial<Record<RouteId, ReactNode>> = {
   today: (
     <>
       <path d="M3 18h18" />

@@ -3,7 +3,14 @@
  * can link to another route without creating an import cycle.
  */
 
-export const ROUTE_IDS = ['today', 'workout', 'progress', 'plan', 'settings'] as const;
+export const ROUTE_IDS = [
+  'today',
+  'workout',
+  'progress',
+  'plan',
+  'settings',
+  'onboarding',
+] as const;
 
 export type RouteId = (typeof ROUTE_IDS)[number];
 
@@ -12,6 +19,7 @@ export interface NavItem {
   readonly label: string;
 }
 
+/** The five bottom-navigation destinations. Onboarding is a route without a tab. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'today', label: 'Today' },
   { id: 'workout', label: 'Workout' },

@@ -1,30 +1,30 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-02 20:05 UTC_
+_Last updated: 2026-09-02 22:30 UTC_
 
-| Item                   | Value                                                                                                                                                                                   |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                        |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                   |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                       |
-| Current phase          | Phase 0 - Repository, Live Pages, and Scaffold                                                                                                                                          |
-| Phase gate             | **YELLOW** - awaiting the owner's Android review of the live link                                                                                                                       |
-| Current branch         | `main`                                                                                                                                                                                  |
-| Latest completed phase | None yet (Phase 0 is at its review gate)                                                                                                                                                |
-| Work in progress       | Phase 0 review gate. No Phase 1 code has been started.                                                                                                                                  |
-| Latest commit          | Scaffold `0ee2c52` ([commit](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commit/0ee2c525bacd55a8fc5b1f804f949abc3dabf5cc)), followed by this status-and-screenshots commit |
-| Latest deployment      | Deploy Pages run [33676126959](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions/runs/33676126959): success, 2026-09-02 19:56 UTC, build marker `0ee2c52`                |
-| Test totals            | Unit: 41 passed. Browser/mobile: 20 passed locally and 20 passed against the live URL (18 smoke across 412 px, 360 px, desktop; 2 PWA)                                                  |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 0`                                                                                                            |
+| Item                   | Value                                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                   |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                   |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                           |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                      |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                          |
+| Current phase          | Phase 1 - Product Foundation and First Useful Live Preview                                                 |
+| Phase gate             | **YELLOW** - awaiting the owner's Android review of the live link                                          |
+| Current branch         | `main`                                                                                                     |
+| Latest completed phase | Phase 0 (GREEN from the owner on 2026-09-02)                                                               |
+| Work in progress       | Phase 1 review gate. No Phase 2 code has been started.                                                     |
+| Latest commit          | Phase 1 build (this commit); the follow-up commit adds live verification and screenshots                   |
+| Latest deployment      | Pending the Phase 1 deploy; last successful deploy before it was Phase 0 `81aeb56`                         |
+| Test totals            | Unit: 95 passed (17 files). Browser/mobile: 41 passed locally (13 flows × 412 px, 360 px, desktop + 2 PWA) |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 1`                               |
 
 ## Phase checklist
 
 | Phase | Name                                                         | Status               |
 | ----- | ------------------------------------------------------------ | -------------------- |
-| 0     | Repository, Live Pages, and Scaffold                         | YELLOW (review gate) |
-| 1     | Product Foundation and First Useful Live Preview             | planned              |
+| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner)        |
+| 1     | Product Foundation and First Useful Live Preview             | YELLOW (review gate) |
 | 2     | Exercise Catalog, Media, and Conflict Engine                 | planned              |
 | 3     | Workout Generation and Duration Engine                       | planned              |
 | 4     | Central Recalibration Engine                                 | planned              |
@@ -33,44 +33,43 @@ _Last updated: 2026-09-02 20:05 UTC_
 | 7     | Progress, Plan, Coverage, PRs, and Session Summary           | planned              |
 | 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | planned              |
 
-## Phase 0 deliverables
+## Phase 1 deliverables
 
-- [x] New public repository `Workout-Conductor-Rebuild-v4` (the preferred names already existed)
-- [x] Vite + React + TypeScript scaffold with CSS modules, Zod, Vitest, Playwright, ESLint, Prettier
-- [x] PWA shell: manifest, original icons (192, 512, maskable, Apple touch), service worker in prompt mode
-- [x] CI workflow: install, lint, type-check, unit tests, build, privacy scan, build verification, browser smoke test
-- [x] Pages workflow: reuses CI, deploys `dist/` to the permanent URL only after a fully green check
-- [x] Privacy rules (`docs/privacy-rules.md`) enforced by `scripts/privacy-scan.mjs`
-- [x] Blank but polished mobile shell: dark charcoal surfaces, lime accent, rounded cards, bottom navigation
-- [x] Today / Workout / Progress / Plan / Settings navigation with hash routing (deep links and reload work)
-- [x] Visible build marker and current-phase chip on every screen; Build status card on Today
-- [x] Permanent Pages URL live: shell, manifest, service worker, and icons served; the full browser suite passes against the live URL under Pixel 7 emulation
-- [x] Real Android-sized screenshots captured from the deployed build and committed (below)
-- [x] Milestone and master execution issue created
+- [x] Step-by-step onboarding (7 steps, plan defaults, skip with defaults, draft survives reload, conflicts explained)
+- [x] Profile and goals
+- [x] Equipment and location profiles (Home, Gym, Travel, Custom; Plan tab editor; current location switch)
+- [x] Preferences and limitations
+- [x] Settings for everything collected, with verified autosave and restart-onboarding
+- [x] localStorage for small settings and the onboarding draft
+- [x] IndexedDB durable-data foundation (profile, locations, workouts, meta)
+- [x] Schema validation with unknown-field preservation
+- [x] Write/read-back save-verification helper with rollback, receipt shown in Diagnostics
+- [x] Export Full Backup JSON / Import with preview, verified restore, and rollback
+- [x] Today dashboard with date, planned length, location, muscle focus, why-this-workout, profile summary
+- [x] Safe synthetic demo workout preview, clearly labeled
+- [ ] Interactive navigation and profile editing verified on the live Pages link (filled in after the deploy)
 - [ ] Owner opens the live link on the Android phone and gives the phase decision (review gate)
 
 ## Known limitations
 
-- Shell only. Onboarding, profiles, settings, persistence, and the synthetic demo workout arrive in Phase 1; the workout engine and the 15 / 30 / 45 / Default duration dropdown arrive in Phase 3.
-- `Start Workout` is intentionally disabled until a workout exists.
-- The "New version available" prompt exists but the hold-during-active-workout rule is wired in later, since no workout can be active yet.
-- Bundle: JS 285 KB raw / 87 KB gzip, CSS 8 KB, dist total 552 KB across 14 files; service worker precaches 18 entries.
-- Screenshots were captured from the `0ee2c52` deployment; the live build now shows the SHA of this status commit. The visible UI is identical.
-- Local test note (Windows): the sandboxed shell used during development drops loopback connections under parallel browser load, which produced spurious navigation timeouts locally. Outside that sandbox and on the CI runner the suite is stable (20/20 twice locally, green in CI, 20/20 against the live URL). Test-infrastructure note, not a product defect.
+- The demo workout is synthetic and says so. The real generation engine and the single 15 / 30 / 45 / Default workout-length dropdown arrive in Phase 3; until then Today shows "Default: N min" as a value.
+- `Start Workout` stays disabled until the active workout arrives in Phase 5. Readiness check-in arrives in Phase 6.
+- Exercise preferences are stored as names; Phase 2's catalog resolves them by alias.
+- Bodyweight-only home setups are accepted only once the catalog can build a bodyweight session (Phase 2/3); onboarding asks for at least one piece of home equipment when there is no gym access.
+- Bundle: JS 350 KB raw / 105 KB gzip, CSS 21 KB, dist total 629 KB across 14 files.
+- Playwright runs with two workers everywhere; four parallel Chromium contexts crashed the browser on the development machine.
 
 ## Mobile screenshots
 
-Captured by Playwright from the deployed build at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-0](docs/screenshots/phase-0)).
+Phase 0: [docs/screenshots/phase-0](docs/screenshots/phase-0) (preview sheet: [preview-sheet.png](docs/screenshots/phase-0/preview-sheet.png)).
 
-- Combined preview sheet: [preview-sheet.png](docs/screenshots/phase-0/preview-sheet.png)
-- Android 412 px (Pixel 7): [Today](docs/screenshots/phase-0/android-412-today.png) · [Workout](docs/screenshots/phase-0/android-412-workout.png) · [Progress](docs/screenshots/phase-0/android-412-progress.png) · [Plan](docs/screenshots/phase-0/android-412-plan.png) · [Settings](docs/screenshots/phase-0/android-412-settings.png)
-- Android 360 px: [Today](docs/screenshots/phase-0/android-360-today.png) · [Workout](docs/screenshots/phase-0/android-360-workout.png) · [Progress](docs/screenshots/phase-0/android-360-progress.png) · [Plan](docs/screenshots/phase-0/android-360-plan.png) · [Settings](docs/screenshots/phase-0/android-360-settings.png)
-- Desktop 1280 px: [Today](docs/screenshots/phase-0/desktop-today.png) · [Workout](docs/screenshots/phase-0/desktop-workout.png) · [Progress](docs/screenshots/phase-0/desktop-progress.png) · [Plan](docs/screenshots/phase-0/desktop-plan.png) · [Settings](docs/screenshots/phase-0/desktop-settings.png)
+Phase 1: captured from the deployed build after this commit's deploy; see [docs/screenshots/phase-1](docs/screenshots/phase-1).
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone and replies with one of `GREEN - NEXT PHASE`,
-`YELLOW - FIX: <issue>`, or `RED - STOP`. On GREEN, Phase 1 begins: step-by-step onboarding,
-profile and goals, equipment and location profiles, preferences and limitations, settings,
-localStorage + IndexedDB foundation with schema validation and verified saves, export/import
-foundation, Today dashboard, and a clearly labeled synthetic demo workout preview.
+Deploy this commit, run the browser suite against the live URL, capture Phase 1 screenshots from
+the live build, update this file, and stop at the review gate. Then the owner opens the live link
+on an Android phone and replies with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or
+`RED - STOP`. On GREEN, Phase 2 begins: the structured exercise catalog, muscle model, movement
+patterns, limitation tags, progression families, conflict validation, alternative-ranking
+foundation, media manifest and licensing register, and custom exercise schemas.

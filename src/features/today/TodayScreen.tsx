@@ -1,80 +1,64 @@
-import { buildInfo, formatBuiltAt, isRealCommit } from '../../app/buildInfo';
-import { CURRENT_PHASE, CURRENT_PHASE_GATE, getPhase } from '../../app/phases';
-import { ACTIONS_URL, REPO_URL, STATUS_URL, commitUrl } from '../../app/projectLinks';
-import { Button } from '../../components/Button/Button';
+import { routeHref } from '../../app/navigation';
 import { Card } from '../../components/Card/Card';
 import { FactList } from '../../components/FactList/FactList';
 import { ScreenHeader } from '../../components/Screen/Screen';
+import { useAppState } from '../../core/state/useAppStore';
+import { formatDayLabel, useNow } from '../../core/time/clock';
+import { GOAL_OPTIONS, STYLE_OPTIONS, labelFor } from '../profile/labels';
+import { DemoWorkoutCard } from './DemoWorkoutCard';
+import { buildDemoWorkout } from './demo/demoWorkout';
 import styles from './TodayScreen.module.css';
 
 export function TodayScreen() {
-  const phase = getPhase(CURRENT_PHASE);
-  const gateLabel =
-    CURRENT_PHASE_GATE === 'yellow' ? 'YELLOW · awaiting Android review' : 'IN PROGRESS';
+  const state = useAppState();
+  const now = useNow();
+  const profile = state.profile;
+
+  if (!profile) {
+    return (
+      <>
+        <ScreenHeader title="Today" intro={formatDayLabel(now)} />
+        <Card eyebrow="Setup" title="No profile yet">
+          <p className={styles.body}>
+            {state.error ?? 'Finish setup to see your workout.'}{' '}
+            <a href={routeHref('onboarding')}>Open setup</a>
+          </p>
+        </Card>
+      </>
+    );
+  }
+
+  const location = state.locations.find((candidate) => candidate.id === profile.currentLocationId);
+  const workout = buildDemoWorkout(profile, location);
 
   return (
     <>
-      <ScreenHeader
-        title="Today"
-        intro="Your recommended workout, planned duration, readiness, and muscle focus will live here."
-      />
+      <ScreenHeader title="Today" intro={formatDayLabel(now)} />
 
-      <Card tone="accent" eyebrow="Today's workout" title="No workout generated yet">
+      <DemoWorkoutCard workout={workout} location={location} />
+
+      <Card eyebrow="Readiness" title="Quick check-in arrives in Phase 6">
         <p className={styles.body}>
-          Onboarding and a clearly labeled synthetic demo workout arrive in Phase 1. The real
-          generation engine, with the single 15 / 30 / 45 / Default workout-length dropdown, arrives
-          in Phase 3.
-        </p>
-        <Button variant="primary" disabled aria-describedby="start-workout-hint">
-          Start Workout
-        </Button>
-        <p id="start-workout-hint" className={styles.hint}>
-          Enabled once a workout exists.
+          Energy, soreness, sleep, joint discomfort, and time pressure will adjust the session
+          instead of cancelling it.
         </p>
       </Card>
 
-      <Card eyebrow="Build status" title={`Phase ${phase.number} · ${phase.name}`}>
+      <Card eyebrow="Your profile" title="What the conductor knows">
         <FactList
           items={[
-            { label: 'Gate', value: <span className={styles.gate}>{gateLabel}</span> },
+            { label: 'Goal', value: labelFor(GOAL_OPTIONS, profile.goals.primary) },
+            { label: 'Style', value: labelFor(STYLE_OPTIONS, profile.trainingStyle) },
             {
-              label: 'Commit',
-              value: isRealCommit(buildInfo.commit) ? (
-                <a
-                  className={styles.mono}
-                  href={commitUrl(buildInfo.commit)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {buildInfo.shortCommit}
-                </a>
-              ) : (
-                <span className={styles.mono}>{buildInfo.shortCommit}</span>
-              ),
+              label: 'Schedule',
+              value: `${profile.schedule.weeklyFrequency} × ${profile.schedule.typicalDurationMinutes} min per week`,
             },
-            { label: 'Branch', value: buildInfo.branch },
-            { label: 'Built', value: formatBuiltAt(buildInfo.builtAt) },
-            { label: 'Version', value: buildInfo.version },
+            { label: 'Units', value: profile.units },
           ]}
         />
-        <div className={styles.links}>
-          <a className={styles.link} href={STATUS_URL} target="_blank" rel="noreferrer">
-            Project status
-          </a>
-          <a className={styles.link} href={REPO_URL} target="_blank" rel="noreferrer">
-            Repository
-          </a>
-          <a className={styles.link} href={ACTIONS_URL} target="_blank" rel="noreferrer">
-            Actions
-          </a>
-        </div>
-      </Card>
-
-      <Card eyebrow="Privacy" title="Local-first by design">
-        <p className={styles.body}>
-          No accounts, no analytics, no cloud sync. Your workout history will be stored only in this
-          browser, with export and import under your control.
-        </p>
+        <a className={styles.link} href={routeHref('settings')}>
+          Edit in Settings
+        </a>
       </Card>
     </>
   );

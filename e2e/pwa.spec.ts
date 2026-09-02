@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureProfile } from './helpers';
 
 /**
  * PWA behaviour of the app shell, run serially in its own project so that a
@@ -12,8 +13,7 @@ test.describe('PWA shell', () => {
     page,
     context,
   }) => {
-    await page.goto('./');
-    await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+    await ensureProfile(page);
 
     // Wait for full activation (not just "activating"): only an activated worker
     // controls pages loaded afterwards, and activation implies the precache
@@ -54,6 +54,8 @@ test.describe('PWA shell', () => {
     await page.goto('./#/settings');
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
     await expect(page.getByTestId('build-marker')).toBeVisible();
+    // Durable data is still there offline: the profile came from IndexedDB, not the network.
+    await expect(page.getByText('IndexedDB ready')).toBeVisible();
     await context.setOffline(false);
   });
 

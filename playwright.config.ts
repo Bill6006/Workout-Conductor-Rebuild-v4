@@ -9,6 +9,9 @@ import { defineConfig, devices } from '@playwright/test';
  * Chromium, which is a test artifact rather than a product behaviour. PWA
  * behaviour (install, control after reload, offline shell) is verified in the
  * dedicated `pwa` project, which runs serially after the smoke projects.
+ *
+ * Two workers everywhere: more parallel Chromium contexts destabilised the
+ * browser on the development machine, and CI runs two as well.
  */
 
 const REPO_NAME = 'Workout-Conductor-Rebuild-v4';
@@ -27,7 +30,7 @@ const deployedURL = process.env.E2E_BASE_URL;
 const baseURL = deployedURL ?? localURL;
 
 const pixel7 = { ...devices['Pixel 7'], deviceScaleFactor: 2 };
-const smokeSpecs = /smoke\.spec\.ts/;
+const smokeSpecs = /(smoke|onboarding|screenshots)\.spec\.ts/;
 const pwaSpecs = /pwa\.spec\.ts/;
 
 export default defineConfig({
@@ -35,7 +38,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : 4,
+  workers: 2,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   timeout: 30_000,
   expect: { timeout: 5_000 },

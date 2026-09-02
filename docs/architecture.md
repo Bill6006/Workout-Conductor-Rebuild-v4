@@ -1,7 +1,7 @@
 # Architecture
 
-This document grows with each phase. It currently describes the Phase 0 shell and the structure
-the later phases will fill in.
+This document grows with each phase. It describes the shell (Phase 0), the data and product
+foundation (Phase 1), and the structure later phases fill in.
 
 ## Principles
 
@@ -15,43 +15,66 @@ the later phases will fill in.
 - **Honest UI.** The shell shows the current phase and build marker on every screen, and a screen
   never pretends a feature exists before its phase.
 
-## Phase 0 shell
+## Source map
 
 ```
 src/
-  main.tsx                      entry; mounts <App /> with global styles
+  main.tsx                      entry; AppStoreProvider > ToastProvider > App
   app/
-    App.tsx                     routes the active screen inside the shell
-    navigation.ts               RouteId, NAV_ITEMS, parseRouteId (no component imports)
-    routes.ts                   RouteId -> screen component
-    useHashRoute.ts             hash-based routing (works under the Pages subpath and on reload)
+    App.tsx                     hydration gate, first-run redirect to onboarding, active screen
+    navigation.ts               RouteId, NAV_ITEMS (5 tabs; onboarding is a tab-less route)
+    routes.tsx                  RouteId -> screen component
+    useHashRoute.ts             hash routing (works under the Pages subpath and on reload)
     phases.ts                   the nine plan phases, CURRENT_PHASE, gate state
     buildInfo.ts                Zod-validated build marker injected by vite.config.ts
-    projectLinks.ts             repository / status / actions URLs shown in the shell
     pwa/UpdatePrompt.tsx        "New version available" prompt; never forces a refresh
-  components/
-    AppShell/                   header (brand, phase chip, build marker) + main + bottom nav
-    BottomNav/                  Today / Workout / Progress / Plan / Settings
-    NavIcons/                   original line icons
-    Card/, Button/, FactList/, Screen/   shared surfaces
+  core/
+    validation/                 Zod schemas: profile, location, settings, backup (loose objects)
+    storage/indexedDb.ts        promise wrapper, stores: profile, locations, workouts, meta
+    storage/verifiedSave.ts     write, read back, compare, roll back; SaveReceipt
+    storage/localSettings.ts    validated localStorage access with in-memory fallback
+    backup/                     build / parse / summarize / restore (with snapshot rollback)
+    state/appStore.ts           the single state owner (useSyncExternalStore), verified saves
+    time/clock.ts               minute clock hook so render stays pure
+  catalog/
+    equipment/                  equipment ids, categories, presets (Phase 2 extends)
+    exercises/                  seed exercise names (replaced by the Phase 2 catalog)
   features/
-    today/ workout/ progress/ plan/ settings/   one screen each
-  styles/
-    tokens.css                  design tokens (dark charcoal, lime accent, radii, safe areas)
-    global.css                  reset and base styles
+    onboarding/                 7-step wizard over a ProfileDraft, localStorage draft persistence
+    profile/draft.ts            ProfileDraft = profile + locations; one editing model
+    profile/editors/            Goals, Schedule, Places, ExercisePreferences, Limitations, Style, Units
+    profile/useProfileEditor    debounced verified autosave used by Settings and Plan
+    today/                      Today dashboard; demo/ holds the synthetic demo (deleted in Phase 3)
+    plan/                       training days, location list, LocationEditorSheet
+    settings/                   editor sections, BackupCard, DiagnosticsCard
+    workout/ progress/          placeholders until Phases 5 and 7
+  components/
+    AppShell/ BottomNav/ NavIcons/ Card/ Button/ FactList/ Screen/
+    Form/                       Field, ChoiceGroup, ChipSelect, Toggle, NumberField, TagInput, TextArea
+    Sheet/ Toast/ ProgressBar/
+  styles/                       tokens.css (dark charcoal, lime accent, radii, safe areas), global.css
 ```
 
 ### Routing
 
 Hash routing (`#/today`, `#/workout`, ...) keeps deep links and reloads working on GitHub Pages
-without a 404 fallback and without a router dependency. Unknown hashes fall back to Today.
+without a 404 fallback and without a router dependency. Unknown hashes fall back to Today. While
+no profile exists the app renders onboarding regardless of the hash and hides the tab bar.
+
+### State and persistence
+
+`AppStore` hydrates from IndexedDB and localStorage at startup and exposes a snapshot to React
+through `useSyncExternalStore`. Mutations (`saveProfile`, `saveLocation`, `deleteLocation`,
+`setCurrentLocation`, `completeOnboarding`, `applyBackup`) go through `putVerified` /
+`deleteVerified`, so state only changes after the write has been read back. See
+[data-model.md](data-model.md) for schemas and the backup contract.
 
 ### Build marker
 
 `vite.config.ts` injects `__BUILD_INFO__` (commit, branch, build time, version, phase). The app
-validates it with Zod and shows `Build <sha> · <time> UTC · Phase <n>` under the header, plus a
-Build status card on Today. `scripts/verify-build.mjs` checks the marker is really in the bundle
-and that the phase constant in `vite.config.ts` matches `src/app/phases.ts`.
+validates it with Zod and shows `Build <sha> · <time> UTC · Phase <n>` under the header;
+Settings, Diagnostics shows the full facts. `scripts/verify-build.mjs` checks the marker is really
+in the bundle and that the phase constant in `vite.config.ts` matches `src/app/phases.ts`.
 
 ### PWA
 
@@ -61,10 +84,9 @@ activated when the user taps Reload. Later phases hold the prompt during an acti
 ## Planned structure (from the execution plan)
 
 ```
-src/core/       state, storage (IndexedDB + localStorage), time, validation, backup
 src/engine/     workoutGenerator, recalibration, conflicts, alternatives, progression,
                 recovery, duration, volume, scoring
-src/catalog/    exercises, equipment, muscles, movementPatterns, mediaManifest
+src/catalog/    exercises (structured), muscles, movementPatterns, mediaManifest
 src/components/ DurationSelector, CalibrationOverlay, ExerciseCard, AlternativeSheet,
                 SetLogger, RestTimer, SupersetGroup, WorkoutSummary, Charts, Dialogs
 ```
@@ -72,6 +94,7 @@ src/components/ DurationSelector, CalibrationOverlay, ExerciseCard, AlternativeS
 ## Delivery pipeline
 
 `.github/workflows/ci.yml` runs install, lint, type-check, unit tests, build, privacy scan,
-build verification, and the Playwright smoke test. `.github/workflows/pages.yml` reuses that
-workflow on every push to `main` and deploys `dist/` to the permanent Pages URL only when every
-step passed.
+build verification, and the Playwright suite (three device projects plus a serial PWA project).
+`.github/workflows/pages.yml` reuses that workflow on every push to `main` and deploys `dist/`
+to the permanent Pages URL only when every step passed. `E2E_BASE_URL=<url> npx playwright test`
+runs the same suite against a deployed build.

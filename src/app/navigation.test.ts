@@ -51,8 +51,13 @@ describe('navigation model', () => {
     ]);
   });
 
-  it('keeps ROUTE_IDS and NAV_ITEMS in sync', () => {
-    expect(NAV_ITEMS.map((item) => item.id)).toEqual([...ROUTE_IDS]);
+  it('keeps every nav item a valid route and onboarding off the tab bar', () => {
+    for (const item of NAV_ITEMS) {
+      expect(ROUTE_IDS).toContain(item.id);
+    }
+    expect(ROUTE_IDS).toContain('onboarding');
+    expect(NAV_ITEMS.some((item) => item.id === 'onboarding')).toBe(false);
+    expect(parseRouteId('#/onboarding')).toBe('onboarding');
   });
 
   it('builds hash hrefs that parse back to the same route', () => {

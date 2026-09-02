@@ -9,10 +9,11 @@ const logoSrc = `${import.meta.env.BASE_URL}icons/icon.svg`;
 
 interface AppShellProps {
   activeRoute: RouteId;
+  showNav?: boolean;
   children: ReactNode;
 }
 
-export function AppShell({ activeRoute, children }: AppShellProps) {
+export function AppShell({ activeRoute, showNav = true, children }: AppShellProps) {
   const phase = getPhase(CURRENT_PHASE);
 
   return (
@@ -41,7 +42,7 @@ export function AppShell({ activeRoute, children }: AppShellProps) {
       <main className={styles.main} id="main">
         {children}
       </main>
-      <BottomNav activeRoute={activeRoute} />
+      {showNav ? <BottomNav activeRoute={activeRoute} /> : null}
     </div>
   );
 }

@@ -1,54 +1,33 @@
-import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
+import { expect, test } from '@playwright/test';
+import { TABS, ensureProfile, expectNoHorizontalOverflow } from './helpers';
 
 /**
- * Browser smoke test for the Phase 0 app shell. Runs against the production
- * build served under the GitHub Pages subpath (see playwright.config.ts).
+ * Browser smoke test for the app shell. Runs against the production build
+ * served under the GitHub Pages subpath (see playwright.config.ts).
  */
-
-const ROUTES = [
-  { id: 'today', label: 'Today' },
-  { id: 'workout', label: 'Workout' },
-  { id: 'progress', label: 'Progress' },
-  { id: 'plan', label: 'Plan' },
-  { id: 'settings', label: 'Settings' },
-] as const;
-
-const screenshotDir = process.env.SCREENSHOT_DIR ?? path.join('test-results', 'screenshots');
-
-async function expectNoHorizontalOverflow(page: Page) {
-  const widths = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }));
-  expect(widths.scrollWidth, 'page must not scroll horizontally').toBeLessThanOrEqual(
-    widths.clientWidth,
-  );
-}
 
 test.describe('app shell', () => {
   test('renders brand, current phase, and a visible build marker', async ({ page }) => {
     await page.goto('./');
     await expect(page.getByText('Workout Conductor', { exact: true })).toBeVisible();
     await expect(page.getByText('Adaptive Strength + Hypertrophy')).toBeVisible();
-    await expect(page.getByTestId('phase-chip')).toHaveText(/Phase 0/);
+    await expect(page.getByTestId('phase-chip')).toHaveText(/Phase 1/);
     await expect(page.getByTestId('build-marker')).toHaveText(
-      /^Build \S+ · \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC · Phase 0$/,
+      /^Build \S+ · \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC · Phase 1$/,
     );
     await expectNoHorizontalOverflow(page);
   });
 
   test('bottom navigation reaches all five screens', async ({ page }) => {
-    await page.goto('./');
+    await ensureProfile(page);
     const nav = page.getByRole('navigation', { name: 'Primary' });
     await expect(nav.getByRole('link')).toHaveCount(5);
 
-    for (const route of ROUTES) {
-      await nav.getByRole('link', { name: route.label }).click();
-      await expect(page).toHaveURL(new RegExp(`#/${route.id}$`));
-      await expect(page.getByRole('heading', { level: 1, name: route.label })).toBeVisible();
-      await expect(nav.getByRole('link', { name: route.label })).toHaveAttribute(
+    for (const tab of TABS) {
+      await nav.getByRole('link', { name: tab.label }).click();
+      await expect(page).toHaveURL(new RegExp(`#/${tab.id}$`));
+      await expect(page.getByRole('heading', { level: 1, name: tab.label })).toBeVisible();
+      await expect(nav.getByRole('link', { name: tab.label })).toHaveAttribute(
         'aria-current',
         'page',
       );
@@ -57,6 +36,7 @@ test.describe('app shell', () => {
   });
 
   test('a deep link opens the requested screen after reload', async ({ page }) => {
+    await ensureProfile(page);
     await page.goto('./#/plan');
     await expect(page.getByRole('heading', { level: 1, name: 'Plan' })).toBeVisible();
     await page.reload();
@@ -66,7 +46,7 @@ test.describe('app shell', () => {
   test('bottom navigation stays within thumb reach at the bottom of the viewport', async ({
     page,
   }) => {
-    await page.goto('./');
+    await ensureProfile(page);
     const nav = page.getByRole('navigation', { name: 'Primary' });
     const box = await nav.boundingBox();
     const viewport = page.viewportSize();
@@ -108,18 +88,5 @@ test.describe('app shell', () => {
     const serviceWorker = await request.get(new URL('sw.js', page.url()).toString());
     expect(serviceWorker.ok()).toBe(true);
     expect(await serviceWorker.text()).toContain('precache');
-  });
-
-  test('captures real screenshots of every screen @screenshots', async ({ page }, testInfo) => {
-    mkdirSync(screenshotDir, { recursive: true });
-    for (const route of ROUTES) {
-      await page.goto(`./#/${route.id}`);
-      await expect(page.getByRole('heading', { level: 1, name: route.label })).toBeVisible();
-      await page.waitForLoadState('networkidle');
-      await page.screenshot({
-        path: path.join(screenshotDir, `${testInfo.project.name}-${route.id}.png`),
-        fullPage: false,
-      });
-    }
   });
 });

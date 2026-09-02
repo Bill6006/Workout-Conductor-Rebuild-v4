@@ -1,3 +1,4 @@
+import { OnboardingScreen } from '../features/onboarding/OnboardingScreen';
 import { PlanScreen } from '../features/plan/PlanScreen';
 import { ProgressScreen } from '../features/progress/ProgressScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
@@ -22,5 +23,7 @@ export function ActiveScreen({ routeId }: ActiveScreenProps) {
       return <PlanScreen />;
     case 'settings':
       return <SettingsScreen />;
+    case 'onboarding':
+      return <OnboardingScreen />;
   }
 }

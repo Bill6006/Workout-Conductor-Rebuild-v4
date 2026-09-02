@@ -29,6 +29,13 @@ export default defineConfig([
     },
   },
   {
+    // Test helpers and tests legitimately export mixed helpers and components.
+    files: ['src/test/**/*.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
     files: ['scripts/**/*.mjs', '*.config.{js,ts}', 'e2e/**/*.ts'],
     extends: [js.configs.recommended],
     languageOptions: {
