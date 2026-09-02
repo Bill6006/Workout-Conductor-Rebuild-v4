@@ -17,7 +17,14 @@ const port = 4173;
 // 127.0.0.1 on purpose: "localhost" resolves to both loopback stacks and the
 // preview server binds only one of them, which made the browser's first
 // connection attempt stall on Windows. The preview script binds the same host.
-const baseURL = `http://127.0.0.1:${port}${base}`;
+const localURL = `http://127.0.0.1:${port}${base}`;
+
+/**
+ * Set E2E_BASE_URL to run the same suite against a deployed build, for example
+ * the permanent GitHub Pages URL after a deploy. No local server is started then.
+ */
+const deployedURL = process.env.E2E_BASE_URL;
+const baseURL = deployedURL ?? localURL;
 
 const pixel7 = { ...devices['Pixel 7'], deviceScaleFactor: 2 };
 const smokeSpecs = /smoke\.spec\.ts/;
@@ -61,10 +68,12 @@ export default defineConfig({
       use: { ...pixel7, serviceWorkers: 'allow' },
     },
   ],
-  webServer: {
-    command: 'npm run preview',
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  webServer: deployedURL
+    ? undefined
+    : {
+        command: 'npm run preview',
+        url: localURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 60_000,
+      },
 });

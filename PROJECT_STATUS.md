@@ -1,22 +1,23 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-02 15:45 UTC_
+_Last updated: 2026-09-02 20:05 UTC_
 
-| Item                   | Value                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                    |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                    |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                            |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                       |
-| Current phase          | Phase 0 - Repository, Live Pages, and Scaffold                                              |
-| Phase gate             | **YELLOW** - awaiting the owner's Android review of the live link                           |
-| Current branch         | `main`                                                                                      |
-| Latest completed phase | None yet (Phase 0 is at its review gate)                                                    |
-| Work in progress       | Phase 0 review gate. No Phase 1 code has been started.                                      |
-| Latest commit          | Pending first push (this file is updated after the push)                                    |
-| Latest deployment      | Pending first Pages deployment                                                              |
-| Test totals            | Unit: 41 passed. Browser/mobile: 20 passed (18 smoke across 412 px, 360 px, desktop; 2 PWA) |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 0`                |
+| Item                   | Value                                                                                                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                        |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                   |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                       |
+| Current phase          | Phase 0 - Repository, Live Pages, and Scaffold                                                                                                                                          |
+| Phase gate             | **YELLOW** - awaiting the owner's Android review of the live link                                                                                                                       |
+| Current branch         | `main`                                                                                                                                                                                  |
+| Latest completed phase | None yet (Phase 0 is at its review gate)                                                                                                                                                |
+| Work in progress       | Phase 0 review gate. No Phase 1 code has been started.                                                                                                                                  |
+| Latest commit          | Scaffold `0ee2c52` ([commit](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commit/0ee2c525bacd55a8fc5b1f804f949abc3dabf5cc)), followed by this status-and-screenshots commit |
+| Latest deployment      | Deploy Pages run [33676126959](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions/runs/33676126959): success, 2026-09-02 19:56 UTC, build marker `0ee2c52`                |
+| Test totals            | Unit: 41 passed. Browser/mobile: 20 passed locally and 20 passed against the live URL (18 smoke across 412 px, 360 px, desktop; 2 PWA)                                                  |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 0`                                                                                                            |
 
 ## Phase checklist
 
@@ -43,8 +44,10 @@ _Last updated: 2026-09-02 15:45 UTC_
 - [x] Blank but polished mobile shell: dark charcoal surfaces, lime accent, rounded cards, bottom navigation
 - [x] Today / Workout / Progress / Plan / Settings navigation with hash routing (deep links and reload work)
 - [x] Visible build marker and current-phase chip on every screen; Build status card on Today
-- [ ] Permanent Pages URL live and opened on the owner's Android phone (pending first deployment)
-- [ ] First real Android-sized screenshots committed (captured from the deployed build)
+- [x] Permanent Pages URL live: shell, manifest, service worker, and icons served; the full browser suite passes against the live URL under Pixel 7 emulation
+- [x] Real Android-sized screenshots captured from the deployed build and committed (below)
+- [x] Milestone and master execution issue created
+- [ ] Owner opens the live link on the Android phone and gives the phase decision (review gate)
 
 ## Known limitations
 
@@ -52,11 +55,17 @@ _Last updated: 2026-09-02 15:45 UTC_
 - `Start Workout` is intentionally disabled until a workout exists.
 - The "New version available" prompt exists but the hold-during-active-workout rule is wired in later, since no workout can be active yet.
 - Bundle: JS 285 KB raw / 87 KB gzip, CSS 8 KB, dist total 552 KB across 14 files; service worker precaches 18 entries.
-- Local test note (Windows): running the Playwright `pwa` project in isolation with 4 workers stalled first navigations; the plain full run used by CI is stable. Test-infrastructure note, not a product defect.
+- Screenshots were captured from the `0ee2c52` deployment; the live build now shows the SHA of this status commit. The visible UI is identical.
+- Local test note (Windows): the sandboxed shell used during development drops loopback connections under parallel browser load, which produced spurious navigation timeouts locally. Outside that sandbox and on the CI runner the suite is stable (20/20 twice locally, green in CI, 20/20 against the live URL). Test-infrastructure note, not a product defect.
 
 ## Mobile screenshots
 
-Pending: captured from the deployed build and stored in `docs/screenshots/phase-0/`.
+Captured by Playwright from the deployed build at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-0](docs/screenshots/phase-0)).
+
+- Combined preview sheet: [preview-sheet.png](docs/screenshots/phase-0/preview-sheet.png)
+- Android 412 px (Pixel 7): [Today](docs/screenshots/phase-0/android-412-today.png) · [Workout](docs/screenshots/phase-0/android-412-workout.png) · [Progress](docs/screenshots/phase-0/android-412-progress.png) · [Plan](docs/screenshots/phase-0/android-412-plan.png) · [Settings](docs/screenshots/phase-0/android-412-settings.png)
+- Android 360 px: [Today](docs/screenshots/phase-0/android-360-today.png) · [Workout](docs/screenshots/phase-0/android-360-workout.png) · [Progress](docs/screenshots/phase-0/android-360-progress.png) · [Plan](docs/screenshots/phase-0/android-360-plan.png) · [Settings](docs/screenshots/phase-0/android-360-settings.png)
+- Desktop 1280 px: [Today](docs/screenshots/phase-0/desktop-today.png) · [Workout](docs/screenshots/phase-0/desktop-workout.png) · [Progress](docs/screenshots/phase-0/desktop-progress.png) · [Plan](docs/screenshots/phase-0/desktop-plan.png) · [Settings](docs/screenshots/phase-0/desktop-settings.png)
 
 ## Next concrete action
 
