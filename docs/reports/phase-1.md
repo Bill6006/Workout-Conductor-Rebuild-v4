@@ -39,17 +39,17 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
 
 ## Verification
 
-| Check                                | Result                                                                                                                                                                                                    |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run lint` / `npm run typecheck` | clean                                                                                                                                                                                                     |
-| `npm run test:unit`                  | 95 passed across 17 files (schemas, IndexedDB, verified save, settings, backup, store, demo, onboarding, App flows, backup card)                                                                          |
-| `npm run build`                      | ok, 18 precache entries; JS 350 KB raw / 105 KB gzip, CSS 21 KB                                                                                                                                           |
-| `npm run privacy-scan`               | passed, 0 findings                                                                                                                                                                                        |
-| `npm run verify-build`               | passed                                                                                                                                                                                                    |
-| `npm run test:e2e` (local)           | 37 passed + 4 skipped by design: 11 flows on each of 412 px, 360 px, desktop (onboarding, settings persistence, places, export/import, navigation, overflow, PWA files) + capture flows on 412 px + 2 PWA |
-| Deploy Pages run 33680317024         | success: verify job green on the Linux runner (all 41 browser tests), deploy 9 s                                                                                                                          |
-| `npm run test:e2e` against live      | 41 passed against https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (build marker `6de52d2 · Phase 1`)                                                                                             |
-| Screenshots                          | 22 captures + preview sheet from the live build in `docs/screenshots/phase-1/`                                                                                                                            |
+| Check                                       | Result                                                                                                                                                                                                    |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint` / `npm run typecheck`        | clean                                                                                                                                                                                                     |
+| `npm run test:unit`                         | 95 passed across 17 files (schemas, IndexedDB, verified save, settings, backup, store, demo, onboarding, App flows, backup card)                                                                          |
+| `npm run build`                             | ok, 18 precache entries; JS 350 KB raw / 105 KB gzip, CSS 21 KB                                                                                                                                           |
+| `npm run privacy-scan`                      | passed, 0 findings                                                                                                                                                                                        |
+| `npm run verify-build`                      | passed                                                                                                                                                                                                    |
+| `npm run test:e2e` (local)                  | 37 passed + 4 skipped by design: 11 flows on each of 412 px, 360 px, desktop (onboarding, settings persistence, places, export/import, navigation, overflow, PWA files) + capture flows on 412 px + 2 PWA |
+| Deploy Pages runs 33680317024 / 33681260911 | success: Phase 1 build `6de52d2`, then the first-run scroll fix `f9e58d2`; verify job green on the Linux runner both times                                                                                |
+| `npm run test:e2e` against live             | 37 passed + 4 skipped by design against https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (build marker `f9e58d2 · Phase 1`); 41 passed on `6de52d2` before the fix                                |
+| Screenshots                                 | 22 captures + preview sheet from the live `f9e58d2` build in `docs/screenshots/phase-1/`                                                                                                                  |
 
 ## Decisions and notes
 
@@ -62,6 +62,9 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
   equipment has exactly one owner.
 - Playwright runs with two workers everywhere: four parallel Chromium contexts crashed the browser
   on the development machine, and CI already uses two.
+- Reviewing the first live captures showed Today opening mid-page after setup: the hash does not
+  change on that transition, so the scroll reset is now keyed on the effective route and the
+  onboarding flow asserts `scrollY === 0` after finishing.
 
 ## Next
 
