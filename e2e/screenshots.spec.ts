@@ -6,13 +6,27 @@ import { TABS, ensureProfile } from './helpers';
 /**
  * Real screenshots of the working application, used as phase evidence.
  * Output folder comes from SCREENSHOT_DIR (see scripts/screenshots.mjs).
+ *
+ * The five tabs are captured on every device project; onboarding steps, sheets,
+ * and the full-page Today capture come from the primary Android project only,
+ * which keeps the committed evidence set small.
  */
 
 const screenshotDir = process.env.SCREENSHOT_DIR ?? path.join('test-results', 'screenshots');
+const PRIMARY_PROJECT = 'android-412';
+
+async function settleToasts(page: Page) {
+  await expect(page.locator('[role="status"] > *')).toHaveCount(0, { timeout: 8_000 });
+}
 
 async function capture(page: Page, testInfo: TestInfo, name: string, fullPage = false) {
   mkdirSync(screenshotDir, { recursive: true });
   await page.waitForLoadState('networkidle');
+  await settleToasts(page);
+  if (fullPage) {
+    // Fixed elements would repeat mid-page in a full-page capture.
+    await page.addStyleTag({ content: 'nav[aria-label="Primary"] { display: none !important; }' });
+  }
   await page.screenshot({
     path: path.join(screenshotDir, `${testInfo.project.name}-${name}.png`),
     fullPage,
@@ -21,6 +35,7 @@ async function capture(page: Page, testInfo: TestInfo, name: string, fullPage = 
 
 test.describe('screenshots @screenshots', () => {
   test('onboarding steps', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');
     await page.goto('./');
     await expect(
       page.getByRole('heading', { level: 1, name: 'What are you training for?' }),
@@ -51,12 +66,15 @@ test.describe('screenshots @screenshots', () => {
       await expect(page.getByRole('heading', { level: 1, name: tab.label })).toBeVisible();
       await capture(page, testInfo, tab.id);
     }
-    await page.goto('./#/today');
-    await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
-    await capture(page, testInfo, 'today-full', true);
+    if (testInfo.project.name === PRIMARY_PROJECT) {
+      await page.goto('./#/today');
+      await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+      await capture(page, testInfo, 'today-full', true);
+    }
   });
 
   test('sheets', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');
     await ensureProfile(page);
     await page.goto('./#/plan');
     await page.getByRole('button', { name: 'Add a place' }).click();

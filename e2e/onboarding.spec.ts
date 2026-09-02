@@ -69,6 +69,8 @@ test.describe('onboarding', () => {
     await expect(page.getByText(/Default: \d+ min/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start Workout' })).toBeDisabled();
     await expectNoHorizontalOverflow(page);
+    // Finishing setup lands at the top of Today, not where the wizard was scrolled.
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
     // The profile is durable: a reload skips setup and rebuilds the same preview.
     await page.reload();

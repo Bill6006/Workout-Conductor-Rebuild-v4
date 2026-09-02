@@ -39,15 +39,17 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
 
 ## Verification
 
-| Check                                | Result                                                                                                                                                                 |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run lint` / `npm run typecheck` | clean                                                                                                                                                                  |
-| `npm run test:unit`                  | 95 passed across 17 files (schemas, IndexedDB, verified save, settings, backup, store, demo, onboarding, App flows, backup card)                                       |
-| `npm run build`                      | ok, 18 precache entries; JS 350 KB raw / 105 KB gzip, CSS 21 KB                                                                                                        |
-| `npm run privacy-scan`               | passed, 0 findings                                                                                                                                                     |
-| `npm run verify-build`               | passed                                                                                                                                                                 |
-| `npm run test:e2e` (local)           | 41 passed: 13 flows on each of 412 px, 360 px, desktop (onboarding, settings persistence, places, export/import, navigation, overflow, PWA files, screenshots) + 2 PWA |
-| Against the live URL                 | filled in at the gate                                                                                                                                                  |
+| Check                                | Result                                                                                                                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint` / `npm run typecheck` | clean                                                                                                                                                                                                     |
+| `npm run test:unit`                  | 95 passed across 17 files (schemas, IndexedDB, verified save, settings, backup, store, demo, onboarding, App flows, backup card)                                                                          |
+| `npm run build`                      | ok, 18 precache entries; JS 350 KB raw / 105 KB gzip, CSS 21 KB                                                                                                                                           |
+| `npm run privacy-scan`               | passed, 0 findings                                                                                                                                                                                        |
+| `npm run verify-build`               | passed                                                                                                                                                                                                    |
+| `npm run test:e2e` (local)           | 37 passed + 4 skipped by design: 11 flows on each of 412 px, 360 px, desktop (onboarding, settings persistence, places, export/import, navigation, overflow, PWA files) + capture flows on 412 px + 2 PWA |
+| Deploy Pages run 33680317024         | success: verify job green on the Linux runner (all 41 browser tests), deploy 9 s                                                                                                                          |
+| `npm run test:e2e` against live      | 41 passed against https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (build marker `6de52d2 · Phase 1`)                                                                                             |
+| Screenshots                          | 22 captures + preview sheet from the live build in `docs/screenshots/phase-1/`                                                                                                                            |
 
 ## Decisions and notes
 

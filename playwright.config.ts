@@ -57,7 +57,8 @@ export default defineConfig({
     {
       name: 'android-360',
       testMatch: smokeSpecs,
-      use: { ...pixel7, viewport: { width: 360, height: 800 } },
+      // 1x is enough for the narrow-width layout check and keeps evidence files small.
+      use: { ...pixel7, viewport: { width: 360, height: 800 }, deviceScaleFactor: 1 },
     },
     {
       name: 'desktop',

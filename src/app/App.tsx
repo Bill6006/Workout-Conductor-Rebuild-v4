@@ -11,9 +11,15 @@ export function App() {
   const routeId = useHashRoute();
   const state = useAppState();
 
+  // First run (or a storage error with nothing saved) goes straight to setup.
+  const needsOnboarding = state.status === 'ready' && state.profile === null;
+  const effectiveRoute: RouteId = needsOnboarding ? 'onboarding' : routeId;
+
+  // Keyed on the effective route so finishing setup (hash unchanged) also
+  // starts Today at the top instead of wherever the wizard was scrolled.
   useEffect(() => {
     window.scrollTo({ top: 0 });
-  }, [routeId]);
+  }, [effectiveRoute]);
 
   if (state.status === 'loading') {
     return (
@@ -25,9 +31,6 @@ export function App() {
     );
   }
 
-  // First run (or a storage error with nothing saved) goes straight to setup.
-  const needsOnboarding = state.status === 'ready' && state.profile === null;
-  const effectiveRoute: RouteId = needsOnboarding ? 'onboarding' : routeId;
   const showNav = effectiveRoute !== 'onboarding';
 
   return (
