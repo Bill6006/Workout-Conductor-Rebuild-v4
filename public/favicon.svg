@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Workout Conductor">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="38%" r="65%">
+      <stop offset="0" stop-color="#22301a"/>
+      <stop offset="1" stop-color="#0e1012"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <g fill="#c6f542">
+    <rect x="124" y="292" width="56" height="96" rx="18"/>
+    <rect x="212" y="236" width="56" height="152" rx="18"/>
+    <rect x="300" y="168" width="56" height="220" rx="18"/>
+  </g>
+  <path d="M112 204 C 196 100, 322 86, 398 136" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="402" cy="138" r="19" fill="#ffffff"/>
+</svg>

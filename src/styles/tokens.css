@@ -1,0 +1,41 @@
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: dark charcoal, near-black */
+  --color-bg: #0e1012;
+  --color-bg-elevated: #171a1e;
+  --color-bg-raised: #1f2329;
+  --color-border: rgba(255, 255, 255, 0.07);
+  --color-border-strong: rgba(255, 255, 255, 0.13);
+
+  /* Primary accent: lime green */
+  --color-accent: #c6f542;
+  --color-accent-strong: #b7ea2c;
+  --color-accent-soft: rgba(198, 245, 66, 0.14);
+  --color-on-accent: #0b0d0f;
+
+  /* Status */
+  --color-yellow: #f5c542;
+  --color-yellow-soft: rgba(245, 197, 66, 0.16);
+
+  /* Text */
+  --color-text: #f4f6f7;
+  --color-text-muted: #9aa3ad;
+  --color-text-subtle: #6a7380;
+
+  /* Shape and depth */
+  --radius-card: 22px;
+  --radius-control: 16px;
+  --radius-pill: 999px;
+  --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.35);
+
+  /* Layout */
+  --shell-max-width: 480px;
+  --nav-height: 66px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Type: system stack only, no remote fonts */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Roboto Mono', Menlo, monospace;
+}

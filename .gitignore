@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+dev-dist/
+*.tsbuildinfo
+
+# test output
+coverage/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# environment
+.env
+.env.*
+*.local
+
+# editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# PRIVACY: real user data must never be committed.
+# Exports, backups, and workout history live only in the user's browser.
+*backup*.json
+*.backup.json
+*export*.json
+workout-history*.json
+exports/
+backups/

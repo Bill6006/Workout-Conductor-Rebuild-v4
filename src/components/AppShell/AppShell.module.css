@@ -1,0 +1,97 @@
+.shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  max-width: var(--shell-max-width);
+  margin: 0 auto;
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 20px);
+  background:
+    radial-gradient(120% 55% at 50% -10%, rgba(198, 245, 66, 0.09) 0%, rgba(198, 245, 66, 0) 60%),
+    var(--color-bg);
+}
+
+@media (min-width: 720px) {
+  .shell {
+    border-left: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(var(--safe-top) + 18px) 20px 6px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brandText {
+  min-width: 0;
+}
+
+.logo {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.brandName {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.brandTagline {
+  font-size: 0.76rem;
+  line-height: 1.3;
+  color: var(--color-text-muted);
+}
+
+.phaseChip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid rgba(198, 245, 66, 0.35);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.phaseDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-yellow);
+  box-shadow: 0 0 0 3px var(--color-yellow-soft);
+}
+
+.buildMarker {
+  padding: 0 20px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
+  color: var(--color-text-subtle);
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 16px 12px;
+}

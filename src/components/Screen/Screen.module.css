@@ -1,0 +1,46 @@
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px 4px;
+}
+
+.title {
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.intro {
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 0.92rem;
+  color: var(--color-text-muted);
+}
+
+.list li::before {
+  content: '';
+  position: absolute;
+  top: 0.55em;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  opacity: 0.85;
+}
