@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                         |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                      |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                      |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                              |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                         |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                             |
-| Current phase          | Phase 4 - Central Recalibration Engine                                                                                                        |
-| Phase gate             | **YELLOW** - Phase 4 work complete and deployed from this commit; awaiting the owner's review on Android                                      |
-| Current branch         | `main`                                                                                                                                        |
-| Latest completed phase | Phase 3 (GREEN from the owner on 2026-09-03)                                                                                                  |
-| Work in progress       | Phase 4 review gate. No Phase 5 code has been started.                                                                                        |
-| Latest commit          | Phase 4 overlay polish (this commit): solid calibration card; the engine build is `e7396c7`                                                   |
-| Latest deployment      | `e7396c7` deployed by Deploy Pages run 33752540844 (success); full browser suite passed against the live URL; this polish commit deploys next |
-| Test totals            | Unit: 192 passed (29 files). Browser/mobile: 62 passed + 6 skipped by design, locally and against the live URL                                |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 4`                                                                  |
+| Item                   | Value                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                    |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                    |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                            |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                       |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                           |
+| Current phase          | Phase 4 - Central Recalibration Engine                                                                                                                                                      |
+| Phase gate             | **YELLOW** - Phase 4 work complete, deployed, and verified live; awaiting the owner's review on Android                                                                                     |
+| Current branch         | `main`                                                                                                                                                                                      |
+| Latest completed phase | Phase 3 (GREEN from the owner on 2026-09-03)                                                                                                                                                |
+| Work in progress       | Phase 4 review gate. No Phase 5 code has been started.                                                                                                                                      |
+| Latest commit          | Phase 4 docs and screenshots (this commit); app build under review is `d7b7086` (engine landed in `e7396c7`)                                                                                |
+| Latest deployment      | `d7b7086` deployed by Deploy Pages run 33753231920 (success); `e7396c7` by run 33752540844; full browser suite passed against the live URL; 30 screenshots captured from the deployed build |
+| Test totals            | Unit: 192 passed (29 files). Browser/mobile: 62 passed + 6 skipped by design, locally and against the live URL                                                                              |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 4`                                                                                                                |
 
 ## Phase checklist
 
@@ -88,14 +88,14 @@ _Last updated: _
 
 ## Mobile screenshots
 
-Phase 3, captured by Playwright from the deployed build `f30bec0` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-3](docs/screenshots/phase-3)).
+Phase 4, captured by Playwright from the deployed build `d7b7086` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-4](docs/screenshots/phase-4)).
 
-- Combined preview sheet: [preview-sheet.png](docs/screenshots/phase-3/preview-sheet.png)
-- Android 412 px (Pixel 7): [Today, Default time](docs/screenshots/phase-3/android-412-today.png) · [Today, fitted to 15 min](docs/screenshots/phase-3/android-412-today-15-min.png) · [Today full page](docs/screenshots/phase-3/android-412-today-full.png) · [Today alternatives](docs/screenshots/phase-3/android-412-today-alternatives.png) · [Workout list](docs/screenshots/phase-3/android-412-workout.png) · [Library](docs/screenshots/phase-3/android-412-library.png) · [Exercise detail sheet](docs/screenshots/phase-3/android-412-exercise-detail.png) · [Onboarding 1 goals](docs/screenshots/phase-3/android-412-onboarding-1-goals.png) · [Progress](docs/screenshots/phase-3/android-412-progress.png) · [Plan](docs/screenshots/phase-3/android-412-plan.png) · [Settings](docs/screenshots/phase-3/android-412-settings.png)
-- Android 360 px: [Today](docs/screenshots/phase-3/android-360-today.png) · [Workout](docs/screenshots/phase-3/android-360-workout.png) · [Progress](docs/screenshots/phase-3/android-360-progress.png) · [Plan](docs/screenshots/phase-3/android-360-plan.png) · [Settings](docs/screenshots/phase-3/android-360-settings.png)
-- Desktop 1280 px: [Today](docs/screenshots/phase-3/desktop-today.png) · [Workout](docs/screenshots/phase-3/desktop-workout.png) · [Progress](docs/screenshots/phase-3/desktop-progress.png) · [Plan](docs/screenshots/phase-3/desktop-plan.png) · [Settings](docs/screenshots/phase-3/desktop-settings.png)
+- Combined preview sheet: [preview-sheet.png](docs/screenshots/phase-4/preview-sheet.png)
+- Android 412 px (Pixel 7): [Calibration overlay](docs/screenshots/phase-4/android-412-calibration-overlay.png) · [Today after recalibration](docs/screenshots/phase-4/android-412-today-recalibrated.png) · [Session-only actions](docs/screenshots/phase-4/android-412-today-session-actions.png) · [Workout tab with recalibration log](docs/screenshots/phase-4/android-412-workout-recalibration-log.png) · [Today, Default time](docs/screenshots/phase-4/android-412-today.png) · [Today, fitted to 15 min](docs/screenshots/phase-4/android-412-today-15-min.png) · [Today full page](docs/screenshots/phase-4/android-412-today-full.png) · [Today alternatives](docs/screenshots/phase-4/android-412-today-alternatives.png) · [Workout list](docs/screenshots/phase-4/android-412-workout.png) · [Library](docs/screenshots/phase-4/android-412-library.png) · [Exercise detail sheet](docs/screenshots/phase-4/android-412-exercise-detail.png) · [Progress](docs/screenshots/phase-4/android-412-progress.png) · [Plan](docs/screenshots/phase-4/android-412-plan.png) · [Settings](docs/screenshots/phase-4/android-412-settings.png)
+- Android 360 px: [Today](docs/screenshots/phase-4/android-360-today.png) · [Workout](docs/screenshots/phase-4/android-360-workout.png) · [Progress](docs/screenshots/phase-4/android-360-progress.png) · [Plan](docs/screenshots/phase-4/android-360-plan.png) · [Settings](docs/screenshots/phase-4/android-360-settings.png)
+- Desktop 1280 px: [Today](docs/screenshots/phase-4/desktop-today.png) · [Workout](docs/screenshots/phase-4/desktop-workout.png) · [Progress](docs/screenshots/phase-4/desktop-progress.png) · [Plan](docs/screenshots/phase-4/desktop-plan.png) · [Settings](docs/screenshots/phase-4/desktop-settings.png)
 
-Phase 2: [docs/screenshots/phase-2](docs/screenshots/phase-2) · Phase 1: [docs/screenshots/phase-1](docs/screenshots/phase-1) · Phase 0: [docs/screenshots/phase-0](docs/screenshots/phase-0).
+Phase 3: [docs/screenshots/phase-3](docs/screenshots/phase-3) · Phase 2: [docs/screenshots/phase-2](docs/screenshots/phase-2) · Phase 1: [docs/screenshots/phase-1](docs/screenshots/phase-1) · Phase 0: [docs/screenshots/phase-0](docs/screenshots/phase-0).
 
 ## Next concrete action
 

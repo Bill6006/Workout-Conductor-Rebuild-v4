@@ -16,7 +16,7 @@
   padding: 22px 22px 20px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-card);
-  /* The elevated token is a translucent tint; stack it on the solid ground so nothing bleeds through. */
+  /* Solid on purpose: the backdrop fades in, and the card must never read as see-through. */
   background: linear-gradient(var(--color-bg-elevated), var(--color-bg-elevated)), var(--color-bg);
   box-shadow: var(--shadow-card);
   text-align: left;
