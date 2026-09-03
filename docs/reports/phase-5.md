@@ -82,7 +82,7 @@ _Gate: YELLOW, awaiting the owner's review on Android._
   notes, active session surviving a new day, custom exercises and media), and the Set Logger
   component (one-tap log, nudge and type, edit mode, disabled and cooldown).
 - Browser: 75 tests passed + 8 skipped by design on Android 412 px, Android 360 px, desktop,
-  and the PWA project, locally and against the live URL. New flows: one-tap logging with the rest
+  and the PWA project, locally and against the live URL (two desktop runs hit a network timeout reaching GitHub Pages while the screenshot capture ran alongside; rerun alone they passed). New flows: one-tap logging with the rest
   timer and inline correction, pause and resume, early finish with rating and the completion
   summary, the next session rotating after Done; superset rounds with both moves together and no
   rest between them; notes, Plate Math, and an active session surviving a reload; 275 px and
