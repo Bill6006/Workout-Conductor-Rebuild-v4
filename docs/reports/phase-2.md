@@ -6,7 +6,7 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
 
 ## Delivered
 
-- **Structured exercise catalog** (84 exercises) authored through `defineExercise` and validated
+- **Structured exercise catalog** (83 exercises) authored through `defineExercise` and validated
   by `ExerciseSchema`: id, name, aliases, primary and secondary muscles, movement pattern,
   compound / unilateral, strength and hypertrophy suitability, default training role, equipment
   requirement groups (any-of / all-of, bodyweight allowed), location suitability, setup time,
@@ -46,16 +46,17 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
 
 ## Verification
 
-| Check                        | Result                                                                                                                                                    |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run lint` / `typecheck` | clean                                                                                                                                                     |
-| `npm run test:unit`          | 136 passed across 24 files (catalog integrity, media files and licensing, conflict engine, alternatives, custom schemas, DB upgrade, demo, library, App)   |
-| `npm run build`              | ok; placeholder media precached with the shell                                                                                                            |
-| `npm run privacy-scan`       | passed, 0 findings                                                                                                                                        |
-| `npm run verify-build`       | passed                                                                                                                                                    |
-| `npm run test:e2e` (local)   | filled in at the gate                                                                                                                                     |
-| Against the live URL         | filled in at the gate                                                                                                                                     |
-| Screenshots                  | filled in at the gate                                                                                                                                     |
+| Check                        | Result                                                                                                                                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint` / `typecheck` | clean                                                                                                                                                                                         |
+| `npm run test:unit`          | 136 passed across 24 files (catalog integrity, media files and licensing, conflict engine, alternatives, custom schemas, DB upgrade, demo, library, App)                                      |
+| `npm run build`              | ok; placeholder media precached with the shell                                                                                                                                                |
+| `npm run privacy-scan`       | passed, 0 findings                                                                                                                                                                            |
+| `npm run verify-build`       | passed                                                                                                                                                                                        |
+| `npm run test:e2e` (local)   | 44 passed + 6 skipped by design: 12 flows on each of 412 px, 360 px, desktop (smoke, onboarding, settings, places, export/import, library, Today alternatives) + 412 px capture flows + 2 PWA |
+| Deploy Pages run 33701273547 | success: verify job green on the Linux runner, deploy 7 s; build marker `b65dc4c · Phase 2`                                                                                                   |
+| Against the live URL         | 44 passed + 6 skipped by design against https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                              |
+| Screenshots                  | 25 captures + preview sheet from the live `b65dc4c` build in `docs/screenshots/phase-2/`                                                                                                      |
 
 ## Decisions and notes
 
@@ -69,6 +70,10 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
   never mixes with licensed production media.
 - The catalog test forbids a name or alias pointing at two exercises, so stored preference names
   resolve unambiguously.
+- Found while testing on Pixel 7 emulation: `overflow: hidden` on the demonstration figure made it
+  a programmatic scroll container, so scroll-into-view scrolled the figure's own content and the
+  Pause button drifted under other elements. `overflow: clip` fixes it; the sheet's focus effect
+  now runs only on open/close.
 
 ## Next
 
