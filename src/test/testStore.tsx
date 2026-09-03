@@ -27,6 +27,8 @@ export function createTestStore(options: TestStoreOptions = {}): TestStoreHandle
     openDb: () => openDatabase({ factory, name: 'wc-test' }),
     storage,
     now: () => TEST_NOW,
+    // Tests assert on results, not on the overlay's minimum visible time.
+    minOverlayMs: 0,
     ...options,
   });
   return { store, factory, storage };

@@ -203,3 +203,128 @@
   letter-spacing: 0.02em;
   color: var(--color-accent);
 }
+
+/* Phase 4: recalibration summary, changed-row marks, exact end time */
+.summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-control);
+  background: var(--color-accent-soft);
+  animation: summary-in 320ms ease-out;
+}
+
+.summaryBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.summaryHeadline {
+  display: block;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.summaryDetails {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.summaryDetails summary {
+  cursor: pointer;
+  color: var(--color-accent);
+}
+
+.summaryDetails ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.summaryActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.summaryButton {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-raised);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exercise[data-changed] {
+  animation: row-changed 1600ms ease-out;
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.tagQuiet {
+  background: var(--color-bg-raised);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-strong);
+}
+
+.endBy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 10px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.endBy input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-accent);
+}
+
+@keyframes summary-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes row-changed {
+  0% {
+    background: var(--color-accent-soft);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary,
+  .exercise[data-changed] {
+    animation: none;
+  }
+}

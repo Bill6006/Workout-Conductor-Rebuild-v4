@@ -36,6 +36,7 @@ test.describe('workout length', () => {
   test('the Workout tab shows the same session as one row per block', async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId('duration-select').selectOption('45');
+    await expect(page.getByTestId('workout-estimate')).toContainText('Fitted to 45 min');
     await page.goto('./#/workout');
     const list = page.getByRole('list', { name: 'Active workout list' });
     await expect(list).toBeVisible();

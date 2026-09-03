@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { exerciseEquipmentLabel } from '../../catalog/exercises/catalog';
-import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
+import { JOINTS, type CatalogExercise, type Joint } from '../../catalog/exercises/exerciseSchema';
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
 import type { AlternativeResult } from '../../engine/alternatives/rankAlternatives';
@@ -14,12 +15,24 @@ export interface PreferenceControls {
   onDislike: () => void;
 }
 
+/** Session-only actions for an exercise in today's workout; none touch the saved profile. */
+export interface SessionActions {
+  pinned: boolean;
+  onPin: () => void;
+  onBusy: () => void;
+  onUncomfortable: () => void;
+  onSkip: () => void;
+  onPain: (joint: Joint) => void;
+  onUseAlternative: (exerciseId: string) => void;
+}
+
 interface ExerciseDetailSheetProps {
   exercise: CatalogExercise | null;
   onClose: () => void;
   availableEquipment?: ReadonlySet<string>;
   alternatives?: AlternativeResult | null;
   preference?: PreferenceControls;
+  sessionActions?: SessionActions;
 }
 
 const ROLE_LABELS: Record<CatalogExercise['defaultRole'], string> = {
@@ -41,13 +54,20 @@ function repRangeLabel(exercise: CatalogExercise): string {
   return parts.join(' · ');
 }
 
+function jointName(joint: Joint): string {
+  const words = joint.replace('-', ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function ExerciseDetailSheet({
   exercise,
   onClose,
   availableEquipment,
   alternatives,
   preference,
+  sessionActions,
 }: ExerciseDetailSheetProps) {
+  const [painJoint, setPainJoint] = useState<Joint>('shoulder');
   if (!exercise) return null;
 
   const traits = [
@@ -124,6 +144,59 @@ export function ExerciseDetailSheet({
         </div>
       ) : null}
 
+      {sessionActions ? (
+        <section className={styles.section} aria-label="This session">
+          <h3 className={styles.sectionTitle}>This session only</h3>
+          <p className={styles.text}>
+            Each change recalibrates just what it touches. Your saved profile and place stay as they
+            are.
+          </p>
+          <div className={styles.actionGrid}>
+            <button
+              type="button"
+              className={styles.actionButton}
+              aria-pressed={sessionActions.pinned}
+              onClick={sessionActions.onPin}
+            >
+              {sessionActions.pinned ? 'Pinned ✓' : 'Pin'}
+            </button>
+            <button type="button" className={styles.actionButton} onClick={sessionActions.onBusy}>
+              Equipment busy
+            </button>
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={sessionActions.onUncomfortable}
+            >
+              Uncomfortable
+            </button>
+            <button type="button" className={styles.actionButton} onClick={sessionActions.onSkip}>
+              Skip today
+            </button>
+          </div>
+          <div className={styles.painRow}>
+            <select
+              aria-label="Which joint hurts?"
+              value={painJoint}
+              onChange={(event) => setPainJoint(event.target.value as Joint)}
+            >
+              {JOINTS.map((joint) => (
+                <option key={joint} value={joint}>
+                  {jointName(joint)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={() => sessionActions.onPain(painJoint)}
+            >
+              Hurts, protect it
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>Setup</h3>
         <ol className={styles.steps}>
@@ -151,8 +224,10 @@ export function ExerciseDetailSheet({
         <section className={styles.section} aria-label="Alternatives">
           <h3 className={styles.sectionTitle}>Alternatives, best match first</h3>
           <p className={styles.text}>
-            Ranked by muscles, pattern, role, equipment here, and your limitations. Tap-to-replace
-            arrives with the active workout in Phase 5.
+            Ranked by muscles, pattern, role, equipment here, and your limitations.
+            {sessionActions
+              ? ' Use one to swap only this exercise; the rest of the workout stays put.'
+              : ''}
           </p>
           {alternatives.candidates.length === 0 ? (
             <p className={styles.empty}>{alternatives.emptyReason}</p>
@@ -183,6 +258,17 @@ export function ExerciseDetailSheet({
                       <span className={styles.alternativeWarn}>{candidate.warnings[0]}</span>
                     ) : null}
                   </div>
+                  {sessionActions ? (
+                    <button
+                      type="button"
+                      className={styles.useButton}
+                      data-testid="use-alternative"
+                      onClick={() => sessionActions.onUseAlternative(candidate.exercise.id)}
+                      aria-label={`Use ${candidate.exercise.name} instead`}
+                    >
+                      Use
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ol>

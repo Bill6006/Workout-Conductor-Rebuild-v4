@@ -34,6 +34,10 @@ export interface WorkoutEntry {
   chosenFor: MuscleId[];
   locked: boolean;
   pinned: boolean;
+  /** Template slot this entry fills; kept entries return to the same slot when the rest is rebuilt. */
+  slot?: number;
+  /** Catalog id this entry replaced, when the user or the engine swapped it this session. */
+  replacedFrom?: string;
 }
 
 export type BlockKind = 'straight' | 'superset' | 'circuit';

@@ -1,0 +1,124 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 12, 14, 0.74);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: fade-in 140ms ease-out;
+}
+
+.card {
+  width: min(100%, 380px);
+  padding: 22px 22px 20px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+}
+
+.spinner {
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 14px;
+  border: 3px solid var(--color-border-strong);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--color-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eyebrowError {
+  color: var(--color-yellow);
+}
+
+.title {
+  margin: 0 0 12px;
+  color: var(--color-text);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  position: relative;
+  padding-left: 18px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  animation: rise 260ms ease-out both;
+}
+
+.item::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+
+.error {
+  margin: 0 0 16px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .item {
+    animation: none;
+  }
+
+  .spinner {
+    animation-duration: 1600ms;
+  }
+}

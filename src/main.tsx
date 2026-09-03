@@ -13,7 +13,9 @@ if (!container) {
   throw new Error('Workout Conductor could not start: the #root element is missing.');
 }
 
-const store = new AppStore();
+// ?slowCalibration=1 holds the calibration overlay open longer, for screenshots and demos only.
+const slowCalibration = new URLSearchParams(window.location.search).has('slowCalibration');
+const store = new AppStore(slowCalibration ? { minOverlayMs: 2500 } : {});
 
 createRoot(container).render(
   <StrictMode>

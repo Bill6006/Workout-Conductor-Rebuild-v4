@@ -104,6 +104,11 @@ Custom exercises (`CustomExerciseSchema`) are presented to the engines through
 
 ### Generation (Phase 3)
 
+Every change after generation goes through the Recalibration Engine (see
+[recalibration-engine.md](recalibration-engine.md)): the store builds a typed request, the pure
+engine returns a new valid workout with a change summary or a failure that keeps the previous one,
+and the session (workout, constraints, logged work, log) persists in localStorage.
+
 `generateWorkout` (see [workout-engine.md](workout-engine.md)) is pure and deterministic:
 profile, place, history, date, and length choice in; an explained `GeneratedWorkout` out. Today
 and Workout share it through `useTodayWorkout`, which memoises on those inputs, so changing the

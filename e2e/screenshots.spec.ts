@@ -16,7 +16,10 @@ const screenshotDir = process.env.SCREENSHOT_DIR ?? path.join('test-results', 's
 const PRIMARY_PROJECT = 'android-412';
 
 async function settleToasts(page: Page) {
-  await expect(page.locator('[role="status"] > *')).toHaveCount(0, { timeout: 8_000 });
+  // Only the toast region; the recalibration summary is a status too and may stay.
+  await expect(page.locator('[role="status"][aria-live="polite"] > *')).toHaveCount(0, {
+    timeout: 8_000,
+  });
 }
 
 async function capture(page: Page, testInfo: TestInfo, name: string, fullPage = false) {
@@ -74,6 +77,34 @@ test.describe('screenshots @screenshots', () => {
       await expect(page.getByTestId('workout-estimate')).toContainText('Fitted to 15 min');
       await capture(page, testInfo, 'today-15-min');
       await page.getByTestId('duration-select').selectOption('default');
+      await expect(page.getByTestId('workout-estimate')).toContainText('Default time');
+
+      // Phase 4: the calibration overlay (held open by ?slowCalibration=1), the change summary,
+      // the session-only actions, and the recalibration log.
+      await page.goto('./?slowCalibration=1#/today');
+      await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+      await page.getByTestId('duration-select').selectOption('30');
+      const overlay = page.getByTestId('calibration-overlay');
+      await expect(overlay).toBeVisible();
+      await page.screenshot({
+        path: path.join(screenshotDir, `${testInfo.project.name}-calibration-overlay.png`),
+      });
+      await expect(overlay).toBeHidden({ timeout: 10_000 });
+      await expect(page.getByTestId('recalibration-summary')).toBeVisible();
+      await capture(page, testInfo, 'today-recalibrated');
+
+      await page.getByTestId('workout-entry').nth(1).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await page
+        .getByRole('dialog')
+        .getByRole('heading', { name: 'This session only' })
+        .scrollIntoViewIfNeeded();
+      await capture(page, testInfo, 'today-session-actions');
+      await page.getByRole('button', { name: 'Equipment busy' }).click();
+      await expect(page.getByTestId('recalibration-summary')).toContainText('busy');
+      await page.goto('./#/workout');
+      await expect(page.getByTestId('calibration-log')).toBeVisible();
+      await capture(page, testInfo, 'workout-recalibration-log');
     }
   });
 

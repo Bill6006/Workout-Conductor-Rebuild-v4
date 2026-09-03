@@ -37,8 +37,8 @@ describe('App', () => {
     const { store } = createTestStore();
     renderApp(store);
     expect(screen.getByText('Workout Conductor')).toBeInTheDocument();
-    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 3');
-    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 3$/);
+    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 4');
+    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 4$/);
     await screen.findByRole('heading', { level: 1, name: 'What are you training for?' });
   });
 
@@ -146,7 +146,9 @@ describe('App', () => {
     await waitFor(() => expect(store.getSnapshot().profile?.techniques.dropSets).toBe(false), {
       timeout: 3000,
     });
-    expect(screen.getByTestId('settings-save-status')).toHaveTextContent('Saved and verified');
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-save-status')).toHaveTextContent('Saved and verified'),
+    );
   });
 
   it('lets the user switch the current location from Plan', async () => {
@@ -165,10 +167,73 @@ describe('App', () => {
     await screen.findByRole('heading', { level: 1, name: 'Today' });
     const before = screen.getAllByTestId('workout-entry').length;
     await user.selectOptions(screen.getByTestId('duration-select'), '15');
-    expect(screen.getByTestId('workout-estimate')).toHaveTextContent('Fitted to 15 min');
+    await waitFor(() =>
+      expect(screen.getByTestId('workout-estimate')).toHaveTextContent('Fitted to 15 min'),
+    );
     expect(screen.getAllByTestId('workout-entry').length).toBeLessThan(before);
-    expect(store.getSnapshot().durationChoice).toBe(15);
+    expect(store.getSnapshot().session?.duration).toBe(15);
     await user.selectOptions(screen.getByTestId('duration-select'), 'default');
+    await waitFor(() => expect(screen.getAllByTestId('workout-entry').length).toBe(before));
+  });
+});
+
+describe('App recalibration', () => {
+  it('recalibrates from the duration dropdown with an overlay and a change summary', async () => {
+    const handle = createTestStore({ minOverlayMs: 60 });
+    await handle.store.hydrate();
+    await handle.store.completeOnboarding(
+      createDefaultProfile(TEST_NOW),
+      createDefaultLocations({ gymAccess: true }, TEST_NOW),
+    );
+    const user = userEvent.setup();
+    renderApp(handle.store);
+    await screen.findByRole('heading', { level: 1, name: 'Today' });
+    const before = screen.getAllByTestId('workout-entry').length;
+
+    await user.selectOptions(screen.getByTestId('duration-select'), '15');
+    expect(await screen.findByTestId('calibration-overlay')).toHaveTextContent(
+      'Fitting the session to 15 minutes',
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId('calibration-overlay')).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('recalibration-summary')).toHaveTextContent(
+      /Recalibrated to 15 min: .*removed/,
+    );
+    expect(screen.getAllByTestId('workout-entry').length).toBeLessThan(before);
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(screen.getByTestId('duration-select')).toHaveValue('default');
     expect(screen.getAllByTestId('workout-entry').length).toBe(before);
+    expect(screen.getByTestId('recalibration-summary')).toHaveTextContent(
+      'Restored the previous workout.',
+    );
+  });
+
+  it('keeps the previous workout and explains when the engine fails', async () => {
+    const handle = createTestStore({
+      minOverlayMs: 0,
+      recalibrate: () => {
+        throw new Error('Simulated engine failure');
+      },
+    });
+    await handle.store.hydrate();
+    await handle.store.completeOnboarding(
+      createDefaultProfile(TEST_NOW),
+      createDefaultLocations({ gymAccess: true }, TEST_NOW),
+    );
+    const user = userEvent.setup();
+    renderApp(handle.store);
+    await screen.findByRole('heading', { level: 1, name: 'Today' });
+    const before = screen.getAllByTestId('workout-entry').length;
+
+    await user.selectOptions(screen.getByTestId('duration-select'), '30');
+    const overlay = await screen.findByRole('dialog', { name: 'Recalibration failed' });
+    expect(overlay).toHaveTextContent('Your previous workout is unchanged');
+    expect(overlay).toHaveTextContent('Simulated engine failure');
+    await user.click(screen.getByRole('button', { name: 'Keep previous workout' }));
+    expect(screen.queryByTestId('calibration-overlay')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('workout-entry').length).toBe(before);
+    expect(screen.getByTestId('duration-select')).toHaveValue('default');
   });
 });

@@ -5,7 +5,8 @@ import type { DurationChoice, TimeBreakdown, WorkoutBlock, WorkoutEntry } from '
  * The one workout-length system: 15 min, 30 min, 45 min, or Default time.
  * Default time is the complete session the plan generates for the user's
  * typical duration. Time estimation lives here too so fitting and display
- * always agree.
+ * always agree. Sets already logged can be excluded from an estimate, which
+ * is how the recalibration engine measures only the remaining work.
  */
 
 export const DURATION_CHOICES: readonly DurationChoice[] = [15, 30, 45, 'default'];
@@ -41,6 +42,11 @@ const SUPERSET_SWITCH_SECONDS = 15;
 const CIRCUIT_SWITCH_SECONDS = 12;
 const WARMUP_SET_REST_SECONDS = 45;
 
+/** Answers whether a set has already been logged; logged sets cost no more time. */
+export type SetDonePredicate = (entryId: string, setIndex: number) => boolean;
+
+const NOTHING_DONE: SetDonePredicate = () => false;
+
 export function workSecondsFor(entry: WorkoutEntry, kind: 'warmup' | 'working' | 'drop'): number {
   if (kind === 'warmup') return WORK_SECONDS.warmup;
   if (kind === 'drop') return 20;
@@ -65,36 +71,50 @@ interface BlockSeconds {
 export function estimateBlockSeconds(
   block: WorkoutBlock,
   exerciseOf: (id: string) => CatalogExercise,
+  isDone: SetDonePredicate = NOTHING_DONE,
 ): BlockSeconds {
-  const setup = block.entries.reduce(
-    (sum, entry) => sum + setupSeconds(exerciseOf(entry.exerciseId)),
-    0,
+  const started = block.entries.some((entry) =>
+    entry.sets.some((set) => isDone(entry.id, set.index)),
   );
+  // Once any set of a block is logged the user is already at the station.
+  const setup = started
+    ? 0
+    : block.entries.reduce((sum, entry) => sum + setupSeconds(exerciseOf(entry.exerciseId)), 0);
 
   if (block.kind === 'straight') {
     const entry = block.entries[0];
     if (!entry) return { work: 0, rest: 0, setup };
     let work = 0;
     let rest = 0;
-    entry.sets.forEach((set, index) => {
+    const remaining = entry.sets.filter((set) => !isDone(entry.id, set.index));
+    remaining.forEach((set, index) => {
       work += workSecondsFor(entry, set.kind);
-      const last = index === entry.sets.length - 1;
+      const last = index === remaining.length - 1;
       if (!last) rest += set.kind === 'warmup' ? WARMUP_SET_REST_SECONDS : set.restSeconds;
     });
     return { work, rest, setup };
   }
 
   // Superset and circuit: rounds of every entry's working set, one rest per round.
-  const rounds = block.rounds;
+  const roundsDone = Math.min(
+    ...block.entries.map(
+      (entry) =>
+        entry.sets.filter((set) => set.kind === 'working' && isDone(entry.id, set.index)).length,
+    ),
+  );
+  const rounds = Math.max(0, block.rounds - roundsDone);
   const switchSeconds =
     block.kind === 'superset' ? SUPERSET_SWITCH_SECONDS : CIRCUIT_SWITCH_SECONDS;
   let work = 0;
   for (const entry of block.entries) {
     for (const set of entry.sets) {
-      if (set.kind === 'warmup') work += WORK_SECONDS.warmup + WARMUP_SET_REST_SECONDS;
+      if (set.kind === 'warmup' && !isDone(entry.id, set.index))
+        work += WORK_SECONDS.warmup + WARMUP_SET_REST_SECONDS;
     }
     work += rounds * workSecondsFor(entry, 'working');
-    if (entry.dropSet) work += workSecondsFor(entry, 'drop');
+    const drop = entry.sets.find((set) => set.kind === 'drop');
+    if (entry.dropSet && drop && !isDone(entry.id, drop.index))
+      work += workSecondsFor(entry, 'drop');
   }
   const transitions = rounds * (block.entries.length - 1) * switchSeconds;
   const rest = Math.max(0, rounds - 1) * block.restBetweenRoundsSeconds;
@@ -105,12 +125,13 @@ export function estimateWorkout(
   blocks: readonly WorkoutBlock[],
   generalWarmupMin: number,
   exerciseOf: (id: string) => CatalogExercise,
+  isDone: SetDonePredicate = NOTHING_DONE,
 ): TimeBreakdown {
   let work = 0;
   let rest = 0;
   let setup = 0;
   for (const block of blocks) {
-    const seconds = estimateBlockSeconds(block, exerciseOf);
+    const seconds = estimateBlockSeconds(block, exerciseOf, isDone);
     work += seconds.work;
     rest += seconds.rest;
     setup += seconds.setup;

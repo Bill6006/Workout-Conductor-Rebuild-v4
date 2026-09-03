@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { AppShell } from '../components/AppShell/AppShell';
+import { CalibrationOverlay } from '../components/CalibrationOverlay/CalibrationOverlay';
 import { Card } from '../components/Card/Card';
 import { useAppState } from '../core/state/useAppStore';
 import { type RouteId } from './navigation';
@@ -41,6 +42,7 @@ export function App() {
         </Card>
       ) : null}
       <ActiveScreen routeId={effectiveRoute} />
+      <CalibrationOverlay />
       <UpdatePrompt />
     </AppShell>
   );

@@ -6,6 +6,7 @@ import { Card } from '../../components/Card/Card';
 import { DurationSelector } from '../../components/DurationSelector/DurationSelector';
 import { ExerciseThumb } from '../../components/ExerciseDetail/ExerciseMedia';
 import type { LocationProfile } from '../../core/validation/location';
+import type { ChangeSummary, EntryChange } from '../../engine/recalibration/types';
 import {
   workingSets,
   type DurationChoice,
@@ -22,7 +23,23 @@ interface WorkoutPreviewCardProps {
   location: LocationProfile | undefined;
   onSelect: (entry: WorkoutEntry, block: WorkoutBlock) => void;
   onDurationChange: (choice: DurationChoice) => void;
+  /** The last recalibration's compact summary, until dismissed. */
+  summary?: ChangeSummary | null;
+  changes?: readonly EntryChange[];
+  canUndo?: boolean;
+  onUndo?: () => void;
+  onDismissSummary?: () => void;
+  /** Exact-end mode state; the control shows when the plan runs over or the mode is on. */
+  endBy?: { on: boolean; label: string | null };
+  onEndByChange?: (on: boolean) => void;
 }
+
+const CHANGE_TAGS: Record<EntryChange['kind'], string> = {
+  added: 'New',
+  replaced: 'Swapped',
+  adjusted: 'Adjusted',
+  removed: 'Removed',
+};
 
 function restLabel(seconds: number): string {
   if (seconds === 0) return 'no rest';
@@ -43,12 +60,14 @@ function EntryRow({
   block,
   prefix,
   location,
+  change,
   onSelect,
 }: {
   entry: WorkoutEntry;
   block: WorkoutBlock;
   prefix?: string;
   location: LocationProfile | undefined;
+  change?: EntryChange['kind'];
   onSelect: (entry: WorkoutEntry, block: WorkoutBlock) => void;
 }) {
   const exercise = requireExercise(entry.exerciseId);
@@ -58,6 +77,9 @@ function EntryRow({
       className={styles.exercise}
       onClick={() => onSelect(entry, block)}
       data-testid="workout-entry"
+      data-entry-id={entry.id}
+      data-exercise-id={entry.exerciseId}
+      data-changed={change}
     >
       {prefix ? <span className={styles.exerciseIndex}>{prefix}</span> : null}
       <ExerciseThumb exercise={exercise} />
@@ -67,6 +89,12 @@ function EntryRow({
           {entry.dropSet ? <span className={styles.badge}>Drop set</span> : null}
           {entry.role === 'primary-strength' ? (
             <span className={styles.badge}>Main lift</span>
+          ) : null}
+          {change ? <span className={styles.tag}>{CHANGE_TAGS[change]}</span> : null}
+          {entry.pinned ? (
+            <span className={`${styles.tag} ${styles.tagQuiet}`}>Pinned</span>
+          ) : entry.locked ? (
+            <span className={`${styles.tag} ${styles.tagQuiet}`}>Your pick</span>
           ) : null}
         </span>
         <span className={styles.exerciseMeta}>
@@ -87,13 +115,22 @@ export function WorkoutPreviewCard({
   location,
   onSelect,
   onDurationChange,
+  summary = null,
+  changes = [],
+  canUndo = false,
+  onUndo,
+  onDismissSummary,
+  endBy,
+  onEndByChange,
 }: WorkoutPreviewCardProps) {
   const { duration } = workout;
-  const fitted = duration.choice !== 'default';
+  const fitted = duration.choice !== 'default' || (endBy?.on ?? false);
   const estimateLabel =
     duration.overByMinutes > 1
       ? `about ${duration.estimatedMinutes} min, ${Math.round(duration.overByMinutes)} over`
       : `about ${duration.estimatedMinutes} min`;
+  const changeOf = (entry: WorkoutEntry) =>
+    changes.find((change) => change.entryId === entry.id)?.kind;
 
   return (
     <Card tone="accent" eyebrow="Today's workout" title={workout.title}>
@@ -116,6 +153,56 @@ export function WorkoutPreviewCard({
         {estimateLabel}
         {duration.overByMinutes > 1 ? '. It may run a few minutes over.' : '.'}
       </p>
+
+      {endBy && (duration.overByMinutes > 1 || endBy.on) ? (
+        <label className={styles.endBy}>
+          <input
+            type="checkbox"
+            checked={endBy.on}
+            onChange={(event) => onEndByChange?.(event.target.checked)}
+            data-testid="end-by-toggle"
+          />
+          <span>
+            End by exact time
+            {endBy.on && endBy.label
+              ? ` · ends by ${endBy.label}`
+              : ` · fit strictly to ${duration.targetMinutes} min, even if a set of the main lift has to go`}
+          </span>
+        </label>
+      ) : null}
+
+      {summary ? (
+        <div className={styles.summary} role="status" data-testid="recalibration-summary">
+          <div className={styles.summaryBody}>
+            <span className={styles.summaryHeadline}>{summary.headline}</span>
+            {summary.details.length > 0 ? (
+              <details className={styles.summaryDetails}>
+                <summary>What changed</summary>
+                <ul>
+                  {summary.details.map((detail) => (
+                    <li key={detail}>{detail}</li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </div>
+          <div className={styles.summaryActions}>
+            {canUndo ? (
+              <button type="button" className={styles.summaryButton} onClick={onUndo}>
+                Undo
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={styles.summaryButton}
+              onClick={onDismissSummary}
+              aria-label="Dismiss summary"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className={styles.focus} aria-label="Muscle priorities">
         {workout.musclePriorities.slice(0, 4).map((priority) => (
@@ -141,6 +228,7 @@ export function WorkoutPreviewCard({
                 block={block}
                 prefix={String(index + 1)}
                 location={location}
+                change={changeOf(block.entries[0]!)}
                 onSelect={onSelect}
               />
             ) : (
@@ -160,6 +248,7 @@ export function WorkoutPreviewCard({
                       block.kind === 'superset' ? `A${entryIndex + 1}` : String(entryIndex + 1)
                     }
                     location={location}
+                    change={changeOf(entry)}
                     onSelect={onSelect}
                   />
                 ))}
@@ -196,8 +285,9 @@ export function WorkoutPreviewCard({
         Start Workout
       </Button>
       <p id="start-workout-hint" className={styles.hint}>
-        Change the length above and the session rebuilds at once. Tap an exercise for its
-        demonstration and alternatives. Logging arrives with the active workout in Phase 5.
+        Change the length above and the session recalibrates at once. Tap an exercise for its
+        demonstration, alternatives, and session-only changes: swap, pin, busy station, skip, hurts.
+        Logging arrives with the active workout in Phase 5.
       </p>
     </Card>
   );
