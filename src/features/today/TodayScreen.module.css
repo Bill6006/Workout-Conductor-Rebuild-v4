@@ -20,7 +20,7 @@
 
 .metaRow {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -170,4 +170,36 @@
   font-size: 0.84rem;
   font-weight: 600;
   text-decoration: none;
+}
+
+.estimate {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.warmup {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.blockRow {
+  list-style: none;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(198, 245, 66, 0.3);
+  border-radius: var(--radius-control);
+  background: rgba(198, 245, 66, 0.06);
+}
+
+.groupLabel {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--color-accent);
 }

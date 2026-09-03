@@ -46,7 +46,7 @@ test.describe('exercise library', () => {
 
   test('Today exercises open their demonstration and ranked alternatives', async ({ page }) => {
     await ensureProfile(page);
-    await page.getByTestId('demo-exercise').first().click();
+    await page.getByTestId('workout-entry').first().click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByTestId('exercise-demo')).toBeVisible();

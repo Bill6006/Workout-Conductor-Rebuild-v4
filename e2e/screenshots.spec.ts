@@ -70,6 +70,10 @@ test.describe('screenshots @screenshots', () => {
       await page.goto('./#/today');
       await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
       await capture(page, testInfo, 'today-full', true);
+      await page.getByTestId('duration-select').selectOption('15');
+      await expect(page.getByTestId('workout-estimate')).toContainText('Fitted to 15 min');
+      await capture(page, testInfo, 'today-15-min');
+      await page.getByTestId('duration-select').selectOption('default');
     }
   });
 
@@ -104,7 +108,7 @@ test.describe('screenshots @screenshots', () => {
     await page.keyboard.press('Escape');
 
     await page.goto('./#/today');
-    await page.getByTestId('demo-exercise').first().click();
+    await page.getByTestId('workout-entry').first().click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page
       .getByRole('dialog')

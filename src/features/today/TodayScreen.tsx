@@ -1,25 +1,33 @@
 import { useState } from 'react';
 import { routeHref } from '../../app/navigation';
+import { requireExercise } from '../../catalog/exercises/catalog';
 import { Card } from '../../components/Card/Card';
 import { ExerciseDetailSheet } from '../../components/ExerciseDetail/ExerciseDetailSheet';
 import { FactList } from '../../components/FactList/FactList';
 import { ScreenHeader } from '../../components/Screen/Screen';
-import { useAppState } from '../../core/state/useAppStore';
+import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import { formatDayLabel, useNow } from '../../core/time/clock';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
-import { buildConflictContext, preferredIdsOf } from '../../engine/conflicts/context';
+import { preferredIdsOf } from '../../engine/conflicts/context';
+import { allEntries, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
 import { GOAL_OPTIONS, STYLE_OPTIONS, labelFor } from '../profile/labels';
-import { DemoWorkoutCard } from './DemoWorkoutCard';
-import { buildDemoWorkout, type DemoExercise } from './demo/demoWorkout';
+import { WorkoutPreviewCard } from './WorkoutPreviewCard';
 import styles from './TodayScreen.module.css';
+import { useTodayWorkout } from './useTodayWorkout';
+
+interface Selection {
+  entry: WorkoutEntry;
+  block: WorkoutBlock;
+}
 
 export function TodayScreen() {
   const state = useAppState();
+  const store = useAppStore();
   const now = useNow();
-  const [selected, setSelected] = useState<DemoExercise | null>(null);
-  const profile = state.profile;
+  const today = useTodayWorkout();
+  const [selected, setSelected] = useState<Selection | null>(null);
 
-  if (!profile) {
+  if (!today) {
     return (
       <>
         <ScreenHeader title="Today" intro={formatDayLabel(now)} />
@@ -33,34 +41,43 @@ export function TodayScreen() {
     );
   }
 
-  const location = state.locations.find((candidate) => candidate.id === profile.currentLocationId);
-  const workout = buildDemoWorkout(profile, location);
-  const context = buildConflictContext(profile, location);
-
-  const alternatives = selected
-    ? rankAlternatives({
-        current: selected.exercise,
-        context,
-        otherExercises: workout.exercises
-          .filter((entry) => entry.exercise.id !== selected.exercise.id)
-          .map((entry) => entry.exercise),
-        supersetPartner: selected.superset
-          ? workout.exercises.find(
-              (entry) => entry.superset && entry.superset !== selected.superset,
-            )?.exercise
-          : undefined,
-        dropSetPlanned: selected.dropSet,
-        plannedSets: { sets: selected.sets, restSeconds: selected.restSeconds },
-        signals: { preferredIds: preferredIdsOf(profile) },
-        limit: 6,
-      })
-    : null;
+  const { profile, location, workout, context } = today;
+  const selectedExercise = selected ? requireExercise(selected.entry.exerciseId) : null;
+  const alternatives =
+    selected && selectedExercise
+      ? rankAlternatives({
+          current: selectedExercise,
+          context,
+          otherExercises: allEntries(workout.blocks)
+            .filter((entry) => entry.id !== selected.entry.id)
+            .map((entry) => requireExercise(entry.exerciseId)),
+          supersetPartner:
+            selected.block.kind === 'superset'
+              ? requireExercise(
+                  selected.block.entries.find((entry) => entry.id !== selected.entry.id)
+                    ?.exerciseId ?? selected.entry.exerciseId,
+                )
+              : undefined,
+          dropSetPlanned: selected.entry.dropSet,
+          plannedSets: {
+            sets: selected.entry.sets.length,
+            restSeconds: selected.entry.restSeconds,
+          },
+          signals: { preferredIds: preferredIdsOf(profile) },
+          limit: 6,
+        })
+      : null;
 
   return (
     <>
       <ScreenHeader title="Today" intro={formatDayLabel(now)} />
 
-      <DemoWorkoutCard workout={workout} location={location} onSelect={setSelected} />
+      <WorkoutPreviewCard
+        workout={workout}
+        location={location}
+        onSelect={(entry, block) => setSelected({ entry, block })}
+        onDurationChange={(choice) => store.setDurationChoice(choice)}
+      />
 
       <Card eyebrow="Readiness" title="Quick check-in arrives in Phase 6">
         <p className={styles.body}>
@@ -78,7 +95,7 @@ export function TodayScreen() {
               label: 'Schedule',
               value: `${profile.schedule.weeklyFrequency} × ${profile.schedule.typicalDurationMinutes} min per week`,
             },
-            { label: 'Units', value: profile.units },
+            { label: 'History', value: `${state.history.length} logged workouts` },
           ]}
         />
         <a className={styles.link} href={routeHref('settings')}>
@@ -87,7 +104,7 @@ export function TodayScreen() {
       </Card>
 
       <ExerciseDetailSheet
-        exercise={selected?.exercise ?? null}
+        exercise={selectedExercise}
         onClose={() => setSelected(null)}
         availableEquipment={context.availableEquipment}
         alternatives={alternatives}

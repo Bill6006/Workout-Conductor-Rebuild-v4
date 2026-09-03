@@ -44,21 +44,28 @@ src/
   engine/
     conflicts/                  the one conflict engine (fit, workout, superset) + context builder
     alternatives/               rankAlternatives: ranked, explained, conflict-filtered candidates
+    workout/types.ts            GeneratedWorkout, blocks (straight / superset / circuit), entries, sets
+    duration/duration.ts        15 / 30 / 45 / Default choices, warm-up budget, time estimation
+    volume/weeklyVolume.ts      weekly volume, exposure, goal weights, targets, muscle priorities
+    progression/roles.ts        role -> sets, reps, RIR, rest; ramp sets; role ranks
+    workoutGenerator/generate.ts templates, slot picking, circuits, supersets, duration fitting, drop set, explanation
   features/
     onboarding/                 7-step wizard over a ProfileDraft, localStorage draft persistence
     profile/draft.ts            ProfileDraft = profile + locations; one editing model
     profile/editors/            Goals, Schedule, Places, ExercisePreferences, Limitations, Style, Units
     profile/useProfileEditor    debounced verified autosave used by Settings and Plan
-    today/                      Today dashboard; demo/ builds the synthetic demo from the catalog (deleted in Phase 3)
+    today/                      Today dashboard; useTodayWorkout runs the generator; WorkoutPreviewCard
     library/                    exercise library: search, muscle-group filter, detail sheet, preferences
     plan/                       training days, location list, LocationEditorSheet
     settings/                   editor sections, BackupCard, DiagnosticsCard
-    workout/ progress/          placeholders until Phases 5 and 7
+    workout/                    Active Workout List preview (one row per block); logging in Phase 5
+    progress/                   placeholder until Phase 7
   components/
     AppShell/ BottomNav/ NavIcons/ Card/ Button/ FactList/ Screen/
     Form/                       Field, ChoiceGroup, ChipSelect, Toggle, NumberField, TagInput, TextArea
     Sheet/ Toast/ ProgressBar/
     ExerciseDetail/             ExerciseThumb, ExerciseDemo (play/pause/replay, reduced motion), ExerciseDetailSheet
+    DurationSelector/           the one workout-length dropdown (15 / 30 / 45 / Default)
   styles/                       tokens.css (dark charcoal, lime accent, radii, safe areas), global.css
 ```
 
@@ -95,6 +102,14 @@ joint stress, and superset compatibility, and explains the top reason and the ke
 Custom exercises (`CustomExerciseSchema`) are presented to the engines through
 `customToCatalogExercise`, so user content and catalog content share one code path.
 
+### Generation (Phase 3)
+
+`generateWorkout` (see [workout-engine.md](workout-engine.md)) is pure and deterministic:
+profile, place, history, date, and length choice in; an explained `GeneratedWorkout` out. Today
+and Workout share it through `useTodayWorkout`, which memoises on those inputs, so changing the
+length dropdown regenerates immediately. The length choice is session-only app state; the
+Default length is the profile's typical workout length.
+
 ### PWA
 
 `vite-plugin-pwa` in `prompt` mode precaches the app shell. A waiting service worker is only
@@ -103,8 +118,8 @@ activated when the user taps Reload. Later phases hold the prompt during an acti
 ## Planned structure (from the execution plan)
 
 ```
-src/engine/     workoutGenerator, recalibration, progression, recovery, duration, volume, scoring
-                (conflicts and alternatives exist since Phase 2)
+src/engine/     recalibration (Phase 4), recovery (Phase 6), scoring (Phase 7)
+                (conflicts, alternatives, workoutGenerator, duration, volume, progression exist)
 src/components/ DurationSelector, CalibrationOverlay, ExerciseCard, AlternativeSheet,
                 SetLogger, RestTimer, SupersetGroup, WorkoutSummary, Charts, Dialogs
 ```

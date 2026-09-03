@@ -37,8 +37,8 @@ describe('App', () => {
     const { store } = createTestStore();
     renderApp(store);
     expect(screen.getByText('Workout Conductor')).toBeInTheDocument();
-    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 2');
-    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 2$/);
+    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 3');
+    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 3$/);
     await screen.findByRole('heading', { level: 1, name: 'What are you training for?' });
   });
 
@@ -61,10 +61,10 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Use defaults and skip setup' }));
 
     await screen.findByRole('heading', { level: 1, name: 'Today' });
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Chest + Arms focus (demo)' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Default: \d+ min/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Push + arms' })).toBeInTheDocument();
+    expect(screen.getByTestId('duration-select')).toHaveValue('default');
+    expect(screen.getByTestId('workout-estimate')).toHaveTextContent(/Default time: about \d+ min/);
+    expect(screen.getAllByTestId('workout-entry').length).toBeGreaterThanOrEqual(5);
     expect(screen.getByRole('button', { name: 'Start Workout' })).toBeDisabled();
     expect(store.getSnapshot().profile?.goals.primary).toBe('build-muscle');
     expect(store.getSnapshot().lastReceipt?.store).toBe('profile');
@@ -100,9 +100,7 @@ describe('App', () => {
     expect(profile?.goals.primary).toBe('strength');
     expect(profile?.limitations.avoidBarbellSquats).toBe(true);
     expect(profile?.units).toBe('kg');
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Full-body strength (demo)' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Full body' })).toBeInTheDocument();
     expect(screen.queryByText('Back Squat')).not.toBeInTheDocument();
   });
 
@@ -159,5 +157,18 @@ describe('App', () => {
     await screen.findByRole('heading', { level: 1, name: 'Plan' });
     await user.click(screen.getByRole('button', { name: 'Use' }));
     await waitFor(() => expect(store.getSnapshot().profile?.currentLocationId).toBe('home'));
+  });
+  it('rebuilds the session immediately when the workout length changes', async () => {
+    const { store } = await seededStore();
+    const user = userEvent.setup();
+    renderApp(store);
+    await screen.findByRole('heading', { level: 1, name: 'Today' });
+    const before = screen.getAllByTestId('workout-entry').length;
+    await user.selectOptions(screen.getByTestId('duration-select'), '15');
+    expect(screen.getByTestId('workout-estimate')).toHaveTextContent('Fitted to 15 min');
+    expect(screen.getAllByTestId('workout-entry').length).toBeLessThan(before);
+    expect(store.getSnapshot().durationChoice).toBe(15);
+    await user.selectOptions(screen.getByTestId('duration-select'), 'default');
+    expect(screen.getAllByTestId('workout-entry').length).toBe(before);
   });
 });

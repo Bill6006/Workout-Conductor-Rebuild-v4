@@ -61,12 +61,10 @@ test.describe('onboarding', () => {
     await page.getByRole('button', { name: 'Finish setup' }).click();
 
     await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
-    await expect(
-      page.getByRole('heading', { level: 2, name: 'Full-body strength (demo)' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Full body' })).toBeVisible();
     await expect(page.getByText('Back Squat')).toHaveCount(0);
     await expect(page.getByText('Barbell Row', { exact: true })).toHaveCount(0);
-    await expect(page.getByText(/Default: \d+ min/)).toBeVisible();
+    await expect(page.getByTestId('workout-estimate')).toContainText('Default time');
     await expect(page.getByRole('button', { name: 'Start Workout' })).toBeDisabled();
     await expectNoHorizontalOverflow(page);
     // Finishing setup lands at the top of Today, not where the wizard was scrolled.
@@ -75,10 +73,8 @@ test.describe('onboarding', () => {
     // The profile is durable: a reload skips setup and rebuilds the same preview.
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
-    await expect(
-      page.getByRole('heading', { level: 2, name: 'Full-body strength (demo)' }),
-    ).toBeVisible();
-    await expect(page.getByText('kg', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Full body' })).toBeVisible();
+    await expect(page.getByText('45 min per week')).toBeVisible();
   });
 
   test('a conflicting answer is explained instead of accepted', async ({ page }) => {

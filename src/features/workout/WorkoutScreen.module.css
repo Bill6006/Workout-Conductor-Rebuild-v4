@@ -1,0 +1,42 @@
+.meta {
+  font-size: 0.86rem;
+  color: var(--color-text-muted);
+}
+
+.meta a {
+  color: var(--color-accent);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.row[data-kind='superset'] .rowLabel,
+.row[data-kind='circuit'] .rowLabel {
+  color: var(--color-accent);
+}
+
+.rowLabel {
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.rowMeta {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-subtle);
+}

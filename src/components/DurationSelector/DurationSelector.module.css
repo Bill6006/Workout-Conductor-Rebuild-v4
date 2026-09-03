@@ -1,0 +1,57 @@
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-subtle);
+}
+
+.selectWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.select {
+  width: 100%;
+  min-height: 28px;
+  padding: 0 22px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.96rem;
+  font-weight: 800;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.select option {
+  color: #0b0d0f;
+  background: #f4f6f7;
+}
+
+.chevron {
+  position: absolute;
+  right: 0;
+  color: var(--color-accent);
+  font-size: 0.95rem;
+  pointer-events: none;
+}

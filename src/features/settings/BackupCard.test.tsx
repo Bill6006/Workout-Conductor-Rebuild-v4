@@ -69,7 +69,7 @@ describe('BackupCard', () => {
 
     await user.click(screen.getByRole('button', { name: 'Replace my data' }));
     await waitFor(() => expect(store.getSnapshot().profile?.goals.primary).toBe('bigger-chest'));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(store.getSnapshot().localSettings.lastImportAt).toBe(TEST_NOW);
   });
 

@@ -30,7 +30,7 @@ const deployedURL = process.env.E2E_BASE_URL;
 const baseURL = deployedURL ?? localURL;
 
 const pixel7 = { ...devices['Pixel 7'], deviceScaleFactor: 2 };
-const smokeSpecs = /(smoke|onboarding|library|screenshots)\.spec\.ts/;
+const smokeSpecs = /(smoke|onboarding|library|duration|screenshots)\.spec\.ts/;
 const pwaSpecs = /pwa\.spec\.ts/;
 
 export default defineConfig({

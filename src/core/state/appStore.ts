@@ -22,6 +22,11 @@ import {
 } from '../validation/location';
 import { UserProfileSchema, type UserProfile } from '../validation/profile';
 import type { LocalSettings } from '../validation/settings';
+import {
+  parseWorkoutRecords,
+  type WorkoutRecord as WorkoutHistoryRecord,
+} from '../validation/workoutRecord';
+import type { DurationChoice } from '../../engine/workout/types';
 import type { CustomExercise, CustomInstruction, CustomMedia } from '../validation/customExercise';
 
 /**
@@ -40,6 +45,10 @@ export interface AppState {
   localSettings: LocalSettings;
   lastReceipt: SaveReceipt | null;
   workoutCount: number;
+  /** Parsed workout history, newest last; drives weekly volume and exposure. */
+  history: WorkoutHistoryRecord[];
+  /** Session-only workout-length choice; Default unless changed for the current workout. */
+  durationChoice: DurationChoice;
   customCounts: { exercises: number; instructions: number; media: number };
 }
 
@@ -78,6 +87,8 @@ export class AppStore {
       localSettings: readLocalSettings(this.storage),
       lastReceipt: null,
       workoutCount: 0,
+      history: [],
+      durationChoice: 'default',
       customCounts: { exercises: 0, instructions: 0, media: 0 },
     };
   }
@@ -102,11 +113,11 @@ export class AppStore {
   async hydrate(): Promise<void> {
     try {
       const db = await this.getDatabase();
-      const [profiles, locations, workoutCount, customExercises, customInstructions, customMedia] =
+      const [profiles, locations, workouts, customExercises, customInstructions, customMedia] =
         await Promise.all([
           db.getAll<Identified>('profile'),
           db.getAll<Identified>('locations'),
-          db.count('workouts'),
+          db.getAll<Identified>('workouts'),
           db.count('customExercises'),
           db.count('customInstructions'),
           db.count('customMedia'),
@@ -126,7 +137,8 @@ export class AppStore {
         profile: parsedProfile?.success ? parsedProfile.data : null,
         locations: sortLocations(validLocations),
         localSettings: readLocalSettings(this.storage),
-        workoutCount,
+        workoutCount: workouts.length,
+        history: parseWorkoutRecords(workouts),
         customCounts: {
           exercises: customExercises,
           instructions: customInstructions,
@@ -198,6 +210,11 @@ export class AppStore {
     await this.saveProfile(profile);
     removeKey(ONBOARDING_DRAFT_KEY, this.storage);
     this.updateLocalSettings({ onboardingCompletedAt: this.now() });
+  }
+
+  /** Remembered for the current workout only; Settings owns the default length. */
+  setDurationChoice(choice: DurationChoice): void {
+    this.setState({ durationChoice: choice });
   }
 
   updateLocalSettings(patch: Partial<LocalSettings>): LocalSettings {
