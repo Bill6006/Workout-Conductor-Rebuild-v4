@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                    |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                 |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                 |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                         |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                    |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                        |
-| Current phase          | Phase 4 - Central Recalibration Engine                                                                                                   |
-| Phase gate             | **YELLOW** - Phase 4 work complete and deployed from this commit; awaiting the owner's review on Android                                 |
-| Current branch         | `main`                                                                                                                                   |
-| Latest completed phase | Phase 3 (GREEN from the owner on 2026-09-03)                                                                                             |
-| Work in progress       | Phase 4 review gate. No Phase 5 code has been started.                                                                                   |
-| Latest commit          | Phase 4 build (this commit): central recalibration engine, calibration overlay, change summary, session-only changes                     |
-| Latest deployment      | Pending: the Phase 4 deploy runs from this commit. Last successful deploy before it: `6bac2a6` (Phase 3 fix status)                      |
-| Test totals            | Unit: 192 passed (29 files). Browser/mobile: 62 passed + 6 skipped by design locally (live run recorded in the docs commit that follows) |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 4`                                                             |
+| Item                   | Value                                                                                                                                         |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                      |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                      |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                              |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                         |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                             |
+| Current phase          | Phase 4 - Central Recalibration Engine                                                                                                        |
+| Phase gate             | **YELLOW** - Phase 4 work complete and deployed from this commit; awaiting the owner's review on Android                                      |
+| Current branch         | `main`                                                                                                                                        |
+| Latest completed phase | Phase 3 (GREEN from the owner on 2026-09-03)                                                                                                  |
+| Work in progress       | Phase 4 review gate. No Phase 5 code has been started.                                                                                        |
+| Latest commit          | Phase 4 overlay polish (this commit): solid calibration card; the engine build is `e7396c7`                                                   |
+| Latest deployment      | `e7396c7` deployed by Deploy Pages run 33752540844 (success); full browser suite passed against the live URL; this polish commit deploys next |
+| Test totals            | Unit: 192 passed (29 files). Browser/mobile: 62 passed + 6 skipped by design, locally and against the live URL                                |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 4`                                                                  |
 
 ## Phase checklist
 

@@ -86,6 +86,8 @@ test.describe('screenshots @screenshots', () => {
       await page.getByTestId('duration-select').selectOption('30');
       const overlay = page.getByTestId('calibration-overlay');
       await expect(overlay).toBeVisible();
+      // Let the evaluation list finish its short fade-in; the overlay is held for 2.5 s here.
+      await page.waitForTimeout(700);
       await page.screenshot({
         path: path.join(screenshotDir, `${testInfo.project.name}-calibration-overlay.png`),
       });
