@@ -12,6 +12,8 @@ export interface TodayWorkout {
   profile: UserProfile;
   location: LocationProfile | undefined;
   workout: GeneratedWorkout;
+  /** Length of the complete Default session, the number the dropdown's Default option shows. */
+  defaultEstimatedMinutes: number;
   context: ConflictContext;
 }
 
@@ -36,6 +38,17 @@ export function useTodayWorkout(): TodayWorkout | null {
       now: day,
       duration: durationChoice,
     });
-    return { profile, location, workout, context: buildConflictContext(profile, location) };
+    const defaultEstimatedMinutes =
+      durationChoice === 'default'
+        ? workout.duration.estimatedMinutes
+        : generateWorkout({ profile, location, history, now: day, duration: 'default' }).duration
+            .estimatedMinutes;
+    return {
+      profile,
+      location,
+      workout,
+      defaultEstimatedMinutes,
+      context: buildConflictContext(profile, location),
+    };
   }, [profile, locations, history, day, durationChoice]);
 }

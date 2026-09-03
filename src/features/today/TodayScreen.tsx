@@ -41,7 +41,7 @@ export function TodayScreen() {
     );
   }
 
-  const { profile, location, workout, context } = today;
+  const { profile, location, workout, defaultEstimatedMinutes, context } = today;
   const selectedExercise = selected ? requireExercise(selected.entry.exerciseId) : null;
   const alternatives =
     selected && selectedExercise
@@ -74,6 +74,7 @@ export function TodayScreen() {
 
       <WorkoutPreviewCard
         workout={workout}
+        defaultEstimatedMinutes={defaultEstimatedMinutes}
         location={location}
         onSelect={(entry, block) => setSelected({ entry, block })}
         onDurationChange={(choice) => store.setDurationChoice(choice)}

@@ -17,9 +17,8 @@ export function WorkoutScreen() {
       {today ? (
         <Card eyebrow="Active workout list · preview" title={today.workout.title}>
           <p className={styles.meta}>
-            {durationLabel(today.workout.duration.choice, today.workout.duration.defaultMinutes)} ·
-            about {today.workout.duration.estimatedMinutes} min ·{' '}
-            {today.location?.name ?? 'no place set'}
+            {durationLabel(today.workout.duration.choice, today.defaultEstimatedMinutes)} · about{' '}
+            {today.workout.duration.estimatedMinutes} min · {today.location?.name ?? 'no place set'}
           </p>
           <ol className={styles.list} aria-label="Active workout list">
             {today.workout.blocks.map((block) => (

@@ -48,5 +48,6 @@ per round and a 15 s switch; circuits pay one rest per round and 12 s per switch
   working totals, progression, or PRs.
 - `WorkoutRecord` (`src/core/validation/workoutRecord.ts`) is the history shape the volume logic
   reads; Phase 5 logging writes it.
-- The workout-length choice lives in app state for the current workout only; the Default length
-  is the profile's typical workout length, editable in Settings.
+- The workout-length choice lives in app state for the current workout only. The Default option
+  shows the complete generated session's length (for example "Default: 50 min"); the planning
+  budget behind it is the profile's typical workout length, editable in Settings.

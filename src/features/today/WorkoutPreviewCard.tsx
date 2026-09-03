@@ -17,6 +17,8 @@ import styles from './TodayScreen.module.css';
 
 interface WorkoutPreviewCardProps {
   workout: GeneratedWorkout;
+  /** Complete Default session length, shown in the dropdown's Default option. */
+  defaultEstimatedMinutes: number;
   location: LocationProfile | undefined;
   onSelect: (entry: WorkoutEntry, block: WorkoutBlock) => void;
   onDurationChange: (choice: DurationChoice) => void;
@@ -81,6 +83,7 @@ function EntryRow({
 
 export function WorkoutPreviewCard({
   workout,
+  defaultEstimatedMinutes,
   location,
   onSelect,
   onDurationChange,
@@ -99,7 +102,7 @@ export function WorkoutPreviewCard({
       <div className={styles.metaRow}>
         <DurationSelector
           choice={duration.choice}
-          defaultMinutes={duration.defaultMinutes}
+          defaultMinutes={defaultEstimatedMinutes}
           onChange={onDurationChange}
         />
         <a className={styles.meta} href={routeHref('plan')}>
