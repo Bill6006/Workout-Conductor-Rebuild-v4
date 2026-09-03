@@ -28,6 +28,14 @@ import {
   restCategory,
   type Prescription,
 } from '../progression/roles';
+import { weightStep } from '../plateMath/plateMath';
+import {
+  applyProgression,
+  recommendNextTarget,
+  summarizeProgression,
+} from '../progression/progression';
+import type { Readiness } from '../recalibration/types';
+import { interpretFatigue } from '../recovery/fatigue';
 import {
   computeExposure,
   computeMusclePriorities,
@@ -88,6 +96,8 @@ export interface GenerationConstraints {
   hardCap?: boolean;
   isSetDone?: SetDonePredicate;
   adjust?: PrescriptionAdjustment;
+  /** Today's check-in, so fatigue can hold loads. */
+  readiness?: Readiness | null;
 }
 
 export interface GenerationInput {
@@ -387,6 +397,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
   const compromises: string[] = [];
   const picker: Picker = { context, preferredIds, exposure };
+  const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 
   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
   // selections, and accepted alternatives stay in their slots.
@@ -433,12 +444,25 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       constraints.adjust,
     );
     const warmupSets = rampSetsFor(pick, slotSpec.role, targetMinutes);
+    const target = recommendNextTarget({
+      exercise: pick,
+      role: slotSpec.role,
+      prescription,
+      history,
+      profile,
+      fatigueLevel: fatigue.level,
+    });
     const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
     entries.push({
       id: `e${index + 1}`,
       exerciseId: pick.id,
       role: slotSpec.role,
-      sets: buildSets(prescription, warmupSets),
+      sets: applyProgression(
+        buildSets(prescription, warmupSets),
+        target,
+        weightStep(pick, profile.units),
+      ),
+      progression: summarizeProgression(target),
       restSeconds: prescription.restSeconds,
       warmupSets,
       dropSet: false,

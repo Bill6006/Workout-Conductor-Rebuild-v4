@@ -95,6 +95,12 @@ test.describe('screenshots @screenshots', () => {
       await expect(page.getByTestId('recalibration-summary')).toBeVisible();
       await capture(page, testInfo, 'today-recalibrated');
 
+      await page.getByTestId('coach-card').scrollIntoViewIfNeeded();
+      await capture(page, testInfo, 'today-coach-card');
+      await page.getByTestId('readiness-open').click();
+      await expect(page.getByRole('dialog', { name: 'Quick check-in' })).toBeVisible();
+      await capture(page, testInfo, 'today-readiness-check-in');
+      await page.keyboard.press('Escape');
       await page.getByTestId('workout-entry').nth(1).click();
       await expect(page.getByRole('dialog')).toBeVisible();
       await page

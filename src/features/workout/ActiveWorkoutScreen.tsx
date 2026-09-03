@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { requireExercise } from '../../catalog/exercises/catalog';
+import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
 import { Card } from '../../components/Card/Card';
 import { DurationSelector } from '../../components/DurationSelector/DurationSelector';
 import { ExerciseCard } from '../../components/ExerciseCard/ExerciseCard';
@@ -19,6 +20,9 @@ import { useTicker } from '../../core/time/useTicker';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { SessionRating } from '../../core/validation/workoutRecord';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
+import type { CoachAction } from '../../engine/coach/coachConductor';
+import { useCoach } from '../coach/useCoach';
+import { ReadinessSheet } from '../today/ReadinessSheet';
 import { preferredIdsOf } from '../../engine/conflicts/context';
 import { estimateWorkout } from '../../engine/duration/duration';
 import { plateMath, weightStep } from '../../engine/plateMath/plateMath';
@@ -119,6 +123,8 @@ export function ActiveWorkoutScreen() {
   const [selected, setSelected] = useState<Selection | null>(null);
   const [finishing, setFinishing] = useState<'idle' | 'rating'>('idle');
   const [endedEarly, setEndedEarly] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const coach = useCoach();
   /** Weight currently shown in a logger, so Plate Math follows it before the set is logged. */
   const [liveWeights, setLiveWeights] = useState<Record<string, number | null>>({});
   const active = session?.status === 'active';
@@ -156,6 +162,31 @@ export function ActiveWorkoutScreen() {
   const act = (trigger: RecalibrationTrigger) => {
     setSelected(null);
     void store.recalibrate(trigger);
+  };
+
+  const onCoachAction = (action: CoachAction) => {
+    switch (action.kind) {
+      case 'recalibrate':
+        void store.recalibrate(action.trigger);
+        break;
+      case 'rest':
+        store.adjustRest(action.deltaSeconds);
+        break;
+      case 'readiness':
+        setCheckingIn(true);
+        break;
+      case 'alternatives': {
+        const block = workout.blocks.find((candidate) =>
+          candidate.entries.some((entry) => entry.id === action.entryId),
+        );
+        const entry = block?.entries.find((candidate) => candidate.id === action.entryId);
+        if (block && entry) setSelected({ entry, block });
+        break;
+      }
+      case 'backup':
+        window.location.hash = '#/settings';
+        break;
+    }
   };
 
   const commitLog = (entry: WorkoutEntry, set: SetPrescription, values: SetLoggerValues) => {
@@ -467,6 +498,10 @@ export function ActiveWorkoutScreen() {
         </button>
       </Card>
 
+      {coach ? (
+        <AdaptiveCoachCard card={coach.card} fatigue={coach.fatigue} onAction={onCoachAction} />
+      ) : null}
+
       {session.rest && position ? (
         <RestTimer
           rest={session.rest}
@@ -568,6 +603,17 @@ export function ActiveWorkoutScreen() {
             : undefined
         }
         editActions={editActions}
+      />
+
+      <ReadinessSheet
+        key={session.constraints.readiness ? 'set' : 'unset'}
+        open={checkingIn}
+        initial={session.constraints.readiness}
+        onClose={() => setCheckingIn(false)}
+        onSubmit={(next) => {
+          setCheckingIn(false);
+          void store.recalibrate({ type: 'readiness', readiness: next });
+        }}
       />
 
       <RatingSheet

@@ -55,7 +55,8 @@ function setsLabel(entry: WorkoutEntry): string {
   const reps = first ? `${first.targetReps[0]}-${first.targetReps[1]}` : '';
   const rir = first ? ` @ RIR ${first.targetRir}` : '';
   const warm = entry.warmupSets > 0 ? ` · ${entry.warmupSets} ramp` : '';
-  return `${working.length} × ${reps}${rir}${warm}`;
+  const load = first && first.targetWeight !== null ? `${first.targetWeight} × ` : '';
+  return `${working.length} × ${load}${reps}${rir}${warm}`;
 }
 
 function EntryRow({

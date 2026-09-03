@@ -12,6 +12,28 @@ export type DurationChoice = 15 | 30 | 45 | 'default';
 
 export type SetKind = 'warmup' | 'working' | 'drop';
 
+export type ProgressionMode =
+  'start' | 'double' | 'weight' | 'reps' | 'sets' | 'maintain' | 'deload' | 'regress';
+
+/** Why an entry's loads and reps are what they are, from the progression engine. */
+export interface EntryProgression {
+  mode: ProgressionMode;
+  evidence: string[];
+  sessions: number;
+  viaFamily: boolean;
+  confidence: 'low' | 'medium' | 'high';
+  /** 1 when an extra set is worth offering; never applied automatically. */
+  setsAdvice: 0 | 1;
+}
+
+/** Values the user set by hand this session; the engines never override them. */
+export interface ManualEdits {
+  weight?: boolean;
+  reps?: boolean;
+  sets?: boolean;
+  rest?: boolean;
+}
+
 export interface SetPrescription {
   index: number;
   kind: SetKind;
@@ -38,6 +60,8 @@ export interface WorkoutEntry {
   slot?: number;
   /** Catalog id this entry replaced, when the user or the engine swapped it this session. */
   replacedFrom?: string;
+  progression?: EntryProgression;
+  manual?: ManualEdits;
 }
 
 export type BlockKind = 'straight' | 'superset' | 'circuit';

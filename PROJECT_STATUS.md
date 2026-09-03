@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                                                                                                                                            |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                         |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                         |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                 |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                            |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                |
-| Current phase          | Phase 5 - Active Workout, Logging, and Superset Experience                                                                                                                                                                                                       |
-| Phase gate             | **YELLOW** - Phase 5 work complete, deployed, and verified live; awaiting the owner's review on Android                                                                                                                                                          |
-| Current branch         | `main`                                                                                                                                                                                                                                                           |
-| Latest completed phase | Phase 4 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                     |
-| Work in progress       | Phase 5 review gate. No Phase 6 code has been started.                                                                                                                                                                                                           |
-| Latest commit          | Phase 5 docs and screenshots (this commit); app build under review is `5af4611`                                                                                                                                                                                  |
-| Latest deployment      | `5af4611` deployed by Deploy Pages run 33779170915 (success); full browser suite passed against the live URL (two desktop runs hit a network timeout while a screenshot capture ran alongside and passed alone); 37 screenshots captured from the deployed build |
-| Test totals            | Unit: 208 passed (33 files). Browser/mobile: 75 passed + 8 skipped by design locally and against the live URL                                                                                                                                                    |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 5`                                                                                                                                                                                     |
+| Item                   | Value                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                   |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                   |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                           |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                      |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                          |
+| Current phase          | Phase 6 - Adaptive Coach, Progression, Strategy, and Recovery                                                                              |
+| Phase gate             | **YELLOW** - Phase 6 work complete and deployed from this commit; awaiting the owner's review on Android                                   |
+| Current branch         | `main`                                                                                                                                     |
+| Latest completed phase | Phase 5 (GREEN from the owner on 2026-09-03)                                                                                               |
+| Work in progress       | Phase 6 review gate. No Phase 7 code has been started.                                                                                     |
+| Latest commit          | Phase 6 build (this commit): progression engine, fatigue, strategy, Coach Conductor, gold coach card, readiness check-in, session feedback |
+| Latest deployment      | Pending: the Phase 6 deploy runs from this commit. Last successful deploy before it: `dc088f8` (Phase 5 docs)                              |
+| Test totals            | Unit: 230 passed (37 files). Browser/mobile: 84 passed + 8 skipped by design locally (live run recorded in the docs commit that follows)   |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 6`                                                               |
 
 ## Phase checklist
 
@@ -28,10 +28,24 @@ _Last updated: _
 | 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner)        |
 | 3     | Workout Generation and Duration Engine                       | GREEN (owner)        |
 | 4     | Central Recalibration Engine                                 | GREEN (owner)        |
-| 5     | Active Workout, Logging, and Superset Experience             | YELLOW (review gate) |
-| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | planned              |
+| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner)        |
+| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | YELLOW (review gate) |
 | 7     | Progress, Plan, Coverage, PRs, and Session Summary           | planned              |
 | 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | planned              |
+
+## Phase 6 deliverables
+
+- [x] Progression engine (`src/engine/progression/progression.ts`, see `docs/progression-engine.md`): double, weight, rep, and set progression, micro-deload, regression, maintain, family continuity, equipment increments; load targets on every card
+- [x] Readiness check-in on Today and in the workout; recovery adjustments through the existing readiness recalibration
+- [x] Fatigue interpretation (`src/engine/recovery/fatigue.ts`) feeding progression, strategy, and the coach
+- [x] Performance recalibration, pain handling, next-target recommendations with "Why this target"
+- [x] Actual-completed-record truth and manual-edit protection (flags on entries the engines never override)
+- [x] One gold Adaptive Coach card with Coach Conductor priority arbitration, one action maximum, concise Why evidence
+- [x] Two-move superset coaching from logged rounds only; incomplete drafts excluded; duration- and readiness-aware evidence
+- [x] Multi-session strategy (`src/engine/strategy/strategy.ts`): load, rep, fatigue, recovery, fit, and coverage plateau diagnosis with user-controlled recommendations
+- [x] Intelligent rest recommendations; safe optional drop-set recommendations; session feedback on completion
+- [x] Nothing auto-applied: swaps, deloads, extra sets, and drop sets all require a tap (major ones a second tap)
+- [ ] Owner opens the live link on the Android phone and gives the phase decision (review gate)
 
 ## Phase 5 deliverables
 
@@ -96,10 +110,10 @@ _Last updated: _
 
 ## Known limitations
 
-- Load targets, personal records, strength progression, and the weekly-volume effect line on the completion summary arrive with Phases 6 and 7; the record already carries everything they need.
-- The readiness check-in screen arrives in Phase 6; the engine path is built.
+- Personal records, estimated one-rep-max views, and the progress analytics arrive in Phase 7; records already carry target RIR, pain joints, and readiness so nothing needs migrating.
+- The coach reads recent history: with no sessions logged it shows "Follow today's plan" and the fatigue line until records accumulate.
 - Vibration on rest completion depends on the phone allowing it; there is never a sound.
-- Demonstrations remain original placeholder diagrams until Phase 8; user media can replace them per exercise now.
+- Demonstrations remain original placeholder diagrams until Phase 8; user media can replace them per exercise.
 
 ## Mobile screenshots
 
@@ -114,8 +128,8 @@ Phase 4: [docs/screenshots/phase-4](docs/screenshots/phase-4) · Phase 3: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone, starts the workout from Today, logs sets with one
-tap, corrects one in place, uses the rest timer, reaches the superset card, pauses and resumes,
-finishes with a rating, reads the summary, taps Done, and replies with `GREEN - NEXT PHASE`,
-`YELLOW - FIX: <issue>`, or `RED - STOP`. On GREEN, Phase 6 begins: adaptive coach, progression,
-strategy, and recovery.
+Owner opens the live link on an Android phone, reads the gold Adaptive Coach card on Today, taps
+Check in with low energy and sleep, watches the session adjust and the coach move to recovery,
+starts the workout and reads the load targets and "Why this target", finishes with a rating and
+reads the coach feedback, and replies with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or
+`RED - STOP`. On GREEN, Phase 7 begins: progress, plan, coverage, PRs, and the session summary.

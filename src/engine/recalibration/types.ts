@@ -41,6 +41,8 @@ export type RecalibrationTrigger =
   | { type: 'rep-range'; entryId: string; reps: [number, number] }
   | { type: 'reorder'; entryId: string; direction: 'up' | 'down' }
   | { type: 'split-superset'; blockId: string }
+  | { type: 'drop-set'; entryId: string; on: boolean }
+  | { type: 'rest-adjust'; entryId: string; deltaSeconds: number }
   | { type: 'technique'; technique: 'supersets' | 'dropSets' | 'circuits' }
   | { type: 'profile' }
   | { type: 'readiness'; readiness: Readiness }

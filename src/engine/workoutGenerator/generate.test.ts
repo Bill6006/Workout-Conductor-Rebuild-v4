@@ -202,6 +202,8 @@ describe('generateWorkout: profile and history', () => {
         endedEarly: false,
         rating: null,
         skippedExerciseIds: [],
+        painJoints: [],
+        readiness: null,
         entries: [
           {
             exerciseId: 'barbell-bench-press',

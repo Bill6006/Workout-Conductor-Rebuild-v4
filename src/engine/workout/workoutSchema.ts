@@ -32,6 +32,24 @@ export const WorkoutEntrySchema = z.looseObject({
   pinned: z.boolean(),
   slot: z.number().int().min(0).optional(),
   replacedFrom: z.string().optional(),
+  progression: z
+    .looseObject({
+      mode: z.enum(['start', 'double', 'weight', 'reps', 'sets', 'maintain', 'deload', 'regress']),
+      evidence: z.array(z.string()),
+      sessions: z.number().int().min(0),
+      viaFamily: z.boolean(),
+      confidence: z.enum(['low', 'medium', 'high']),
+      setsAdvice: z.union([z.literal(0), z.literal(1)]),
+    })
+    .optional(),
+  manual: z
+    .looseObject({
+      weight: z.boolean().optional(),
+      reps: z.boolean().optional(),
+      sets: z.boolean().optional(),
+      rest: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export const WorkoutBlockSchema = z.looseObject({

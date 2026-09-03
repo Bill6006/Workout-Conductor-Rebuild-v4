@@ -10,6 +10,12 @@ import {
 } from '../conflicts/conflictEngine';
 import { preferredIdsOf } from '../conflicts/context';
 import { estimateWorkout, resolveTargetMinutes, type SetDonePredicate } from '../duration/duration';
+import { weightStep } from '../plateMath/plateMath';
+import {
+  applyProgression,
+  recommendNextTarget,
+  summarizeProgression,
+} from '../progression/progression';
 import { buildSets, prescribe, rampSetsFor } from '../progression/roles';
 import {
   generateWorkout,
@@ -71,6 +77,8 @@ const LOCAL_TRIGGERS = new Set<TriggerType>([
   'rep-range',
   'reorder',
   'split-superset',
+  'drop-set',
+  'rest-adjust',
 ]);
 const PARTIAL_TRIGGERS = new Set<TriggerType>([
   'readiness',
@@ -313,6 +321,7 @@ function rebuild(
     hardCap,
     isSetDone: classified.isDone,
     adjust: options.adjust,
+    readiness: constraints.readiness,
   };
   return generateWorkout({
     profile: request.profile,
@@ -368,10 +377,19 @@ function applySubstitution(
     const prescription = prescribe(exercise, entry.role, request.profile);
     const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
     const warmupSets = rampSetsFor(exercise, entry.role, request.workout.duration.targetMinutes);
-    entry.sets = buildSets(
-      { ...prescription, sets: working, restSeconds: entry.restSeconds },
-      warmupSets,
+    const target = recommendNextTarget({
+      exercise,
+      role: entry.role,
+      prescription,
+      history: request.history,
+      profile: request.profile,
+    });
+    entry.sets = applyProgression(
+      buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
+      target,
+      weightStep(exercise, request.profile.units),
     );
+    entry.progression = summarizeProgression(target);
     entry.warmupSets = warmupSets;
     if (entry.dropSet) {
       if (exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
@@ -787,6 +805,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         if (set.kind !== 'warmup' && !isDone(entry.id, set.index))
           set.targetWeight = trigger.weight;
       }
+      entry.manual = { ...entry.manual, weight: true };
       return {
         ...base,
         workout,
@@ -909,6 +928,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         }
         entry.sets = entry.sets.filter((set) => set !== removable);
       }
+      entry.manual = { ...entry.manual, sets: true };
       syncRounds(block);
       refresh(workout, request, constraints);
       const count = entry.sets.filter((set) => set.kind === 'working').length;
@@ -966,6 +986,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           changed += 1;
         }
       }
+      if (changed > 0) entry.manual = { ...entry.manual, reps: true };
       return {
         ...base,
         workout,
@@ -1026,6 +1047,69 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       workout.blocks.splice(at, 1, ...straight);
       refresh(workout, request, constraints);
       return { ...base, workout, headline: `Split ${block.label} into straight sets.` };
+    }
+
+    case 'drop-set': {
+      const workout = cloneWorkout(request.workout);
+      const { entry, block } = findEntry(workout, trigger.entryId);
+      const { isDone } = classify(request);
+      const exercise = requireExercise(entry.exerciseId);
+      const existing = entry.sets.find((set) => set.kind === 'drop');
+      if (trigger.on) {
+        if (!exercise.dropSetSafe) throw new Error(`${exercise.name} is not safe for a drop set.`);
+        if (existing)
+          return { ...base, workout, headline: `${exercise.name} already has a drop set.` };
+        const lastWorking = [...entry.sets].reverse().find((set) => set.kind === 'working');
+        const step = weightStep(exercise, request.profile.units);
+        const load = lastWorking?.targetWeight ?? null;
+        entry.sets.push({
+          index: nextSetIndex(entry),
+          kind: 'drop',
+          targetReps: [8, 12],
+          targetRir: 0,
+          targetWeight:
+            load === null ? null : Math.max(step, Math.round((load * 0.8) / step) * step),
+          restSeconds: 0,
+        });
+        entry.dropSet = true;
+      } else {
+        if (!existing) return { ...base, workout, headline: `${exercise.name} has no drop set.` };
+        if (isDone(entry.id, existing.index)) throw new Error('A logged drop set stays.');
+        entry.sets = entry.sets.filter((set) => set !== existing);
+        entry.dropSet = false;
+      }
+      syncRounds(block);
+      refresh(workout, request, constraints);
+      return {
+        ...base,
+        workout,
+        headline: trigger.on
+          ? `Drop set added to ${exercise.name}: strip about 20% after the last set and go.`
+          : `Drop set removed from ${exercise.name}.`,
+      };
+    }
+
+    case 'rest-adjust': {
+      const workout = cloneWorkout(request.workout);
+      const { entry, block } = findEntry(workout, trigger.entryId);
+      const { isDone } = classify(request);
+      const name = requireExercise(entry.exerciseId).name;
+      const next = Math.max(30, Math.min(300, entry.restSeconds + trigger.deltaSeconds));
+      entry.restSeconds = next;
+      for (const set of entry.sets) {
+        if (set.kind === 'working' && !isDone(entry.id, set.index)) set.restSeconds = next;
+      }
+      block.restBetweenRoundsSeconds =
+        block.kind === 'straight'
+          ? next
+          : Math.max(30, Math.min(300, block.restBetweenRoundsSeconds + trigger.deltaSeconds));
+      entry.manual = { ...entry.manual, rest: true };
+      refresh(workout, request, constraints);
+      return {
+        ...base,
+        workout,
+        headline: `${name}: ${next >= 60 ? `${Math.round((next / 60) * 10) / 10} min` : `${next} s`} rest for the remaining sets.`,
+      };
     }
 
     case 'end-by': {

@@ -14,6 +14,11 @@
   --color-accent-soft: rgba(198, 245, 66, 0.14);
   --color-on-accent: #0b0d0f;
 
+  /* Adaptive Coach: the one gold surface */
+  --color-gold: #f2c14e;
+  --color-gold-soft: rgba(242, 193, 78, 0.16);
+  --color-on-gold: #1a1406;
+
   /* Status */
   --color-yellow: #f5c542;
   --color-yellow-soft: rgba(245, 197, 66, 0.16);

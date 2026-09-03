@@ -109,6 +109,16 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
     scope: 'local',
     evaluating: ['Splitting the pair into straight sets', 'Re-estimating the session time'],
   },
+  'drop-set': {
+    label: 'Drop set',
+    scope: 'local',
+    evaluating: ['Checking the move is drop-set safe', 'Re-estimating the session time'],
+  },
+  'rest-adjust': {
+    label: 'Rest changed',
+    scope: 'local',
+    evaluating: ['Updating the remaining rests', 'Re-estimating the session time'],
+  },
   technique: {
     label: 'Techniques',
     scope: 'full',
@@ -195,6 +205,10 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
       return `Moving ${name} ${trigger.direction}`;
     case 'split-superset':
       return 'Splitting the superset into straight sets';
+    case 'drop-set':
+      return trigger.on ? `Adding a drop set to ${name}` : `Removing the drop set from ${name}`;
+    case 'rest-adjust':
+      return trigger.deltaSeconds > 0 ? `Resting longer on ${name}` : `Resting less on ${name}`;
     case 'technique':
       return trigger.technique === 'supersets'
         ? 'Re-pairing exercises'

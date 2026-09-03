@@ -84,6 +84,8 @@ export interface CompletionSummary {
   highlights: string[];
   endedEarly: boolean;
   nextImplication: string;
+  /** Coach feedback on the session, exercise by exercise. */
+  feedback: string[];
 }
 
 export interface WorkoutSession {
@@ -229,6 +231,7 @@ const CompletionSchema = z.looseObject({
   highlights: z.array(z.string()),
   endedEarly: z.boolean(),
   nextImplication: z.string(),
+  feedback: z.array(z.string()).default([]),
 });
 
 const SessionSchema = z.looseObject({

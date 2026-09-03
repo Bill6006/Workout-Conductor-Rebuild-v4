@@ -120,6 +120,19 @@ export function EntryPanels({
               {previous.rir === null ? '' : ` @ RIR ${previous.rir}`}, {previous.sets} working sets.
             </p>
           ) : null}
+          {entry.progression ? (
+            <>
+              <h4 className={styles.panelTitle}>Why this target</h4>
+              <ul className={styles.panelList} data-testid="progression-evidence">
+                {entry.progression.evidence.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+                {entry.manual?.weight || entry.manual?.reps ? (
+                  <li>You set this by hand; the engines keep your values.</li>
+                ) : null}
+              </ul>
+            </>
+          ) : null}
           <h4 className={styles.panelTitle}>Setup</h4>
           <ol className={styles.panelList}>
             {(instruction?.setup.length ? instruction.setup : exercise.instructions.setup).map(

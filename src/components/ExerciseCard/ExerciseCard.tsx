@@ -86,7 +86,7 @@ export function ExerciseCard({
         </div>
         <p className={styles.targetLine} data-testid="target-line">
           {target
-            ? `${position && position.kind === 'warmup' ? 'Ramp set' : position && position.kind === 'drop' ? 'Drop set' : `Set ${Math.min(working.length, doneWorking + 1)} of ${working.length}`} · ${target.targetReps[0]}-${target.targetReps[1]} reps${target.kind === 'working' ? ` @ RIR ${target.targetRir}` : ''}`
+            ? `${position && position.kind === 'warmup' ? 'Ramp set' : position && position.kind === 'drop' ? 'Drop set' : `Set ${Math.min(working.length, doneWorking + 1)} of ${working.length}`}${target.targetWeight !== null ? ` · ${target.targetWeight} ${units}` : ''} · ${target.targetReps[0]}-${target.targetReps[1]} reps${target.kind === 'working' ? ` @ RIR ${target.targetRir}` : ''}`
             : `${working.length} sets done`}
           {' · '}
           {rest >= 60 ? `${Math.round((rest / 60) * 10) / 10} min rest` : `${rest} s rest`}

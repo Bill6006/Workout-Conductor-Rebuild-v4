@@ -28,6 +28,8 @@ function record(
     endedEarly: false,
     rating: null,
     skippedExerciseIds: [],
+    painJoints: [],
+    readiness: null,
     entries: [
       {
         exerciseId,

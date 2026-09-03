@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { routeHref } from '../../app/navigation';
 import { requireExercise } from '../../catalog/exercises/catalog';
+import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
 import { Card } from '../../components/Card/Card';
 import { ExerciseDetailSheet } from '../../components/ExerciseDetail/ExerciseDetailSheet';
 import { FactList } from '../../components/FactList/FactList';
@@ -11,7 +12,10 @@ import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
 import { preferredIdsOf } from '../../engine/conflicts/context';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import { allEntries, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
+import type { CoachAction } from '../../engine/coach/coachConductor';
+import { useCoach } from '../coach/useCoach';
 import { GOAL_OPTIONS, STYLE_OPTIONS, labelFor } from '../profile/labels';
+import { ReadinessSheet } from './ReadinessSheet';
 import { WorkoutPreviewCard } from './WorkoutPreviewCard';
 import styles from './TodayScreen.module.css';
 import { useTodayWorkout } from './useTodayWorkout';
@@ -35,6 +39,8 @@ export function TodayScreen() {
   const now = useNow();
   const today = useTodayWorkout();
   const [selected, setSelected] = useState<Selection | null>(null);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const coach = useCoach();
 
   if (!today) {
     return (
@@ -83,6 +89,33 @@ export function TodayScreen() {
     void store.recalibrate(trigger);
   };
 
+  // Coach actions are taps the user makes; the card never applies anything itself.
+  const onCoachAction = (action: CoachAction) => {
+    switch (action.kind) {
+      case 'recalibrate':
+        void store.recalibrate(action.trigger);
+        break;
+      case 'rest':
+        store.adjustRest(action.deltaSeconds);
+        break;
+      case 'readiness':
+        setCheckingIn(true);
+        break;
+      case 'alternatives': {
+        const block = workout.blocks.find((candidate) =>
+          candidate.entries.some((entry) => entry.id === action.entryId),
+        );
+        const entry = block?.entries.find((candidate) => candidate.id === action.entryId);
+        if (block && entry) setSelected({ entry, block });
+        break;
+      }
+      case 'backup':
+        window.location.hash = routeHref('settings');
+        break;
+    }
+  };
+  const readiness = session.constraints.readiness;
+
   return (
     <>
       <ScreenHeader title="Today" intro={formatDayLabel(now)} />
@@ -110,13 +143,37 @@ export function TodayScreen() {
         }}
       />
 
-      <Card eyebrow="Readiness" title="Quick check-in arrives in Phase 6">
-        <p className={styles.body}>
-          The recalibration engine already turns energy, soreness, sleep, joint discomfort, and time
-          pressure into fewer sets, more reps in reserve, gentler picks, or a shorter session. The
-          check-in screen that feeds it arrives with the adaptive coach.
+      {coach ? (
+        <AdaptiveCoachCard card={coach.card} fatigue={coach.fatigue} onAction={onCoachAction} />
+      ) : null}
+
+      <Card eyebrow="Readiness" title={readiness ? 'Checked in for today' : 'Quick check-in'}>
+        <p className={styles.body} data-testid="readiness-summary">
+          {readiness
+            ? `Energy ${readiness.energy}/5 · soreness ${readiness.soreness}/5 · sleep ${readiness.sleep}/5 · motivation ${readiness.motivation}/5${readiness.jointDiscomfort.length ? ` · ${readiness.jointDiscomfort.join(', ')} discomfort` : ''}${readiness.timePressure ? ' · short on time' : ''}.`
+            : 'Thirty seconds on energy, soreness, sleep, motivation, joints, and time. The session adjusts instead of cancelling.'}
+          {coach ? ` Fatigue ${coach.fatigue.level}: ${coach.fatigue.evidence[0]}` : ''}
         </p>
+        <button
+          type="button"
+          className={styles.link}
+          onClick={() => setCheckingIn(true)}
+          data-testid="readiness-open"
+        >
+          {readiness ? 'Update check-in' : 'Check in'}
+        </button>
       </Card>
+
+      <ReadinessSheet
+        key={readiness ? 'set' : 'unset'}
+        open={checkingIn}
+        initial={readiness}
+        onClose={() => setCheckingIn(false)}
+        onSubmit={(next) => {
+          setCheckingIn(false);
+          void store.recalibrate({ type: 'readiness', readiness: next });
+        }}
+      />
 
       <Card eyebrow="Your profile" title="What the conductor knows">
         <FactList

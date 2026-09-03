@@ -86,9 +86,17 @@ export function WorkoutCompletion({ session, units }: WorkoutCompletionProps) {
             { label: 'Next time', value: summary.nextImplication },
           ]}
         />
+        {summary.feedback.length > 0 ? (
+          <FactList
+            items={summary.feedback.map((line, index) => ({
+              label: index === 0 ? 'Coach' : '',
+              value: line,
+            }))}
+          />
+        ) : null}
         <p className={styles.panelNote}>
-          Weekly volume and recent exposure now include this session; the next workout is generated
-          from them. Personal records and progression arrive in Phases 6 and 7.
+          Weekly volume, recent exposure, and every logged set now feed the next targets. Personal
+          records and the progress views arrive in Phase 7.
         </p>
         <Button
           variant="primary"

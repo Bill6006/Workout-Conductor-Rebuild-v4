@@ -4,6 +4,7 @@ import { muscleName } from '../../catalog/muscles/muscles';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import { allEntries, workingSets } from '../../engine/workout/types';
 import type { UserProfile } from '../validation/profile';
+import { sessionFeedback } from '../../engine/strategy/strategy';
 import type { LoggedExercise, SessionRating, WorkoutRecord } from '../validation/workoutRecord';
 import type { CompletionSummary, WorkoutSession } from './session';
 
@@ -53,6 +54,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
               setIndex: set.index,
               targetReps: [set.targetReps[0], set.targetReps[1]] as [number, number],
               targetWeight: set.targetWeight,
+              targetRir: set.targetRir,
               loggedAt: done.completedAt,
             };
           }),
@@ -76,6 +78,13 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
     endedEarly: options.endedEarly,
     rating: options.rating,
     skippedExerciseIds,
+    painJoints: [...session.constraints.painJoints],
+    readiness: session.constraints.readiness
+      ? {
+          ...session.constraints.readiness,
+          jointDiscomfort: [...session.constraints.readiness.jointDiscomfort],
+        }
+      : null,
   };
 }
 
@@ -103,6 +112,7 @@ export function buildCompletion(
   session: WorkoutSession,
   record: WorkoutRecord,
   profile: UserProfile,
+  history: readonly WorkoutRecord[] = [],
 ): CompletionSummary {
   const entries = allEntries(session.workout.blocks);
   const completedWorking = (entry: LoggedExercise) =>
@@ -176,5 +186,6 @@ export function buildCompletion(
     highlights,
     endedEarly: record.endedEarly,
     nextImplication: nextImplication(record, muscles),
+    feedback: sessionFeedback(record, history, profile),
   };
 }

@@ -939,7 +939,7 @@ export class AppStore {
     });
     const db = await this.getDatabase();
     const receipt = await putVerified(db, 'workouts', record, { now: this.now });
-    const completion = buildCompletion(session, record, profile);
+    const completion = buildCompletion(session, record, profile, this.state.history);
     this.setState({
       history: parseWorkoutRecords([...this.state.history, record]),
       workoutCount: this.state.workoutCount + 1,

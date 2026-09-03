@@ -18,6 +18,7 @@ export const LoggedSetSchema = z.looseObject({
   setIndex: z.number().int().min(0).optional(),
   targetReps: z.tuple([z.number().int().min(0), z.number().int().min(0)]).optional(),
   targetWeight: z.number().min(0).nullable().optional(),
+  targetRir: z.number().min(0).max(10).optional(),
   loggedAt: z.iso.datetime().optional(),
 });
 
@@ -56,6 +57,19 @@ export const WorkoutRecordSchema = z.looseObject({
   endedEarly: z.boolean().default(false),
   rating: SessionRatingSchema.nullable().default(null),
   skippedExerciseIds: z.array(z.string()).default([]),
+  /** Joints reported painful during the session. */
+  painJoints: z.array(z.string()).default([]),
+  readiness: z
+    .looseObject({
+      energy: z.number(),
+      soreness: z.number(),
+      sleep: z.number(),
+      motivation: z.number(),
+      jointDiscomfort: z.array(z.string()),
+      timePressure: z.boolean(),
+    })
+    .nullable()
+    .default(null),
 });
 
 export type WorkoutRecord = z.infer<typeof WorkoutRecordSchema>;

@@ -22,7 +22,7 @@ timestamp. The engine is pure: it never mutates the request.
 
 ## Trigger registry
 
-`triggers.ts` lists all 23 triggers with a label, a default scope, and the short list of things
+`triggers.ts` lists all 25 triggers with a label, a default scope, and the short list of things
 the overlay shows while the engine works.
 
 | Trigger        | Default scope | What it does                                                                                                |
@@ -50,6 +50,8 @@ the overlay shows while the engine works.
 | rep-range      | local         | Sets the rep target on the remaining working sets.                                                          |
 | reorder        | local         | Moves an unstarted row up or down; started work keeps its place.                                            |
 | split-superset | local         | Turns an unstarted superset into straight sets.                                                             |
+| drop-set       | local         | Adds or removes an optional drop set (only when the move is drop-set safe; a logged one stays).             |
+| rest-adjust    | local         | Changes the rest for the remaining sets of one exercise (30 s to 5 min).                                    |
 
 ## Scope
 
