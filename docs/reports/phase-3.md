@@ -46,17 +46,17 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
 
 ## Verification
 
-| Check                        | Result                                                                                                                                                                                           |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run lint` / `typecheck` | clean                                                                                                                                                                                            |
-| `npm run test:unit`          | 152 passed across 26 files (generator, duration and estimation, volume and priorities, progression roles, plus everything from earlier phases)                                                   |
-| `npm run build`              | ok; JS 454 KB raw / 133 KB gzip, CSS 27 KB                                                                                                                                                       |
-| `npm run privacy-scan`       | passed, 0 findings                                                                                                                                                                               |
-| `npm run verify-build`       | passed                                                                                                                                                                                           |
-| `npm run test:e2e` (local)   | 50 passed + 6 skipped by design: 14 flows on each of 412 px, 360 px, desktop (smoke, onboarding, settings, places, export/import, library, workout length, Workout list) + capture flows + 2 PWA |
-| Deploy Pages run 33719261912 | success: verify job green on the Linux runner, deploy 7 s; build marker `2d9d605 · Phase 3`                                                                                                      |
-| Against the live URL         | 50 passed + 6 skipped by design against https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                 |
-| Screenshots                  | 26 captures + preview sheet from the live `2d9d605` build in `docs/screenshots/phase-3/`                                                                                                         |
+| Check                                       | Result                                                                                                                                                                                                |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint` / `typecheck`                | clean                                                                                                                                                                                                 |
+| `npm run test:unit`                         | 152 passed across 26 files (generator, duration and estimation, volume and priorities, progression roles, plus everything from earlier phases)                                                        |
+| `npm run build`                             | ok; JS 454 KB raw / 133 KB gzip, CSS 27 KB                                                                                                                                                            |
+| `npm run privacy-scan`                      | passed, 0 findings                                                                                                                                                                                    |
+| `npm run verify-build`                      | passed                                                                                                                                                                                                |
+| `npm run test:e2e` (local)                  | 50 passed + 6 skipped by design: 14 flows on each of 412 px, 360 px, desktop (smoke, onboarding, settings, places, export/import, library, workout length, Workout list) + capture flows + 2 PWA      |
+| Deploy Pages runs 33719261912 / 33719882460 | success: engine build `2d9d605`, then `f30bec0` (Default option shows the generated session length); verify job green on the Linux runner both times                                                  |
+| Against the live URL                        | 50 passed + 6 skipped by design against https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (build marker `f30bec0 · Phase 3`); one image-loaded assertion hit network timing once and now polls |
+| Screenshots                                 | 26 captures + preview sheet from the live `f30bec0` build in `docs/screenshots/phase-3/`                                                                                                              |
 
 ## Decisions and notes
 
@@ -68,6 +68,8 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
 - Load targets (`targetWeight`) stay null until the progression engine in Phase 6.
 - Recalibration of a started workout (locked completed work, overlay, change summary, End-by
   time) is Phase 4; today the dropdown regenerates the not-yet-started session.
+- The dropdown's Default option shows the complete generated session's length, as in the plan's
+  example ("Default: 62 min"); the typical length from Settings is the planning budget behind it.
 
 ## Next
 

@@ -26,9 +26,12 @@ test.describe('exercise library', () => {
     await expect(dialog).toBeVisible();
     const demo = dialog.getByTestId('exercise-demo');
     await expect(demo).toHaveAttribute('data-playing', 'true');
-    expect(
-      await demo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0),
-    ).toBe(true);
+    // The loop is fetched over the network on the live site; poll until it has loaded.
+    await expect
+      .poll(() => demo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0), {
+        timeout: 10_000,
+      })
+      .toBe(true);
     await dialog.getByRole('button', { name: 'Pause' }).click();
     await expect(demo).toHaveAttribute('data-playing', 'false');
     await expect(dialog.getByRole('heading', { name: 'Execution' })).toBeVisible();

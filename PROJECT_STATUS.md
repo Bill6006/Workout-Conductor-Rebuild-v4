@@ -1,23 +1,23 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-03 05:50 UTC_
+_Last updated: 2026-09-03 06:05 UTC_
 
-| Item                   | Value                                                                                                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                           |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                           |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                   |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                              |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                  |
-| Current phase          | Phase 3 - Workout Generation and Duration Engine                                                                                                                                   |
-| Phase gate             | **YELLOW** - awaiting the owner's Android review of the live link                                                                                                                  |
-| Current branch         | `main`                                                                                                                                                                             |
-| Latest completed phase | Phase 2 (GREEN from the owner on 2026-09-03)                                                                                                                                       |
-| Work in progress       | Phase 3 review gate. No Phase 4 code has been started.                                                                                                                             |
-| Latest commit          | App build `2d9d605` ([commit](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commit/2d9d605)); this commit adds the live screenshots and final status                    |
-| Latest deployment      | Deploy Pages run [33719261912](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions/runs/33719261912): success, 2026-09-03 05:33 UTC, build marker `2d9d605 · Phase 3` |
-| Test totals            | Unit: 152 passed (26 files). Browser/mobile: 50 passed + 6 skipped by design, locally and against the live URL (14 flows × 412 px, 360 px, desktop + 412 px capture flows + 2 PWA) |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 3`                                                                                                       |
+| Item                   | Value                                                                                                                                                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                         |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                         |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                 |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                            |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                |
+| Current phase          | Phase 3 - Workout Generation and Duration Engine                                                                                                                                                                 |
+| Phase gate             | **YELLOW** - awaiting the owner's Android review of the live link                                                                                                                                                |
+| Current branch         | `main`                                                                                                                                                                                                           |
+| Latest completed phase | Phase 2 (GREEN from the owner on 2026-09-03)                                                                                                                                                                     |
+| Work in progress       | Phase 3 review gate. No Phase 4 code has been started.                                                                                                                                                           |
+| Latest commit          | App build `f30bec0` ([commit](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commit/f30bec0)) on top of the engine build `2d9d605`; this commit adds the live screenshots and final status             |
+| Latest deployment      | Deploy Pages run [33719882460](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions/runs/33719882460): success, 2026-09-03 05:42 UTC, build marker `f30bec0 · Phase 3`                               |
+| Test totals            | Unit: 152 passed (26 files). Browser/mobile: 50 passed + 6 skipped by design locally and against the live URL (one image-loaded check was made to poll after a network timing miss on the live run, then passed) |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 3`                                                                                                                                     |
 
 ## Phase checklist
 
@@ -59,7 +59,7 @@ _Last updated: 2026-09-03 05:50 UTC_
 
 ## Mobile screenshots
 
-Phase 3, captured by Playwright from the deployed build `2d9d605` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-3](docs/screenshots/phase-3)).
+Phase 3, captured by Playwright from the deployed build `f30bec0` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-3](docs/screenshots/phase-3)).
 
 - Combined preview sheet: [preview-sheet.png](docs/screenshots/phase-3/preview-sheet.png)
 - Android 412 px (Pixel 7): [Today, Default time](docs/screenshots/phase-3/android-412-today.png) · [Today, fitted to 15 min](docs/screenshots/phase-3/android-412-today-15-min.png) · [Today full page](docs/screenshots/phase-3/android-412-today-full.png) · [Today alternatives](docs/screenshots/phase-3/android-412-today-alternatives.png) · [Workout list](docs/screenshots/phase-3/android-412-workout.png) · [Library](docs/screenshots/phase-3/android-412-library.png) · [Exercise detail sheet](docs/screenshots/phase-3/android-412-exercise-detail.png) · [Onboarding 1 goals](docs/screenshots/phase-3/android-412-onboarding-1-goals.png) · [Progress](docs/screenshots/phase-3/android-412-progress.png) · [Plan](docs/screenshots/phase-3/android-412-plan.png) · [Settings](docs/screenshots/phase-3/android-412-settings.png)
