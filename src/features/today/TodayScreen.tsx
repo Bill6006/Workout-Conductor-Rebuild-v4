@@ -103,6 +103,11 @@ export function TodayScreen() {
           label: clockLabel(session.constraints.endBy),
         }}
         onEndByChange={(on) => void store.setEndBy(on)}
+        sessionStatus={session.status}
+        onStart={() => {
+          if (session.status === 'preview') store.startWorkout();
+          window.location.hash = routeHref('workout');
+        }}
       />
 
       <Card eyebrow="Readiness" title="Quick check-in arrives in Phase 6">

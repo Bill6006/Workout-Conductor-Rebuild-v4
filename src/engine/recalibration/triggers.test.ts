@@ -13,7 +13,7 @@ const profile = createDefaultProfile(NOW);
 describe('trigger registry', () => {
   it('covers every trigger with a label, a scope, and what the engine evaluates', () => {
     const types = Object.keys(TRIGGER_REGISTRY) as TriggerType[];
-    expect(types).toHaveLength(18);
+    expect(types).toHaveLength(23);
     for (const type of types) {
       const definition = TRIGGER_REGISTRY[type];
       expect(definition.label.length).toBeGreaterThan(0);

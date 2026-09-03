@@ -43,12 +43,32 @@ const BY_NAME: ReadonlyMap<string, CatalogExercise> = (() => {
   return map;
 })();
 
+/**
+ * User-owned custom exercises, registered by the store after hydration so every
+ * lookup below resolves them exactly like catalog entries. Never persisted here.
+ */
+const CUSTOM_REGISTRY = new Map<string, CatalogExercise>();
+
+export function registerCustomExercises(list: readonly CatalogExercise[]): void {
+  CUSTOM_REGISTRY.clear();
+  for (const exercise of list) CUSTOM_REGISTRY.set(exercise.id, exercise);
+}
+
+export function customExercises(): CatalogExercise[] {
+  return [...CUSTOM_REGISTRY.values()];
+}
+
+/** Catalog plus registered custom exercises. */
+export function allExercises(): CatalogExercise[] {
+  return [...EXERCISES, ...CUSTOM_REGISTRY.values()];
+}
+
 export function getExercise(id: string): CatalogExercise | undefined {
-  return BY_ID.get(id);
+  return BY_ID.get(id) ?? CUSTOM_REGISTRY.get(id);
 }
 
 export function requireExercise(id: string): CatalogExercise {
-  const exercise = BY_ID.get(id);
+  const exercise = BY_ID.get(id) ?? CUSTOM_REGISTRY.get(id);
   if (!exercise) throw new RangeError(`Unknown exercise ${id}`);
   return exercise;
 }

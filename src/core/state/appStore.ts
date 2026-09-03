@@ -1,14 +1,27 @@
 import { EQUIPMENT } from '../../catalog/equipment/equipment';
-import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
+import {
+  getExercise,
+  registerCustomExercises,
+  requireExercise,
+} from '../../catalog/exercises/catalog';
+import type { MuscleId } from '../../catalog/muscles/muscles';
+import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import { resolveTargetMinutes } from '../../engine/duration/duration';
 import { recalibrate as runRecalibration } from '../../engine/recalibration/recalibrate';
 import { describeTrigger, type TriggerContext } from '../../engine/recalibration/triggers';
 import type {
+  CompletedSet,
   RecalibrationRequest,
   RecalibrationResult,
   RecalibrationTrigger,
 } from '../../engine/recalibration/types';
-import { allEntries, type DurationChoice } from '../../engine/workout/types';
+import {
+  currentPosition,
+  restAfter,
+  workoutSequence,
+  type SetPosition,
+} from '../../engine/workout/sequence';
+import { allEntries, type DurationChoice, type GeneratedWorkout } from '../../engine/workout/types';
 import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import {
   buildBackup,
@@ -27,7 +40,16 @@ import {
 } from '../storage/localSettings';
 import { deleteVerified, putVerified, type SaveReceipt } from '../storage/verifiedSave';
 import type { Backup } from '../validation/backup';
-import type { CustomExercise, CustomInstruction, CustomMedia } from '../validation/customExercise';
+import {
+  CUSTOM_ID_PREFIX,
+  CustomExerciseSchema,
+  CustomInstructionSchema,
+  CustomMediaSchema,
+  customToCatalogExercise,
+  type CustomExercise,
+  type CustomInstruction,
+  type CustomMedia,
+} from '../validation/customExercise';
 import {
   HOME_LOCATION_ID,
   LocationProfileSchema,
@@ -37,18 +59,26 @@ import { UserProfileSchema, type UserProfile } from '../validation/profile';
 import type { LocalSettings } from '../validation/settings';
 import {
   parseWorkoutRecords,
+  type SessionRating,
   type WorkoutRecord as WorkoutHistoryRecord,
 } from '../validation/workoutRecord';
 import {
   CALIBRATION_LOG_LIMIT,
   IDLE_CALIBRATION,
+  clearSession,
   computeBaseKey,
   createSession,
+  doneKeys,
+  elapsedSeconds,
   readSession,
   writeSession,
   type CalibrationState,
+  type CompletionSummary,
+  type RestState,
+  type SetDraft,
   type WorkoutSession,
 } from './session';
+import { buildCompletion, buildWorkoutRecord } from './workoutRecordBuilder';
 
 /**
  * The single application state owner. Durable data goes through IndexedDB
@@ -58,7 +88,8 @@ import {
  * Every change to the generated workout runs through `recalibrate`, which
  * shows the calibration state, calls the pure Recalibration Engine, and either
  * commits the new workout with its change summary or keeps the previous one
- * and reports the error.
+ * and reports the error. The active workout (start, log, rest, pause, finish)
+ * lives here too, so one set edit is one small state change.
  */
 
 export type StoreStatus = 'loading' | 'ready' | 'error';
@@ -71,11 +102,14 @@ export interface AppState {
   localSettings: LocalSettings;
   lastReceipt: SaveReceipt | null;
   workoutCount: number;
-  /** Parsed workout history, newest last; drives weekly volume and exposure. */
+  /** Parsed workout history, oldest first; drives weekly volume and exposure. */
   history: WorkoutHistoryRecord[];
   /** Today's workout session: the generated workout plus session-only state. */
   session: WorkoutSession | null;
   calibration: CalibrationState;
+  customExercises: CustomExercise[];
+  /** Per-exercise notes and cue memory. */
+  customInstructions: CustomInstruction[];
   customCounts: { exercises: number; instructions: number; media: number };
 }
 
@@ -89,9 +123,33 @@ export interface AppStoreOptions {
   minOverlayMs?: number;
 }
 
+export interface SetValues {
+  weight: number | null;
+  reps: number;
+  rir: number | null;
+}
+
+export interface NewCustomExercise {
+  name: string;
+  primaryMuscles: MuscleId[];
+  secondaryMuscles?: MuscleId[];
+  movementPattern: MovementPatternId;
+  equipment: string[][];
+  notes?: string;
+}
+
+export interface NewCustomMedia {
+  kind: 'image' | 'video';
+  mimeType: string;
+  sizeBytes: number;
+  dataUrl: string;
+}
+
 type Listener = () => void;
 
 const DEFAULT_MIN_OVERLAY_MS = 450;
+const LONG_INTERRUPTION_SECONDS = 20 * 60;
+const FAR_FROM_TARGET_REPS = 3;
 const TECHNIQUES = ['supersets', 'dropSets', 'circuits'] as const;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -130,6 +188,26 @@ export function profileTrigger(
   return relevant(previous) !== relevant(next) ? { type: 'profile' } : null;
 }
 
+/** "Incline Dumbbell Press · set 2 of 3 · 6-10 reps @ RIR 1". */
+export function describePosition(workout: GeneratedWorkout, position: SetPosition): string {
+  const name = requireExercise(position.exerciseId).name;
+  const entry = allEntries(workout.blocks).find((candidate) => candidate.id === position.entryId);
+  const count = entry ? entry.sets.filter((set) => set.kind === position.kind).length : 0;
+  const [low, high] = position.set.targetReps;
+  if (position.kind === 'warmup') return `${name} · ramp set ${position.ordinal} of ${count}`;
+  if (position.kind === 'drop') return `${name} · drop set: strip about 20% and go`;
+  return `${name} · set ${position.ordinal} of ${count} · ${low}-${high} reps @ RIR ${position.set.targetRir}`;
+}
+
+function slugify(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
 export class AppStore {
   private state: AppState;
   private readonly listeners = new Set<Listener>();
@@ -158,6 +236,8 @@ export class AppStore {
       history: [],
       session: null,
       calibration: IDLE_CALIBRATION,
+      customExercises: [],
+      customInstructions: [],
       customCounts: { exercises: 0, instructions: 0, media: 0 },
     };
   }
@@ -179,6 +259,10 @@ export class AppStore {
     return this.dbPromise;
   }
 
+  private nowMs(): number {
+    return Date.parse(this.now());
+  }
+
   async hydrate(): Promise<void> {
     try {
       const db = await this.getDatabase();
@@ -187,8 +271,8 @@ export class AppStore {
           db.getAll<Identified>('profile'),
           db.getAll<Identified>('locations'),
           db.getAll<Identified>('workouts'),
-          db.count('customExercises'),
-          db.count('customInstructions'),
+          db.getAll<Identified>('customExercises'),
+          db.getAll<Identified>('customInstructions'),
           db.count('customMedia'),
         ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
@@ -196,6 +280,15 @@ export class AppStore {
         .map((location) => LocationProfileSchema.safeParse(location))
         .filter((result) => result.success)
         .map((result) => result.data);
+      const validCustom = customExercises
+        .map((record) => CustomExerciseSchema.safeParse(record))
+        .filter((result) => result.success)
+        .map((result) => result.data);
+      const validInstructions = customInstructions
+        .map((record) => CustomInstructionSchema.safeParse(record))
+        .filter((result) => result.success)
+        .map((result) => result.data);
+      registerCustomExercises(validCustom.map(customToCatalogExercise));
 
       this.setState({
         status: 'ready',
@@ -208,9 +301,11 @@ export class AppStore {
         localSettings: readLocalSettings(this.storage),
         workoutCount: workouts.length,
         history: parseWorkoutRecords(workouts),
+        customExercises: validCustom,
+        customInstructions: validInstructions,
         customCounts: {
-          exercises: customExercises,
-          instructions: customInstructions,
+          exercises: validCustom.length,
+          instructions: validInstructions.length,
           media: customMedia,
         },
       });
@@ -241,10 +336,22 @@ export class AppStore {
     this.setState({ session });
   }
 
+  private requireSession(): WorkoutSession {
+    const session = this.state.session;
+    if (!session) throw new Error('There is no workout session yet.');
+    return session;
+  }
+
+  private isDoneFor(session: WorkoutSession) {
+    const keys = doneKeys(session.completed);
+    return (entryId: string, setIndex: number) => keys.has(`${entryId}:${setIndex}`);
+  }
+
   /**
    * Reuses the persisted session when it was generated from today's inputs;
    * otherwise (first run, a new day, an edited profile, new history) generates
-   * a fresh Default session silently.
+   * a fresh Default session silently. A started or completed workout is never
+   * replaced underneath the user.
    */
   private ensureSession(): void {
     const key = this.baseKey();
@@ -253,10 +360,13 @@ export class AppStore {
       this.setState({ session: null });
       return;
     }
-    if (this.state.session?.baseKey === key) return;
-    const persisted = readSession(this.storage);
-    if (persisted && persisted.baseKey === key) {
-      this.setState({ session: persisted });
+    const current = this.state.session ?? readSession(this.storage);
+    if (current && current.status !== 'preview') {
+      if (this.state.session !== current) this.setState({ session: current });
+      return;
+    }
+    if (current && current.baseKey === key) {
+      if (this.state.session !== current) this.setState({ session: current });
       return;
     }
     const workout = generateWorkout({
@@ -287,7 +397,11 @@ export class AppStore {
     switch (trigger.type) {
       case 'replace':
         return { exerciseName: getExercise(trigger.exerciseId)?.name };
-      case 'pin': {
+      case 'pin':
+      case 'sets':
+      case 'add-warmup':
+      case 'rep-range':
+      case 'reorder': {
         const entry = entryOf(trigger.entryId);
         return { exerciseName: entry ? requireExercise(entry.exerciseId).name : undefined };
       }
@@ -319,7 +433,7 @@ export class AppStore {
   ): Promise<RecalibrationResult | null> {
     const session = this.state.session;
     const { profile, history } = this.state;
-    if (!session || !profile) return null;
+    if (!session || !profile || session.status === 'completed') return null;
     const described = describeTrigger(trigger, this.triggerContext(trigger, session));
     const startedAt = Date.now();
     this.setState({
@@ -337,7 +451,10 @@ export class AppStore {
     const request: RecalibrationRequest = {
       trigger,
       workout: session.workout,
-      completed: session.completed,
+      completed: {
+        ...session.completed,
+        elapsedSeconds: elapsedSeconds(session, this.nowMs()),
+      },
       lockedEntryIds: [],
       currentEntryId: session.completed.currentEntryId,
       duration: trigger.type === 'duration' ? trigger.choice : session.duration,
@@ -363,24 +480,33 @@ export class AppStore {
     const remaining = this.minOverlayMs - (Date.now() - startedAt);
     if (remaining > 0) await sleep(remaining);
 
-    const key = this.baseKey() ?? session.baseKey;
+    const latest = this.state.session ?? session;
+    const key = this.baseKey() ?? latest.baseKey;
     if (result.ok) {
+      const position = currentPosition(result.workout, this.isDoneFor(latest));
       this.setSession({
-        ...session,
+        ...latest,
         baseKey: key,
         duration: result.duration,
         workout: result.workout,
         constraints: result.constraints,
+        completed: {
+          ...latest.completed,
+          currentEntryId:
+            latest.status === 'preview'
+              ? latest.completed.currentEntryId
+              : (position?.entryId ?? null),
+        },
         defaultEstimatedMinutes:
           result.duration === 'default'
             ? result.workout.duration.estimatedMinutes
-            : session.defaultEstimatedMinutes,
+            : latest.defaultEstimatedMinutes,
         lastSummary: result.summary,
         lastChanges: result.changes,
         previous: {
-          workout: session.workout,
-          constraints: session.constraints,
-          duration: session.duration,
+          workout: latest.workout,
+          constraints: latest.constraints,
+          duration: latest.duration,
         },
         log: [
           {
@@ -391,14 +517,13 @@ export class AppStore {
             headline: result.summary.headline,
             durationMs: result.durationMs,
           },
-          ...session.log,
+          ...latest.log,
         ].slice(0, CALIBRATION_LOG_LIMIT),
       });
       this.setState({ calibration: IDLE_CALIBRATION });
     } else {
       // Rollback: the previous, still valid workout stays exactly as it was.
-      const current = this.state.session;
-      if (current && current.baseKey !== key) this.setSession({ ...current, baseKey: key });
+      if (latest.baseKey !== key) this.setSession({ ...latest, baseKey: key });
       this.setState({
         calibration: {
           status: 'error',
@@ -417,11 +542,19 @@ export class AppStore {
     const session = this.state.session;
     if (!session?.previous) return;
     const headline = 'Restored the previous workout.';
+    const position = currentPosition(session.previous.workout, this.isDoneFor(session));
     this.setSession({
       ...session,
       workout: session.previous.workout,
       constraints: session.previous.constraints,
       duration: session.previous.duration,
+      completed: {
+        ...session.completed,
+        currentEntryId:
+          session.status === 'preview'
+            ? session.completed.currentEntryId
+            : (position?.entryId ?? null),
+      },
       defaultEstimatedMinutes:
         session.previous.duration === 'default'
           ? session.previous.workout.duration.estimatedMinutes
@@ -475,8 +608,425 @@ export class AppStore {
     const { session, profile } = this.state;
     if (!session || !profile) return Promise.resolve(null);
     const minutes = resolveTargetMinutes(session.duration, profile.schedule.typicalDurationMinutes);
-    const time = on ? new Date(Date.parse(this.now()) + minutes * 60_000).toISOString() : null;
+    const time = on ? new Date(this.nowMs() + minutes * 60_000).toISOString() : null;
     return this.recalibrate({ type: 'end-by', time });
+  }
+
+  // ---------------------------------------------------------------- active workout
+
+  startWorkout(): void {
+    const session = this.requireSession();
+    if (session.status !== 'preview') return;
+    const now = this.now();
+    const position = currentPosition(session.workout, this.isDoneFor(session));
+    this.setSession({
+      ...session,
+      status: 'active',
+      activeSince: now,
+      pausedAt: null,
+      completed: {
+        ...session.completed,
+        startedAt: now,
+        currentEntryId: position?.entryId ?? null,
+      },
+    });
+  }
+
+  pauseWorkout(): void {
+    const session = this.requireSession();
+    if (session.status !== 'active') return;
+    const nowMs = this.nowMs();
+    const rest: RestState | null = session.rest
+      ? {
+          ...session.rest,
+          pausedRemaining: Math.max(0, (Date.parse(session.rest.endsAt) - nowMs) / 1000),
+        }
+      : null;
+    this.setSession({
+      ...session,
+      status: 'paused',
+      pausedAt: this.now(),
+      activeSince: null,
+      completed: { ...session.completed, elapsedSeconds: elapsedSeconds(session, nowMs) },
+      rest,
+    });
+  }
+
+  /** Resumes; after a long interruption the remaining workout is recalculated. */
+  async resumeWorkout(): Promise<void> {
+    const session = this.requireSession();
+    if (session.status !== 'paused') return;
+    const nowMs = this.nowMs();
+    const away = session.pausedAt ? Math.max(0, (nowMs - Date.parse(session.pausedAt)) / 1000) : 0;
+    const rest: RestState | null =
+      session.rest && session.rest.pausedRemaining !== null
+        ? {
+            ...session.rest,
+            pausedRemaining: null,
+            endsAt: new Date(nowMs + session.rest.pausedRemaining * 1000).toISOString(),
+          }
+        : session.rest;
+    this.setSession({
+      ...session,
+      status: 'active',
+      activeSince: this.now(),
+      pausedAt: null,
+      rest,
+    });
+    if (away >= LONG_INTERRUPTION_SECONDS) {
+      await this.recalibrate({ type: 'resume', awaySeconds: Math.round(away) });
+    }
+  }
+
+  private positionOf(
+    session: WorkoutSession,
+    entryId: string,
+    setIndex: number,
+  ): SetPosition | null {
+    return (
+      workoutSequence(session.workout).find(
+        (item) => item.entryId === entryId && item.setIndex === setIndex,
+      ) ?? null
+    );
+  }
+
+  /**
+   * Logs or corrects one set. A new log advances the current set and starts
+   * the programmed rest; a correction changes only that set. Reps far from
+   * target on a working set recalibrate the exercise's remaining sets.
+   */
+  async logSet(entryId: string, setIndex: number, values: SetValues): Promise<void> {
+    const session = this.requireSession();
+    if (session.status === 'preview' || session.status === 'completed') {
+      throw new Error('Start the workout before logging a set.');
+    }
+    const entry = allEntries(session.workout.blocks).find((candidate) => candidate.id === entryId);
+    const set = entry?.sets.find((candidate) => candidate.index === setIndex);
+    if (!entry || !set) throw new Error('That set is no longer in the workout.');
+    const now = this.now();
+    const nowMs = this.nowMs();
+    const reps = Math.max(0, Math.round(values.reps));
+    const existingAt = session.completed.sets.findIndex(
+      (candidate) => candidate.entryId === entryId && candidate.setIndex === setIndex,
+    );
+    const isEdit = existingAt >= 0;
+    const logged: CompletedSet = {
+      entryId,
+      exerciseId: entry.exerciseId,
+      setIndex,
+      kind: set.kind,
+      reps,
+      weight: values.weight,
+      rir: values.rir,
+      completedAt: isEdit ? (session.completed.sets[existingAt] as CompletedSet).completedAt : now,
+      skipped: false,
+    };
+    const sets = isEdit
+      ? session.completed.sets.map((candidate, index) =>
+          index === existingAt ? logged : candidate,
+        )
+      : [...session.completed.sets, logged];
+    const completed = { ...session.completed, sets };
+    const keys = doneKeys(completed);
+    const isDone = (id: string, index: number) => keys.has(`${id}:${index}`);
+    const next = currentPosition(session.workout, isDone);
+
+    let rest = session.rest;
+    if (!isEdit) {
+      const position = this.positionOf(session, entryId, setIndex);
+      const seconds = position ? restAfter(session.workout, position) : 0;
+      rest =
+        seconds > 0 && next
+          ? {
+              entryId,
+              setIndex,
+              seconds,
+              startedAt: now,
+              endsAt: new Date(nowMs + seconds * 1000).toISOString(),
+              pausedRemaining: null,
+              nextLabel: `Next: ${describePosition(session.workout, next)}`,
+            }
+          : null;
+    }
+    const resuming = session.status === 'paused';
+    this.setSession({
+      ...session,
+      status: 'active',
+      activeSince: resuming ? now : session.activeSince,
+      pausedAt: null,
+      completed: { ...completed, currentEntryId: next?.entryId ?? null },
+      rest,
+      drafts: {
+        ...session.drafts,
+        [entryId]: { weight: values.weight, reps, rir: values.rir },
+      },
+    });
+
+    if (!isEdit && set.kind === 'working') {
+      const [low, high] = set.targetReps;
+      const remaining = entry.sets.some(
+        (candidate) =>
+          candidate.kind === 'working' &&
+          candidate.index !== setIndex &&
+          !isDone(entryId, candidate.index),
+      );
+      if (
+        remaining &&
+        (reps >= high + FAR_FROM_TARGET_REPS || reps <= low - FAR_FROM_TARGET_REPS)
+      ) {
+        await this.recalibrate({ type: 'performance', entryId, setIndex, actualReps: reps });
+      }
+    }
+  }
+
+  private markSkipped(
+    session: WorkoutSession,
+    entryId: string,
+    exerciseId: string,
+    targets: readonly { index: number; kind: CompletedSet['kind'] }[],
+  ): void {
+    if (targets.length === 0) return;
+    const sets = [
+      ...session.completed.sets,
+      ...targets.map((set) => ({
+        entryId,
+        exerciseId,
+        setIndex: set.index,
+        kind: set.kind,
+        reps: 0,
+        weight: null,
+        rir: null,
+        completedAt: this.now(),
+        skipped: true,
+      })),
+    ];
+    const keys = new Set(sets.map((c) => `${c.entryId}:${c.setIndex}`));
+    const next = currentPosition(session.workout, (id, index) => keys.has(`${id}:${index}`));
+    this.setSession({
+      ...session,
+      completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
+      rest: null,
+    });
+  }
+
+  /** A skipped set is done for planning and carries no work. */
+  skipSet(entryId: string, setIndex: number): void {
+    const session = this.requireSession();
+    if (session.status === 'preview' || session.status === 'completed') return;
+    const entry = allEntries(session.workout.blocks).find((candidate) => candidate.id === entryId);
+    const set = entry?.sets.find((candidate) => candidate.index === setIndex);
+    if (!entry || !set) return;
+    if (session.completed.sets.some((c) => c.entryId === entryId && c.setIndex === setIndex))
+      return;
+    this.markSkipped(session, entryId, entry.exerciseId, [set]);
+  }
+
+  /** Skips every remaining ramp set of an exercise; ramp sets never count as work. */
+  skipWarmup(entryId: string): void {
+    const session = this.requireSession();
+    const entry = allEntries(session.workout.blocks).find((candidate) => candidate.id === entryId);
+    if (!entry || session.status === 'preview' || session.status === 'completed') return;
+    const keys = doneKeys(session.completed);
+    const pending = entry.sets.filter(
+      (set) => set.kind === 'warmup' && !keys.has(`${entryId}:${set.index}`),
+    );
+    this.markSkipped(session, entryId, entry.exerciseId, pending);
+  }
+
+  /** Removes the most recently logged set and cancels its rest. */
+  undoLastSet(): void {
+    const session = this.requireSession();
+    if (session.completed.sets.length === 0) return;
+    const sets = session.completed.sets.slice(0, -1);
+    const keys = new Set(sets.map((c) => `${c.entryId}:${c.setIndex}`));
+    const next = currentPosition(session.workout, (id, index) => keys.has(`${id}:${index}`));
+    this.setSession({
+      ...session,
+      completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
+      rest: null,
+    });
+  }
+
+  /** Removes one logged set (from an inline correction). */
+  deleteLoggedSet(entryId: string, setIndex: number): void {
+    const session = this.requireSession();
+    const sets = session.completed.sets.filter(
+      (c) => !(c.entryId === entryId && c.setIndex === setIndex),
+    );
+    if (sets.length === session.completed.sets.length) return;
+    const keys = new Set(sets.map((c) => `${c.entryId}:${c.setIndex}`));
+    const next = currentPosition(session.workout, (id, index) => keys.has(`${id}:${index}`));
+    this.setSession({
+      ...session,
+      completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
+    });
+  }
+
+  setDraft(entryId: string, draft: SetDraft): void {
+    const session = this.requireSession();
+    this.setSession({ ...session, drafts: { ...session.drafts, [entryId]: draft } });
+  }
+
+  adjustRest(deltaSeconds: number): void {
+    const session = this.requireSession();
+    if (!session.rest) return;
+    const rest = session.rest;
+    const seconds = Math.max(0, rest.seconds + deltaSeconds);
+    this.setSession({
+      ...session,
+      rest:
+        rest.pausedRemaining !== null
+          ? { ...rest, seconds, pausedRemaining: Math.max(0, rest.pausedRemaining + deltaSeconds) }
+          : {
+              ...rest,
+              seconds,
+              endsAt: new Date(Date.parse(rest.endsAt) + deltaSeconds * 1000).toISOString(),
+            },
+    });
+  }
+
+  skipRest(): void {
+    const session = this.requireSession();
+    if (!session.rest) return;
+    this.setSession({ ...session, rest: null });
+  }
+
+  /** Per-exercise notes and cue memory, kept with the user's custom content and backed up. */
+  async saveExerciseNotes(
+    exerciseId: string,
+    input: { notes: string; cues: string[] },
+  ): Promise<void> {
+    const existing = this.state.customInstructions.find((item) => item.exerciseId === exerciseId);
+    const record = CustomInstructionSchema.parse({
+      id: exerciseId,
+      exerciseId,
+      setup: existing?.setup ?? [],
+      execution: existing?.execution ?? [],
+      cues: input.cues.map((cue) => cue.trim()).filter((cue) => cue.length > 0),
+      notes: input.notes.trim(),
+      updatedAt: this.now(),
+    });
+    const db = await this.getDatabase();
+    const receipt = await putVerified(db, 'customInstructions', record, { now: this.now });
+    const customInstructions = [
+      ...this.state.customInstructions.filter((item) => item.exerciseId !== exerciseId),
+      record,
+    ];
+    this.setState({
+      customInstructions,
+      lastReceipt: receipt,
+      customCounts: { ...this.state.customCounts, instructions: customInstructions.length },
+    });
+  }
+
+  /** Saves the durable record (one entry per exercise) and shows the completion summary. */
+  async finishWorkout(
+    rating: SessionRating | null,
+    options: { endedEarly?: boolean } = {},
+  ): Promise<CompletionSummary> {
+    const session = this.requireSession();
+    if (session.status === 'preview') throw new Error('Start the workout before finishing it.');
+    if (session.status === 'completed' && session.completion) return session.completion;
+    const profile = this.state.profile;
+    if (!profile) throw new Error('No profile.');
+    const now = this.now();
+    const elapsed = elapsedSeconds(session, this.nowMs());
+    const record = buildWorkoutRecord(session, {
+      now,
+      elapsedSeconds: elapsed,
+      rating,
+      endedEarly: options.endedEarly ?? false,
+    });
+    const db = await this.getDatabase();
+    const receipt = await putVerified(db, 'workouts', record, { now: this.now });
+    const completion = buildCompletion(session, record, profile);
+    this.setState({
+      history: parseWorkoutRecords([...this.state.history, record]),
+      workoutCount: this.state.workoutCount + 1,
+      lastReceipt: receipt,
+    });
+    this.setSession({
+      ...session,
+      status: 'completed',
+      activeSince: null,
+      pausedAt: null,
+      rest: null,
+      rating,
+      completion,
+      completed: { ...session.completed, elapsedSeconds: elapsed },
+    });
+    return completion;
+  }
+
+  /** Leaves the completion surface; the next session is generated from the new history. */
+  dismissCompletion(): void {
+    const session = this.state.session;
+    if (!session || session.status !== 'completed') return;
+    clearSession(this.storage);
+    this.setState({ session: null });
+    this.ensureSession();
+  }
+
+  // ---------------------------------------------------------------- custom content
+
+  async addCustomExercise(input: NewCustomExercise): Promise<CustomExercise> {
+    const now = this.now();
+    const id = `${CUSTOM_ID_PREFIX}${slugify(input.name) || 'exercise'}-${now.replace(/\D/g, '').slice(8, 14)}`;
+    const record = CustomExerciseSchema.parse({
+      id,
+      custom: true,
+      name: input.name.trim(),
+      primaryMuscles: input.primaryMuscles,
+      secondaryMuscles: input.secondaryMuscles ?? [],
+      movementPattern: input.movementPattern,
+      equipment: input.equipment.length > 0 ? input.equipment : [[]],
+      notes: input.notes ?? '',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const db = await this.getDatabase();
+    const receipt = await putVerified(db, 'customExercises', record, { now: this.now });
+    const customExercises = [...this.state.customExercises, record];
+    registerCustomExercises(customExercises.map(customToCatalogExercise));
+    this.setState({
+      customExercises,
+      lastReceipt: receipt,
+      customCounts: { ...this.state.customCounts, exercises: customExercises.length },
+    });
+    return record;
+  }
+
+  /** One user-owned demonstration per exercise; stored inline and backed up. */
+  async addCustomMedia(exerciseId: string, media: NewCustomMedia): Promise<CustomMedia> {
+    const record = CustomMediaSchema.parse({
+      id: exerciseId,
+      exerciseId,
+      kind: media.kind,
+      mimeType: media.mimeType,
+      sizeBytes: media.sizeBytes,
+      dataUrl: media.dataUrl,
+      source: 'user',
+      createdAt: this.now(),
+    });
+    const db = await this.getDatabase();
+    const existed = (await db.get<Identified>('customMedia', exerciseId)) !== undefined;
+    const receipt = await putVerified(db, 'customMedia', record, { now: this.now });
+    this.setState({
+      lastReceipt: receipt,
+      customCounts: {
+        ...this.state.customCounts,
+        media: this.state.customCounts.media + (existed ? 0 : 1),
+      },
+    });
+    return record;
+  }
+
+  async getCustomMedia(exerciseId: string): Promise<CustomMedia | null> {
+    const db = await this.getDatabase();
+    const raw = await db.get<Identified>('customMedia', exerciseId);
+    if (!raw) return null;
+    const parsed = CustomMediaSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
   }
 
   // ---------------------------------------------------------------- durable data
@@ -492,7 +1042,7 @@ export class AppStore {
       return receipt;
     }
     const trigger = previous ? profileTrigger(previous, next) : null;
-    if (trigger) await this.recalibrate(trigger);
+    if (trigger && this.state.session.status !== 'completed') await this.recalibrate(trigger);
     else this.syncSessionKey();
     return receipt;
   }
@@ -508,6 +1058,7 @@ export class AppStore {
     if (
       isCurrent &&
       this.state.session &&
+      this.state.session.status !== 'completed' &&
       previous &&
       !sameEquipment(previous.equipment, next.equipment)
     ) {

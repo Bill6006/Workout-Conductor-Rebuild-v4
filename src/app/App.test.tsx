@@ -37,8 +37,8 @@ describe('App', () => {
     const { store } = createTestStore();
     renderApp(store);
     expect(screen.getByText('Workout Conductor')).toBeInTheDocument();
-    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 4');
-    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 4$/);
+    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 5');
+    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 5$/);
     await screen.findByRole('heading', { level: 1, name: 'What are you training for?' });
   });
 
@@ -65,7 +65,7 @@ describe('App', () => {
     expect(screen.getByTestId('duration-select')).toHaveValue('default');
     expect(screen.getByTestId('workout-estimate')).toHaveTextContent(/Default time: about \d+ min/);
     expect(screen.getAllByTestId('workout-entry').length).toBeGreaterThanOrEqual(5);
-    expect(screen.getByRole('button', { name: 'Start Workout' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Start Workout' })).toBeEnabled();
     expect(store.getSnapshot().profile?.goals.primary).toBe('build-muscle');
     expect(store.getSnapshot().lastReceipt?.store).toBe('profile');
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();

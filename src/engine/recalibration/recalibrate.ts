@@ -66,6 +66,11 @@ const LOCAL_TRIGGERS = new Set<TriggerType>([
   'pin',
   'performance',
   'target-weight',
+  'sets',
+  'add-warmup',
+  'rep-range',
+  'reorder',
+  'split-superset',
 ]);
 const PARTIAL_TRIGGERS = new Set<TriggerType>([
   'readiness',
@@ -875,6 +880,154 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       };
     }
 
+    case 'sets': {
+      const workout = cloneWorkout(request.workout);
+      const { entry, block } = findEntry(workout, trigger.entryId);
+      const { isDone } = classify(request);
+      const exercise = requireExercise(entry.exerciseId);
+      if (trigger.workingDelta > 0) {
+        const last = [...entry.sets].reverse().find((set) => set.kind === 'working');
+        const prescription = prescribe(exercise, entry.role, request.profile);
+        const added: SetPrescription = {
+          index: nextSetIndex(entry),
+          kind: 'working',
+          targetReps: last ? [last.targetReps[0], last.targetReps[1]] : prescription.reps,
+          targetRir: last?.targetRir ?? prescription.rir,
+          targetWeight: last?.targetWeight ?? null,
+          restSeconds: entry.restSeconds,
+        };
+        const dropAt = entry.sets.findIndex((set) => set.kind === 'drop');
+        if (dropAt >= 0) entry.sets.splice(dropAt, 0, added);
+        else entry.sets.push(added);
+      } else {
+        const removable = [...entry.sets]
+          .reverse()
+          .find((set) => set.kind === 'working' && !isDone(entry.id, set.index));
+        const working = entry.sets.filter((set) => set.kind === 'working').length;
+        if (!removable || working <= 1) {
+          return { ...base, workout, headline: `${exercise.name} keeps its last working set.` };
+        }
+        entry.sets = entry.sets.filter((set) => set !== removable);
+      }
+      syncRounds(block);
+      refresh(workout, request, constraints);
+      const count = entry.sets.filter((set) => set.kind === 'working').length;
+      return {
+        ...base,
+        workout,
+        headline: `${exercise.name}: ${count} working ${count === 1 ? 'set' : 'sets'}.`,
+      };
+    }
+
+    case 'add-warmup': {
+      const workout = cloneWorkout(request.workout);
+      const { entry } = findEntry(workout, trigger.entryId);
+      const name = requireExercise(entry.exerciseId).name;
+      const first = entry.sets.find((set) => set.kind === 'working');
+      const reps = first?.targetReps ?? [8, 10];
+      entry.sets.unshift({
+        index: nextSetIndex(entry),
+        kind: 'warmup',
+        targetReps: [Math.max(3, reps[0]), Math.max(5, reps[1])],
+        targetRir: 5,
+        targetWeight: null,
+        restSeconds: 45,
+      });
+      entry.warmupSets += 1;
+      if (!workout.warmup.rampEntryIds.includes(entry.id))
+        workout.warmup.rampEntryIds.push(entry.id);
+      refresh(workout, request, constraints);
+      return {
+        ...base,
+        workout,
+        headline: `Added a ramp set to ${name}; ramp sets never count as working sets.`,
+      };
+    }
+
+    case 'rep-range': {
+      const [low, high] = trigger.reps;
+      if (!(
+        Number.isInteger(low) &&
+        Number.isInteger(high) &&
+        low >= 1 &&
+        high >= low &&
+        high <= 120
+      )) {
+        throw new Error('The rep range must be whole numbers between 1 and 120, low first.');
+      }
+      const workout = cloneWorkout(request.workout);
+      const { entry } = findEntry(workout, trigger.entryId);
+      const { isDone } = classify(request);
+      const name = requireExercise(entry.exerciseId).name;
+      let changed = 0;
+      for (const set of entry.sets) {
+        if (set.kind === 'working' && !isDone(entry.id, set.index)) {
+          set.targetReps = [low, high];
+          changed += 1;
+        }
+      }
+      return {
+        ...base,
+        workout,
+        headline:
+          changed > 0
+            ? `${name}: ${low}-${high} reps for the remaining ${changed === 1 ? 'set' : 'sets'}.`
+            : `No sets left to change on ${name}.`,
+      };
+    }
+
+    case 'reorder': {
+      const workout = cloneWorkout(request.workout);
+      const { frozenIds } = classify(request);
+      const index = workout.blocks.findIndex((block) =>
+        block.entries.some((entry) => entry.id === trigger.entryId),
+      );
+      if (index < 0) throw new Error('That exercise is no longer in the workout.');
+      const target = trigger.direction === 'up' ? index - 1 : index + 1;
+      const moving = workout.blocks[index] as WorkoutBlock;
+      if (target < 0 || target >= workout.blocks.length) {
+        return {
+          ...base,
+          workout,
+          headline: `${moving.label} is already ${trigger.direction === 'up' ? 'first' : 'last'}.`,
+        };
+      }
+      const started = (block: WorkoutBlock) =>
+        block.entries.some(
+          (entry) => frozenIds.has(entry.id) || entry.id === request.currentEntryId,
+        );
+      const other = workout.blocks[target] as WorkoutBlock;
+      if (started(moving) || started(other)) {
+        throw new Error('Started exercises keep their place in the order.');
+      }
+      workout.blocks[index] = other;
+      workout.blocks[target] = moving;
+      refresh(workout, request, constraints);
+      return { ...base, workout, headline: `Moved ${moving.label} ${trigger.direction}.` };
+    }
+
+    case 'split-superset': {
+      const workout = cloneWorkout(request.workout);
+      const at = workout.blocks.findIndex((block) => block.id === trigger.blockId);
+      const block = workout.blocks[at];
+      if (!block || block.kind === 'straight') throw new Error('That row is not a superset.');
+      const { frozenIds } = classify(request);
+      if (block.entries.some((entry) => frozenIds.has(entry.id))) {
+        throw new Error('A superset with logged rounds stays together.');
+      }
+      const straight: WorkoutBlock[] = block.entries.map((entry) => ({
+        id: `b-${entry.id}`,
+        kind: 'straight',
+        label: requireExercise(entry.exerciseId).name,
+        entries: [entry],
+        rounds: workingSets(entry).length,
+        restBetweenRoundsSeconds: entry.restSeconds,
+      }));
+      workout.blocks.splice(at, 1, ...straight);
+      refresh(workout, request, constraints);
+      return { ...base, workout, headline: `Split ${block.label} into straight sets.` };
+    }
+
     case 'end-by': {
       constraints.endBy = trigger.time;
       const workout = rebuild(request, scope, { choice: request.duration, constraints });
@@ -886,6 +1039,17 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       };
     }
   }
+}
+
+function nextSetIndex(entry: WorkoutEntry): number {
+  return Math.max(-1, ...entry.sets.map((set) => set.index)) + 1;
+}
+
+function syncRounds(block: WorkoutBlock): void {
+  block.rounds =
+    block.kind === 'straight'
+      ? workingSets(block.entries[0] as WorkoutEntry).length
+      : Math.min(...block.entries.map((member) => workingSets(member).length));
 }
 
 /** Invariants every result must satisfy before it can replace the previous workout. */

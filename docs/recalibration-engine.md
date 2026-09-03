@@ -22,7 +22,7 @@ timestamp. The engine is pure: it never mutates the request.
 
 ## Trigger registry
 
-`triggers.ts` lists all 18 triggers with a label, a default scope, and the short list of things
+`triggers.ts` lists all 23 triggers with a label, a default scope, and the short list of things
 the overlay shows while the engine works.
 
 | Trigger        | Default scope | What it does                                                                                                |
@@ -45,6 +45,11 @@ the overlay shows while the engine works.
 | finish-early   | partial       | Keeps logged work and the current exercise, drops the rest.                                                 |
 | intensity      | partial       | Harder or easier for the remaining work.                                                                    |
 | end-by         | partial       | Exact end time: a hard cap with no tolerance.                                                               |
+| sets           | local         | Adds or removes one working set of an exercise (never a logged one).                                        |
+| add-warmup     | local         | Adds a light ramp set; ramp sets never count as working sets.                                               |
+| rep-range      | local         | Sets the rep target on the remaining working sets.                                                          |
+| reorder        | local         | Moves an unstarted row up or down; started work keeps its place.                                            |
+| split-superset | local         | Turns an unstarted superset into straight sets.                                                             |
 
 ## Scope
 

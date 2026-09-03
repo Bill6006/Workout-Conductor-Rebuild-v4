@@ -36,6 +36,11 @@ export type RecalibrationTrigger =
   | { type: 'pin'; entryId: string; pinned: boolean }
   | { type: 'performance'; entryId: string; setIndex: number; actualReps: number }
   | { type: 'target-weight'; entryId: string; weight: number | null }
+  | { type: 'sets'; entryId: string; workingDelta: -1 | 1 }
+  | { type: 'add-warmup'; entryId: string }
+  | { type: 'rep-range'; entryId: string; reps: [number, number] }
+  | { type: 'reorder'; entryId: string; direction: 'up' | 'down' }
+  | { type: 'split-superset'; blockId: string }
   | { type: 'technique'; technique: 'supersets' | 'dropSets' | 'circuits' }
   | { type: 'profile' }
   | { type: 'readiness'; readiness: Readiness }
@@ -56,11 +61,13 @@ export interface CompletedSet {
   weight: number | null;
   rir: number | null;
   completedAt: string;
+  /** A skipped set is done for planning but carries no work. */
+  skipped?: boolean;
 }
 
 export interface CompletedWork {
   startedAt: string | null;
-  /** Active seconds since the workout started, excluding long interruptions. */
+  /** Active seconds since the workout started, excluding pauses and long interruptions. */
   elapsedSeconds: number;
   currentEntryId: string | null;
   sets: CompletedSet[];

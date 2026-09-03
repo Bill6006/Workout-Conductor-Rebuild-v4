@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { routeHref } from '../../app/navigation';
 import {
   EXERCISES,
+  customExercises,
   exerciseEquipmentLabel,
   primaryMuscleGroups,
   searchExercises,
@@ -24,6 +25,7 @@ import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
 import { buildConflictContext, preferredIdsOf } from '../../engine/conflicts/context';
 import { checkExerciseFit, isBlocked } from '../../engine/conflicts/conflictEngine';
+import { CustomExerciseSheet } from './CustomExerciseSheet';
 import styles from './LibraryScreen.module.css';
 
 type GroupFilter = MuscleGroup | 'all';
@@ -35,13 +37,27 @@ export function LibraryScreen() {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<GroupFilter>('all');
   const [selected, setSelected] = useState<CatalogExercise | null>(null);
+  const [creating, setCreating] = useState(false);
+  const customCount = state.customExercises.length;
 
   const profile = state.profile;
   const location = state.locations.find((candidate) => candidate.id === profile?.currentLocationId);
   const context = profile ? buildConflictContext(profile, location) : null;
   const preferredIds = profile ? preferredIdsOf(profile) : new Set<string>();
 
-  const results = searchExercises({ query, muscleGroup: group === 'all' ? undefined : group });
+  const catalogResults = searchExercises({
+    query,
+    muscleGroup: group === 'all' ? undefined : group,
+  });
+  const customMatches = customCount
+    ? customExercises().filter(
+        (exercise) =>
+          (query.trim() === '' ||
+            exercise.name.toLowerCase().includes(query.trim().toLowerCase())) &&
+          (group === 'all' || primaryMuscleGroups(exercise).includes(group)),
+      )
+    : [];
+  const results = [...customMatches, ...catalogResults];
 
   const alternatives =
     selected && context
@@ -79,6 +95,17 @@ export function LibraryScreen() {
         title="Exercise library"
         intro={`${EXERCISES.length} exercises with structured metadata. Placeholder diagrams stand in for production demonstrations until Phase 8.`}
       />
+      <div className={styles.chipRow}>
+        <button
+          type="button"
+          className={styles.chip}
+          onClick={() => setCreating(true)}
+          data-testid="add-custom-exercise"
+        >
+          + Custom exercise{customCount ? ` (${customCount})` : ''}
+        </button>
+      </div>
+      <CustomExerciseSheet open={creating} onClose={() => setCreating(false)} />
 
       <Card>
         <input

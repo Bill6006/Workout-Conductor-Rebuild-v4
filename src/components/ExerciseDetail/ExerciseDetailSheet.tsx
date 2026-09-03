@@ -4,6 +4,7 @@ import { JOINTS, type CatalogExercise, type Joint } from '../../catalog/exercise
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
 import type { AlternativeResult } from '../../engine/alternatives/rankAlternatives';
+import { useCustomMedia } from '../../features/library/useCustomMedia';
 import { Sheet } from '../Sheet/Sheet';
 import styles from './ExerciseDetail.module.css';
 import { ExerciseDemo, ExerciseThumb } from './ExerciseMedia';
@@ -26,6 +27,21 @@ export interface SessionActions {
   onUseAlternative: (exerciseId: string) => void;
 }
 
+/** Set and order edits for an exercise in the active workout; each runs through the engine. */
+export interface EditActions {
+  canReorder: boolean;
+  inSuperset: boolean;
+  hasWarmup: boolean;
+  onAddSet: () => void;
+  onRemoveSet: () => void;
+  onAddRamp: () => void;
+  onSkipWarmup: () => void;
+  onRepRange: (reps: [number, number]) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onSplit: () => void;
+}
+
 interface ExerciseDetailSheetProps {
   exercise: CatalogExercise | null;
   onClose: () => void;
@@ -33,6 +49,7 @@ interface ExerciseDetailSheetProps {
   alternatives?: AlternativeResult | null;
   preference?: PreferenceControls;
   sessionActions?: SessionActions;
+  editActions?: EditActions;
 }
 
 const ROLE_LABELS: Record<CatalogExercise['defaultRole'], string> = {
@@ -66,8 +83,12 @@ export function ExerciseDetailSheet({
   alternatives,
   preference,
   sessionActions,
+  editActions,
 }: ExerciseDetailSheetProps) {
   const [painJoint, setPainJoint] = useState<Joint>('shoulder');
+  const [repLow, setRepLow] = useState('');
+  const [repHigh, setRepHigh] = useState('');
+  const customMedia = useCustomMedia(exercise?.id ?? '');
   if (!exercise) return null;
 
   const traits = [
@@ -82,7 +103,7 @@ export function ExerciseDetailSheet({
 
   return (
     <Sheet open title={exercise.name} onClose={onClose}>
-      <ExerciseDemo exercise={exercise} />
+      <ExerciseDemo exercise={exercise} customMedia={customMedia} />
 
       <div className={styles.chips} aria-label="Muscles">
         {exercise.primaryMuscles.map((muscle) => (
@@ -192,6 +213,85 @@ export function ExerciseDetailSheet({
               onClick={() => sessionActions.onPain(painJoint)}
             >
               Hurts, protect it
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {editActions ? (
+        <section className={styles.section} aria-label="Sets and order">
+          <h3 className={styles.sectionTitle}>Sets and order</h3>
+          <div className={styles.actionGrid}>
+            <button type="button" className={styles.actionButton} onClick={editActions.onAddSet}>
+              + Working set
+            </button>
+            <button type="button" className={styles.actionButton} onClick={editActions.onRemoveSet}>
+              − Working set
+            </button>
+            <button type="button" className={styles.actionButton} onClick={editActions.onAddRamp}>
+              + Ramp set
+            </button>
+            {editActions.hasWarmup ? (
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={editActions.onSkipWarmup}
+              >
+                Skip ramp sets
+              </button>
+            ) : null}
+            {editActions.canReorder ? (
+              <>
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  onClick={editActions.onMoveUp}
+                >
+                  Move up
+                </button>
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  onClick={editActions.onMoveDown}
+                >
+                  Move down
+                </button>
+              </>
+            ) : null}
+            {editActions.inSuperset ? (
+              <button type="button" className={styles.actionButton} onClick={editActions.onSplit}>
+                Split superset
+              </button>
+            ) : null}
+          </div>
+          <div className={styles.painRow}>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={120}
+              placeholder="low"
+              aria-label="Rep range low"
+              value={repLow}
+              onChange={(event) => setRepLow(event.target.value)}
+            />
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={120}
+              placeholder="high"
+              aria-label="Rep range high"
+              value={repHigh}
+              onChange={(event) => setRepHigh(event.target.value)}
+            />
+            <button
+              type="button"
+              className={styles.actionButton}
+              disabled={repLow === '' || repHigh === ''}
+              onClick={() => editActions.onRepRange([Number(repLow), Number(repHigh)])}
+            >
+              Set reps
             </button>
           </div>
         </section>

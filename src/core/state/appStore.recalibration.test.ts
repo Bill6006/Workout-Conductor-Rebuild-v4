@@ -6,7 +6,10 @@ import { createDefaultProfile } from '../validation/profile';
 import { profileTrigger, type AppStoreOptions } from './appStore';
 import { readSession } from './session';
 
-type SeedOptions = Partial<AppStoreOptions> & { factory?: TestStoreHandle['factory']; storage?: TestStoreHandle['storage'] };
+type SeedOptions = Partial<AppStoreOptions> & {
+  factory?: TestStoreHandle['factory'];
+  storage?: TestStoreHandle['storage'];
+};
 
 async function seeded(options: SeedOptions = {}): Promise<TestStoreHandle> {
   const handle = createTestStore({ minOverlayMs: 0, ...options });
@@ -49,7 +52,11 @@ describe('AppStore session and recalibration', () => {
     expect(current.lastSummary?.headline).toMatch(/^Recalibrated to 15 min/);
     expect(current.lastChanges.length).toBeGreaterThan(0);
     expect(current.previous?.workout.duration.choice).toBe('default');
-    expect(current.log[0]).toMatchObject({ trigger: 'duration', scope: 'full', label: 'Workout length' });
+    expect(current.log[0]).toMatchObject({
+      trigger: 'duration',
+      scope: 'full',
+      label: 'Workout length',
+    });
     expect(readSession(handle.storage)?.duration).toBe(15);
   });
 
@@ -64,7 +71,10 @@ describe('AppStore session and recalibration', () => {
     expect(result?.ok).toBe(false);
     expect(session(handle).workout).toBe(before);
     expect(session(handle).duration).toBe('default');
-    expect(handle.store.getSnapshot().calibration).toMatchObject({ status: 'error', error: 'boom' });
+    expect(handle.store.getSnapshot().calibration).toMatchObject({
+      status: 'error',
+      error: 'boom',
+    });
     handle.store.dismissCalibrationError();
     expect(handle.store.getSnapshot().calibration.status).toBe('idle');
   });
@@ -128,7 +138,9 @@ describe('AppStore session and recalibration', () => {
     expect(session(handle).workout.recalibration.version).toBe(version);
     expect(session(handle).baseKey).toContain(handle.store.getSnapshot().profile?.updatedAt);
     expect(profileTrigger(profile, { ...profile, units: 'kg' })).toBeNull();
-    expect(profileTrigger(profile, { ...profile, goals: { ...profile.goals, primary: 'strength' } })).toEqual({
+    expect(
+      profileTrigger(profile, { ...profile, goals: { ...profile.goals, primary: 'strength' } }),
+    ).toEqual({
       type: 'profile',
     });
   });

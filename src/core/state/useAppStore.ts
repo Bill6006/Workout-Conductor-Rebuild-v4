@@ -14,3 +14,17 @@ export function useAppState(): AppState {
   const store = useAppStore();
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 }
+
+/**
+ * Subscribes to one slice of the state. React skips the re-render when the
+ * selected value is referentially unchanged, so a set edit only re-renders the
+ * components that read the session.
+ */
+export function useAppSelector<T>(selector: (state: AppState) => T): T {
+  const store = useAppStore();
+  return useSyncExternalStore(
+    store.subscribe,
+    () => selector(store.getSnapshot()),
+    () => selector(store.getSnapshot()),
+  );
+}

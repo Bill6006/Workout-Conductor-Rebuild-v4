@@ -128,6 +128,48 @@ test.describe('screenshots @screenshots', () => {
     await expect(page.getByRole('dialog', { name: 'Restore this backup?' })).toBeVisible();
     await capture(page, testInfo, 'settings-import-preview');
   });
+  test('active workout', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');
+    await ensureProfile(page);
+    await page.getByTestId('start-workout').click();
+    await expect(page.getByTestId('workout-stats')).toBeVisible();
+    await capture(page, testInfo, 'workout-active-start');
+    await page.getByTestId('skip-warmup').click();
+    await page.getByTestId('logger-weight').click();
+    await page.getByRole('spinbutton', { name: 'Weight' }).fill('185');
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('logger-weight')).toContainText('185');
+    await capture(page, testInfo, 'workout-set-logger');
+    await page.getByTestId('log-set').click();
+    await expect(page.getByTestId('rest-timer')).toBeVisible();
+    await capture(page, testInfo, 'workout-rest-timer');
+    await page.getByTestId('plates-tab').click();
+    await expect(page.getByTestId('plate-math')).toBeVisible();
+    await capture(page, testInfo, 'workout-plate-math');
+    await page.getByTestId('skip-rest').click();
+    for (let guard = 0; guard < 40; guard += 1) {
+      if (await page.getByTestId('superset-group').isVisible()) break;
+      const skipWarmup = page.getByTestId('skip-warmup');
+      if (await skipWarmup.isVisible()) {
+        await skipWarmup.click();
+        continue;
+      }
+      await page.getByTestId('log-set').click();
+      const skipRest = page.getByTestId('skip-rest');
+      if (await skipRest.isVisible()) await skipRest.click();
+    }
+    await expect(page.getByTestId('superset-group')).toBeVisible();
+    await page.getByTestId('log-set').click();
+    await capture(page, testInfo, 'workout-superset');
+    await page.getByTestId('end-early').click();
+    await expect(page.getByRole('dialog', { name: 'End the workout early?' })).toBeVisible();
+    await capture(page, testInfo, 'workout-rating');
+    await page.getByRole('radio', { name: 'About right' }).click();
+    await page.getByTestId('save-workout').click();
+    await expect(page.getByTestId('completion-summary')).toBeVisible();
+    await capture(page, testInfo, 'workout-completion');
+  });
+
   test('library and exercise detail', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');
     await ensureProfile(page);

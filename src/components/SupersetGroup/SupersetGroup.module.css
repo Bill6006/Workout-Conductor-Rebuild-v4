@@ -1,0 +1,115 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 12px 12px;
+  border: 1px solid rgba(198, 245, 66, 0.35);
+  border-radius: var(--radius-card);
+  background: linear-gradient(170deg, #1c2412 0%, #15181c 40%);
+  box-shadow: var(--shadow-card);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kind {
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.memberName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prefix {
+  display: inline-grid;
+  min-width: 30px;
+  height: 24px;
+  padding: 0 6px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.round {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.table th,
+.table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.table thead th {
+  color: var(--color-text-subtle);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.table tbody th {
+  width: 3.5rem;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.table tr[data-state='current'] th {
+  color: var(--color-accent);
+}
+
+.cell {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-raised);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.now {
+  color: var(--color-accent);
+  font-weight: 800;
+}
+
+.pending {
+  color: var(--color-text-subtle);
+}
+
+.members {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

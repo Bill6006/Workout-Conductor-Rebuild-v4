@@ -1,4 +1,4 @@
-import { EXERCISES, exerciseEquipmentLabel } from '../../catalog/exercises/catalog';
+import { allExercises, exerciseEquipmentLabel } from '../../catalog/exercises/catalog';
 import type { CatalogExercise, Joint, StressLevel } from '../../catalog/exercises/exerciseSchema';
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
@@ -113,7 +113,7 @@ function loadLabel(load: CatalogExercise['load']): string {
 
 export function rankAlternatives(request: AlternativeRequest): AlternativeResult {
   const { current, context } = request;
-  const catalog = request.catalog ?? EXERCISES;
+  const catalog = request.catalog ?? allExercises();
   const others = request.otherExercises ?? [];
   const otherIds = new Set(others.map((exercise) => exercise.id));
   const otherPatterns = new Set(others.map((exercise) => exercise.movementPattern));

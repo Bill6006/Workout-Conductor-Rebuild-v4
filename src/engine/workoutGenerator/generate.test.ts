@@ -199,6 +199,9 @@ describe('generateWorkout: profile and history', () => {
         completedAt: yesterday,
         locationId: 'gym',
         templateId: 'push-arms',
+        endedEarly: false,
+        rating: null,
+        skippedExerciseIds: [],
         entries: [
           {
             exerciseId: 'barbell-bench-press',

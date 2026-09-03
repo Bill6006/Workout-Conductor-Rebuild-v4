@@ -32,6 +32,9 @@ interface WorkoutPreviewCardProps {
   /** Exact-end mode state; the control shows when the plan runs over or the mode is on. */
   endBy?: { on: boolean; label: string | null };
   onEndByChange?: (on: boolean) => void;
+  /** 'preview' offers Start; an active or completed session offers to continue. */
+  sessionStatus?: 'preview' | 'active' | 'paused' | 'completed';
+  onStart?: () => void;
 }
 
 const CHANGE_TAGS: Record<EntryChange['kind'], string> = {
@@ -122,6 +125,8 @@ export function WorkoutPreviewCard({
   onDismissSummary,
   endBy,
   onEndByChange,
+  sessionStatus = 'preview',
+  onStart,
 }: WorkoutPreviewCardProps) {
   const { duration } = workout;
   const fitted = duration.choice !== 'default' || (endBy?.on ?? false);
@@ -281,13 +286,22 @@ export function WorkoutPreviewCard({
         </ul>
       </details>
 
-      <Button variant="primary" disabled aria-describedby="start-workout-hint">
-        Start Workout
+      <Button
+        variant="primary"
+        onClick={onStart}
+        aria-describedby="start-workout-hint"
+        data-testid="start-workout"
+      >
+        {sessionStatus === 'preview'
+          ? 'Start Workout'
+          : sessionStatus === 'completed'
+            ? 'See the summary'
+            : 'Continue workout'}
       </Button>
       <p id="start-workout-hint" className={styles.hint}>
         Change the length above and the session recalibrates at once. Tap an exercise for its
         demonstration, alternatives, and session-only changes: swap, pin, busy station, skip, hurts.
-        Logging arrives with the active workout in Phase 5.
+        Start opens the active workout with one-tap set logging and the rest timer.
       </p>
     </Card>
   );

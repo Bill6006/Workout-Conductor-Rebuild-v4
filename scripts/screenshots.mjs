@@ -29,7 +29,7 @@ if (result.status !== 0) {
 }
 
 const GROUPS = [
-  { prefix: 'android-412-', title: 'Android 412 px (Pixel 7)', width: 200, limit: 14 },
+  { prefix: 'android-412-', title: 'Android 412 px (Pixel 7)', width: 200, limit: 26 },
   { prefix: 'android-360-', title: 'Android 360 px', width: 180, limit: 6 },
   { prefix: 'desktop-', title: 'Desktop 1280 px', width: 480, limit: 3 },
 ];

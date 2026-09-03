@@ -84,6 +84,31 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
     scope: 'local',
     evaluating: ['Updating the remaining sets'],
   },
+  sets: {
+    label: 'Sets changed',
+    scope: 'local',
+    evaluating: ['Updating the remaining sets', 'Re-estimating the session time'],
+  },
+  'add-warmup': {
+    label: 'Ramp set added',
+    scope: 'local',
+    evaluating: ['Adding a light ramp set', 'Keeping warm-ups out of working totals'],
+  },
+  'rep-range': {
+    label: 'Rep range',
+    scope: 'local',
+    evaluating: ['Updating the remaining sets'],
+  },
+  reorder: {
+    label: 'Reordered',
+    scope: 'local',
+    evaluating: ['Moving the row', 'Keeping started work in place'],
+  },
+  'split-superset': {
+    label: 'Superset split',
+    scope: 'local',
+    evaluating: ['Splitting the pair into straight sets', 'Re-estimating the session time'],
+  },
   technique: {
     label: 'Techniques',
     scope: 'full',
@@ -160,6 +185,16 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
       return 'Adjusting the next sets';
     case 'target-weight':
       return 'Updating the target weight';
+    case 'sets':
+      return trigger.workingDelta > 0 ? `Adding a set to ${name}` : `Removing a set from ${name}`;
+    case 'add-warmup':
+      return `Adding a ramp set to ${name}`;
+    case 'rep-range':
+      return `Updating the rep target for ${name}`;
+    case 'reorder':
+      return `Moving ${name} ${trigger.direction}`;
+    case 'split-superset':
+      return 'Splitting the superset into straight sets';
     case 'technique':
       return trigger.technique === 'supersets'
         ? 'Re-pairing exercises'

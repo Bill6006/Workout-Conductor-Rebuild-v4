@@ -25,6 +25,9 @@ function record(
     completedAt: when,
     locationId: 'gym',
     templateId,
+    endedEarly: false,
+    rating: null,
+    skippedExerciseIds: [],
     entries: [
       {
         exerciseId,

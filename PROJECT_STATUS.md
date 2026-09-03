@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                    |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                    |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                            |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                       |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                           |
-| Current phase          | Phase 4 - Central Recalibration Engine                                                                                                                                                      |
-| Phase gate             | **YELLOW** - Phase 4 work complete, deployed, and verified live; awaiting the owner's review on Android                                                                                     |
-| Current branch         | `main`                                                                                                                                                                                      |
-| Latest completed phase | Phase 3 (GREEN from the owner on 2026-09-03)                                                                                                                                                |
-| Work in progress       | Phase 4 review gate. No Phase 5 code has been started.                                                                                                                                      |
-| Latest commit          | Phase 4 docs and screenshots (this commit); app build under review is `d7b7086` (engine landed in `e7396c7`)                                                                                |
-| Latest deployment      | `d7b7086` deployed by Deploy Pages run 33753231920 (success); `e7396c7` by run 33752540844; full browser suite passed against the live URL; 30 screenshots captured from the deployed build |
-| Test totals            | Unit: 192 passed (29 files). Browser/mobile: 62 passed + 6 skipped by design, locally and against the live URL                                                                              |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 4`                                                                                                                |
+| Item                   | Value                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                 |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                 |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                         |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                    |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                        |
+| Current phase          | Phase 5 - Active Workout, Logging, and Superset Experience                                                                               |
+| Phase gate             | **YELLOW** - Phase 5 work complete and deployed from this commit; awaiting the owner's review on Android                                 |
+| Current branch         | `main`                                                                                                                                   |
+| Latest completed phase | Phase 4 (GREEN from the owner on 2026-09-03)                                                                                             |
+| Work in progress       | Phase 5 review gate. No Phase 6 code has been started.                                                                                   |
+| Latest commit          | Phase 5 build (this commit): active workout, Set Logger, rest timer, superset card, completion, notes, Plate Math, custom exercises      |
+| Latest deployment      | Pending: the Phase 5 deploy runs from this commit. Last successful deploy before it: `545c383` (Phase 4 docs)                            |
+| Test totals            | Unit: 208 passed (33 files). Browser/mobile: 75 passed + 8 skipped by design locally (live run recorded in the docs commit that follows) |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 5`                                                             |
 
 ## Phase checklist
 
@@ -27,11 +27,27 @@ _Last updated: _
 | 1     | Product Foundation and First Useful Live Preview             | GREEN (owner)        |
 | 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner)        |
 | 3     | Workout Generation and Duration Engine                       | GREEN (owner)        |
-| 4     | Central Recalibration Engine                                 | YELLOW (review gate) |
-| 5     | Active Workout, Logging, and Superset Experience             | planned              |
+| 4     | Central Recalibration Engine                                 | GREEN (owner)        |
+| 5     | Active Workout, Logging, and Superset Experience             | YELLOW (review gate) |
 | 6     | Adaptive Coach, Progression, Strategy, and Recovery          | planned              |
 | 7     | Progress, Plan, Coverage, PRs, and Session Summary           | planned              |
 | 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | planned              |
+
+## Phase 5 deliverables
+
+- [x] Premium active workout screen (`src/features/workout/ActiveWorkoutScreen.tsx`): current set unmistakable, elapsed and remaining time, duration dropdown mid-workout, pause and resume, up next, whole-workout list
+- [x] Reusable Set Logger (`src/components/SetLogger/SetLogger.tsx`): one-tap normal set, large dials, tap-to-type, cooldown against double taps; design rationale and tap counts in `docs/mobile-test-report.md`
+- [x] Inline completed-set editing in place, Undo for the last set, persistent completion marks
+- [x] Set Options (add or remove set, ramp set, skip ramp sets, rep range, reorder, split superset) routed through the engine; 23 triggers now
+- [x] Rest timer: programmed rest, quick adjust, skip, next target, survives screen changes and backgrounding, freezes on pause, vibration, no sound
+- [x] Demonstrations, instructions, cues, previous performance in a How-to panel; alternatives and one-exercise replacement from Options
+- [x] Combined two-move superset card with round table; separate durable records per member; one list row per superset; round editing; final-round completion authority
+- [x] Drop-set presentation; warm-up Add/Skip and logging that never counts as working sets
+- [x] Per-exercise notes and cue memory (verified write, backed up); Plate Math with live weight
+- [x] Custom exercise creator with optional user media; custom exercises resolve everywhere
+- [x] Workout completion with quick rating, one verified record write, summary, and the next session generated from history
+- [x] 360 px and 150 percent zoom (275 px) layouts verified in the browser suite
+- [ ] Owner opens the live link on the Android phone and gives the phase decision (review gate)
 
 ## Phase 4 deliverables
 
@@ -80,11 +96,10 @@ _Last updated: _
 
 ## Known limitations
 
-- Load targets stay empty until the progression engine (Phase 6); sets show reps and RIR targets only.
-- The readiness check-in screen, the active-workout logging that fires reps-far-from-target, resume, finish-early, and harder/easier triggers, and `Start Workout` arrive in Phases 5 and 6; the engine paths for all of them are built and tested now.
-- Before a workout starts, End by exact time counts from the moment it is switched on.
-- No history yet, so weekly volume starts from the plan defaults and confidence reads "low" until sessions are logged.
-- Demonstrations remain original placeholder diagrams until Phase 8.
+- Load targets, personal records, strength progression, and the weekly-volume effect line on the completion summary arrive with Phases 6 and 7; the record already carries everything they need.
+- The readiness check-in screen arrives in Phase 6; the engine path is built.
+- Vibration on rest completion depends on the phone allowing it; there is never a sound.
+- Demonstrations remain original placeholder diagrams until Phase 8; user media can replace them per exercise now.
 
 ## Mobile screenshots
 
@@ -99,9 +114,8 @@ Phase 3: [docs/screenshots/phase-3](docs/screenshots/phase-3) · Phase 2: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone, changes the workout length and watches the
-calibration card then the change summary, tries Undo, opens an exercise and uses Pin, Equipment
-busy, Uncomfortable, Skip today, "Hurts, protect it", and Use on an alternative, switches the
-place on Plan, checks the Workout tab log, and replies with `GREEN - NEXT PHASE`,
-`YELLOW - FIX: <issue>`, or `RED - STOP`. On GREEN, Phase 5 begins: the active workout, logging,
-and superset experience.
+Owner opens the live link on an Android phone, starts the workout from Today, logs sets with one
+tap, corrects one in place, uses the rest timer, reaches the superset card, pauses and resumes,
+finishes with a rating, reads the summary, taps Done, and replies with `GREEN - NEXT PHASE`,
+`YELLOW - FIX: <issue>`, or `RED - STOP`. On GREEN, Phase 6 begins: adaptive coach, progression,
+strategy, and recovery.
