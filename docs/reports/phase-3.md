@@ -58,6 +58,15 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
 | Against the live URL                        | 50 passed + 6 skipped by design against https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (build marker `f30bec0 · Phase 3`); one image-loaded assertion hit network timing once and now polls |
 | Screenshots                                 | 26 captures + preview sheet from the live `f30bec0` build in `docs/screenshots/phase-3/`                                                                                                              |
 
+## Review-gate fix (YELLOW - FIX)
+
+The owner's phone showed "Local storage is unavailable. The requested version (2) is less than
+the existing version (5)." GitHub Pages projects of one account share an origin and IndexedDB is
+per origin, so an earlier app's `workout-conductor` database (version 5) blocked this app's
+version-2 open. The database is now `workout-conductor-v4`, and `openDatabase` recovers from a
+same-named database at a higher version by adding the missing stores one version up without
+removing anything. A unit test simulates the collision.
+
 ## Decisions and notes
 
 - Duration fitting keeps the highest-value work: it pairs first, shortens rests second, trims

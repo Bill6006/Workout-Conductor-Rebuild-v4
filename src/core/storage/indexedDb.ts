@@ -5,7 +5,11 @@
  * only ever adds stores or indexes; a deployment can never wipe user data.
  */
 
-export const DB_NAME = 'workout-conductor';
+/**
+ * Every GitHub Pages project of one account shares the same origin, and IndexedDB is
+ * per origin, so the name carries the app generation to stay clear of earlier apps.
+ */
+export const DB_NAME = 'workout-conductor-v4';
 export const DB_VERSION = 2;
 
 export const STORE_NAMES = [
@@ -77,29 +81,60 @@ function resolveFactory(explicit?: IDBFactory): IDBFactory {
   throw new StorageUnavailableError('IndexedDB is not available in this browser.');
 }
 
-export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<Database> {
-  const factory = resolveFactory(options.factory);
-  const name = options.name ?? DB_NAME;
-
-  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+function openAt(factory: IDBFactory, name: string, version?: number): Promise<IDBDatabase> {
+  return new Promise<IDBDatabase>((resolve, reject) => {
     let request: IDBOpenDBRequest;
     try {
-      request = factory.open(name, DB_VERSION);
+      request = version === undefined ? factory.open(name) : factory.open(name, version);
     } catch (error) {
-      reject(
-        new StorageUnavailableError(
-          error instanceof Error ? error.message : 'Could not open IndexedDB.',
-        ),
-      );
+      reject(error);
       return;
     }
     request.onupgradeneeded = () => upgradeDatabase(request.result);
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
-      reject(new StorageUnavailableError(request.error?.message ?? 'Could not open IndexedDB.'));
+    request.onerror = () => reject(request.error ?? new Error('Could not open IndexedDB.'));
     request.onblocked = () =>
       reject(new StorageUnavailableError('IndexedDB is blocked by another open tab.'));
   });
+}
+
+function isVersionError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { name?: string }).name === 'VersionError'
+  );
+}
+
+function toUnavailable(error: unknown): StorageUnavailableError {
+  if (error instanceof StorageUnavailableError) return error;
+  return new StorageUnavailableError(
+    error instanceof Error ? error.message : 'Could not open IndexedDB.',
+  );
+}
+
+export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<Database> {
+  const factory = resolveFactory(options.factory);
+  const name = options.name ?? DB_NAME;
+
+  let db: IDBDatabase;
+  try {
+    db = await openAt(factory, name, DB_VERSION);
+  } catch (error) {
+    if (!isVersionError(error)) throw toUnavailable(error);
+    // A database with this name already exists at a higher version: another app on this
+    // origin, or a newer build. Open it as it is and add any missing stores one version up.
+    // Existing stores are never removed.
+    try {
+      const existing = await openAt(factory, name);
+      const currentVersion = existing.version;
+      const missing = STORE_NAMES.some((store) => !existing.objectStoreNames.contains(store));
+      existing.close();
+      db = await openAt(factory, name, missing ? currentVersion + 1 : currentVersion);
+    } catch (recoveryError) {
+      throw toUnavailable(recoveryError);
+    }
+  }
 
   db.onversionchange = () => db.close();
 

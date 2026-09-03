@@ -1,6 +1,6 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-03 06:05 UTC_
+_Last updated: 2026-09-03 07:05 UTC_
 
 | Item                   | Value                                                                                                                                                                                                            |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -10,12 +10,12 @@ _Last updated: 2026-09-03 06:05 UTC_
 | Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                            |
 | Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                |
 | Current phase          | Phase 3 - Workout Generation and Duration Engine                                                                                                                                                                 |
-| Phase gate             | **YELLOW** - awaiting the owner's Android review of the live link                                                                                                                                                |
+| Phase gate             | **YELLOW** - owner reported a storage error on the phone (YELLOW - FIX); fixed in this commit, awaiting the owner's re-check                                                                                     |
 | Current branch         | `main`                                                                                                                                                                                                           |
 | Latest completed phase | Phase 2 (GREEN from the owner on 2026-09-03)                                                                                                                                                                     |
-| Work in progress       | Phase 3 review gate. No Phase 4 code has been started.                                                                                                                                                           |
-| Latest commit          | App build `f30bec0` ([commit](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commit/f30bec0)) on top of the engine build `2d9d605`; this commit adds the live screenshots and final status             |
-| Latest deployment      | Deploy Pages run [33719882460](https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions/runs/33719882460): success, 2026-09-03 05:42 UTC, build marker `f30bec0 · Phase 3`                               |
+| Work in progress       | Phase 3 review gate, YELLOW - FIX applied: storage could not open on the owner's phone. No Phase 4 code has been started.                                                                                        |
+| Latest commit          | Phase 3 fix (this commit): own database name plus version-collision recovery; app build before it was `f30bec0`                                                                                                  |
+| Latest deployment      | Pending the fix deploy; last successful deploy before it was `f1d4ec4` (run 33720363748)                                                                                                                         |
 | Test totals            | Unit: 152 passed (26 files). Browser/mobile: 50 passed + 6 skipped by design locally and against the live URL (one image-loaded check was made to poll after a network timing miss on the live run, then passed) |
 | Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 3`                                                                                                                                     |
 
@@ -49,6 +49,13 @@ _Last updated: 2026-09-03 06:05 UTC_
 - [x] Active Workout List preview on the Workout tab; synthetic demo deleted
 - [x] Live verification: the full browser suite passes against the deployed build; 26 screenshots captured from it
 - [ ] Owner opens the live link on the Android phone and gives the phase decision (review gate)
+
+## Phase 3 review-gate fix (YELLOW - FIX)
+
+- Reported from the owner's Android phone: "Local storage is unavailable. The requested version (2) is less than the existing version (5)." Finish setup then failed with the same message.
+- Cause: every GitHub Pages project of one account shares the origin `bill6006.github.io`, and IndexedDB is per origin. An earlier Workout Conductor app on the phone left a database named `workout-conductor` at version 5; this app asked for version 2 and the browser refused.
+- Fix: this app's database is now `workout-conductor-v4`, and opening recovers automatically when a same-named database already exists at a higher version (open as-is, add the missing stores one version up, never remove any store). Covered by a unit test that simulates another app owning the name at version 5.
+- Data written to the old name by earlier apps is left untouched.
 
 ## Known limitations
 
