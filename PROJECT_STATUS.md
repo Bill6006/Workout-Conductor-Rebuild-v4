@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                   |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                   |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                           |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                      |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                          |
-| Current phase          | Phase 6 - Adaptive Coach, Progression, Strategy, and Recovery                                                                              |
-| Phase gate             | **YELLOW** - Phase 6 work complete and deployed from this commit; awaiting the owner's review on Android                                   |
-| Current branch         | `main`                                                                                                                                     |
-| Latest completed phase | Phase 5 (GREEN from the owner on 2026-09-03)                                                                                               |
-| Work in progress       | Phase 6 review gate. No Phase 7 code has been started.                                                                                     |
-| Latest commit          | Phase 6 build (this commit): progression engine, fatigue, strategy, Coach Conductor, gold coach card, readiness check-in, session feedback |
-| Latest deployment      | Pending: the Phase 6 deploy runs from this commit. Last successful deploy before it: `dc088f8` (Phase 5 docs)                              |
-| Test totals            | Unit: 230 passed (37 files). Browser/mobile: 84 passed + 8 skipped by design locally (live run recorded in the docs commit that follows)   |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 6`                                                               |
+| Item                   | Value                                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                      |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                      |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                              |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                         |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                             |
+| Current phase          | Phase 6 - Adaptive Coach, Progression, Strategy, and Recovery                                                                                                 |
+| Phase gate             | **YELLOW** - Phase 6 work complete, deployed, and verified live; awaiting the owner's review on Android                                                       |
+| Current branch         | `main`                                                                                                                                                        |
+| Latest completed phase | Phase 5 (GREEN from the owner on 2026-09-03)                                                                                                                  |
+| Work in progress       | Phase 6 review gate. No Phase 7 code has been started.                                                                                                        |
+| Latest commit          | Phase 6 docs and screenshots (this commit); app build under review is `95719b3`                                                                               |
+| Latest deployment      | `95719b3` deployed by Deploy Pages run 33808515404 (success); full browser suite passed against the live URL; 39 screenshots captured from the deployed build |
+| Test totals            | Unit: 230 passed (37 files). Browser/mobile: 84 passed + 8 skipped by design locally and against the live URL                                                 |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 6`                                                                                  |
 
 ## Phase checklist
 
@@ -117,14 +117,14 @@ _Last updated: _
 
 ## Mobile screenshots
 
-Phase 5, captured by Playwright from the deployed build `5af4611` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-5](docs/screenshots/phase-5)).
+Phase 6, captured by Playwright from the deployed build `95719b3` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-6](docs/screenshots/phase-6)).
 
-- Combined preview sheet: [preview-sheet.png](docs/screenshots/phase-5/preview-sheet.png)
-- Android 412 px (Pixel 7): [Active workout start](docs/screenshots/phase-5/android-412-workout-active-start.png) · [Set logger](docs/screenshots/phase-5/android-412-workout-set-logger.png) · [Rest timer](docs/screenshots/phase-5/android-412-workout-rest-timer.png) · [Plate Math](docs/screenshots/phase-5/android-412-workout-plate-math.png) · [Superset card](docs/screenshots/phase-5/android-412-workout-superset.png) · [Rating](docs/screenshots/phase-5/android-412-workout-rating.png) · [Completion](docs/screenshots/phase-5/android-412-workout-completion.png) · [Calibration overlay](docs/screenshots/phase-5/android-412-calibration-overlay.png) · [Today after recalibration](docs/screenshots/phase-5/android-412-today-recalibrated.png) · [Session-only actions](docs/screenshots/phase-5/android-412-today-session-actions.png) · [Today, Default time](docs/screenshots/phase-5/android-412-today.png) · [Today full page](docs/screenshots/phase-5/android-412-today-full.png) · [Workout preview](docs/screenshots/phase-5/android-412-workout.png) · [Library](docs/screenshots/phase-5/android-412-library.png) · [Exercise detail sheet](docs/screenshots/phase-5/android-412-exercise-detail.png) · [Progress](docs/screenshots/phase-5/android-412-progress.png) · [Plan](docs/screenshots/phase-5/android-412-plan.png) · [Settings](docs/screenshots/phase-5/android-412-settings.png)
-- Android 360 px: [Today](docs/screenshots/phase-5/android-360-today.png) · [Workout](docs/screenshots/phase-5/android-360-workout.png) · [Progress](docs/screenshots/phase-5/android-360-progress.png) · [Plan](docs/screenshots/phase-5/android-360-plan.png) · [Settings](docs/screenshots/phase-5/android-360-settings.png)
-- Desktop 1280 px: [Today](docs/screenshots/phase-5/desktop-today.png) · [Workout](docs/screenshots/phase-5/desktop-workout.png) · [Progress](docs/screenshots/phase-5/desktop-progress.png) · [Plan](docs/screenshots/phase-5/desktop-plan.png) · [Settings](docs/screenshots/phase-5/desktop-settings.png)
+- Combined preview sheet: [preview-sheet.png](docs/screenshots/phase-6/preview-sheet.png)
+- Android 412 px (Pixel 7): [Adaptive Coach card](docs/screenshots/phase-6/android-412-today-coach-card.png) · [Readiness check-in](docs/screenshots/phase-6/android-412-today-readiness-check-in.png) · [Active workout start](docs/screenshots/phase-6/android-412-workout-active-start.png) · [Set logger](docs/screenshots/phase-6/android-412-workout-set-logger.png) · [Rest timer](docs/screenshots/phase-6/android-412-workout-rest-timer.png) · [Plate Math](docs/screenshots/phase-6/android-412-workout-plate-math.png) · [Superset card](docs/screenshots/phase-6/android-412-workout-superset.png) · [Rating](docs/screenshots/phase-6/android-412-workout-rating.png) · [Completion with coach feedback](docs/screenshots/phase-6/android-412-workout-completion.png) · [Calibration overlay](docs/screenshots/phase-6/android-412-calibration-overlay.png) · [Today after recalibration](docs/screenshots/phase-6/android-412-today-recalibrated.png) · [Session-only actions](docs/screenshots/phase-6/android-412-today-session-actions.png) · [Today, Default time](docs/screenshots/phase-6/android-412-today.png) · [Today full page](docs/screenshots/phase-6/android-412-today-full.png) · [Workout preview](docs/screenshots/phase-6/android-412-workout.png) · [Library](docs/screenshots/phase-6/android-412-library.png) · [Exercise detail sheet](docs/screenshots/phase-6/android-412-exercise-detail.png) · [Progress](docs/screenshots/phase-6/android-412-progress.png) · [Plan](docs/screenshots/phase-6/android-412-plan.png) · [Settings](docs/screenshots/phase-6/android-412-settings.png)
+- Android 360 px: [Today](docs/screenshots/phase-6/android-360-today.png) · [Workout](docs/screenshots/phase-6/android-360-workout.png) · [Progress](docs/screenshots/phase-6/android-360-progress.png) · [Plan](docs/screenshots/phase-6/android-360-plan.png) · [Settings](docs/screenshots/phase-6/android-360-settings.png)
+- Desktop 1280 px: [Today](docs/screenshots/phase-6/desktop-today.png) · [Workout](docs/screenshots/phase-6/desktop-workout.png) · [Progress](docs/screenshots/phase-6/desktop-progress.png) · [Plan](docs/screenshots/phase-6/desktop-plan.png) · [Settings](docs/screenshots/phase-6/desktop-settings.png)
 
-Phase 4: [docs/screenshots/phase-4](docs/screenshots/phase-4) · Phase 3: [docs/screenshots/phase-3](docs/screenshots/phase-3) · Phase 2: [docs/screenshots/phase-2](docs/screenshots/phase-2) · Phase 1: [docs/screenshots/phase-1](docs/screenshots/phase-1) · Phase 0: [docs/screenshots/phase-0](docs/screenshots/phase-0).
+Phase 5: [docs/screenshots/phase-5](docs/screenshots/phase-5) · Phase 4: [docs/screenshots/phase-4](docs/screenshots/phase-4) · Phase 3: [docs/screenshots/phase-3](docs/screenshots/phase-3) · Phase 2: [docs/screenshots/phase-2](docs/screenshots/phase-2) · Phase 1: [docs/screenshots/phase-1](docs/screenshots/phase-1) · Phase 0: [docs/screenshots/phase-0](docs/screenshots/phase-0).
 
 ## Next concrete action
 
