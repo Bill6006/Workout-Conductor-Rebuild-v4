@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-label="Placeholder demonstration: Incline push">
+  <rect width="320" height="240" rx="18" fill="#171a1e"/>
+  <circle cx="108" cy="126" r="10" stroke="#f4f6f7" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M114 134 L188 168 M188 168 L214 178 M150 152 L172 180" stroke="#f4f6f7" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M60 182 H260" stroke="#6a7380" stroke-width="4" stroke-linecap="round"/>
+  <g><animateTransform attributeName="transform" type="translate" values="0 0; 8 -34; 0 0" keyTimes="0; 0.5; 1" dur="1.8s" calcMode="spline" keySplines="0.4 0 0.6 1; 0.4 0 0.6 1" repeatCount="indefinite"/><path d="M110 104 H230" stroke="#c6f542" stroke-width="6" stroke-linecap="round"/><rect x="98" y="92" width="12" height="24" rx="3" fill="#c6f542"/><rect x="230" y="92" width="12" height="24" rx="3" fill="#c6f542"/></g>
+  <text x="16" y="222" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#c6f542" letter-spacing="1.2">PLACEHOLDER</text>
+  <text x="304" y="222" text-anchor="end" font-family="system-ui, sans-serif" font-size="12" fill="#6a7380">Incline push · loop</text>
+</svg>

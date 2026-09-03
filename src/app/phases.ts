@@ -23,7 +23,7 @@ export const PHASES: readonly PhaseDefinition[] = [
   { number: 8, name: 'Data Safety, Optional Migration, PWA, Polish, and Acceptance' },
 ];
 
-export const CURRENT_PHASE = 1;
+export const CURRENT_PHASE = 2;
 
 /**
  * Gate state of the current phase as shipped in this build.

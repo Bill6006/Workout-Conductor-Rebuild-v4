@@ -9,6 +9,7 @@ import {
 import type { LocationProfile } from '../validation/location';
 import type { UserProfile } from '../validation/profile';
 import type { LocalSettings } from '../validation/settings';
+import type { CustomExercise, CustomInstruction, CustomMedia } from '../validation/customExercise';
 
 /**
  * Export / import foundation. Exports are exact snapshots; imports are
@@ -29,6 +30,9 @@ export interface BackupSource {
   locations: LocationProfile[];
   localSettings: LocalSettings;
   workouts: WorkoutRecord[];
+  customExercises: CustomExercise[];
+  customInstructions: CustomInstruction[];
+  customMedia: CustomMedia[];
 }
 
 export function buildBackup(source: BackupSource, app: BackupAppInfo, exportedAt: string): Backup {
@@ -42,6 +46,9 @@ export function buildBackup(source: BackupSource, app: BackupAppInfo, exportedAt
       locations: source.locations,
       localSettings: source.localSettings,
       workouts: source.workouts,
+      customExercises: source.customExercises,
+      customInstructions: source.customInstructions,
+      customMedia: source.customMedia,
     },
   };
 }
@@ -64,6 +71,7 @@ export interface BackupSummary {
   primaryGoal: string | null;
   locationCount: number;
   workoutCount: number;
+  customExerciseCount: number;
   unknownTopLevelKeys: string[];
 }
 
@@ -79,6 +87,7 @@ export function summarizeBackup(backup: Backup): BackupSummary {
     primaryGoal: backup.data.profile?.goals.primary ?? null,
     locationCount: backup.data.locations.length,
     workoutCount: backup.data.workouts.length,
+    customExerciseCount: backup.data.customExercises.length,
     unknownTopLevelKeys: Object.keys(backup).filter((key) => !KNOWN_TOP_LEVEL_KEYS.has(key)),
   };
 }
@@ -105,22 +114,27 @@ export function parseBackupText(text: string): BackupParseResult {
   return { ok: true, backup: result.data, summary: summarizeBackup(result.data) };
 }
 
-interface StoreSnapshot {
-  profile: Identified[];
-  locations: Identified[];
-  workouts: Identified[];
-}
+const RESTORED_STORES = [
+  'profile',
+  'locations',
+  'workouts',
+  'customExercises',
+  'customInstructions',
+  'customMedia',
+] as const;
+
+type StoreSnapshot = Record<(typeof RESTORED_STORES)[number], Identified[]>;
 
 async function snapshotStores(db: Database): Promise<StoreSnapshot> {
-  return {
-    profile: await db.getAll('profile'),
-    locations: await db.getAll('locations'),
-    workouts: await db.getAll('workouts'),
-  };
+  const snapshot = {} as StoreSnapshot;
+  for (const store of RESTORED_STORES) {
+    snapshot[store] = await db.getAll(store);
+  }
+  return snapshot;
 }
 
 async function restoreSnapshot(db: Database, snapshot: StoreSnapshot): Promise<void> {
-  for (const store of ['profile', 'locations', 'workouts'] as const) {
+  for (const store of RESTORED_STORES) {
     await db.clear(store);
     for (const record of snapshot[store]) {
       await db.put(store, record);
@@ -150,6 +164,18 @@ export async function restoreBackup(
     await db.clear('workouts');
     for (const workout of backup.data.workouts) {
       await putVerified(db, 'workouts', workout, options);
+    }
+    await db.clear('customExercises');
+    for (const record of backup.data.customExercises) {
+      await putVerified(db, 'customExercises', record, options);
+    }
+    await db.clear('customInstructions');
+    for (const record of backup.data.customInstructions) {
+      await putVerified(db, 'customInstructions', record, options);
+    }
+    await db.clear('customMedia');
+    for (const record of backup.data.customMedia) {
+      await putVerified(db, 'customMedia', record, options);
     }
     await db.clear('profile');
     if (backup.data.profile) {

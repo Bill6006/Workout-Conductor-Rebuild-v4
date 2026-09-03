@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CustomExerciseSchema, CustomInstructionSchema, CustomMediaSchema } from './customExercise';
 import { LocationProfileSchema } from './location';
 import { UserProfileSchema } from './profile';
 import { LocalSettingsSchema } from './settings';
@@ -24,6 +25,9 @@ export const BackupSchema = z.looseObject({
     locations: z.array(LocationProfileSchema),
     localSettings: LocalSettingsSchema,
     workouts: z.array(z.looseObject({ id: z.string().min(1) })),
+    customExercises: z.array(CustomExerciseSchema).default([]),
+    customInstructions: z.array(CustomInstructionSchema).default([]),
+    customMedia: z.array(CustomMediaSchema).default([]),
   }),
 });
 

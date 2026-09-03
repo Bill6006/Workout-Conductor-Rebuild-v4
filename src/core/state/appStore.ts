@@ -22,6 +22,7 @@ import {
 } from '../validation/location';
 import { UserProfileSchema, type UserProfile } from '../validation/profile';
 import type { LocalSettings } from '../validation/settings';
+import type { CustomExercise, CustomInstruction, CustomMedia } from '../validation/customExercise';
 
 /**
  * The single application state owner. Durable data goes through IndexedDB
@@ -39,6 +40,7 @@ export interface AppState {
   localSettings: LocalSettings;
   lastReceipt: SaveReceipt | null;
   workoutCount: number;
+  customCounts: { exercises: number; instructions: number; media: number };
 }
 
 export interface AppStoreOptions {
@@ -76,6 +78,7 @@ export class AppStore {
       localSettings: readLocalSettings(this.storage),
       lastReceipt: null,
       workoutCount: 0,
+      customCounts: { exercises: 0, instructions: 0, media: 0 },
     };
   }
 
@@ -99,11 +102,15 @@ export class AppStore {
   async hydrate(): Promise<void> {
     try {
       const db = await this.getDatabase();
-      const [profiles, locations, workoutCount] = await Promise.all([
-        db.getAll<Identified>('profile'),
-        db.getAll<Identified>('locations'),
-        db.count('workouts'),
-      ]);
+      const [profiles, locations, workoutCount, customExercises, customInstructions, customMedia] =
+        await Promise.all([
+          db.getAll<Identified>('profile'),
+          db.getAll<Identified>('locations'),
+          db.count('workouts'),
+          db.count('customExercises'),
+          db.count('customInstructions'),
+          db.count('customMedia'),
+        ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
       const validLocations = locations
         .map((location) => LocationProfileSchema.safeParse(location))
@@ -120,6 +127,11 @@ export class AppStore {
         locations: sortLocations(validLocations),
         localSettings: readLocalSettings(this.storage),
         workoutCount,
+        customCounts: {
+          exercises: customExercises,
+          instructions: customInstructions,
+          media: customMedia,
+        },
       });
     } catch (error) {
       this.setState({
@@ -196,7 +208,12 @@ export class AppStore {
 
   async createBackup(app: BackupAppInfo): Promise<Backup> {
     const db = await this.getDatabase();
-    const workouts = await db.getAll<WorkoutRecord>('workouts');
+    const [workouts, customExercises, customInstructions, customMedia] = await Promise.all([
+      db.getAll<WorkoutRecord>('workouts'),
+      db.getAll<CustomExercise>('customExercises'),
+      db.getAll<CustomInstruction>('customInstructions'),
+      db.getAll<CustomMedia>('customMedia'),
+    ]);
     const exportedAt = this.now();
     const backup = buildBackup(
       {
@@ -204,6 +221,9 @@ export class AppStore {
         locations: this.state.locations,
         localSettings: this.state.localSettings,
         workouts,
+        customExercises,
+        customInstructions,
+        customMedia,
       },
       app,
       exportedAt,

@@ -91,4 +91,25 @@ test.describe('screenshots @screenshots', () => {
     await expect(page.getByRole('dialog', { name: 'Restore this backup?' })).toBeVisible();
     await capture(page, testInfo, 'settings-import-preview');
   });
+  test('library and exercise detail', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');
+    await ensureProfile(page);
+    await page.goto('./#/library');
+    await expect(page.getByRole('heading', { level: 1, name: 'Exercise library' })).toBeVisible();
+    await capture(page, testInfo, 'library');
+    await page.getByRole('searchbox', { name: 'Search exercises' }).fill('incline dumbbell press');
+    await page.getByTestId('library-row').first().click();
+    await expect(page.getByRole('dialog', { name: 'Incline Dumbbell Press' })).toBeVisible();
+    await capture(page, testInfo, 'exercise-detail');
+    await page.keyboard.press('Escape');
+
+    await page.goto('./#/today');
+    await page.getByTestId('demo-exercise').first().click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page
+      .getByRole('dialog')
+      .getByRole('heading', { name: /Alternatives/ })
+      .scrollIntoViewIfNeeded();
+    await capture(page, testInfo, 'today-alternatives');
+  });
 });

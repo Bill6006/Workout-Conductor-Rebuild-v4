@@ -37,14 +37,20 @@ src/
     state/appStore.ts           the single state owner (useSyncExternalStore), verified saves
     time/clock.ts               minute clock hook so render stays pure
   catalog/
-    equipment/                  equipment ids, categories, presets (Phase 2 extends)
-    exercises/                  seed exercise names (replaced by the Phase 2 catalog)
+    equipment/                  equipment ids, categories, presets
+    muscles/ movementPatterns/  muscle model (18 muscles, 6 groups) and 22 movement patterns
+    exercises/                  ExerciseSchema, defineExercise DSL, data/ (push, pull, legs, armsCore), catalog lookups
+    media/mediaManifest.ts      asset registry with source + license; placeholder loops per pattern
+  engine/
+    conflicts/                  the one conflict engine (fit, workout, superset) + context builder
+    alternatives/               rankAlternatives: ranked, explained, conflict-filtered candidates
   features/
     onboarding/                 7-step wizard over a ProfileDraft, localStorage draft persistence
     profile/draft.ts            ProfileDraft = profile + locations; one editing model
     profile/editors/            Goals, Schedule, Places, ExercisePreferences, Limitations, Style, Units
     profile/useProfileEditor    debounced verified autosave used by Settings and Plan
-    today/                      Today dashboard; demo/ holds the synthetic demo (deleted in Phase 3)
+    today/                      Today dashboard; demo/ builds the synthetic demo from the catalog (deleted in Phase 3)
+    library/                    exercise library: search, muscle-group filter, detail sheet, preferences
     plan/                       training days, location list, LocationEditorSheet
     settings/                   editor sections, BackupCard, DiagnosticsCard
     workout/ progress/          placeholders until Phases 5 and 7
@@ -52,6 +58,7 @@ src/
     AppShell/ BottomNav/ NavIcons/ Card/ Button/ FactList/ Screen/
     Form/                       Field, ChoiceGroup, ChipSelect, Toggle, NumberField, TagInput, TextArea
     Sheet/ Toast/ ProgressBar/
+    ExerciseDetail/             ExerciseThumb, ExerciseDemo (play/pause/replay, reduced motion), ExerciseDetailSheet
   styles/                       tokens.css (dark charcoal, lime accent, radii, safe areas), global.css
 ```
 
@@ -76,6 +83,18 @@ validates it with Zod and shows `Build <sha> · <time> UTC · Phase <n>` under t
 Settings, Diagnostics shows the full facts. `scripts/verify-build.mjs` checks the marker is really
 in the bundle and that the phase constant in `vite.config.ts` matches `src/app/phases.ts`.
 
+### Catalog and engines (Phase 2)
+
+Every exercise is authored through `defineExercise`, which fills pattern- and equipment-based
+defaults (station, setup time, load type and bar weight for Plate Math, rep ranges, drop-set
+safety, superset friendliness, warm-up ramp) and validates the result against `ExerciseSchema`.
+The conflict engine (see [conflict-engine.md](conflict-engine.md)) is the only place that decides
+whether an exercise, a selection, or a superset pair is acceptable. `rankAlternatives` scores
+candidates on muscle overlap, pattern, role, stimulus, progression family, preference, setup time,
+joint stress, and superset compatibility, and explains the top reason and the key difference.
+Custom exercises (`CustomExerciseSchema`) are presented to the engines through
+`customToCatalogExercise`, so user content and catalog content share one code path.
+
 ### PWA
 
 `vite-plugin-pwa` in `prompt` mode precaches the app shell. A waiting service worker is only
@@ -84,9 +103,8 @@ activated when the user taps Reload. Later phases hold the prompt during an acti
 ## Planned structure (from the execution plan)
 
 ```
-src/engine/     workoutGenerator, recalibration, conflicts, alternatives, progression,
-                recovery, duration, volume, scoring
-src/catalog/    exercises (structured), muscles, movementPatterns, mediaManifest
+src/engine/     workoutGenerator, recalibration, progression, recovery, duration, volume, scoring
+                (conflicts and alternatives exist since Phase 2)
 src/components/ DurationSelector, CalibrationOverlay, ExerciseCard, AlternativeSheet,
                 SetLogger, RestTimer, SupersetGroup, WorkoutSummary, Charts, Dialogs
 ```

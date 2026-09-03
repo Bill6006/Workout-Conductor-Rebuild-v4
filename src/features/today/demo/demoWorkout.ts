@@ -1,22 +1,31 @@
+import { exercisesByPattern } from '../../../catalog/exercises/catalog';
+import type { CatalogExercise } from '../../../catalog/exercises/exerciseSchema';
+import type { MovementPatternId } from '../../../catalog/movementPatterns/movementPatterns';
+import { muscleName } from '../../../catalog/muscles/muscles';
 import type { LocationProfile } from '../../../core/validation/location';
 import type { UserProfile } from '../../../core/validation/profile';
+import {
+  checkExerciseFit,
+  checkSupersetPair,
+  checkWorkoutConflicts,
+  isBlocked,
+} from '../../../engine/conflicts/conflictEngine';
+import { buildConflictContext, preferredIdsOf } from '../../../engine/conflicts/context';
 
 /**
- * SYNTHETIC DEMO WORKOUT (Phase 1 only).
+ * SYNTHETIC DEMO WORKOUT (until Phase 3).
  *
  * A small deterministic preview so the Today screen feels real before the
- * workout-generation engine (Phase 3) exists. It reads the profile and the
- * current location's equipment, but it is not the engine: no weekly volume,
- * no progression, no time-fitting. Phase 3 deletes this module.
+ * workout-generation engine exists. It now draws from the structured catalog
+ * and passes every pick through the conflict engine, but it is still not the
+ * engine: no weekly volume, no progression, no time-fitting. Phase 3 replaces it.
  */
 
 export type DemoRole = 'strength' | 'hypertrophy' | 'isolation';
 
 export interface DemoExercise {
-  name: string;
+  exercise: CatalogExercise;
   role: DemoRole;
-  muscles: string[];
-  equipment: string;
   sets: number;
   reps: string;
   restSeconds: number;
@@ -34,398 +43,44 @@ export interface DemoWorkout {
   compromises: string[];
 }
 
-type Tag = 'overhead' | 'dip' | 'barbell-squat' | 'knee-heavy' | 'wide-grip' | 'lower-back';
-
-interface Candidate {
-  name: string;
-  role: DemoRole;
-  muscles: string[];
-  equipmentLabel: string;
-  /** any-of groups; each group is all-of equipment ids; an empty list means bodyweight */
-  requires: string[][];
-  tags?: Tag[];
-}
-
-type Slot =
-  | 'press'
-  | 'incline-press'
-  | 'pull'
-  | 'row'
-  | 'squat'
-  | 'hinge'
-  | 'overhead'
-  | 'chest-iso'
-  | 'side-delt'
-  | 'biceps'
-  | 'triceps';
-
-const CANDIDATES: Record<Slot, Candidate[]> = {
-  press: [
-    {
-      name: 'Barbell Bench Press',
-      role: 'strength',
-      muscles: ['Chest', 'Triceps'],
-      equipmentLabel: 'Barbell',
-      requires: [
-        ['barbell', 'flat-bench'],
-        ['barbell', 'adjustable-bench'],
-      ],
-    },
-    {
-      name: 'Dumbbell Bench Press',
-      role: 'strength',
-      muscles: ['Chest', 'Triceps'],
-      equipmentLabel: 'Dumbbells',
-      requires: [
-        ['dumbbells', 'flat-bench'],
-        ['dumbbells', 'adjustable-bench'],
-        ['adjustable-dumbbells', 'adjustable-bench'],
-        ['adjustable-dumbbells', 'flat-bench'],
-      ],
-    },
-    {
-      name: 'Machine Chest Press',
-      role: 'strength',
-      muscles: ['Chest', 'Triceps'],
-      equipmentLabel: 'Machine',
-      requires: [['chest-press-machine']],
-    },
-    {
-      name: 'Push-Up',
-      role: 'strength',
-      muscles: ['Chest', 'Triceps'],
-      equipmentLabel: 'Bodyweight',
-      requires: [[]],
-    },
-  ],
-  'incline-press': [
-    {
-      name: 'Incline Dumbbell Press',
-      role: 'hypertrophy',
-      muscles: ['Upper chest', 'Shoulders'],
-      equipmentLabel: 'Dumbbells',
-      requires: [
-        ['dumbbells', 'adjustable-bench'],
-        ['adjustable-dumbbells', 'adjustable-bench'],
-      ],
-    },
-    {
-      name: 'Incline Barbell Bench Press',
-      role: 'hypertrophy',
-      muscles: ['Upper chest', 'Shoulders'],
-      equipmentLabel: 'Barbell',
-      requires: [['barbell', 'adjustable-bench']],
-    },
-    {
-      name: 'Band Incline Press',
-      role: 'hypertrophy',
-      muscles: ['Upper chest', 'Shoulders'],
-      equipmentLabel: 'Bands',
-      requires: [['resistance-bands']],
-    },
-  ],
-  pull: [
-    {
-      name: 'Pull-Up',
-      role: 'hypertrophy',
-      muscles: ['Lats', 'Biceps'],
-      equipmentLabel: 'Pull-up bar',
-      requires: [['pull-up-bar']],
-    },
-    {
-      name: 'Lat Pulldown',
-      role: 'hypertrophy',
-      muscles: ['Lats', 'Biceps'],
-      equipmentLabel: 'Cable',
-      requires: [['lat-pulldown']],
-    },
-    {
-      name: 'Band Pulldown',
-      role: 'hypertrophy',
-      muscles: ['Lats', 'Biceps'],
-      equipmentLabel: 'Bands',
-      requires: [['resistance-bands']],
-    },
-  ],
-  row: [
-    {
-      name: 'Chest-Supported Row',
-      role: 'hypertrophy',
-      muscles: ['Upper back', 'Biceps'],
-      equipmentLabel: 'Dumbbells',
-      requires: [
-        ['dumbbells', 'adjustable-bench'],
-        ['adjustable-dumbbells', 'adjustable-bench'],
-      ],
-    },
-    {
-      name: 'Seated Cable Row',
-      role: 'hypertrophy',
-      muscles: ['Upper back', 'Biceps'],
-      equipmentLabel: 'Cable',
-      requires: [['seated-row'], ['cable-station']],
-    },
-    {
-      name: 'Barbell Row',
-      role: 'hypertrophy',
-      muscles: ['Upper back', 'Biceps'],
-      equipmentLabel: 'Barbell',
-      requires: [['barbell']],
-      tags: ['lower-back'],
-    },
-    {
-      name: 'Dumbbell Row',
-      role: 'hypertrophy',
-      muscles: ['Upper back', 'Biceps'],
-      equipmentLabel: 'Dumbbells',
-      requires: [['dumbbells'], ['adjustable-dumbbells']],
-    },
-    {
-      name: 'Band Row',
-      role: 'hypertrophy',
-      muscles: ['Upper back', 'Biceps'],
-      equipmentLabel: 'Bands',
-      requires: [['resistance-bands']],
-    },
-  ],
-  squat: [
-    {
-      name: 'Back Squat',
-      role: 'strength',
-      muscles: ['Quads', 'Glutes'],
-      equipmentLabel: 'Barbell',
-      requires: [['barbell', 'squat-rack']],
-      tags: ['barbell-squat', 'knee-heavy', 'lower-back'],
-    },
-    {
-      name: 'Hack Squat',
-      role: 'strength',
-      muscles: ['Quads', 'Glutes'],
-      equipmentLabel: 'Machine',
-      requires: [['hack-squat']],
-      tags: ['knee-heavy'],
-    },
-    {
-      name: 'Leg Press',
-      role: 'strength',
-      muscles: ['Quads', 'Glutes'],
-      equipmentLabel: 'Machine',
-      requires: [['leg-press']],
-      tags: ['knee-heavy'],
-    },
-    {
-      name: 'Goblet Squat',
-      role: 'strength',
-      muscles: ['Quads', 'Glutes'],
-      equipmentLabel: 'Dumbbell',
-      requires: [['dumbbells'], ['adjustable-dumbbells'], ['kettlebells']],
-      tags: ['knee-heavy'],
-    },
-  ],
-  hinge: [
-    {
-      name: 'Romanian Deadlift',
-      role: 'hypertrophy',
-      muscles: ['Hamstrings', 'Glutes'],
-      equipmentLabel: 'Barbell',
-      requires: [['barbell']],
-      tags: ['lower-back'],
-    },
-    {
-      name: 'Dumbbell Romanian Deadlift',
-      role: 'hypertrophy',
-      muscles: ['Hamstrings', 'Glutes'],
-      equipmentLabel: 'Dumbbells',
-      requires: [['dumbbells'], ['adjustable-dumbbells']],
-      tags: ['lower-back'],
-    },
-    {
-      name: 'Leg Curl',
-      role: 'hypertrophy',
-      muscles: ['Hamstrings'],
-      equipmentLabel: 'Machine',
-      requires: [['leg-curl']],
-    },
-  ],
-  overhead: [
-    {
-      name: 'Overhead Press',
-      role: 'hypertrophy',
-      muscles: ['Shoulders', 'Triceps'],
-      equipmentLabel: 'Barbell',
-      requires: [['barbell']],
-      tags: ['overhead'],
-    },
-    {
-      name: 'Dumbbell Shoulder Press',
-      role: 'hypertrophy',
-      muscles: ['Shoulders', 'Triceps'],
-      equipmentLabel: 'Dumbbells',
-      requires: [['dumbbells'], ['adjustable-dumbbells']],
-      tags: ['overhead'],
-    },
-  ],
-  'chest-iso': [
-    {
-      name: 'Cable Fly',
-      role: 'isolation',
-      muscles: ['Chest'],
-      equipmentLabel: 'Cable',
-      requires: [['cable-station'], ['functional-trainer']],
-    },
-    {
-      name: 'Pec Deck',
-      role: 'isolation',
-      muscles: ['Chest'],
-      equipmentLabel: 'Machine',
-      requires: [['pec-deck']],
-    },
-    {
-      name: 'Dumbbell Fly',
-      role: 'isolation',
-      muscles: ['Chest'],
-      equipmentLabel: 'Dumbbells',
-      requires: [
-        ['dumbbells', 'flat-bench'],
-        ['dumbbells', 'adjustable-bench'],
-        ['adjustable-dumbbells', 'adjustable-bench'],
-      ],
-    },
-    {
-      name: 'Band Fly',
-      role: 'isolation',
-      muscles: ['Chest'],
-      equipmentLabel: 'Bands',
-      requires: [['resistance-bands']],
-    },
-  ],
-  'side-delt': [
-    {
-      name: 'Lateral Raise',
-      role: 'isolation',
-      muscles: ['Side delts'],
-      equipmentLabel: 'Dumbbells',
-      requires: [['dumbbells'], ['adjustable-dumbbells']],
-    },
-    {
-      name: 'Cable Lateral Raise',
-      role: 'isolation',
-      muscles: ['Side delts'],
-      equipmentLabel: 'Cable',
-      requires: [['cable-station'], ['functional-trainer']],
-    },
-    {
-      name: 'Band Lateral Raise',
-      role: 'isolation',
-      muscles: ['Side delts'],
-      equipmentLabel: 'Bands',
-      requires: [['resistance-bands']],
-    },
-  ],
-  biceps: [
-    {
-      name: 'EZ-Bar Curl',
-      role: 'isolation',
-      muscles: ['Biceps'],
-      equipmentLabel: 'EZ bar',
-      requires: [['ez-bar']],
-    },
-    {
-      name: 'Incline Dumbbell Curl',
-      role: 'isolation',
-      muscles: ['Biceps'],
-      equipmentLabel: 'Dumbbells',
-      requires: [
-        ['dumbbells', 'adjustable-bench'],
-        ['adjustable-dumbbells', 'adjustable-bench'],
-      ],
-    },
-    {
-      name: 'Dumbbell Curl',
-      role: 'isolation',
-      muscles: ['Biceps'],
-      equipmentLabel: 'Dumbbells',
-      requires: [['dumbbells'], ['adjustable-dumbbells']],
-    },
-    {
-      name: 'Cable Curl',
-      role: 'isolation',
-      muscles: ['Biceps'],
-      equipmentLabel: 'Cable',
-      requires: [['cable-station']],
-    },
-    {
-      name: 'Band Curl',
-      role: 'isolation',
-      muscles: ['Biceps'],
-      equipmentLabel: 'Bands',
-      requires: [['resistance-bands']],
-    },
-  ],
-  triceps: [
-    {
-      name: 'Cable Triceps Pushdown',
-      role: 'isolation',
-      muscles: ['Triceps'],
-      equipmentLabel: 'Cable',
-      requires: [['cable-station'], ['functional-trainer']],
-    },
-    {
-      name: 'Overhead Triceps Extension',
-      role: 'isolation',
-      muscles: ['Triceps'],
-      equipmentLabel: 'Dumbbell',
-      requires: [['dumbbells'], ['adjustable-dumbbells']],
-      tags: ['overhead'],
-    },
-    {
-      name: 'Skull Crusher',
-      role: 'isolation',
-      muscles: ['Triceps'],
-      equipmentLabel: 'EZ bar',
-      requires: [
-        ['ez-bar', 'flat-bench'],
-        ['ez-bar', 'adjustable-bench'],
-      ],
-    },
-    {
-      name: 'Dip',
-      role: 'isolation',
-      muscles: ['Triceps', 'Chest'],
-      equipmentLabel: 'Dip station',
-      requires: [['dip-station']],
-      tags: ['dip'],
-    },
-    {
-      name: 'Band Triceps Pushdown',
-      role: 'isolation',
-      muscles: ['Triceps'],
-      equipmentLabel: 'Bands',
-      requires: [['resistance-bands']],
-    },
-  ],
-};
+type Slot = [MovementPatternId, DemoRole];
 
 const TEMPLATES = {
   'chest-arms': {
     title: 'Chest + Arms focus',
     slots: [
-      'press',
-      'incline-press',
-      'row',
-      'chest-iso',
-      'triceps',
-      'biceps',
-      'side-delt',
+      ['horizontal-push', 'strength'],
+      ['incline-push', 'hypertrophy'],
+      ['horizontal-pull', 'hypertrophy'],
+      ['chest-fly', 'isolation'],
+      ['elbow-extension', 'isolation'],
+      ['elbow-flexion', 'isolation'],
+      ['shoulder-abduction', 'isolation'],
     ] as Slot[],
   },
   'full-body-strength': {
     title: 'Full-body strength',
-    slots: ['squat', 'press', 'row', 'hinge', 'overhead', 'biceps', 'triceps'] as Slot[],
+    slots: [
+      ['squat', 'strength'],
+      ['horizontal-push', 'strength'],
+      ['horizontal-pull', 'hypertrophy'],
+      ['hinge', 'hypertrophy'],
+      ['vertical-push', 'hypertrophy'],
+      ['elbow-flexion', 'isolation'],
+      ['elbow-extension', 'isolation'],
+    ] as Slot[],
   },
   'upper-hypertrophy': {
     title: 'Upper-body hypertrophy',
-    slots: ['press', 'pull', 'incline-press', 'row', 'side-delt', 'biceps', 'triceps'] as Slot[],
+    slots: [
+      ['horizontal-push', 'strength'],
+      ['vertical-pull', 'hypertrophy'],
+      ['incline-push', 'hypertrophy'],
+      ['horizontal-pull', 'hypertrophy'],
+      ['shoulder-abduction', 'isolation'],
+      ['elbow-flexion', 'isolation'],
+      ['elbow-extension', 'isolation'],
+    ] as Slot[],
   },
 } as const;
 
@@ -433,11 +88,11 @@ type TemplateKey = keyof typeof TEMPLATES;
 
 const PRESCRIPTIONS: Record<
   DemoRole,
-  { sets: number; reps: string; rest: Record<UserProfile['restStyle'], number> }
+  { sets: number; rest: Record<UserProfile['restStyle'], number> }
 > = {
-  strength: { sets: 4, reps: '4-6', rest: { short: 120, standard: 150, long: 180 } },
-  hypertrophy: { sets: 3, reps: '8-12', rest: { short: 60, standard: 90, long: 120 } },
-  isolation: { sets: 3, reps: '10-15', rest: { short: 45, standard: 60, long: 90 } },
+  strength: { sets: 4, rest: { short: 120, standard: 150, long: 180 } },
+  hypertrophy: { sets: 3, rest: { short: 60, standard: 90, long: 120 } },
+  isolation: { sets: 3, rest: { short: 45, standard: 60, long: 90 } },
 };
 
 function chooseTemplate(profile: UserProfile): TemplateKey {
@@ -451,33 +106,57 @@ function chooseTemplate(profile: UserProfile): TemplateKey {
   return 'upper-hypertrophy';
 }
 
-function hasEquipment(available: ReadonlySet<string>, requires: string[][]): boolean {
-  return requires.some((group) => group.every((id) => available.has(id)));
+function repsFor(exercise: CatalogExercise, role: DemoRole): string {
+  const range =
+    role === 'strength' && exercise.repRanges.strength
+      ? exercise.repRanges.strength
+      : exercise.repRanges.hypertrophy;
+  return `${range[0]}-${range[1]}`;
 }
 
-function blockedTags(profile: UserProfile): Set<Tag> {
-  const blocked = new Set<Tag>();
-  if (profile.limitations.avoidBarbellSquats) blocked.add('barbell-squat');
-  if (profile.limitations.shoulder.includes('avoid-overhead-pressing')) blocked.add('overhead');
-  if (profile.limitations.shoulder.includes('avoid-dips')) blocked.add('dip');
-  if (profile.limitations.shoulder.includes('avoid-wide-grip-pressing')) blocked.add('wide-grip');
-  if (profile.limitations.painAreas.includes('knee')) blocked.add('knee-heavy');
-  if (profile.limitations.painAreas.includes('lower-back')) blocked.add('lower-back');
-  return blocked;
-}
+function pickForSlot(
+  pattern: MovementPatternId,
+  role: DemoRole,
+  chosen: readonly CatalogExercise[],
+  context: ReturnType<typeof buildConflictContext>,
+  preferredIds: ReadonlySet<string>,
+): CatalogExercise | undefined {
+  const chosenIds = new Set(chosen.map((exercise) => exercise.id));
+  const candidates = exercisesByPattern(pattern)
+    .filter((exercise) => !chosenIds.has(exercise.id))
+    .filter((exercise) => (role === 'strength' ? exercise.compound : true))
+    .filter((exercise) => !isBlocked(checkExerciseFit(exercise, context)))
+    .filter((exercise) => !isBlocked(checkWorkoutConflicts([...chosen, exercise], context)));
 
-function normalize(name: string): string {
-  return name.trim().toLowerCase();
+  const score = (exercise: CatalogExercise) =>
+    role === 'strength'
+      ? exercise.strengthSuitability * 10 + exercise.hypertrophySuitability
+      : exercise.hypertrophySuitability * 10 + exercise.strengthSuitability;
+
+  // Equal picks: prefer the option with less joint stress, then the quicker setup.
+  const stress = (exercise: CatalogExercise) =>
+    Object.values(exercise.jointStress).reduce(
+      (total, level) => total + (level === 'high' ? 2 : level === 'moderate' ? 1 : 0),
+      0,
+    );
+
+  candidates.sort(
+    (a, b) =>
+      Number(preferredIds.has(b.id)) - Number(preferredIds.has(a.id)) ||
+      score(b) - score(a) ||
+      stress(a) - stress(b) ||
+      a.setupSeconds - b.setupSeconds ||
+      a.name.localeCompare(b.name),
+  );
+  return candidates[0];
 }
 
 export function buildDemoWorkout(
   profile: UserProfile,
   location: LocationProfile | undefined,
 ): DemoWorkout {
-  const available = new Set(location?.equipment ?? []);
-  const disliked = new Set(profile.exercisePreferences.disliked.map(normalize));
-  const preferred = new Set(profile.exercisePreferences.preferred.map(normalize));
-  const blocked = blockedTags(profile);
+  const context = buildConflictContext(profile, location);
+  const preferredIds = preferredIdsOf(profile);
   const templateKey = chooseTemplate(profile);
   const template = TEMPLATES[templateKey];
   const compromises: string[] = [];
@@ -486,59 +165,37 @@ export function buildDemoWorkout(
     Math.max(4, Math.round(profile.schedule.typicalDurationMinutes / 9)),
   );
 
+  const chosenExercises: CatalogExercise[] = [];
   const chosen: DemoExercise[] = [];
-  for (const slot of template.slots) {
+  for (const [pattern, role] of template.slots) {
     if (chosen.length >= maxExercises) break;
-    const candidates = CANDIDATES[slot];
-    const ranked = [...candidates].sort((a, b) => {
-      const prefA = preferred.has(normalize(a.name)) ? 1 : 0;
-      const prefB = preferred.has(normalize(b.name)) ? 1 : 0;
-      return prefB - prefA;
-    });
-    const pick = ranked.find(
-      (candidate) =>
-        hasEquipment(available, candidate.requires) &&
-        !disliked.has(normalize(candidate.name)) &&
-        !(candidate.tags ?? []).some((tag) => blocked.has(tag)),
-    );
+    const pick = pickForSlot(pattern, role, chosenExercises, context, preferredIds);
     if (!pick) {
-      const skipped = candidates.find((candidate) =>
-        (candidate.tags ?? []).some((tag) => blocked.has(tag)),
+      compromises.push(
+        `No ${pattern.replace(/-/g, ' ')} option fits ${location?.name ?? 'this place'} and your limits.`,
       );
-      if (skipped) {
-        compromises.push(`${skipped.name} left out because of your limitations.`);
-      } else if (candidates.some((candidate) => disliked.has(normalize(candidate.name)))) {
-        compromises.push(
-          `A ${slot.replace('-', ' ')} movement was skipped: the options here are on your disliked list.`,
-        );
-      } else {
-        compromises.push(
-          `No ${slot.replace('-', ' ')} option fits ${location?.name ?? 'this location'}'s equipment.`,
-        );
-      }
       continue;
     }
-    const prescription = PRESCRIPTIONS[pick.role];
+    chosenExercises.push(pick);
+    const prescription = PRESCRIPTIONS[role];
     chosen.push({
-      name: pick.name,
-      role: pick.role,
-      muscles: pick.muscles,
-      equipment: pick.equipmentLabel,
+      exercise: pick,
+      role,
       sets: prescription.sets,
-      reps: prescription.reps,
+      reps: repsFor(pick, role),
       restSeconds: prescription.rest[profile.restStyle],
     });
   }
 
   if (profile.techniques.supersets) {
     const isolationIndexes = chosen
-      .map((exercise, index) => (exercise.role === 'isolation' ? index : -1))
+      .map((entry, index) => (entry.role === 'isolation' ? index : -1))
       .filter((index) => index >= 0);
     if (isolationIndexes.length >= 2) {
       const [first, second] = isolationIndexes.slice(-2) as [number, number];
       const a1 = chosen[first];
       const a2 = chosen[second];
-      if (a1 && a2) {
+      if (a1 && a2 && !isBlocked(checkSupersetPair(a1.exercise, a2.exercise, context))) {
         a1.superset = 'A1';
         a2.superset = 'A2';
         a1.restSeconds = 15;
@@ -549,17 +206,26 @@ export function buildDemoWorkout(
   if (profile.techniques.dropSets) {
     const target = [...chosen]
       .reverse()
-      .find((exercise) => exercise.role === 'isolation' && exercise.superset !== 'A1');
+      .find(
+        (entry) =>
+          entry.role === 'isolation' && entry.superset !== 'A1' && entry.exercise.dropSetSafe,
+      );
     if (target) target.dropSet = true;
   }
 
   const workSeconds = chosen.reduce(
-    (total, exercise) => total + exercise.sets * (40 + exercise.restSeconds),
+    (total, entry) => total + entry.exercise.setupSeconds + entry.sets * (40 + entry.restSeconds),
     0,
   );
   const estimatedMinutes = Math.round(5 + workSeconds / 60);
 
-  const focus = [...new Set(chosen.flatMap((exercise) => exercise.muscles))].slice(0, 5);
+  const focus = [...new Set(chosen.flatMap((entry) => entry.exercise.primaryMuscles))]
+    .slice(0, 5)
+    .map(muscleName);
+
+  for (const conflict of checkWorkoutConflicts(chosenExercises, context)) {
+    if (conflict.severity === 'warn') compromises.push(conflict.message);
+  }
 
   const why: string[] = [];
   why.push(`Primary goal ${goalPhrase(profile.goals.primary)}: ${templateReason(templateKey)}.`);
@@ -568,12 +234,14 @@ export function buildDemoWorkout(
       `Secondary goal ${goalPhrase(profile.goals.secondary)} keeps direct arm and chest work in.`,
     );
   }
-  why.push(`Built for ${location?.name ?? 'your location'} using only the equipment saved there.`);
-  if (profile.techniques.supersets && chosen.some((exercise) => exercise.superset)) {
+  why.push(
+    `Built for ${location?.name ?? 'your location'} using only the equipment saved there, checked by the conflict engine.`,
+  );
+  if (chosen.some((entry) => entry.superset)) {
     why.push('Supersets are on, so the last two isolation moves are paired to save time.');
   }
-  if (profile.techniques.dropSets && chosen.some((exercise) => exercise.dropSet)) {
-    why.push('Drop sets are on, so one isolation move ends with a drop set.');
+  if (chosen.some((entry) => entry.dropSet)) {
+    why.push('Drop sets are on, so one drop-set-safe isolation move ends with a drop set.');
   }
   why.push(
     `${restLabel(profile.restStyle)} rests, ${profile.schedule.typicalDurationMinutes}-minute typical session.`,
@@ -586,7 +254,7 @@ export function buildDemoWorkout(
     exercises: chosen,
     estimatedMinutes,
     why,
-    compromises,
+    compromises: [...new Set(compromises)],
   };
 }
 

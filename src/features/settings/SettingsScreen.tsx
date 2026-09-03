@@ -60,6 +60,9 @@ export function SettingsScreen() {
 
           <Card eyebrow="Exercise preferences" title="Loved and avoided">
             <ExercisePreferencesEditor draft={draft} onChange={editor.update} />
+            <a className={styles.inlineLink} href={routeHref('library')} data-testid="library-link">
+              Browse the exercise library ›
+            </a>
           </Card>
 
           <Card eyebrow="Limitations" title="Pain and movement limits">

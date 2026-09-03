@@ -5,17 +5,21 @@ data lives, its schema owner, and the rules that protect it.
 
 ## Storage owners
 
-| Data                        | Store                                | Owner                             | Notes                                                                    |
-| --------------------------- | ------------------------------------ | --------------------------------- | ------------------------------------------------------------------------ |
-| User profile                | IndexedDB `profile` (key `current`)  | `src/core/validation/profile.ts`  | Goals, schedule, preferences, limitations, techniques, units, bodyweight |
-| Location profiles           | IndexedDB `locations`                | `src/core/validation/location.ts` | Home, Gym, Travel, Custom; each owns its equipment list                  |
-| Workout history             | IndexedDB `workouts`                 | Phase 5                           | Opaque records with an `id` until logging exists; backed up as-is        |
-| Meta                        | IndexedDB `meta`                     | reserved                          | Migrations and future counters                                           |
-| Small settings              | localStorage `wc.v1.settings`        | `src/core/validation/settings.ts` | Onboarding completion, last export, last import                          |
-| Unfinished onboarding draft | localStorage `wc.v1.onboardingDraft` | `src/features/profile/draft.ts`   | Removed when setup finishes                                              |
+| Data                        | Store                                | Owner                                   | Notes                                                                                |
+| --------------------------- | ------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------ |
+| User profile                | IndexedDB `profile` (key `current`)  | `src/core/validation/profile.ts`        | Goals, schedule, preferences, limitations, techniques, units, bodyweight             |
+| Location profiles           | IndexedDB `locations`                | `src/core/validation/location.ts`       | Home, Gym, Travel, Custom; each owns its equipment list                              |
+| Workout history             | IndexedDB `workouts`                 | Phase 5                                 | Opaque records with an `id` until logging exists; backed up as-is                    |
+| Meta                        | IndexedDB `meta`                     | reserved                                | Migrations and future counters                                                       |
+| Custom exercises            | IndexedDB `customExercises`          | `src/core/validation/customExercise.ts` | User-created exercises, presented to the engines like catalog entries                |
+| Custom instructions         | IndexedDB `customInstructions`       | `src/core/validation/customExercise.ts` | Per-exercise setup, execution, cues, notes (keyed by exercise id)                    |
+| Custom media                | IndexedDB `customMedia`              | `src/core/validation/customExercise.ts` | User-owned image or video as a size-capped data URL; never licensed production media |
+| Small settings              | localStorage `wc.v1.settings`        | `src/core/validation/settings.ts`       | Onboarding completion, last export, last import                                      |
+| Unfinished onboarding draft | localStorage `wc.v1.onboardingDraft` | `src/features/profile/draft.ts`         | Removed when setup finishes                                                          |
 
-The database is `workout-conductor`, version 1, opened by `src/core/storage/indexedDb.ts`.
-Upgrades only ever add stores or indexes. A deployment never wipes IndexedDB.
+The database is `workout-conductor`, version 2, opened by `src/core/storage/indexedDb.ts`.
+Version 2 added the three custom-content stores; upgrades only ever add stores or indexes, and
+the upgrade test proves version-1 data survives. A deployment never wipes IndexedDB.
 
 ## Schemas
 
@@ -34,7 +38,11 @@ That is what lets a backup written by a newer app version pass through an older 
   exists and cannot be deleted; deleting the current location falls back to Home.
 - `LocalSettings` (`schemaVersion: 1`): `onboardingCompletedAt`, `lastExportAt`, `lastImportAt`.
 - `Backup` (`format: "workout-conductor-backup"`, `schemaVersion: 1`): `exportedAt`, `app`,
-  `data.profile`, `data.locations`, `data.localSettings`, `data.workouts`.
+  `data.profile`, `data.locations`, `data.localSettings`, `data.workouts`, and since Phase 2
+  `data.customExercises`, `data.customInstructions`, `data.customMedia` (default to empty lists, so
+  Phase 1 backups still import).
+- `CustomExercise` (`id` starts with `custom-`), `CustomInstruction` (keyed by exercise id), and
+  `CustomMedia` (`source: "user"`, data URL, at most 3 MB).
 
 ## Save safety
 

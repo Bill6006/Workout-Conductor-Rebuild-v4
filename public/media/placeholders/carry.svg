@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-label="Placeholder demonstration: Carry">
+  <rect width="320" height="240" rx="18" fill="#171a1e"/>
+  <circle cx="160" cy="74" r="10" stroke="#f4f6f7" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M160 84 V150 M160 150 L144 190 M160 150 L176 190" stroke="#f4f6f7" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M100 196 H220" stroke="#6a7380" stroke-width="4" stroke-linecap="round"/>
+  <g><rect x="120" y="142" width="24" height="16" rx="4" fill="#c6f542"/><rect x="176" y="142" width="24" height="16" rx="4" fill="#c6f542"/></g>
+  <text x="16" y="222" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#c6f542" letter-spacing="1.2">PLACEHOLDER</text>
+  <text x="304" y="222" text-anchor="end" font-family="system-ui, sans-serif" font-size="12" fill="#6a7380">Carry</text>
+</svg>

@@ -1,25 +1,30 @@
 import { routeHref } from '../../app/navigation';
+import { exerciseEquipmentLabel } from '../../catalog/exercises/catalog';
 import { Button } from '../../components/Button/Button';
 import { Card } from '../../components/Card/Card';
+import { ExerciseThumb } from '../../components/ExerciseDetail/ExerciseMedia';
 import type { LocationProfile } from '../../core/validation/location';
-import type { DemoWorkout } from './demo/demoWorkout';
+import type { DemoExercise, DemoWorkout } from './demo/demoWorkout';
 import styles from './TodayScreen.module.css';
 
 interface DemoWorkoutCardProps {
   workout: DemoWorkout;
   location: LocationProfile | undefined;
+  onSelect: (entry: DemoExercise) => void;
 }
 
 function restLabel(seconds: number): string {
   return seconds >= 60 ? `${Math.round(seconds / 60)} min rest` : `${seconds} s rest`;
 }
 
-export function DemoWorkoutCard({ workout, location }: DemoWorkoutCardProps) {
+export function DemoWorkoutCard({ workout, location, onSelect }: DemoWorkoutCardProps) {
+  const available = new Set(location?.equipment ?? []);
+
   return (
     <Card tone="accent" eyebrow="Today's workout · synthetic demo" title={workout.title}>
       <p className={styles.demoNote}>
-        Demo preview built from your profile and equipment. The real generation engine and the 15 /
-        30 / 45 / Default dropdown arrive in Phase 3.
+        Demo preview from the exercise catalog, filtered by your places and limits. The real
+        generation engine and the 15 / 30 / 45 / Default dropdown arrive in Phase 3.
       </p>
 
       <div className={styles.metaRow}>
@@ -42,22 +47,28 @@ export function DemoWorkoutCard({ workout, location }: DemoWorkoutCardProps) {
       </div>
 
       <ol className={styles.exercises} aria-label="Exercises">
-        {workout.exercises.map((exercise, index) => (
-          <li key={exercise.name} className={styles.exercise}>
-            <span className={styles.exerciseIndex}>{index + 1}</span>
-            <span className={styles.exerciseBody}>
-              <span className={styles.exerciseName}>
-                {exercise.name}
-                {exercise.superset ? (
-                  <span className={styles.badge}>{exercise.superset}</span>
-                ) : null}
-                {exercise.dropSet ? <span className={styles.badge}>Drop set</span> : null}
+        {workout.exercises.map((entry, index) => (
+          <li key={entry.exercise.id}>
+            <button
+              type="button"
+              className={styles.exercise}
+              onClick={() => onSelect(entry)}
+              data-testid="demo-exercise"
+            >
+              <span className={styles.exerciseIndex}>{index + 1}</span>
+              <ExerciseThumb exercise={entry.exercise} />
+              <span className={styles.exerciseBody}>
+                <span className={styles.exerciseName}>
+                  {entry.exercise.name}
+                  {entry.superset ? <span className={styles.badge}>{entry.superset}</span> : null}
+                  {entry.dropSet ? <span className={styles.badge}>Drop set</span> : null}
+                </span>
+                <span className={styles.exerciseMeta}>
+                  {entry.sets} × {entry.reps} · {restLabel(entry.restSeconds)} ·{' '}
+                  {exerciseEquipmentLabel(entry.exercise, available)}
+                </span>
               </span>
-              <span className={styles.exerciseMeta}>
-                {exercise.sets} × {exercise.reps} · {restLabel(exercise.restSeconds)} ·{' '}
-                {exercise.equipment}
-              </span>
-            </span>
+            </button>
           </li>
         ))}
       </ol>
@@ -80,7 +91,8 @@ export function DemoWorkoutCard({ workout, location }: DemoWorkoutCardProps) {
         Start Workout
       </Button>
       <p id="start-workout-hint" className={styles.hint}>
-        Logging arrives with the active workout in Phase 5.
+        Tap an exercise for its demonstration, instructions, and ranked alternatives. Logging
+        arrives with the active workout in Phase 5.
       </p>
     </Card>
   );

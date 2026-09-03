@@ -1,4 +1,4 @@
-import { SEED_EXERCISE_NAMES } from '../../../catalog/exercises/seedExerciseNames';
+import { exerciseNames } from '../../../catalog/exercises/catalog';
 import { Field } from '../../../components/Form/Field';
 import { TagInput } from '../../../components/Form/TagInput';
 import { updateProfile } from '../draft';
@@ -7,6 +7,7 @@ import styles from './editors.module.css';
 
 export function ExercisePreferencesEditor({ draft, onChange }: EditorProps) {
   const { preferred, disliked } = draft.profile.exercisePreferences;
+  const catalogNames = exerciseNames();
 
   return (
     <div className={styles.stack}>
@@ -18,7 +19,7 @@ export function ExercisePreferencesEditor({ draft, onChange }: EditorProps) {
         <TagInput
           id="preferred-exercises"
           values={preferred}
-          suggestions={SEED_EXERCISE_NAMES.filter((name) => !disliked.includes(name))}
+          suggestions={catalogNames.filter((name) => !disliked.includes(name))}
           placeholder="Type an exercise or tap a suggestion"
           onChange={(next) =>
             onChange(
@@ -44,7 +45,7 @@ export function ExercisePreferencesEditor({ draft, onChange }: EditorProps) {
         <TagInput
           id="disliked-exercises"
           values={disliked}
-          suggestions={SEED_EXERCISE_NAMES.filter((name) => !preferred.includes(name))}
+          suggestions={catalogNames.filter((name) => !preferred.includes(name))}
           placeholder="Type an exercise or tap a suggestion"
           onChange={(next) =>
             onChange(

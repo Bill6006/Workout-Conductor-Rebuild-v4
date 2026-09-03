@@ -13,20 +13,26 @@ interface SheetProps {
 export function Sheet({ open, title, onClose, children, footer }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  // Runs only when the sheet opens or closes, so re-renders never re-focus or re-lock.
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    panelRef.current?.focus();
+    panelRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

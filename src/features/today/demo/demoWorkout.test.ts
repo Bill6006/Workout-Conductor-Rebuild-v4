@@ -10,7 +10,10 @@ function profile(overrides: Partial<UserProfile> = {}): UserProfile {
   return { ...createDefaultProfile(NOW), ...overrides };
 }
 
-describe('buildDemoWorkout', () => {
+const names = (workout: ReturnType<typeof buildDemoWorkout>) =>
+  workout.exercises.map((entry) => entry.exercise.name);
+
+describe('buildDemoWorkout (catalog-backed)', () => {
   it('is deterministic and clearly synthetic', () => {
     const a = buildDemoWorkout(profile(), gym);
     const b = buildDemoWorkout(profile(), gym);
@@ -21,17 +24,23 @@ describe('buildDemoWorkout', () => {
     expect(a.estimatedMinutes).toBeGreaterThan(20);
   });
 
-  it('picks the chest and arms template for the default goals', () => {
+  it('picks the chest and arms template with the best available press first', () => {
     const workout = buildDemoWorkout(profile(), gym);
     expect(workout.title).toBe('Chest + Arms focus (demo)');
-    expect(workout.exercises[0]?.name).toBe('Barbell Bench Press');
+    expect(names(workout)[0]).toBe('Barbell Bench Press');
     expect(workout.focus).toContain('Chest');
+    expect(workout.exercises[0]?.reps).toBe('4-6');
   });
 
   it('uses only equipment available at the location', () => {
     const workout = buildDemoWorkout(profile(), home);
-    expect(workout.exercises.map((exercise) => exercise.name)).not.toContain('Barbell Bench Press');
-    expect(workout.exercises.map((exercise) => exercise.equipment)).not.toContain('Barbell');
+    const available = new Set(home?.equipment ?? []);
+    for (const entry of workout.exercises) {
+      expect(entry.exercise.equipment.some((group) => group.every((id) => available.has(id)))).toBe(
+        true,
+      );
+    }
+    expect(names(workout)).not.toContain('Barbell Bench Press');
     expect(workout.why.join(' ')).toContain('Home');
   });
 
@@ -40,20 +49,21 @@ describe('buildDemoWorkout', () => {
       profile({ exercisePreferences: { preferred: [], disliked: ['Barbell Bench Press'] } }),
       gym,
     );
-    expect(disliked.exercises[0]?.name).toBe('Dumbbell Bench Press');
+    expect(names(disliked)).not.toContain('Barbell Bench Press');
+    expect(disliked.exercises[0]?.exercise.movementPattern).toBe('horizontal-push');
 
     const preferred = buildDemoWorkout(
       profile({ exercisePreferences: { preferred: ['Machine Chest Press'], disliked: [] } }),
       gym,
     );
-    expect(preferred.exercises[0]?.name).toBe('Machine Chest Press');
+    expect(names(preferred)[0]).toBe('Machine Chest Press');
   });
 
   it('respects barbell-squat and shoulder limitations in the strength template', () => {
     const base = profile({ goals: { primary: 'strength', secondary: 'none' } });
     const withSquat = buildDemoWorkout(base, gym);
     expect(withSquat.title).toBe('Full-body strength (demo)');
-    expect(withSquat.exercises[0]?.name).toBe('Back Squat');
+    expect(names(withSquat)[0]).toBe('Back Squat');
 
     const limited = buildDemoWorkout(
       {
@@ -67,26 +77,37 @@ describe('buildDemoWorkout', () => {
       },
       gym,
     );
-    const names = limited.exercises.map((exercise) => exercise.name);
-    expect(names).not.toContain('Back Squat');
-    expect(names[0]).toBe('Hack Squat');
-    expect(names).not.toContain('Overhead Press');
-    expect(names).not.toContain('Dumbbell Shoulder Press');
+    const limitedNames = names(limited);
+    expect(limitedNames).not.toContain('Back Squat');
+    expect(limitedNames[0]).toBe('Hack Squat');
+    expect(limitedNames).not.toContain('Overhead Press');
+    expect(limitedNames).not.toContain('Dumbbell Shoulder Press');
+    expect(limitedNames).not.toContain('Machine Shoulder Press');
   });
 
-  it('pairs isolation moves when supersets are on and marks one drop set when enabled', () => {
+  it('never produces a blocked selection', () => {
+    const workout = buildDemoWorkout(profile(), gym);
+    const ids = workout.exercises.map((entry) => entry.exercise.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(workout.compromises.every((line) => !/twice|compete/.test(line))).toBe(true);
+  });
+
+  it('pairs drop-set-safe isolation moves when supersets are on and marks one drop set', () => {
     const on = buildDemoWorkout(profile(), gym);
-    expect(
-      on.exercises.filter((exercise) => exercise.superset).map((exercise) => exercise.superset),
-    ).toEqual(['A1', 'A2']);
-    expect(on.exercises.filter((exercise) => exercise.dropSet)).toHaveLength(1);
+    expect(on.exercises.filter((entry) => entry.superset).map((entry) => entry.superset)).toEqual([
+      'A1',
+      'A2',
+    ]);
+    const drops = on.exercises.filter((entry) => entry.dropSet);
+    expect(drops).toHaveLength(1);
+    expect(drops[0]?.exercise.dropSetSafe).toBe(true);
 
     const off = buildDemoWorkout(
       profile({ techniques: { supersets: false, dropSets: false, circuits: false } }),
       gym,
     );
-    expect(off.exercises.some((exercise) => exercise.superset)).toBe(false);
-    expect(off.exercises.some((exercise) => exercise.dropSet)).toBe(false);
+    expect(off.exercises.some((entry) => entry.superset)).toBe(false);
+    expect(off.exercises.some((entry) => entry.dropSet)).toBe(false);
   });
 
   it('shortens the session for a shorter typical duration', () => {
@@ -105,13 +126,13 @@ describe('buildDemoWorkout', () => {
     expect(short.estimatedMinutes).toBeLessThan(long.estimatedMinutes);
   });
 
-  it('explains compromises when nothing fits', () => {
+  it('explains compromises when almost nothing fits', () => {
     const bare = createLocation(
       { id: 'bare', name: 'Bare room', kind: 'custom', equipment: [] },
       NOW,
     );
     const workout = buildDemoWorkout(profile(), bare);
-    expect(workout.exercises.map((exercise) => exercise.name)).toEqual(['Push-Up']);
+    expect(names(workout)).toEqual(['Push-Up']);
     expect(workout.compromises.length).toBeGreaterThan(0);
   });
 });

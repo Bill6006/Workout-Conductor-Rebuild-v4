@@ -10,6 +10,7 @@ export const ROUTE_IDS = [
   'plan',
   'settings',
   'onboarding',
+  'library',
 ] as const;
 
 export type RouteId = (typeof ROUTE_IDS)[number];
@@ -19,7 +20,7 @@ export interface NavItem {
   readonly label: string;
 }
 
-/** The five bottom-navigation destinations. Onboarding is a route without a tab. */
+/** The five bottom-navigation destinations. Onboarding and the library are routes without a tab. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'today', label: 'Today' },
   { id: 'workout', label: 'Workout' },

@@ -37,7 +37,7 @@ const commit = process.env.GITHUB_SHA ?? gitValue('git rev-parse HEAD', 'local')
 const branch = process.env.GITHUB_REF_NAME ?? gitValue('git rev-parse --abbrev-ref HEAD', 'local');
 
 /** Keep in sync with src/app/phases.ts (CURRENT_PHASE). Validated by verify-build. */
-const CURRENT_PHASE = 1;
+const CURRENT_PHASE = 2;
 
 const buildInfo = {
   commit,

@@ -75,8 +75,16 @@
 
 .exercise {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .exerciseIndex {

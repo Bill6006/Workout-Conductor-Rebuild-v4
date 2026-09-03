@@ -1,3 +1,4 @@
+import { LibraryScreen } from '../features/library/LibraryScreen';
 import { OnboardingScreen } from '../features/onboarding/OnboardingScreen';
 import { PlanScreen } from '../features/plan/PlanScreen';
 import { ProgressScreen } from '../features/progress/ProgressScreen';
@@ -25,5 +26,7 @@ export function ActiveScreen({ routeId }: ActiveScreenProps) {
       return <SettingsScreen />;
     case 'onboarding':
       return <OnboardingScreen />;
+    case 'library':
+      return <LibraryScreen />;
   }
 }

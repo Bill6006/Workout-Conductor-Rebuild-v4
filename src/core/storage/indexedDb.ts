@@ -6,9 +6,17 @@
  */
 
 export const DB_NAME = 'workout-conductor';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
-export const STORE_NAMES = ['profile', 'locations', 'workouts', 'meta'] as const;
+export const STORE_NAMES = [
+  'profile',
+  'locations',
+  'workouts',
+  'meta',
+  'customExercises',
+  'customInstructions',
+  'customMedia',
+] as const;
 export type StoreName = (typeof STORE_NAMES)[number];
 
 export class StorageUnavailableError extends Error {

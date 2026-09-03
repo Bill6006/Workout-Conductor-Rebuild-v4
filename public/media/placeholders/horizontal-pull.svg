@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-label="Placeholder demonstration: Horizontal pull">
+  <rect width="320" height="240" rx="18" fill="#171a1e"/>
+  <circle cx="112" cy="104" r="10" stroke="#f4f6f7" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M120 110 L172 134 M172 134 L166 190 M172 134 L196 188" stroke="#f4f6f7" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M100 196 H220" stroke="#6a7380" stroke-width="4" stroke-linecap="round"/>
+  <g><path d="M126 172 H246" stroke="#c6f542" stroke-width="6" stroke-linecap="round"/><rect x="114" y="160" width="12" height="24" rx="3" fill="#c6f542"/><rect x="246" y="160" width="12" height="24" rx="3" fill="#c6f542"/></g>
+  <text x="16" y="222" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#c6f542" letter-spacing="1.2">PLACEHOLDER</text>
+  <text x="304" y="222" text-anchor="end" font-family="system-ui, sans-serif" font-size="12" fill="#6a7380">Horizontal pull</text>
+</svg>

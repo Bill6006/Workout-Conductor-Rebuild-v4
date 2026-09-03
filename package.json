@@ -29,6 +29,7 @@
     "verify-build": "node scripts/verify-build.mjs",
     "verify": "npm run lint && npm run typecheck && npm run test:unit && npm run build && npm run privacy-scan && npm run verify-build && npm run test:e2e",
     "icons": "node scripts/generate-icons.mjs",
+    "media:placeholders": "node scripts/generate-placeholder-media.mjs",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
