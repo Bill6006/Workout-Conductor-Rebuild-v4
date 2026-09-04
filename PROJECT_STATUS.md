@@ -14,9 +14,9 @@ _Last updated: _
 | Current branch         | `main`                                                                                                                                                                                          |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                    |
 | Work in progress       | Phase 7 review gate, YELLOW - FIX applied: demonstration thumbnail, tempo and cue, collapsed set list, useful right column on the exercise card. No Phase 8 code has been started.              |
-| Latest commit          | Phase 7 fix docs and screenshots (this commit); app build under review is `791e9cf` (review fixes `0bb5845` and `791e9cf` on top of Phase 7 `251c4c2`, `28e8c62`, `5d0d5d5`, `006a671`)         |
-| Latest deployment      | `791e9cf` deployed by Deploy Pages run 33888956447 (success); full browser suite passed against the live URL (90 passed + 8 skipped by design); 43 screenshots captured from the deployed build |
-| Test totals            | Unit: 249 passed (44 files). Browser/mobile: 90 passed + 8 skipped by design locally and against the live URL                                                                                   |
+| Latest commit          | Phase 7 fix docs and screenshots (this commit); app build under review is `22fd9fe` (review fixes `0bb5845`, `791e9cf`, `22fd9fe` on top of Phase 7 `251c4c2`, `28e8c62`, `5d0d5d5`, `006a671`) |
+| Latest deployment      | `22fd9fe` deployed by Deploy Pages run 33891700248 (success); full browser suite passed against the live URL (90 passed + 8 skipped by design); 43 screenshots captured from the deployed build |
+| Test totals            | Unit: 251 passed (45 files). Browser/mobile: 90 passed + 8 skipped by design locally and against the live URL                                                                                   |
 | Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                    |
 
 ## Phase checklist
@@ -133,7 +133,7 @@ _Last updated: _
 
 ## Mobile screenshots
 
-Phase 7, captured by Playwright from the deployed build `791e9cf` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-7](docs/screenshots/phase-7)).
+Phase 7, captured by Playwright from the deployed build `22fd9fe` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-7](docs/screenshots/phase-7)).
 
 - Combined preview sheet: [preview-sheet.png](docs/screenshots/phase-7/preview-sheet.png)
 - Android 412 px (Pixel 7): [Progress after a workout](docs/screenshots/phase-7/android-412-progress-after-workout.png) · [History detail](docs/screenshots/phase-7/android-412-progress-history-detail.png) · [Progress with explained scores](docs/screenshots/phase-7/android-412-progress-scores.png) · [Plan with the week and a saved workout](docs/screenshots/phase-7/android-412-plan-week-and-saved.png) · [Completion with records, recovery, and next targets](docs/screenshots/phase-7/android-412-workout-completion.png) · [Adaptive Coach card](docs/screenshots/phase-7/android-412-today-coach-card.png) · [Readiness check-in](docs/screenshots/phase-7/android-412-today-readiness-check-in.png) · [Active workout start](docs/screenshots/phase-7/android-412-workout-active-start.png) · [Set logger](docs/screenshots/phase-7/android-412-workout-set-logger.png) · [Rest timer](docs/screenshots/phase-7/android-412-workout-rest-timer.png) · [Superset card](docs/screenshots/phase-7/android-412-workout-superset.png) · [Calibration overlay](docs/screenshots/phase-7/android-412-calibration-overlay.png) · [Today, Default time](docs/screenshots/phase-7/android-412-today.png) · [Today full page](docs/screenshots/phase-7/android-412-today-full.png) · [Workout preview](docs/screenshots/phase-7/android-412-workout.png) · [Library](docs/screenshots/phase-7/android-412-library.png) · [Progress](docs/screenshots/phase-7/android-412-progress.png) · [Plan](docs/screenshots/phase-7/android-412-plan.png) · [Settings](docs/screenshots/phase-7/android-412-settings.png)
