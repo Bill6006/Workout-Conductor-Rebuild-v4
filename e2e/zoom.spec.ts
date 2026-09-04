@@ -14,13 +14,21 @@ const LEVELS = [1, 1.15, 1.3, 1.5];
  *   scaling the root font size, which every rem-based size follows.
  */
 
+/** E2E_WIDE_FONTS=1 swaps in a wide fallback font, close to the Linux runner's DejaVu Sans. */
+async function emulateWideFonts(page: Page): Promise<void> {
+  if (!process.env.E2E_WIDE_FONTS) return;
+  await page.addStyleTag({ content: '* { font-family: Verdana, sans-serif !important; }' });
+}
+
 async function setZoom(page: Page, level: number): Promise<void> {
+  await emulateWideFonts(page);
   await page.evaluate((value) => {
     (document.documentElement.style as CSSStyleDeclaration & { zoom: string }).zoom = String(value);
   }, level);
 }
 
 async function setTextScale(page: Page, level: number): Promise<void> {
+  await emulateWideFonts(page);
   await page.evaluate((value) => {
     document.documentElement.style.fontSize = `${value * 100}%`;
   }, level);

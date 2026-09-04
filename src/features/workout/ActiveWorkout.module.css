@@ -108,8 +108,9 @@
 
 .setRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 2px 8px;
   min-height: 40px;
   padding: 4px 0;
   border-bottom: 1px solid var(--color-border);
@@ -152,7 +153,7 @@
 
 .setValue {
   display: inline-flex;
-  flex: 1;
+  flex: 1 1 9rem;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -185,8 +186,9 @@
   font-weight: 900;
 }
 
+/* A rem basis grows with text size: the value wraps under the name once it cannot fit beside it. */
 .setTarget {
-  flex: 1;
+  flex: 1 1 9rem;
   min-width: 0;
   font-size: 0.86rem;
 }
@@ -544,12 +546,4 @@
 /* The tab list keeps its role while the row layout stays the parent's. */
 .tabGroup {
   display: contents;
-}
-
-/* Very narrow layouts: set names may shrink and the aside may wrap. */
-@media (max-width: 320px) {
-  .setName {
-    min-width: 0;
-    white-space: normal;
-  }
 }

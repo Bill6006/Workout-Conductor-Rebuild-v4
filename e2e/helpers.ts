@@ -13,13 +13,35 @@ export async function ensureProfile(page: Page): Promise<void> {
 }
 
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
-  const widths = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }));
-  expect(widths.scrollWidth, 'page must not scroll horizontally').toBeLessThanOrEqual(
-    widths.clientWidth,
-  );
+  const widths = await page.evaluate(() => {
+    const clientWidth = document.documentElement.clientWidth;
+    const offenders = Array.from(document.querySelectorAll<HTMLElement>('body *'))
+      .map((el) => ({ el, rect: el.getBoundingClientRect() }))
+      .filter(
+        ({ el, rect }) =>
+          rect.right > clientWidth + 1 ||
+          (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX === 'visible'),
+      )
+      .sort(
+        (a, b) =>
+          Math.max(b.rect.right, b.el.scrollWidth) - Math.max(a.rect.right, a.el.scrollWidth),
+      )
+      .slice(0, 8)
+      .map(
+        ({ el, rect }) =>
+          `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]} right=${Math.round(rect.right)} scrollW=${el.scrollWidth} clientW=${el.clientWidth} text=${(el.textContent ?? '').trim().slice(0, 28)}`,
+      );
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth,
+      innerWidth: window.innerWidth,
+      offenders,
+    };
+  });
+  expect(
+    widths.scrollWidth,
+    `page must not scroll horizontally (innerWidth ${widths.innerWidth})\n${widths.offenders.join('\n')}`,
+  ).toBeLessThanOrEqual(widths.clientWidth);
 }
 
 export const TABS = [
