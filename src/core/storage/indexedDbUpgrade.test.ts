@@ -97,7 +97,7 @@ describe('IndexedDB upgrade', () => {
     await createVersionOne(factory, 'upgrade');
 
     const db = await openDatabase({ factory, name: 'upgrade' });
-    expect(DB_VERSION).toBe(3);
+    expect(DB_VERSION).toBe(4);
     expect(DB_NAME).toBe('workout-conductor-v4');
     expect(await db.get('profile', 'current')).toEqual({ id: 'current', units: 'kg' });
     for (const store of STORE_NAMES) {

@@ -146,6 +146,33 @@ test.describe('screenshots @screenshots', () => {
     await page.getByTestId('import-file-input').setInputFiles(filePath ?? '');
     await expect(page.getByRole('dialog', { name: 'Restore this backup?' })).toBeVisible();
     await capture(page, testInfo, 'settings-import-preview');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await page.getByTestId('snapshot-now').click();
+    await expect(page.getByTestId('snapshot-list')).toBeVisible();
+    await page.getByTestId('snapshot-list').scrollIntoViewIfNeeded();
+    await capture(page, testInfo, 'settings-data-safety');
+    await page.getByTestId('legacy-file-input').setInputFiles({
+      name: 'old-history.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(
+        JSON.stringify({
+          history: [
+            {
+              date: '2026-05-01T18:00:00Z',
+              name: 'Push A',
+              exercises: [
+                { name: 'Barbell Bench Press', sets: [{ weight: 135, reps: 5, rir: 2 }] },
+                { name: 'Unknown Thing', sets: [{ weight: 1, reps: 1 }] },
+              ],
+            },
+          ],
+        }),
+      ),
+    });
+    await expect(page.getByRole('dialog', { name: 'Import these workouts?' })).toBeVisible();
+    await capture(page, testInfo, 'settings-legacy-preview');
+    await page.keyboard.press('Escape');
   });
   test('active workout', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');

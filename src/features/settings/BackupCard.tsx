@@ -3,19 +3,21 @@ import { buildInfo } from '../../app/buildInfo';
 import { Button } from '../../components/Button/Button';
 import { Card } from '../../components/Card/Card';
 import { FactList } from '../../components/FactList/FactList';
-import { Sheet } from '../../components/Sheet/Sheet';
 import { useToast } from '../../components/Toast/useToast';
 import {
   backupFileName,
+  historyFileName,
   parseBackupText,
   serializeBackup,
+  settingsFileName,
   type BackupSummary,
 } from '../../core/backup/backup';
 import { downloadTextFile, readFileText } from '../../core/backup/download';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import { formatDateTime } from '../../core/time/clock';
 import type { Backup } from '../../core/validation/backup';
-import { GOAL_OPTIONS, labelFor } from '../profile/labels';
+import { describeCounts } from './format';
+import { RestorePreviewSheet } from './RestorePreviewSheet';
 import styles from './Settings.module.css';
 
 type PreviewState = { open: false } | { open: true; backup: Backup; summary: BackupSummary };
@@ -27,17 +29,32 @@ export function BackupCard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<PreviewState>({ open: false });
   const [busy, setBusy] = useState(false);
+  const app = { version: buildInfo.version, commit: buildInfo.commit };
 
-  async function exportBackup() {
+  async function exportFile(kind: 'full' | 'history' | 'settings') {
     setBusy(true);
     try {
-      const backup = await store.createBackup({
-        version: buildInfo.version,
-        commit: buildInfo.commit,
-      });
-      const text = serializeBackup(backup);
-      downloadTextFile(backupFileName(backup.exportedAt), text);
-      toast.show(`Backup exported (${Math.max(1, Math.round(text.length / 1024))} KB)`, 'success');
+      let text: string;
+      let name: string;
+      if (kind === 'full') {
+        const backup = await store.createBackup(app);
+        text = serializeBackup(backup);
+        name = backupFileName(backup.exportedAt);
+      } else if (kind === 'history') {
+        const history = await store.createHistoryExport(app);
+        text = serializeBackup(history);
+        name = historyFileName(history.exportedAt);
+      } else {
+        const settings = store.createSettingsExport(app);
+        text = serializeBackup(settings);
+        name = settingsFileName(settings.exportedAt);
+      }
+      downloadTextFile(name, text);
+      const label = kind === 'full' ? 'Backup' : kind === 'history' ? 'History' : 'Settings';
+      toast.show(
+        `${label} exported (${Math.max(1, Math.round(text.length / 1024))} KB)`,
+        'success',
+      );
     } catch (error) {
       toast.show(error instanceof Error ? error.message : 'Export failed', 'error');
     } finally {
@@ -65,9 +82,9 @@ export function BackupCard() {
     if (!preview.open) return;
     setBusy(true);
     try {
-      await store.applyBackup(preview.backup);
+      const counts = await store.applyBackup(preview.backup);
       setPreview({ open: false });
-      toast.show('Backup restored and verified', 'success');
+      toast.show(`Backup restored and verified: ${describeCounts(counts)}`, 'success');
     } catch (error) {
       toast.show(
         `${error instanceof Error ? error.message : 'Import failed'} Your previous data was kept.`,
@@ -81,8 +98,10 @@ export function BackupCard() {
   return (
     <Card eyebrow="Backup" title="Export and import">
       <p className={styles.body}>
-        A Full Backup JSON holds your profile, places, settings, and (from Phase 5) workout history.
-        It is saved to your device only. Automatic local backup arrives in Phase 8.
+        A Full Backup JSON holds your profile, places, settings, workout history, notes and cues,
+        custom exercises, your own demonstrations, and saved workouts. Files are saved to your
+        device only; nothing is uploaded anywhere. History and settings can also be exported on
+        their own.
       </p>
       <FactList
         items={[
@@ -91,11 +110,27 @@ export function BackupCard() {
         ]}
       />
       <div className={styles.buttonRow}>
-        <Button variant="primary" onClick={() => void exportBackup()} disabled={busy}>
+        <Button variant="primary" onClick={() => void exportFile('full')} disabled={busy}>
           Export Full Backup JSON
         </Button>
         <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={busy}>
           Import Full Backup JSON
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => void exportFile('history')}
+          disabled={busy}
+          data-testid="export-history"
+        >
+          Export history JSON
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => void exportFile('settings')}
+          disabled={busy}
+          data-testid="export-settings"
+        >
+          Export settings JSON
         </Button>
         <input
           ref={fileInputRef}
@@ -108,51 +143,15 @@ export function BackupCard() {
         />
       </div>
 
-      {preview.open ? (
-        <Sheet
-          open
-          title="Restore this backup?"
-          onClose={() => setPreview({ open: false })}
-          footer={
-            <>
-              <Button
-                variant="secondary"
-                onClick={() => setPreview({ open: false })}
-                disabled={busy}
-              >
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={() => void applyImport()} disabled={busy}>
-                {busy ? 'Restoring…' : 'Replace my data'}
-              </Button>
-            </>
-          }
-        >
-          <p className={styles.body}>
-            This replaces the profile, places, and history on this device. Every record is written
-            and read back; if anything fails, your current data is restored automatically.
-          </p>
-          <FactList
-            items={[
-              { label: 'Exported', value: formatDateTime(preview.summary.exportedAt) },
-              { label: 'App version', value: preview.summary.appVersion },
-              {
-                label: 'Profile',
-                value: preview.summary.hasProfile
-                  ? `Yes · ${labelFor(GOAL_OPTIONS, (preview.summary.primaryGoal ?? 'build-muscle') as (typeof GOAL_OPTIONS)[number]['value'])}`
-                  : 'None',
-              },
-              { label: 'Places', value: String(preview.summary.locationCount) },
-              { label: 'Workouts', value: String(preview.summary.workoutCount) },
-            ]}
-          />
-          {preview.summary.newerThanThisApp ? (
-            <p className={styles.warning}>
-              This backup comes from a newer app version. Unknown fields are kept as they are.
-            </p>
-          ) : null}
-        </Sheet>
-      ) : null}
+      <RestorePreviewSheet
+        open={preview.open}
+        title="Restore this backup?"
+        summary={preview.open ? preview.summary : null}
+        busy={busy}
+        confirmLabel="Replace my data"
+        onCancel={() => setPreview({ open: false })}
+        onConfirm={() => void applyImport()}
+      />
     </Card>
   );
 }

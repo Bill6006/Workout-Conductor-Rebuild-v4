@@ -1,5 +1,6 @@
 import { EQUIPMENT } from '../../catalog/equipment/equipment';
 import {
+  allExercises,
   getExercise,
   registerCustomExercises,
   requireExercise,
@@ -23,14 +24,29 @@ import {
 } from '../../engine/workout/sequence';
 import { allEntries, type DurationChoice, type GeneratedWorkout } from '../../engine/workout/types';
 import { generateWorkout } from '../../engine/workoutGenerator/generate';
+import { normalizeName } from '../backup/legacyImport';
+import { WorkoutRecordSchema } from '../validation/workoutRecord';
 import {
   buildBackup,
+  buildHistoryExport,
+  buildSettingsExport,
   restoreBackup,
+  summarizeBackup,
   type BackupAppInfo,
+  type BackupSummary,
+  type MetaRecord,
+  type RestoreCounts,
   type WorkoutRecord,
 } from '../backup/backup';
-import { openDatabase, type Database, type Identified } from '../storage/indexedDb';
 import {
+  STORE_NAMES,
+  openDatabase,
+  type Database,
+  type Identified,
+  type StoreName,
+} from '../storage/indexedDb';
+import {
+  LOCAL_SETTINGS_KEY,
   ONBOARDING_DRAFT_KEY,
   defaultStorage,
   readLocalSettings,
@@ -39,7 +55,13 @@ import {
   type KeyValueStorage,
 } from '../storage/localSettings';
 import { deleteVerified, putVerified, type SaveReceipt } from '../storage/verifiedSave';
-import type { Backup } from '../validation/backup';
+import {
+  BackupSchema,
+  type Backup,
+  type HistoryExport,
+  type SettingsExport,
+} from '../validation/backup';
+import { SESSION_KEY } from './session';
 import {
   CUSTOM_ID_PREFIX,
   CustomExerciseSchema,
@@ -114,6 +136,54 @@ export interface AppState {
   customInstructions: CustomInstruction[];
   savedWorkouts: SavedWorkout[];
   customCounts: { exercises: number; instructions: number; media: number };
+}
+
+export type SnapshotReason = 'workout' | 'pre-import' | 'manual' | 'legacy-import';
+
+/** Automatic local backups kept on this device; the newest SNAPSHOTS_KEPT survive. */
+export const SNAPSHOTS_KEPT = 3;
+
+export interface BackupSnapshot extends Identified {
+  createdAt: string;
+  reason: SnapshotReason;
+  seq: number;
+  backup: Backup;
+}
+
+export interface BackupSnapshotSummary {
+  id: string;
+  createdAt: string;
+  reason: SnapshotReason;
+  seq: number;
+  summary: BackupSummary;
+}
+
+export interface StorageDiagnostic {
+  usageBytes: number | null;
+  quotaBytes: number | null;
+  persisted: boolean | null;
+  counts: Record<StoreName, number>;
+  localKeys: { key: string; present: boolean }[];
+}
+
+export type SaveCheckResult =
+  | { ok: true; ms: number; bytes: number; checkedAt: string }
+  | { ok: false; error: string; checkedAt: string };
+
+export interface CleanupResult {
+  removed: string[];
+  kept: string[];
+}
+
+export const DIAGNOSTIC_PROBE_ID = 'diagnostic-probe';
+
+/** A receipt for one legacy import, kept in `meta` so the import can be undone exactly. */
+export interface LegacyImportReceipt extends Identified {
+  kind: 'legacy-import';
+  importedAt: string;
+  recordIds: string[];
+  snapshotId: string;
+  fileName: string;
 }
 
 export interface AppStoreOptions {
@@ -217,6 +287,8 @@ export class AppStore {
   private readonly openDb: () => Promise<Database>;
   private readonly storage: KeyValueStorage;
   private readonly now: () => string;
+  /** Background work (automatic snapshots) that tests and diagnostics can wait for. */
+  private pendingWork: Promise<void> = Promise.resolve();
   private readonly engine: typeof runRecalibration;
   private readonly minOverlayMs: number;
   private dbPromise: Promise<Database> | null = null;
@@ -970,6 +1042,10 @@ export class AppStore {
       completion,
       completed: { ...session.completed, elapsedSeconds: elapsed },
     });
+    this.pendingWork = this.snapshotBackup('workout').then(
+      () => undefined,
+      () => undefined,
+    );
     return completion;
   }
 
@@ -1224,41 +1300,354 @@ export class AppStore {
     return localSettings;
   }
 
-  async createBackup(app: BackupAppInfo): Promise<Backup> {
+  /** An exact snapshot of everything durable on this device, read straight from disk. */
+  private async buildBackupFromDisk(app: BackupAppInfo, exportedAt: string): Promise<Backup> {
     const db = await this.getDatabase();
-    const [workouts, customExercises, customInstructions, customMedia] = await Promise.all([
+    const [
+      profiles,
+      locations,
+      workouts,
+      customExercises,
+      customInstructions,
+      customMedia,
+      saved,
+      meta,
+    ] = await Promise.all([
+      db.getAll<Identified>('profile'),
+      db.getAll<Identified>('locations'),
       db.getAll<WorkoutRecord>('workouts'),
       db.getAll<CustomExercise>('customExercises'),
       db.getAll<CustomInstruction>('customInstructions'),
       db.getAll<CustomMedia>('customMedia'),
+      db.getAll<Identified>('savedWorkouts'),
+      db.getAll<Identified>('meta'),
     ]);
-    const exportedAt = this.now();
-    const backup = buildBackup(
+    const profile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
+    return buildBackup(
       {
-        profile: this.state.profile,
-        locations: this.state.locations,
+        profile: profile?.success ? profile.data : null,
+        locations: locations
+          .map((record) => LocationProfileSchema.safeParse(record))
+          .filter((result) => result.success)
+          .map((result) => result.data),
         localSettings: this.state.localSettings,
         workouts,
         customExercises,
         customInstructions,
         customMedia,
-        savedWorkouts: this.state.savedWorkouts,
+        savedWorkouts: saved as unknown as SavedWorkout[],
+        meta: meta.filter((record) => record.id !== DIAGNOSTIC_PROBE_ID) as MetaRecord[],
       },
       app,
       exportedAt,
     );
+  }
+
+  async createBackup(app: BackupAppInfo): Promise<Backup> {
+    const exportedAt = this.now();
+    const backup = await this.buildBackupFromDisk(app, exportedAt);
     this.updateLocalSettings({ lastExportAt: exportedAt });
     return backup;
   }
 
-  /** Verified restore with rollback, then a fresh hydrate from disk. */
-  async applyBackup(backup: Backup): Promise<void> {
+  async createHistoryExport(app: BackupAppInfo): Promise<HistoryExport> {
     const db = await this.getDatabase();
-    await restoreBackup(db, backup, { now: this.now });
+    const workouts = await db.getAll<WorkoutRecord>('workouts');
+    const exportedAt = this.now();
+    this.updateLocalSettings({ lastExportAt: exportedAt });
+    return buildHistoryExport({ workouts }, app, exportedAt);
+  }
+
+  createSettingsExport(app: BackupAppInfo): SettingsExport {
+    const exportedAt = this.now();
+    this.updateLocalSettings({ lastExportAt: exportedAt });
+    return buildSettingsExport(
+      {
+        profile: this.state.profile,
+        locations: this.state.locations,
+        localSettings: this.state.localSettings,
+      },
+      app,
+      exportedAt,
+    );
+  }
+
+  /**
+   * Verified restore with verified rollback, then a fresh hydrate from disk.
+   * The data from before the import is kept as a local snapshot first, so an
+   * import can always be undone from the Automatic backups card.
+   */
+  async applyBackup(
+    backup: Backup,
+    options: { snapshotFirst?: boolean } = {},
+  ): Promise<RestoreCounts> {
+    const db = await this.getDatabase();
+    if (options.snapshotFirst ?? true) await this.snapshotBackup('pre-import');
+    const counts = await restoreBackup(db, backup, { now: this.now });
     this.updateLocalSettings({
       onboardingCompletedAt: backup.data.localSettings.onboardingCompletedAt,
       lastImportAt: this.now(),
     });
     await this.hydrate();
+    return counts;
+  }
+
+  // ---------------------------------------------------------------- automatic local backups
+
+  /** Resolves once background snapshot work has settled; never rejects. */
+  async flushPendingWork(): Promise<void> {
+    await this.pendingWork;
+  }
+
+  private async readSnapshots(db: Database): Promise<BackupSnapshot[]> {
+    const raw = await db.getAll<Identified>('backups');
+    return raw
+      .filter((record): record is BackupSnapshot => {
+        const candidate = record as Partial<BackupSnapshot>;
+        return (
+          typeof candidate.createdAt === 'string' &&
+          typeof candidate.seq === 'number' &&
+          BackupSchema.safeParse(candidate.backup).success
+        );
+      })
+      .sort((a, b) => b.seq - a.seq);
+  }
+
+  /** Writes a verified snapshot of the current data and prunes to the newest SNAPSHOTS_KEPT. */
+  async snapshotBackup(reason: SnapshotReason): Promise<BackupSnapshotSummary> {
+    const db = await this.getDatabase();
+    const existing = await this.readSnapshots(db);
+    const createdAt = this.now();
+    const seq = (existing[0]?.seq ?? 0) + 1;
+    const backup = await this.buildBackupFromDisk(
+      { version: this.state.localSettings.schemaVersion.toString() },
+      createdAt,
+    );
+    const record: BackupSnapshot = {
+      id: `snapshot-${seq}-${createdAt.replace(/[^0-9]/g, '')}`,
+      createdAt,
+      reason,
+      seq,
+      backup,
+    };
+    await putVerified(db, 'backups', record, { now: this.now });
+    for (const stale of [record, ...existing].sort((a, b) => b.seq - a.seq).slice(SNAPSHOTS_KEPT)) {
+      await deleteVerified(db, 'backups', stale.id);
+    }
+    return this.summarizeSnapshot(record);
+  }
+
+  private summarizeSnapshot(record: BackupSnapshot): BackupSnapshotSummary {
+    return {
+      id: record.id,
+      createdAt: record.createdAt,
+      reason: record.reason,
+      seq: record.seq,
+      summary: summarizeBackup(record.backup),
+    };
+  }
+
+  /** Newest first. */
+  async listSnapshots(): Promise<BackupSnapshotSummary[]> {
+    const db = await this.getDatabase();
+    return (await this.readSnapshots(db)).map((record) => this.summarizeSnapshot(record));
+  }
+
+  async getBackupSnapshot(id: string): Promise<Backup | null> {
+    const db = await this.getDatabase();
+    const record = await db.get<BackupSnapshot>('backups', id);
+    if (!record) return null;
+    const parsed = BackupSchema.safeParse(record.backup);
+    return parsed.success ? parsed.data : null;
+  }
+
+  /** Restores a snapshot the same way an imported file is restored; the current data is snapshotted first. */
+  async restoreSnapshot(id: string): Promise<RestoreCounts> {
+    const backup = await this.getBackupSnapshot(id);
+    if (!backup) throw new Error('That backup is no longer on this device.');
+    return this.applyBackup(backup);
+  }
+
+  // ---------------------------------------------------------------- legacy import
+
+  /** Catalog lookup by id or by name, tolerant of case, punctuation, and spacing. */
+  resolveExerciseName(nameOrId: string): string | null {
+    if (getExercise(nameOrId)) return nameOrId;
+    const wanted = normalizeName(nameOrId);
+    if (!wanted) return null;
+    const match = allExercises().find((exercise) => normalizeName(exercise.name) === wanted);
+    return match?.id ?? null;
+  }
+
+  async listLegacyImports(): Promise<LegacyImportReceipt[]> {
+    const db = await this.getDatabase();
+    const raw = await db.getAll<Identified>('meta');
+    return raw
+      .filter((record): record is LegacyImportReceipt => {
+        const candidate = record as Partial<LegacyImportReceipt>;
+        return candidate.kind === 'legacy-import' && Array.isArray(candidate.recordIds);
+      })
+      .sort((a, b) => b.importedAt.localeCompare(a.importedAt));
+  }
+
+  /**
+   * Adds legacy workout records with verified writes after snapshotting the
+   * current data. Any failure removes what was written before rethrowing; a
+   * receipt in `meta` lets the whole import be undone later.
+   */
+  async importLegacy(records: WorkoutRecord[], fileName: string): Promise<LegacyImportReceipt> {
+    if (records.length === 0) throw new Error('Nothing to import.');
+    const validated = records.map((record) => WorkoutRecordSchema.parse(record));
+    const snapshot = await this.snapshotBackup('legacy-import');
+    const db = await this.getDatabase();
+    const written: string[] = [];
+    try {
+      for (const record of validated) {
+        await putVerified(db, 'workouts', record, { now: this.now });
+        written.push(record.id);
+      }
+      const receipt: LegacyImportReceipt = {
+        id: `legacy-import-${snapshot.seq}-${this.now().replace(/[^0-9]/g, '')}`,
+        kind: 'legacy-import',
+        importedAt: this.now(),
+        recordIds: written,
+        snapshotId: snapshot.id,
+        fileName,
+      };
+      await putVerified(db, 'meta', receipt, { now: this.now });
+      await this.hydrate();
+      return receipt;
+    } catch (error) {
+      for (const id of written) {
+        try {
+          await deleteVerified(db, 'workouts', id);
+        } catch {
+          // The snapshot taken above still holds the pre-import data.
+        }
+      }
+      await this.hydrate();
+      throw error;
+    }
+  }
+
+  /** Removes exactly the records one legacy import added, then the receipt. */
+  async undoLegacyImport(receiptId: string): Promise<number> {
+    const db = await this.getDatabase();
+    const receipt = (await db.get<LegacyImportReceipt>('meta', receiptId)) ?? null;
+    if (!receipt || receipt.kind !== 'legacy-import')
+      throw new Error('That import is no longer on this device.');
+    let removed = 0;
+    for (const id of receipt.recordIds) {
+      if ((await db.get<Identified>('workouts', id)) !== undefined) {
+        await deleteVerified(db, 'workouts', id);
+        removed += 1;
+      }
+    }
+    await deleteVerified(db, 'meta', receiptId);
+    await this.hydrate();
+    return removed;
+  }
+
+  // ---------------------------------------------------------------- storage diagnostics
+
+  async storageDiagnostic(): Promise<StorageDiagnostic> {
+    const db = await this.getDatabase();
+    const counts = {} as Record<StoreName, number>;
+    for (const store of STORE_NAMES) counts[store] = await db.count(store);
+    const manager =
+      typeof navigator !== 'undefined' && 'storage' in navigator ? navigator.storage : undefined;
+    let usageBytes: number | null = null;
+    let quotaBytes: number | null = null;
+    let persisted: boolean | null = null;
+    try {
+      if (manager && typeof manager.estimate === 'function') {
+        const estimate = await manager.estimate();
+        usageBytes = estimate.usage ?? null;
+        quotaBytes = estimate.quota ?? null;
+      }
+      if (manager && typeof manager.persisted === 'function') persisted = await manager.persisted();
+    } catch {
+      // Estimates are advisory; the counts above are the facts that matter.
+    }
+    const localKeys = [LOCAL_SETTINGS_KEY, ONBOARDING_DRAFT_KEY, SESSION_KEY].map((key) => ({
+      key,
+      present: this.storage.getItem(key) !== null,
+    }));
+    return { usageBytes, quotaBytes, persisted, counts, localKeys };
+  }
+
+  /** Asks the browser to protect this origin's data from eviction; null when unsupported. */
+  async requestPersistence(): Promise<boolean | null> {
+    const manager =
+      typeof navigator !== 'undefined' && 'storage' in navigator ? navigator.storage : undefined;
+    if (!manager || typeof manager.persist !== 'function') return null;
+    try {
+      return await manager.persist();
+    } catch {
+      return null;
+    }
+  }
+
+  /** Writes, reads back, verifies, and removes one probe record; nothing else is touched. */
+  async runSaveCheck(): Promise<SaveCheckResult> {
+    const checkedAt = this.now();
+    const started = Date.now();
+    try {
+      const db = await this.getDatabase();
+      const receipt = await putVerified(
+        db,
+        'meta',
+        { id: DIAGNOSTIC_PROBE_ID, checkedAt, nonce: Math.random().toString(36).slice(2) },
+        { now: this.now },
+      );
+      await deleteVerified(db, 'meta', DIAGNOSTIC_PROBE_ID);
+      return { ok: true, ms: Date.now() - started, bytes: receipt.bytes, checkedAt };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Save check failed',
+        checkedAt,
+      };
+    }
+  }
+
+  /**
+   * Removes temporary data only: a leftover diagnostic probe, an onboarding draft
+   * once setup is complete, and snapshots beyond the kept count. Workout history,
+   * profile, places, notes, custom content, saved workouts, media, and an active
+   * session are never touched; `dryRun` reports without removing.
+   */
+  async cleanupTemporaryData(options: { dryRun?: boolean } = {}): Promise<CleanupResult> {
+    const db = await this.getDatabase();
+    const removed: string[] = [];
+    const dry = options.dryRun ?? false;
+    if ((await db.get<Identified>('meta', DIAGNOSTIC_PROBE_ID)) !== undefined) {
+      if (!dry) await deleteVerified(db, 'meta', DIAGNOSTIC_PROBE_ID);
+      removed.push('Diagnostic probe record');
+    }
+    if (
+      this.state.localSettings.onboardingCompletedAt &&
+      this.storage.getItem(ONBOARDING_DRAFT_KEY) !== null
+    ) {
+      if (!dry) removeKey(ONBOARDING_DRAFT_KEY, this.storage);
+      removed.push('Finished onboarding draft');
+    }
+    const snapshots = await this.readSnapshots(db);
+    for (const stale of snapshots.slice(SNAPSHOTS_KEPT)) {
+      if (!dry) await deleteVerified(db, 'backups', stale.id);
+      removed.push(`Old automatic backup from ${stale.createdAt}`);
+    }
+    const kept = [
+      `Workout history (${await db.count('workouts')})`,
+      `Profile (${await db.count('profile')})`,
+      `Places (${await db.count('locations')})`,
+      `Notes and cues (${await db.count('customInstructions')})`,
+      `Custom exercises (${await db.count('customExercises')})`,
+      `Your demonstrations (${await db.count('customMedia')})`,
+      `Saved workouts (${await db.count('savedWorkouts')})`,
+      `Automatic backups (${Math.min(snapshots.length, SNAPSHOTS_KEPT)})`,
+      ...(this.storage.getItem(SESSION_KEY) !== null ? ['Active or previewed session'] : []),
+    ];
+    return { removed, kept };
   }
 }

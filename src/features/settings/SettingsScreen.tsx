@@ -13,6 +13,9 @@ import { UnitsEditor } from '../profile/editors/UnitsEditor';
 import { useProfileEditor } from '../profile/useProfileEditor';
 import { BackupCard } from './BackupCard';
 import { DiagnosticsCard } from './DiagnosticsCard';
+import { LegacyImportCard } from './LegacyImportCard';
+import { SnapshotsCard } from './SnapshotsCard';
+import { StorageCard } from './StorageCard';
 import styles from './Settings.module.css';
 
 export function SettingsScreen() {
@@ -86,6 +89,9 @@ export function SettingsScreen() {
       )}
 
       <BackupCard />
+      <SnapshotsCard />
+      <StorageCard />
+      <LegacyImportCard />
 
       <Card eyebrow="Setup" title="Run setup again">
         <p className={styles.body}>

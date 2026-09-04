@@ -47,7 +47,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
+  width: 100%;
+  max-width: 44px;
   height: 28px;
   border-radius: var(--radius-pill);
   transition: background 0.15s ease;
@@ -67,4 +68,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Very narrow layouts (150 percent zoom on a 360 px phone): tighter padding, smaller labels. */
+@media (max-width: 320px) {
+  .inner {
+    padding-right: 2px;
+    padding-left: 2px;
+  }
+
+  .item {
+    padding: 4px 0;
+    font-size: 0.62rem;
+  }
+
+  .iconWrap svg {
+    width: 20px;
+    height: 20px;
+  }
 }

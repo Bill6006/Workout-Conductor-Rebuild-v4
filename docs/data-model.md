@@ -5,19 +5,22 @@ data lives, its schema owner, and the rules that protect it.
 
 ## Storage owners
 
-| Data                        | Store                                | Owner                                   | Notes                                                                                |
-| --------------------------- | ------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------ |
-| User profile                | IndexedDB `profile` (key `current`)  | `src/core/validation/profile.ts`        | Goals, schedule, preferences, limitations, techniques, units, bodyweight             |
-| Location profiles           | IndexedDB `locations`                | `src/core/validation/location.ts`       | Home, Gym, Travel, Custom; each owns its equipment list                              |
-| Workout history             | IndexedDB `workouts`                 | Phase 5                                 | Opaque records with an `id` until logging exists; backed up as-is                    |
-| Meta                        | IndexedDB `meta`                     | reserved                                | Migrations and future counters                                                       |
-| Custom exercises            | IndexedDB `customExercises`          | `src/core/validation/customExercise.ts` | User-created exercises, presented to the engines like catalog entries                |
-| Custom instructions         | IndexedDB `customInstructions`       | `src/core/validation/customExercise.ts` | Per-exercise setup, execution, cues, notes (keyed by exercise id)                    |
-| Custom media                | IndexedDB `customMedia`              | `src/core/validation/customExercise.ts` | User-owned image or video as a size-capped data URL; never licensed production media |
-| Small settings              | localStorage `wc.v1.settings`        | `src/core/validation/settings.ts`       | Onboarding completion, last export, last import                                      |
-| Unfinished onboarding draft | localStorage `wc.v1.onboardingDraft` | `src/features/profile/draft.ts`         | Removed when setup finishes                                                          |
+| Data                        | Store                                | Owner                                   | Notes                                                                                    |
+| --------------------------- | ------------------------------------ | --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| User profile                | IndexedDB `profile` (key `current`)  | `src/core/validation/profile.ts`        | Goals, schedule, preferences, limitations, techniques, units, bodyweight                 |
+| Location profiles           | IndexedDB `locations`                | `src/core/validation/location.ts`       | Home, Gym, Travel, Custom; each owns its equipment list                                  |
+| Workout history             | IndexedDB `workouts`                 | `src/core/validation/workoutRecord.ts`  | One record per finished workout; legacy imports add records with `source: legacy-import` |
+| Meta                        | IndexedDB `meta`                     | `src/core/state/appStore.ts`            | Legacy-import receipts; a diagnostic probe exists only during a save check               |
+| Saved workouts              | IndexedDB `savedWorkouts`            | `src/core/validation/savedWorkout.ts`   | Named copies of a generated workout that load as a fresh session                         |
+| Automatic backups           | IndexedDB `backups`                  | `src/core/state/appStore.ts`            | The newest three verified full snapshots (after workouts, before imports, manual)        |
+| Custom exercises            | IndexedDB `customExercises`          | `src/core/validation/customExercise.ts` | User-created exercises, presented to the engines like catalog entries                    |
+| Custom instructions         | IndexedDB `customInstructions`       | `src/core/validation/customExercise.ts` | Per-exercise setup, execution, cues, notes (keyed by exercise id)                        |
+| Custom media                | IndexedDB `customMedia`              | `src/core/validation/customExercise.ts` | User-owned image or video as a size-capped data URL; never licensed production media     |
+| Small settings              | localStorage `wc.v1.settings`        | `src/core/validation/settings.ts`       | Onboarding completion, last export, last import                                          |
+| Unfinished onboarding draft | localStorage `wc.v1.onboardingDraft` | `src/features/profile/draft.ts`         | Removed when setup finishes                                                              |
+| Current session             | localStorage `wc.v1.session`         | `src/core/state/session.ts`             | The preview or active workout; never touched by cleanup                                  |
 
-The database is `workout-conductor-v4`, version 2, opened by `src/core/storage/indexedDb.ts`.
+The database is `workout-conductor-v4`, version 4, opened by `src/core/storage/indexedDb.ts`. Upgrades only add stores.
 Every GitHub Pages project of one account shares the same origin and IndexedDB is per origin, so
 the name carries the app generation. If a same-named database already exists at a higher
 version (another app on the origin, or a newer build), opening recovers by adding the missing
@@ -41,10 +44,11 @@ That is what lets a backup written by a newer app version pass through an older 
   from `src/catalog/equipment/equipment.ts`, normalized), `notes`, timestamps. `home` always
   exists and cannot be deleted; deleting the current location falls back to Home.
 - `LocalSettings` (`schemaVersion: 1`): `onboardingCompletedAt`, `lastExportAt`, `lastImportAt`.
-- `Backup` (`format: "workout-conductor-backup"`, `schemaVersion: 1`): `exportedAt`, `app`,
-  `data.profile`, `data.locations`, `data.localSettings`, `data.workouts`, and since Phase 2
-  `data.customExercises`, `data.customInstructions`, `data.customMedia` (default to empty lists, so
-  Phase 1 backups still import).
+- `Backup` (`format: "workout-conductor-backup"`, `schemaVersion: 2`): `exportedAt`, `app`,
+  `data.profile`, `data.locations`, `data.localSettings`, `data.workouts`, `data.customExercises`,
+  `data.customInstructions`, `data.customMedia`, `data.savedWorkouts`, and `data.meta`. Schema 1
+  files are migrated forward on import (the empty `meta` list is added); unknown fields are kept
+  at every level. See `docs/backup-and-restore.md`.
 - `CustomExercise` (`id` starts with `custom-`), `CustomInstruction` (keyed by exercise id), and
   `CustomMedia` (`source: "user"`, data URL, at most 3 MB).
 

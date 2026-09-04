@@ -31,7 +31,7 @@ const baseURL = deployedURL ?? localURL;
 
 const pixel7 = { ...devices['Pixel 7'], deviceScaleFactor: 2 };
 const smokeSpecs =
-  /(smoke|onboarding|library|duration|recalibration|activeWorkout|coach|progress|media|screenshots)\.spec\.ts/;
+  /(smoke|onboarding|library|duration|recalibration|activeWorkout|coach|progress|media|dataSafety|a11y|zoom|screenshots)\.spec\.ts/;
 const pwaSpecs = /pwa\.spec\.ts/;
 
 export default defineConfig({

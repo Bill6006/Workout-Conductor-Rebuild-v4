@@ -70,3 +70,52 @@
   font-weight: 600;
   text-decoration: none;
 }
+
+.snapshotList {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.snapshotRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-raised);
+}
+
+.snapshotText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.snapshotText strong {
+  color: var(--color-text);
+  font-size: 0.95rem;
+}
+
+.sheetHeading {
+  margin: 12px 0 6px;
+  color: var(--color-text-subtle);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plainList {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}

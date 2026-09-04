@@ -187,6 +187,7 @@
 
 .setTarget {
   flex: 1;
+  min-width: 0;
   font-size: 0.86rem;
 }
 
@@ -505,7 +506,8 @@
 
 /* Collapsed remaining sets and the right-hand aside */
 .setAside {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   margin-left: auto;
   color: var(--color-text-subtle);
   font-size: 0.76rem;
@@ -537,4 +539,17 @@
 
 .setsCompact .setRow[data-state='summary'] {
   display: flex;
+}
+
+/* The tab list keeps its role while the row layout stays the parent's. */
+.tabGroup {
+  display: contents;
+}
+
+/* Very narrow layouts: set names may shrink and the aside may wrap. */
+@media (max-width: 320px) {
+  .setName {
+    min-width: 0;
+    white-space: normal;
+  }
 }

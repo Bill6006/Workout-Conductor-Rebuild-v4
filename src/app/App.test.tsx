@@ -37,8 +37,8 @@ describe('App', () => {
     const { store } = createTestStore();
     renderApp(store);
     expect(screen.getByText('Workout Conductor')).toBeInTheDocument();
-    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 7');
-    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 7$/);
+    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 8');
+    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 8$/);
     await screen.findByRole('heading', { level: 1, name: 'What are you training for?' });
   });
 

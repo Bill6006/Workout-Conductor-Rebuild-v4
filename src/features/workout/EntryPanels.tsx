@@ -69,38 +69,40 @@ export function EntryPanels({
 
   return (
     <div className={styles.panels}>
-      <div className={styles.panelTabs} role="tablist" aria-label="Exercise panels">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={open === 'howto'}
-          className={styles.panelTab}
-          onClick={() => toggle('howto')}
-        >
-          How to
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={open === 'notes'}
-          className={styles.panelTab}
-          onClick={() => toggle('notes')}
-          data-testid="notes-tab"
-        >
-          Notes{instruction && (instruction.notes || instruction.cues.length > 0) ? ' •' : ''}
-        </button>
-        {plates ? (
+      <div className={styles.panelTabs}>
+        <div className={styles.tabGroup} role="tablist" aria-label="Exercise panels">
           <button
             type="button"
             role="tab"
-            aria-selected={open === 'plates'}
+            aria-selected={open === 'howto'}
             className={styles.panelTab}
-            onClick={() => toggle('plates')}
-            data-testid="plates-tab"
+            onClick={() => toggle('howto')}
           >
-            Plates
+            How to
           </button>
-        ) : null}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={open === 'notes'}
+            className={styles.panelTab}
+            onClick={() => toggle('notes')}
+            data-testid="notes-tab"
+          >
+            Notes{instruction && (instruction.notes || instruction.cues.length > 0) ? ' •' : ''}
+          </button>
+          {plates ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={open === 'plates'}
+              className={styles.panelTab}
+              onClick={() => toggle('plates')}
+              data-testid="plates-tab"
+            >
+              Plates
+            </button>
+          ) : null}
+        </div>
         <button
           type="button"
           className={styles.panelTab}

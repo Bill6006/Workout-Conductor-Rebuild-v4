@@ -2,36 +2,36 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                                                                                                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                                       |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                                       |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                               |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                          |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                              |
-| Current phase          | Phase 7 - Progress, Plan, Coverage, PRs, and Session Summary                                                                                                                                                                                                                                   |
-| Phase gate             | **YELLOW** - owner review rounds on the exercise card, RIR and rest evidence, media, and ending a workout (YELLOW - FIX); fixed in this commit, awaiting the owner's re-check                                                                                                                  |
-| Current branch         | `main`                                                                                                                                                                                                                                                                                         |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                   |
-| Work in progress       | Phase 7 review gate, YELLOW - FIX applied across seven rounds: card layout, evidence-based tempo, effort (RIR) and rest with evidence, warm-up labels, animated card demonstration, your own GIF from the details, end without saving behind a confirmation. No Phase 8 code has been started. |
-| Latest commit          | Phase 7 fix docs and screenshots (this commit); app build under review is `584a5b8` (review fixes `0bb5845`, `791e9cf`, `22fd9fe`, `801cff7`, `f12721a`, `09b1278`, `584a5b8` on top of Phase 7 `251c4c2`, `28e8c62`, `5d0d5d5`, `006a671`)                                                    |
-| Latest deployment      | `584a5b8` deployed by Deploy Pages run 33899809708 (success; earlier rounds 33895867293 and 33898142561); full browser suite passed against the live URL (96 passed + 8 skipped by design); 45 screenshots captured from the deployed build                                                    |
-| Test totals            | Unit: 266 passed (48 files). Browser/mobile: 96 passed + 8 skipped by design locally and against the live URL                                                                                                                                                                                  |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                                                                   |
+| Item                   | Value                                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                        |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                   |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                       |
+| Current phase          | Phase 8 - Data Safety, Optional Migration, PWA, Polish, and Acceptance                                                                                                                                                                                  |
+| Phase gate             | Phase 7 **GREEN** (owner approved on Android, 2026-09-04). Phase 8 in progress; no gate yet                                                                                                                                                             |
+| Current branch         | `main`                                                                                                                                                                                                                                                  |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                            |
+| Work in progress       | Phase 8: complete backup and exact restore, automatic local backups, storage and save diagnostics with safe cleanup, optional legacy import, service-worker update safety, accessibility and zoom testing, final polish, complete suite, cutover report |
+| Latest commit          | Phase 7 fix docs and screenshots (this commit); app build under review is `584a5b8` (review fixes `0bb5845`, `791e9cf`, `22fd9fe`, `801cff7`, `f12721a`, `09b1278`, `584a5b8` on top of Phase 7 `251c4c2`, `28e8c62`, `5d0d5d5`, `006a671`)             |
+| Latest deployment      | `584a5b8` deployed by Deploy Pages run 33899809708 (success; earlier rounds 33895867293 and 33898142561); full browser suite passed against the live URL (96 passed + 8 skipped by design); 45 screenshots captured from the deployed build             |
+| Test totals            | Unit: 266 passed (48 files). Browser/mobile: 96 passed + 8 skipped by design locally and against the live URL                                                                                                                                           |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                            |
 
 ## Phase checklist
 
-| Phase | Name                                                         | Status               |
-| ----- | ------------------------------------------------------------ | -------------------- |
-| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner)        |
-| 1     | Product Foundation and First Useful Live Preview             | GREEN (owner)        |
-| 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner)        |
-| 3     | Workout Generation and Duration Engine                       | GREEN (owner)        |
-| 4     | Central Recalibration Engine                                 | GREEN (owner)        |
-| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner)        |
-| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | GREEN (owner)        |
-| 7     | Progress, Plan, Coverage, PRs, and Session Summary           | YELLOW (review gate) |
-| 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | planned              |
+| Phase | Name                                                         | Status        |
+| ----- | ------------------------------------------------------------ | ------------- |
+| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner) |
+| 1     | Product Foundation and First Useful Live Preview             | GREEN (owner) |
+| 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner) |
+| 3     | Workout Generation and Duration Engine                       | GREEN (owner) |
+| 4     | Central Recalibration Engine                                 | GREEN (owner) |
+| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner) |
+| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | GREEN (owner) |
+| 7     | Progress, Plan, Coverage, PRs, and Session Summary           | GREEN         |
+| 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | in progress   |
 
 ## Phase 7 deliverables
 
