@@ -5,6 +5,7 @@ import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
 import { workingSets, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
 import type { PreviousPerformance } from '../../features/workout/previousPerformance';
+import { useCustomMedia } from '../../features/library/useCustomMedia';
 import { effortGuidance, restGuidance } from '../../features/workout/effort';
 import { tempoCue } from '../../features/workout/tempo';
 import { ExerciseThumb } from '../ExerciseDetail/ExerciseMedia';
@@ -72,6 +73,7 @@ export function ExerciseCard({
 }: ExerciseCardProps) {
   const [tempoOpen, setTempoOpen] = useState(false);
   const exercise = requireExercise(entry.exerciseId);
+  const customMedia = useCustomMedia(exercise.id);
   const working = workingSets(entry).filter((set) => set.kind === 'working');
   const doneWorking = logged.filter((set) => set.kind === 'working' && !set.skipped).length;
   const target = position?.set ?? working[0] ?? entry.sets[0];
@@ -139,7 +141,7 @@ export function ExerciseCard({
             aria-label={`How to do ${exercise.name}: demonstration and details`}
             data-testid="card-thumb"
           >
-            <ExerciseThumb exercise={exercise} size="large" />
+            <ExerciseThumb exercise={exercise} size="large" customMedia={customMedia} />
             <span className={styles.thumbLabel}>How to</span>
           </button>
           <button

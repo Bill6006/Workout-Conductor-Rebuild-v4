@@ -1113,6 +1113,20 @@ export class AppStore {
     return parsed.success ? parsed.data : null;
   }
 
+  /** Removes the user's demonstration for an exercise; the placeholder returns. */
+  async deleteCustomMedia(exerciseId: string): Promise<void> {
+    const db = await this.getDatabase();
+    const existed = (await db.get<Identified>('customMedia', exerciseId)) !== undefined;
+    if (!existed) return;
+    await deleteVerified(db, 'customMedia', exerciseId);
+    this.setState({
+      customCounts: {
+        ...this.state.customCounts,
+        media: Math.max(0, this.state.customCounts.media - 1),
+      },
+    });
+  }
+
   // ---------------------------------------------------------------- durable data
 
   async saveProfile(profile: UserProfile): Promise<SaveReceipt> {

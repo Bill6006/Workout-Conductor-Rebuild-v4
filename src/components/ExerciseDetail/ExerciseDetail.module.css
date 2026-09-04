@@ -299,3 +299,32 @@
   font: inherit;
   font-size: 14px;
 }
+
+.demoPick {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.demoPick:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.demoInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.demoButtonAccent {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}

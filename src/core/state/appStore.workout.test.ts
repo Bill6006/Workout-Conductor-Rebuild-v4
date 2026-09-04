@@ -278,6 +278,12 @@ describe('active workout in the store', () => {
     expect((await handle.store.getCustomMedia(created.id))?.dataUrl).toBe(
       'data:image/png;base64,AAAA',
     );
+    expect(handle.store.getSnapshot().customCounts.media).toBe(1);
+    await handle.store.deleteCustomMedia(created.id);
+    expect(await handle.store.getCustomMedia(created.id)).toBeNull();
+    expect(handle.store.getSnapshot().customCounts.media).toBe(0);
+    await handle.store.deleteCustomMedia(created.id);
+    expect(handle.store.getSnapshot().customCounts.media).toBe(0);
     expect(workoutSequence(session(handle).workout).length).toBeGreaterThan(0);
   });
 });

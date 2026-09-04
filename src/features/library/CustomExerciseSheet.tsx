@@ -13,19 +13,11 @@ import { useToast } from '../../components/Toast/useToast';
 import { CUSTOM_MEDIA_MAX_BYTES } from '../../core/validation/customExercise';
 import { useAppStore } from '../../core/state/useAppStore';
 import styles from './LibraryScreen.module.css';
+import { readAsDataUrl } from './mediaFile';
 
 interface CustomExerciseSheetProps {
   open: boolean;
   onClose: () => void;
-}
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read the file.'));
-    reader.readAsDataURL(file);
-  });
 }
 
 /**

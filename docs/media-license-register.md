@@ -35,3 +35,14 @@ it resolves to a placeholder.
 
 Added when the production media set is created. Each row must name the exercise ids it covers,
 the files, the author or source, the license, and any attribution text required by that license.
+
+## Your own demonstration (user media)
+
+- Tap the demonstration on an exercise card to open its details, then tap the demonstration
+  again (or the "Your GIF" button) to pick a GIF, photo, or short video from the phone, up to
+  3 MB. It replaces the placeholder on the card and in the details, with Replace and Remove
+  under it.
+- User media is stored inline in the on-device database (`customMedia`, one per exercise),
+  travels with a full backup, and is never uploaded anywhere or committed to this repository.
+- The card thumbnail plays the same loop as the details (the placeholder loop or the user's
+  file); phones set to reduce motion get the still poster instead.

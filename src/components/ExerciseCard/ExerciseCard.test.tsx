@@ -7,6 +7,9 @@ import { allEntries } from '../../engine/workout/types';
 import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import { ExerciseCard } from './ExerciseCard';
 
+// The card is presentational; the user's own media comes from the store in the app.
+vi.mock('../../features/library/useCustomMedia', () => ({ useCustomMedia: () => null }));
+
 const NOW = '2026-09-03T14:00:00.000Z';
 const profile = createDefaultProfile(NOW);
 const [, gym] = createDefaultLocations({ gymAccess: true }, NOW);
@@ -48,7 +51,9 @@ describe('ExerciseCard', () => {
     expect(screen.getByTestId('tempo-bar')).toBeInTheDocument();
     await user.click(chip);
     expect(screen.getByTestId('tempo-detail')).toHaveTextContent(/Cue: /);
-    expect(screen.getByRole('list', { name: 'Why this tempo, effort, and rest' }).children.length).toBeGreaterThan(1);
+    expect(
+      screen.getByRole('list', { name: 'Why this tempo, effort, and rest' }).children.length,
+    ).toBeGreaterThan(1);
     expect(chip).toHaveAttribute('aria-expanded', 'true');
     await user.click(chip);
     expect(screen.queryByTestId('tempo-detail')).not.toBeInTheDocument();

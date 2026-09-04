@@ -4,7 +4,10 @@ import { JOINTS, type CatalogExercise, type Joint } from '../../catalog/exercise
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
 import type { AlternativeResult } from '../../engine/alternatives/rankAlternatives';
+import { customMediaFromFile } from '../../features/library/mediaFile';
 import { useCustomMedia } from '../../features/library/useCustomMedia';
+import { useAppStore } from '../../core/state/useAppStore';
+import { useToast } from '../Toast/useToast';
 import { Sheet } from '../Sheet/Sheet';
 import styles from './ExerciseDetail.module.css';
 import { ExerciseDemo, ExerciseThumb } from './ExerciseMedia';
@@ -89,7 +92,34 @@ export function ExerciseDetailSheet({
   const [repLow, setRepLow] = useState('');
   const [repHigh, setRepHigh] = useState('');
   const customMedia = useCustomMedia(exercise?.id ?? '');
+  const store = useAppStore();
+  const toast = useToast();
+  const [mediaBusy, setMediaBusy] = useState(false);
   if (!exercise) return null;
+
+  const exerciseId = exercise.id;
+  const pickMedia = async (file: File) => {
+    setMediaBusy(true);
+    try {
+      await store.addCustomMedia(exerciseId, await customMediaFromFile(file));
+      toast.show('Saved your demonstration · stays on this device', 'success');
+    } catch (error) {
+      toast.show(error instanceof Error ? error.message : 'Could not save that file', 'error');
+    } finally {
+      setMediaBusy(false);
+    }
+  };
+  const removeMedia = async () => {
+    setMediaBusy(true);
+    try {
+      await store.deleteCustomMedia(exerciseId);
+      toast.show('Removed your demonstration', 'success');
+    } catch (error) {
+      toast.show(error instanceof Error ? error.message : 'Could not remove it', 'error');
+    } finally {
+      setMediaBusy(false);
+    }
+  };
 
   const traits = [
     exercise.compound ? 'Compound' : 'Isolation',
@@ -103,7 +133,13 @@ export function ExerciseDetailSheet({
 
   return (
     <Sheet open title={exercise.name} onClose={onClose}>
-      <ExerciseDemo exercise={exercise} customMedia={customMedia} />
+      <ExerciseDemo
+        exercise={exercise}
+        customMedia={customMedia}
+        onPickFile={(file) => void pickMedia(file)}
+        onRemove={() => void removeMedia()}
+        busy={mediaBusy}
+      />
 
       <div className={styles.chips} aria-label="Muscles">
         {exercise.primaryMuscles.map((muscle) => (

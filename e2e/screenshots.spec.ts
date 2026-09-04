@@ -153,6 +153,23 @@ test.describe('screenshots @screenshots', () => {
     await page.getByTestId('start-workout').click();
     await expect(page.getByTestId('workout-stats')).toBeVisible();
     await capture(page, testInfo, 'workout-active-start');
+    await page.getByTestId('exercise-card').first().getByTestId('card-thumb').click();
+    await expect(page.getByRole('dialog').getByTestId('demo-pick')).toBeVisible();
+    await capture(page, testInfo, 'workout-how-to-sheet');
+    await page
+      .getByRole('dialog')
+      .getByTestId('demo-file-input')
+      .setInputFiles({
+        name: 'bench.gif',
+        mimeType: 'image/gif',
+        buffer: Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'),
+      });
+    await expect(page.getByRole('dialog').getByTestId('custom-media')).toBeVisible();
+    await capture(page, testInfo, 'workout-own-gif');
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(page.getByRole('dialog').getByTestId('exercise-demo')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
     await page.getByTestId('skip-warmup').click();
     await page.getByTestId('logger-weight').click();
     await page.getByRole('spinbutton', { name: 'Weight' }).fill('185');

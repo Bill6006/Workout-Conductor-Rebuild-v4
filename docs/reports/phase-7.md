@@ -128,6 +128,23 @@ rest times are research-based, and for the header target line to end at the reps
 - The header target line ends at the reps ("Set 1 of 4 · 4-6 reps"). RIR and rest remain on the
   set rows, in the logger, and in the tempo detail.
 
+A sixth look, on the same build, said the card's demonstration looked like a still image and
+asked for a way to upload a GIF of one's own from the details view:
+
+- The card thumbnail was the still poster; it now plays the same loop as the details view
+  (the placeholder loop, or the user's own file once one exists). Phones set to reduce motion
+  keep the still poster.
+- In the details view the demonstration itself is now a button: tapping it, or the "Your GIF"
+  button beside Play and Replay, opens the phone's picker for a GIF, photo, or short video up
+  to 3 MB. The file is saved on the device (verified write, one per exercise), shown on the
+  card and in the details at once, backed up with everything else, and never leaves the phone.
+  Replace and Remove sit under the user's own demonstration; Remove brings the placeholder
+  back. The label under the placeholder reads "Placeholder · tap it to use your own GIF".
+- New browser test: pick a GIF in the details, see it on the card, reload, still there, remove
+  it; run locally and against the live URL. New unit tests cover the file helper (type, size,
+  empty), the animated thumbnail with and without reduced motion, the picker, and the store's
+  remove action.
+
 ## Decisions and notes
 
 - Charts are plain HTML marks: one series, one hue, thin marks with rounded data ends, recessive
