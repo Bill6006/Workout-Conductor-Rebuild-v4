@@ -314,7 +314,9 @@ export function ProgressScreen() {
               label: 'Density',
               value:
                 efficiency.value.setsPer10Min === null
-                  ? 'no timed sessions yet'
+                  ? efficiency.samples > 0
+                    ? 'needs five minutes of logged training'
+                    : 'no timed sessions yet'
                   : `${efficiency.value.setsPer10Min} working sets per 10 min`,
             },
             {

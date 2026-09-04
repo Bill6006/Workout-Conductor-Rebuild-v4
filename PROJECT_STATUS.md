@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                                                                           |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                        |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                        |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                           |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                               |
-| Current phase          | Phase 7 - Progress, Plan, Coverage, PRs, and Session Summary                                                                                                                                    |
-| Phase gate             | **YELLOW** - Phase 7 work complete, deployed, and verified live; awaiting the owner's review on Android                                                                                         |
-| Current branch         | `main`                                                                                                                                                                                          |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                    |
-| Work in progress       | Phase 7 review gate. No Phase 8 code has been started.                                                                                                                                          |
-| Latest commit          | Phase 7 docs and screenshots (this commit); app build under review is `251c4c2`                                                                                                                 |
-| Latest deployment      | `251c4c2` deployed by Deploy Pages run 33869848868 (success); full browser suite passed against the live URL (90 passed + 8 skipped by design); 43 screenshots captured from the deployed build |
-| Test totals            | Unit: 244 passed (41 files). Browser/mobile: 88 passed + 8 skipped by design locally; 90 passed + 8 skipped against the live URL                                                                |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                    |
+| Item                   | Value                                                                                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                            |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                            |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                    |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                               |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                   |
+| Current phase          | Phase 7 - Progress, Plan, Coverage, PRs, and Session Summary                                                                                                                                                        |
+| Phase gate             | **YELLOW** - Phase 7 work complete, deployed, and verified live; awaiting the owner's review on Android                                                                                                             |
+| Current branch         | `main`                                                                                                                                                                                                              |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                        |
+| Work in progress       | Phase 7 review gate. No Phase 8 code has been started.                                                                                                                                                              |
+| Latest commit          | Phase 7 density label, live screenshots, and status (this commit); Phase 7 landed in `251c4c2`, the density guard in `28e8c62`                                                                                      |
+| Latest deployment      | `28e8c62` deployed by Deploy Pages run 33870798719 (success); full browser suite passed against the live URL (90 passed + 8 skipped by design); this commit deploys next and the screenshots are recaptured from it |
+| Test totals            | Unit: 244 passed (41 files). Browser/mobile: 88 passed + 8 skipped by design locally; 90 passed + 8 skipped against the live URL                                                                                    |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                        |
 
 ## Phase checklist
 
