@@ -145,6 +145,21 @@ asked for a way to upload a GIF of one's own from the details view:
   empty), the animated thumbnail with and without reduced motion, the picker, and the store's
   remove action.
 
+A seventh look asked for a way to end a workout without saving it, guarded so it cannot happen
+by accident, and for the Pause and Replay buttons under the demonstration to go:
+
+- "End workout early" still opens the rating step, which saves everything logged. That step now
+  also offers "End without saving". Tapping it asks "Discard this workout?" with the plain
+  consequence (no sets, no records, no progress, cannot be undone) and two answers: "Keep
+  workout" returns to the rating step; "Discard workout" clears the session without writing a
+  record, shows "Workout discarded · nothing was saved", and the Workout tab returns to a fresh
+  preview. The store's discard action ignores previews and completed sessions.
+- The demonstration has no Pause or Replay buttons; the loop plays, and phones set to reduce
+  motion get the still poster. The "Your GIF" button stays.
+- Browser test: end early, choose End without saving, keep the workout on the first ask, then
+  discard on the second and land on a fresh preview with the toast. Store test: discarding
+  after a logged set leaves no workout record and a preview session.
+
 ## Decisions and notes
 
 - Charts are plain HTML marks: one series, one hue, thin marks with rounded data ends, recessive

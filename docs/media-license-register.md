@@ -46,3 +46,5 @@ the files, the author or source, the license, and any attribution text required 
   travels with a full backup, and is never uploaded anywhere or committed to this repository.
 - The card thumbnail plays the same loop as the details (the placeholder loop or the user's
   file); phones set to reduce motion get the still poster instead.
+- The demonstration has no Pause or Replay controls: the loop plays on its own, and phones set
+  to reduce motion get the still poster instead.

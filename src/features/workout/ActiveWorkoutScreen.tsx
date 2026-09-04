@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
+import { Button } from '../../components/Button/Button';
 import { Card } from '../../components/Card/Card';
 import { DurationSelector } from '../../components/DurationSelector/DurationSelector';
 import { ExerciseCard } from '../../components/ExerciseCard/ExerciseCard';
@@ -12,6 +13,7 @@ import { ProgressBar } from '../../components/ProgressBar/ProgressBar';
 import { RestTimer } from '../../components/RestTimer/RestTimer';
 import { ScreenHeader } from '../../components/Screen/Screen';
 import { SetLogger, type SetLoggerValues } from '../../components/SetLogger/SetLogger';
+import { Sheet } from '../../components/Sheet/Sheet';
 import { SupersetGroup } from '../../components/SupersetGroup/SupersetGroup';
 import { useToast } from '../../components/Toast/useToast';
 import { doneKeys, elapsedSeconds, type WorkoutSession } from '../../core/state/session';
@@ -122,7 +124,7 @@ export function ActiveWorkoutScreen() {
   const calibrating = useAppSelector((state) => state.calibration.status !== 'idle');
   const [editing, setEditing] = useState<Editing | null>(null);
   const [selected, setSelected] = useState<Selection | null>(null);
-  const [finishing, setFinishing] = useState<'idle' | 'rating'>('idle');
+  const [finishing, setFinishing] = useState<'idle' | 'rating' | 'discard'>('idle');
   const [endedEarly, setEndedEarly] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const coach = useCoach();
@@ -636,7 +638,40 @@ export function ActiveWorkoutScreen() {
         endedEarly={endedEarly}
         onClose={() => setFinishing('idle')}
         onSave={(rating) => void finish(rating)}
+        onDiscard={() => setFinishing('discard')}
       />
+      <Sheet
+        open={finishing === 'discard'}
+        title="Discard this workout?"
+        onClose={() => setFinishing('rating')}
+        footer={
+          <div className={styles.ratingActions}>
+            <Button
+              variant="secondary"
+              onClick={() => setFinishing('rating')}
+              data-testid="discard-cancel"
+            >
+              Keep workout
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setFinishing('idle');
+                store.discardWorkout();
+                toast.show('Workout discarded · nothing was saved', 'success');
+              }}
+              data-testid="discard-confirm"
+            >
+              Discard workout
+            </Button>
+          </div>
+        }
+      >
+        <p className={styles.panelNote}>
+          Nothing from this session will be saved: no sets, no records, no progress. This cannot be
+          undone.
+        </p>
+      </Sheet>
     </>
   );
 }

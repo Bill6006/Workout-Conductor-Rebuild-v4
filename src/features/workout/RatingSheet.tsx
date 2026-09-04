@@ -9,6 +9,8 @@ interface RatingSheetProps {
   endedEarly: boolean;
   onClose: () => void;
   onSave: (rating: SessionRating | null) => void;
+  /** Offered when ending early: throw the session away after a confirmation. */
+  onDiscard?: () => void;
 }
 
 const EFFORTS: { id: SessionRating['effort']; label: string }[] = [
@@ -18,7 +20,7 @@ const EFFORTS: { id: SessionRating['effort']; label: string }[] = [
 ];
 
 /** The quick session rating asked when a workout is saved; every answer is optional. */
-export function RatingSheet({ open, endedEarly, onClose, onSave }: RatingSheetProps) {
+export function RatingSheet({ open, endedEarly, onClose, onSave, onDiscard }: RatingSheetProps) {
   const [effort, setEffort] = useState<SessionRating['effort']>('right');
   const [pain, setPain] = useState(false);
   const [energy, setEnergy] = useState(3);
@@ -41,6 +43,16 @@ export function RatingSheet({ open, endedEarly, onClose, onSave }: RatingSheetPr
           <button type="button" className={styles.linkButton} onClick={() => onSave(null)}>
             Save without rating
           </button>
+          {endedEarly && onDiscard ? (
+            <button
+              type="button"
+              className={styles.linkButton}
+              onClick={onDiscard}
+              data-testid="discard-workout"
+            >
+              End without saving
+            </button>
+          ) : null}
         </div>
       }
     >

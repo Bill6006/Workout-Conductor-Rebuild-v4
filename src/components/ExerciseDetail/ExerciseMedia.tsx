@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { mediaFor, mediaUrl } from '../../catalog/media/mediaManifest';
 import type { CustomMedia } from '../../core/validation/customExercise';
@@ -88,8 +88,8 @@ interface DemoProps {
 }
 
 /**
- * Looping demonstration with Play/Pause and Replay. Reduced-motion users get
- * the poster until they press Play. Placeholder assets say so on the image.
+ * Looping demonstration. Reduced-motion users get the still poster instead.
+ * Placeholder assets say so on the image.
  * With `onPickFile`, the image itself is a button that opens the file picker.
  */
 export function ExerciseDemo({
@@ -101,10 +101,8 @@ export function ExerciseDemo({
 }: DemoProps) {
   const asset = mediaFor(exercise);
   const reducedMotion = useReducedMotion();
-  const [playing, setPlaying] = useState<boolean | null>(null);
-  const [replayKey, setReplayKey] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isPlaying = playing ?? !reducedMotion;
+  const isPlaying = !reducedMotion;
   const canPick = typeof onPickFile === 'function';
   const pickLabel = customMedia
     ? 'Replace your demonstration'
@@ -200,7 +198,6 @@ export function ExerciseDemo({
     <figure className={styles.demo}>
       {wrap(
         <img
-          key={replayKey}
           className={styles.demoImage}
           src={mediaUrl(isPlaying ? asset.demo : asset.poster)}
           alt={`${exercise.name} demonstration`}
@@ -220,24 +217,6 @@ export function ExerciseDemo({
             : 'Demonstration'}
         </span>
         <span className={styles.demoControls}>
-          <button
-            type="button"
-            className={styles.demoButton}
-            onClick={() => setPlaying(!isPlaying)}
-            aria-pressed={isPlaying}
-          >
-            {isPlaying ? 'Pause' : 'Play'}
-          </button>
-          <button
-            type="button"
-            className={styles.demoButton}
-            onClick={() => {
-              setPlaying(true);
-              setReplayKey((key) => key + 1);
-            }}
-          >
-            Replay
-          </button>
           {canPick ? (
             <button
               type="button"

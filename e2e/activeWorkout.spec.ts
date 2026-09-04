@@ -148,3 +148,25 @@ test.describe('active workout', () => {
     await expectNoHorizontalOverflow(page);
   });
 });
+
+test.describe('end without saving', () => {
+  test('asks first, keeps the workout on the first answer, and saves nothing on the second', async ({
+    page,
+  }) => {
+    await ensureProfile(page);
+    await page.getByTestId('start-workout').click();
+    await expect(page.getByTestId('workout-stats')).toBeVisible();
+    await page.getByTestId('end-early').click();
+    await expect(page.getByRole('dialog', { name: 'End the workout early?' })).toBeVisible();
+    await page.getByTestId('discard-workout').click();
+    await expect(page.getByRole('dialog', { name: 'Discard this workout?' })).toBeVisible();
+    await page.getByTestId('discard-cancel').click();
+    await expect(page.getByRole('dialog', { name: 'End the workout early?' })).toBeVisible();
+    await page.getByTestId('discard-workout').click();
+    await page.getByTestId('discard-confirm').click();
+    await expect(page.getByTestId('start-workout')).toBeVisible();
+    await expect(
+      page.locator('[role="status"]').filter({ hasText: 'Workout discarded' }),
+    ).toBeVisible();
+  });
+});

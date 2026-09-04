@@ -32,8 +32,6 @@ test.describe('exercise library', () => {
         timeout: 10_000,
       })
       .toBe(true);
-    await dialog.getByRole('button', { name: 'Pause' }).click();
-    await expect(demo).toHaveAttribute('data-playing', 'false');
     await expect(dialog.getByRole('heading', { name: 'Execution' })).toBeVisible();
     await expect(
       dialog.getByRole('heading', { name: /Alternatives, best match first/ }),

@@ -286,4 +286,24 @@ describe('active workout in the store', () => {
     expect(handle.store.getSnapshot().customCounts.media).toBe(0);
     expect(workoutSequence(session(handle).workout).length).toBeGreaterThan(0);
   });
+  it('ends without saving only through discardWorkout, and writes nothing', async () => {
+    const clock = makeClock();
+    const handle = await seeded(clock);
+    const { store } = handle;
+    await store.startWorkout();
+    const at = position(handle);
+    expect(at).not.toBeNull();
+    await store.logSet(at!.entryId, at!.setIndex, { weight: 100, reps: 8, rir: 2 });
+    expect(session(handle).status).toBe('active');
+
+    store.discardWorkout();
+    expect(session(handle).status).toBe('preview');
+    expect(doneKeys(session(handle).completed).size).toBe(0);
+    const db = await store.getDatabase();
+    expect(await db.getAll<Identified>('workouts')).toHaveLength(0);
+
+    // A preview is left alone.
+    store.discardWorkout();
+    expect(session(handle).status).toBe('preview');
+  });
 });

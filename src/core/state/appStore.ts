@@ -1051,6 +1051,15 @@ export class AppStore {
     this.ensureSession();
   }
 
+  /** Ends the workout without saving anything; a fresh preview is generated as usual. */
+  discardWorkout(): void {
+    const session = this.state.session;
+    if (!session || session.status === 'preview' || session.status === 'completed') return;
+    clearSession(this.storage);
+    this.setState({ session: null });
+    this.ensureSession();
+  }
+
   // ---------------------------------------------------------------- custom content
 
   async addCustomExercise(input: NewCustomExercise): Promise<CustomExercise> {

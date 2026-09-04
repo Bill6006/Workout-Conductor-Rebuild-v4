@@ -43,3 +43,9 @@
   background: var(--color-bg-raised);
   color: var(--color-text);
 }
+
+.danger {
+  border-color: var(--color-danger, #ff6b6b);
+  background: transparent;
+  color: var(--color-danger, #ff6b6b);
+}

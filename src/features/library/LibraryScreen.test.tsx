@@ -61,9 +61,6 @@ describe('LibraryScreen', () => {
     expect(within(dialog).getByRole('heading', { name: 'Common mistakes' })).toBeInTheDocument();
     expect(within(dialog).getByText('No drop sets')).toBeInTheDocument();
     expect(within(dialog).getByText('Dumbbell Bench Press')).toBeInTheDocument();
-
-    await user.click(within(dialog).getByRole('button', { name: 'Pause' }));
-    expect(within(dialog).getByTestId('exercise-demo')).toHaveAttribute('data-playing', 'false');
   });
 
   it('marks an exercise preferred with a verified save', async () => {
