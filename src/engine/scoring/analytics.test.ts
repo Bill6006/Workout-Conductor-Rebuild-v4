@@ -162,5 +162,13 @@ describe('analytics', () => {
       hypertrophySets: 1,
     });
     expect(durationEfficiency([]).confidence).toBe('none');
+    const tooShort = durationEfficiency([
+      record(0, 'barbell-bench-press', [[5, 185, 2]], [4, 6], 2, {
+        elapsedSeconds: 20,
+        plannedMinutes: 45,
+      }),
+    ]);
+    expect(tooShort.value.setsPer10Min).toBeNull();
+    expect(tooShort.explanation).toContain('at least five minutes');
   });
 });

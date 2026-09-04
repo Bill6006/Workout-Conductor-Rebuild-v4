@@ -187,6 +187,15 @@ test.describe('screenshots @screenshots', () => {
     await page.getByTestId('save-workout').click();
     await expect(page.getByTestId('completion-summary')).toBeVisible();
     await capture(page, testInfo, 'workout-completion');
+    // Phase 7: Progress with populated scores and the history row after the saved workout.
+    await page.getByTestId('completion-done').click();
+    await page.goto('./#/progress');
+    await expect(page.getByTestId('history-row')).toHaveCount(1);
+    await page.getByTestId('score-panel').first().locator('summary').click();
+    await capture(page, testInfo, 'progress-after-workout', true);
+    await page.getByTestId('history-row').first().click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await capture(page, testInfo, 'progress-history-detail');
   });
 
   test('library and exercise detail', async ({ page }, testInfo) => {

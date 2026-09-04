@@ -164,8 +164,9 @@ export function durationEfficiency(history: readonly WorkoutRecord[]): Score<Eff
   const averagePlannedMinutes = Math.round(avg(planned) * 10) / 10;
   const averageRatio = Math.round((averageActualMinutes / averagePlannedMinutes) * 100) / 100;
   const totalMinutes = actual.reduce((a, b) => a + b, 0);
+  // Density needs real training time; a session shorter than five minutes says nothing.
   const setsPer10Min =
-    totalMinutes > 0
+    totalMinutes >= 5
       ? Math.round((sets.reduce((a, b) => a + b, 0) / totalMinutes) * 100) / 10
       : null;
   return {
@@ -174,7 +175,11 @@ export function durationEfficiency(history: readonly WorkoutRecord[]): Score<Eff
       'Actual duration against the planned length, and completed working sets per ten minutes, over the last ten sessions.',
     samples: sessions.length,
     confidence: confidenceFor(sessions.length),
-    explanation: `${sessions.length} timed ${sessions.length === 1 ? 'session' : 'sessions'}: about ${averageActualMinutes} min actual against ${averagePlannedMinutes} min planned (${Math.round(averageRatio * 100)}%), ${setsPer10Min} working sets per 10 min.`,
+    explanation: `${sessions.length} timed ${sessions.length === 1 ? 'session' : 'sessions'}: about ${averageActualMinutes} min actual against ${averagePlannedMinutes} min planned (${Math.round(averageRatio * 100)}%)${
+      setsPer10Min === null
+        ? '; density needs at least five minutes of logged training.'
+        : `, ${setsPer10Min} working sets per 10 min.`
+    }`,
     data: sessions.map(
       (record, index) =>
         `${shortDate(when(record))}: ${Math.round(actual[index] as number)} min of ${planned[index]} planned, ${sets[index]} sets`,
