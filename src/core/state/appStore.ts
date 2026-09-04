@@ -270,15 +270,23 @@ export class AppStore {
   async hydrate(): Promise<void> {
     try {
       const db = await this.getDatabase();
-      const [profiles, locations, workouts, customExercises, customInstructions, customMedia] =
-        await Promise.all([
-          db.getAll<Identified>('profile'),
-          db.getAll<Identified>('locations'),
-          db.getAll<Identified>('workouts'),
-          db.getAll<Identified>('customExercises'),
-          db.getAll<Identified>('customInstructions'),
-          db.count('customMedia'),
-        ]);
+      const [
+        profiles,
+        locations,
+        workouts,
+        customExercises,
+        customInstructions,
+        customMedia,
+        savedRaw,
+      ] = await Promise.all([
+        db.getAll<Identified>('profile'),
+        db.getAll<Identified>('locations'),
+        db.getAll<Identified>('workouts'),
+        db.getAll<Identified>('customExercises'),
+        db.getAll<Identified>('customInstructions'),
+        db.count('customMedia'),
+        db.getAll<Identified>('savedWorkouts'),
+      ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
       const validLocations = locations
         .map((location) => LocationProfileSchema.safeParse(location))
@@ -305,7 +313,8 @@ export class AppStore {
         localSettings: readLocalSettings(this.storage),
         workoutCount: workouts.length,
         history: parseWorkoutRecords(workouts),
-        savedWorkouts: parseSavedWorkouts(await db.getAll<Identified>('savedWorkouts')),
+        // No await inside this literal: the settings read above must not go stale.
+        savedWorkouts: parseSavedWorkouts(savedRaw),
         customExercises: validCustom,
         customInstructions: validInstructions,
         customCounts: {
