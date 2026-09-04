@@ -2,36 +2,36 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                        |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                   |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                       |
-| Current phase          | Phase 8 - Data Safety, Optional Migration, PWA, Polish, and Acceptance                                                                                                                                                                                  |
-| Phase gate             | Phase 7 **GREEN** (owner approved on Android, 2026-09-04). Phase 8 in progress; no gate yet                                                                                                                                                             |
-| Current branch         | `main`                                                                                                                                                                                                                                                  |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                            |
-| Work in progress       | Phase 8: complete backup and exact restore, automatic local backups, storage and save diagnostics with safe cleanup, optional legacy import, service-worker update safety, accessibility and zoom testing, final polish, complete suite, cutover report |
-| Latest commit          | Phase 7 fix docs and screenshots (this commit); app build under review is `584a5b8` (review fixes `0bb5845`, `791e9cf`, `22fd9fe`, `801cff7`, `f12721a`, `09b1278`, `584a5b8` on top of Phase 7 `251c4c2`, `28e8c62`, `5d0d5d5`, `006a671`)             |
-| Latest deployment      | `584a5b8` deployed by Deploy Pages run 33899809708 (success; earlier rounds 33895867293 and 33898142561); full browser suite passed against the live URL (96 passed + 8 skipped by design); 45 screenshots captured from the deployed build             |
-| Test totals            | Unit: 266 passed (48 files). Browser/mobile: 96 passed + 8 skipped by design locally and against the live URL                                                                                                                                           |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                            |
+| Item                   | Value                                                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                          |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                          |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                  |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                             |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                 |
+| Current phase          | Phase 8 - Data Safety, Optional Migration, PWA, Polish, and Acceptance                                                                                                                            |
+| Phase gate             | **YELLOW** - Phase 8 built, deployed, and verified; awaiting the owner's Android review                                                                                                           |
+| Current branch         | `main`                                                                                                                                                                                            |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                      |
+| Work in progress       | None. Phase 8 is at its review gate; the cutover report is in `docs/cutover-report.md`. Nothing beyond Phase 8 exists in the plan.                                                                |
+| Latest commit          | Phase 8 status, report, and screenshots (this commit); app build under review is `5691ed7` (Phase 8 `ffaeb0f`, `f4d22dc`, `5691ed7`)                                                              |
+| Latest deployment      | `5691ed7` deployed by Deploy Pages run 33924564630 (success); full browser suite passed against the live URL (110 passed + 12 skipped by design); 47 screenshots captured from the deployed build |
+| Test totals            | Unit: 282 passed (51 files). Browser/mobile: 110 passed + 12 skipped by design locally and against the live URL                                                                                   |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                      |
 
 ## Phase checklist
 
-| Phase | Name                                                         | Status        |
-| ----- | ------------------------------------------------------------ | ------------- |
-| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner) |
-| 1     | Product Foundation and First Useful Live Preview             | GREEN (owner) |
-| 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner) |
-| 3     | Workout Generation and Duration Engine                       | GREEN (owner) |
-| 4     | Central Recalibration Engine                                 | GREEN (owner) |
-| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner) |
-| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | GREEN (owner) |
-| 7     | Progress, Plan, Coverage, PRs, and Session Summary           | GREEN         |
-| 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | in progress   |
+| Phase | Name                                                         | Status               |
+| ----- | ------------------------------------------------------------ | -------------------- |
+| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner)        |
+| 1     | Product Foundation and First Useful Live Preview             | GREEN (owner)        |
+| 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner)        |
+| 3     | Workout Generation and Duration Engine                       | GREEN (owner)        |
+| 4     | Central Recalibration Engine                                 | GREEN (owner)        |
+| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner)        |
+| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | GREEN (owner)        |
+| 7     | Progress, Plan, Coverage, PRs, and Session Summary           | GREEN                |
+| 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | YELLOW (review gate) |
 
 ## Phase 7 deliverables
 
@@ -125,14 +125,30 @@ _Last updated: _
 - Later rounds: RIR and rest targets now carry their evidence (effort and rest lines in the tempo detail and the How to panel; ramp sets labelled warm-up beside their RIR; three hypertrophy rest defaults raised to match the research; header line ends at the reps); the card demonstration plays the same loop as the details and shows your own GIF, photo, or video picked from the details view (on device, 3 MB, Replace and Remove); Pause and Replay are gone; the rating step offers End without saving behind a Discard this workout? confirmation. See `docs/tempo-guidance.md` and `docs/media-license-register.md`.
 - Fix: a larger demonstration (96 × 72) sits at the top right of every card and opens the full demonstration; a tempo chip under it and a one-rep tempo bar in the header (the fill moves like the weight: down at the lowering pace, hold, up at the lifting pace, squeeze) reveal the reason, a one-line form cue, and the evidence on tap (tempo modelled as phases with research-backed reasons, see `docs/tempo-guidance.md`); the equipment line is gone from the card header; logged and current rows stay open while the remaining sets collapse into one expandable line; the right column carries the current set's target load (or "log below"), and each upcoming set's load and rest when expanded.
 
+## Phase 8 deliverables (YELLOW - awaiting review)
+
+- Full Backup JSON schema 2: profile, places, settings, workouts, notes and cues, custom exercises, your demonstrations, saved workouts, meta; schema 1 files migrate forward; unknown fields kept at every level; history and settings exports on their own (`docs/backup-and-restore.md`).
+- Exact restore with verified writes and a verified rollback; the pre-import state is kept as an automatic backup so any import can be undone; restore reports counts per store.
+- Automatic local backups after each finished workout, before each import, and on demand; the newest three stay on the device; each previews and restores like a file.
+- Storage and save check: usage and quota, persistence, record counts, last verified save, a write/read-back/verify probe, and a request for persistent storage.
+- Safe cleanup, previewed first: only a leftover probe, a finished onboarding draft, and old automatic backups; protected data proven untouched by test.
+- Optional legacy import: a forgiving JSON export shape, previewed with matched and skipped exercises, written with verified saves after a backup, undone exactly from a receipt.
+- Service-worker update safety: Reload is withheld during an active workout; the viewport lets the Android keyboard resize the layout.
+- Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
+- Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
+- Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
 ## Known limitations
 
 - Progress scores need records: with none logged the cards show their definitions and "none" confidence until sessions accumulate.
 - Trends and rankings need at least three sessions per lift; the first session of a lift is its baseline and never a record.
 - Vibration on rest completion depends on the phone allowing it; there is never a sound.
-- Demonstrations remain original placeholder diagrams until Phase 8; user media can replace them per exercise.
+- Demonstrations are original placeholder diagrams (one animated loop per movement pattern); your own GIF, photo, or video replaces them per exercise.
+- Automatic backups include your demonstrations inline, so three of them cost about three times the size of your media.
 
 ## Mobile screenshots
+
+Phase 8, captured by Playwright from the deployed build `5691ed7` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-8](docs/screenshots/phase-8)): [Settings with backups, automatic backups, and storage check](docs/screenshots/phase-8/android-412-settings-data-safety.png) · [Legacy import preview](docs/screenshots/phase-8/android-412-settings-legacy-preview.png) · [Import preview](docs/screenshots/phase-8/android-412-settings-import-preview.png) · [Combined preview sheet](docs/screenshots/phase-8/preview-sheet.png); the full set is in the folder.
 
 Phase 7, captured by Playwright from the deployed build `584a5b8` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-7](docs/screenshots/phase-7)).
 
@@ -141,12 +157,12 @@ Phase 7, captured by Playwright from the deployed build `584a5b8` at https://bil
 - Android 360 px: [Today](docs/screenshots/phase-7/android-360-today.png) · [Workout](docs/screenshots/phase-7/android-360-workout.png) · [Progress](docs/screenshots/phase-7/android-360-progress.png) · [Plan](docs/screenshots/phase-7/android-360-plan.png) · [Settings](docs/screenshots/phase-7/android-360-settings.png)
 - Desktop 1280 px: [Today](docs/screenshots/phase-7/desktop-today.png) · [Workout](docs/screenshots/phase-7/desktop-workout.png) · [Progress](docs/screenshots/phase-7/desktop-progress.png) · [Plan](docs/screenshots/phase-7/desktop-plan.png) · [Settings](docs/screenshots/phase-7/desktop-settings.png)
 
-Phase 6: [docs/screenshots/phase-6](docs/screenshots/phase-6) · Phase 5: [docs/screenshots/phase-5](docs/screenshots/phase-5) · Phase 4: [docs/screenshots/phase-4](docs/screenshots/phase-4) · Phase 3: [docs/screenshots/phase-3](docs/screenshots/phase-3) · Phase 2: [docs/screenshots/phase-2](docs/screenshots/phase-2) · Phase 1: [docs/screenshots/phase-1](docs/screenshots/phase-1) · Phase 0: [docs/screenshots/phase-0](docs/screenshots/phase-0).
+Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/screenshots/phase-6](docs/screenshots/phase-6) · Phase 5: [docs/screenshots/phase-5](docs/screenshots/phase-5) · Phase 4: [docs/screenshots/phase-4](docs/screenshots/phase-4) · Phase 3: [docs/screenshots/phase-3](docs/screenshots/phase-3) · Phase 2: [docs/screenshots/phase-2](docs/screenshots/phase-2) · Phase 1: [docs/screenshots/phase-1](docs/screenshots/phase-1) · Phase 0: [docs/screenshots/phase-0](docs/screenshots/phase-0).
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone, finishes a workout and reads the summary's records,
-recovery, focus, and next targets, opens Progress (scores, "How this is calculated", history
-detail) and Plan (this week, weekly targets, recovery balance, save and reuse a workout), and
-replies with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`. On GREEN, Phase 8
-begins: data safety, optional migration, PWA, polish, and acceptance.
+Owner opens the live link on an Android phone and, in Settings, exports and imports a Full Backup JSON,
+restores an automatic backup, runs the save check, previews Clear temporary data, and tries an older
+export with Undo; then starts a workout and reads that a new version is only offered after it. Reply
+with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`. Phase 8 is the last phase in the
+plan; on GREEN the rebuild is complete (`docs/cutover-report.md`).
