@@ -81,6 +81,15 @@ right-hand column of each set row.
 - The right-hand column now carries the current set's target load (or "log below" before a
   weight is known) and, when expanded, each upcoming set's load and rest.
 
+A second look on the phone asked for less text after the tempo, no equipment list under the
+target, a bigger demonstration, and a use for the space under it:
+
+- The tempo is now a chip under the demonstration ("Tempo 2-1-X"); tapping it reveals the
+  reason and the form cue, and tapping again hides them.
+- The equipment line is gone from the card; the header keeps only the target line and last
+  time's numbers. Equipment stays in the How to panel and the details sheet.
+- The demonstration grew from 72 × 54 to 96 × 72 with the tempo chip filling the space under it.
+
 ## Decisions and notes
 
 - Charts are plain HTML marks: one series, one hue, thin marks with rounded data ends, recessive

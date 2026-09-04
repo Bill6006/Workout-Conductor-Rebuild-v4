@@ -7,18 +7,21 @@ import { useReducedMotion } from './useReducedMotion';
 
 interface ThumbProps {
   exercise: CatalogExercise;
+  /** Large is the exercise card's demonstration; small is for list rows. */
+  size?: 'small' | 'large';
 }
 
 /** Compact poster for exercise rows; lazy so lists stay fast. */
-export function ExerciseThumb({ exercise }: ThumbProps) {
+export function ExerciseThumb({ exercise, size = 'small' }: ThumbProps) {
   const asset = mediaFor(exercise);
+  const large = size === 'large';
   return (
     <img
-      className={styles.thumb}
+      className={large ? `${styles.thumb} ${styles.thumbLarge}` : styles.thumb}
       src={mediaUrl(asset.poster)}
       alt=""
-      width={72}
-      height={54}
+      width={large ? 96 : 72}
+      height={large ? 72 : 54}
       loading="lazy"
       decoding="async"
       data-testid="exercise-thumb"

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { exerciseEquipmentLabel, requireExercise } from '../../catalog/exercises/catalog';
+import { useState, type ReactNode } from 'react';
+import { requireExercise } from '../../catalog/exercises/catalog';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
@@ -49,10 +49,10 @@ function roleLabel(entry: WorkoutEntry): string {
 }
 
 /**
- * The current exercise: demonstration thumbnail, name, role, the set target
- * for right now, previous performance, tempo and form cue, then the set rows
- * and logger from the screen. Rest, target, and equipment read in one line so
- * the current set is unmistakable.
+ * The current exercise: name, role, the set target for right now, last time's
+ * numbers, and on the right the demonstration with a tempo chip that reveals
+ * the reason and a form cue on tap. Then the set rows and logger from the
+ * screen. Rest and target read in one line so the current set is unmistakable.
  */
 export function ExerciseCard({
   entry,
@@ -61,7 +61,6 @@ export function ExerciseCard({
   position,
   logged,
   previous,
-  availableEquipment,
   children,
   panels,
   prefix,
@@ -69,6 +68,7 @@ export function ExerciseCard({
   badge = null,
   onShowDetail,
 }: ExerciseCardProps) {
+  const [tempoOpen, setTempoOpen] = useState(false);
   const exercise = requireExercise(entry.exerciseId);
   const working = workingSets(entry).filter((set) => set.kind === 'working');
   const doneWorking = logged.filter((set) => set.kind === 'working' && !set.skipped).length;
@@ -110,28 +110,45 @@ export function ExerciseCard({
             {rest >= 60 ? `${Math.round((rest / 60) * 10) / 10} min rest` : `${rest} s rest`}
           </p>
           <p className={styles.meta}>
-            {exerciseEquipmentLabel(exercise, availableEquipment)}
             {previous
-              ? ` · last time ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}`
-              : ' · first time logged'}
+              ? `Last time ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}`
+              : 'First time logged'}
           </p>
-          <p className={styles.tempo} data-testid="tempo-line">
-            <strong>Tempo {tempo.tempo}</strong> · {tempo.why}
-          </p>
-          {tempo.cue ? <p className={styles.cue}>Cue: {tempo.cue}</p> : null}
         </div>
-        <button
-          type="button"
-          className={styles.thumbButton}
-          onClick={onShowDetail}
-          disabled={!onShowDetail}
-          aria-label={`How to do ${exercise.name}: demonstration and details`}
-          data-testid="card-thumb"
-        >
-          <ExerciseThumb exercise={exercise} />
-          <span className={styles.thumbLabel}>How to</span>
-        </button>
+        <div className={styles.headAside}>
+          <button
+            type="button"
+            className={styles.thumbButton}
+            onClick={onShowDetail}
+            disabled={!onShowDetail}
+            aria-label={`How to do ${exercise.name}: demonstration and details`}
+            data-testid="card-thumb"
+          >
+            <ExerciseThumb exercise={exercise} size="large" />
+            <span className={styles.thumbLabel}>How to</span>
+          </button>
+          <button
+            type="button"
+            className={styles.tempoChip}
+            onClick={() => setTempoOpen((open) => !open)}
+            aria-expanded={tempoOpen}
+            data-testid="tempo-line"
+          >
+            Tempo {tempo.tempo} {tempoOpen ? '▴' : '▾'}
+          </button>
+        </div>
       </header>
+      {tempoOpen ? (
+        <p className={styles.tempoDetail} data-testid="tempo-detail">
+          <strong>{tempo.tempo}</strong> · {tempo.why}
+          {tempo.cue ? (
+            <>
+              <br />
+              Cue: {tempo.cue}
+            </>
+          ) : null}
+        </p>
+      ) : null}
       {children}
       {panels}
     </section>

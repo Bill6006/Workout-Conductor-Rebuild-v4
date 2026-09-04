@@ -7,6 +7,12 @@
   background: var(--color-bg-raised);
 }
 
+.thumbLarge {
+  width: 96px;
+  height: 72px;
+  border-radius: 12px;
+}
+
 .demo {
   margin: 0;
   /* clip, not hidden: hidden makes this a scroll container and scroll-into-view

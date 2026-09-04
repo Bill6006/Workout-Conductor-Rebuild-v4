@@ -122,7 +122,7 @@ _Last updated: _
 ## Phase 7 review-gate fix (YELLOW - FIX)
 
 - Reported from the owner's phone: the exercise card showed no demonstration, no tempo or visual cue, the set list took most of the screen, and the right side of each set row was empty.
-- Fix: the demonstration thumbnail sits at the top right of every card and opens the full demonstration; a tempo line by set job with a reason and a one-line form cue from the exercise's first execution step; logged and current rows stay open while the remaining sets collapse into one expandable line; the right column carries the current set's target load (or "log below"), and each upcoming set's load and rest when expanded.
+- Fix: a larger demonstration (96 × 72) sits at the top right of every card and opens the full demonstration; a tempo chip under it reveals the reason and a one-line form cue on tap; the equipment line is gone from the card header; logged and current rows stay open while the remaining sets collapse into one expandable line; the right column carries the current set's target load (or "log below"), and each upcoming set's load and rest when expanded.
 
 ## Known limitations
 

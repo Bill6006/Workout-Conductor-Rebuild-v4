@@ -132,3 +132,38 @@
   font-size: 0.8rem;
   line-height: 1.35;
 }
+
+/* Right column: bigger demonstration with the tempo chip under it */
+.headAside {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  align-content: start;
+}
+
+.tempoChip {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-raised);
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tempoDetail {
+  margin: 8px 0 4px;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.tempoDetail strong {
+  color: var(--color-accent);
+}
