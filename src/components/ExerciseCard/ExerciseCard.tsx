@@ -7,6 +7,7 @@ import { workingSets, type WorkoutBlock, type WorkoutEntry } from '../../engine/
 import type { PreviousPerformance } from '../../features/workout/previousPerformance';
 import { tempoCue } from '../../features/workout/tempo';
 import { ExerciseThumb } from '../ExerciseDetail/ExerciseMedia';
+import { TempoBar } from '../TempoBar/TempoBar';
 import styles from './ExerciseCard.module.css';
 
 export interface ExerciseCardProps {
@@ -114,6 +115,15 @@ export function ExerciseCard({
               ? `Last time ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}`
               : 'First time logged'}
           </p>
+          <button
+            type="button"
+            className={styles.tempoBarButton}
+            onClick={() => setTempoOpen((open) => !open)}
+            aria-expanded={tempoOpen}
+            aria-label={`Tempo ${tempo.tempo}: ${tempoOpen ? 'hide' : 'show'} the reason and cue`}
+          >
+            <TempoBar phases={tempo.phases} totalSeconds={tempo.totalSeconds} />
+          </button>
         </div>
         <div className={styles.headAside}>
           <button
@@ -134,20 +144,26 @@ export function ExerciseCard({
             aria-expanded={tempoOpen}
             data-testid="tempo-line"
           >
-            Tempo {tempo.tempo} {tempoOpen ? '▴' : '▾'}
+            <span className={styles.tempoChipLabel}>Tempo</span>
+            <span className={styles.tempoChipValue}>
+              {tempo.tempo} {tempoOpen ? '▴' : '▾'}
+            </span>
           </button>
         </div>
       </header>
       {tempoOpen ? (
-        <p className={styles.tempoDetail} data-testid="tempo-detail">
-          <strong>{tempo.tempo}</strong> · {tempo.why}
-          {tempo.cue ? (
-            <>
-              <br />
-              Cue: {tempo.cue}
-            </>
-          ) : null}
-        </p>
+        <div className={styles.tempoDetail} data-testid="tempo-detail">
+          <p className={styles.tempoDetailLine}>
+            <strong>{tempo.tempo}</strong> · lower, pause, lift, squeeze in seconds; X is as fast as
+            you can. {tempo.why}.
+          </p>
+          {tempo.cue ? <p className={styles.tempoDetailLine}>Cue: {tempo.cue}</p> : null}
+          <ul className={styles.tempoEvidence} aria-label="Why this tempo">
+            {tempo.evidence.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       {children}
       {panels}

@@ -90,6 +90,17 @@ target, a bigger demonstration, and a use for the space under it:
   time's numbers. Equipment stays in the How to panel and the details sheet.
 - The demonstration grew from 72 × 54 to 96 × 72 with the tempo chip filling the space under it.
 
+A third look asked for the empty space under "last time" to carry a neat tempo bar, and for
+tempo to be evidence-based rather than conventional:
+
+- Tempo is now modelled as phases in seconds (lower, hold, lift, squeeze; X is as fast as you
+  can) with lower-pause-lift-squeeze notation, and every choice carries its evidence (Schoenfeld,
+  Ogborn and Krieger 2015; Behm and Sale 1993; Wilk, Zajac and Tufano 2021; Roig et al. 2009;
+  Schoenfeld and Contreras 2016; Schoenfeld et al. 2018). See `docs/tempo-guidance.md`.
+- A one-rep tempo bar fills that space: segments sized by their seconds with a marker sweeping
+  at the real pace; it stops under reduced motion. Tapping the bar or the chip opens the reason,
+  the cue, and the evidence lines.
+
 ## Decisions and notes
 
 - Charts are plain HTML marks: one series, one hue, thin marks with rounded data ends, recessive
