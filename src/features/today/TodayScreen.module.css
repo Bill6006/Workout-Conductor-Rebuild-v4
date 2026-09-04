@@ -328,3 +328,15 @@
     animation: none;
   }
 }
+
+/* Rows must shrink with the viewport: the text block gives way and wraps, never the row. */
+.exerciseBody {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.exerciseName,
+.exerciseMeta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
