@@ -46,7 +46,7 @@ describe('BackupCard', () => {
     const parsed = JSON.parse(text) as { format: string; data: { locations: unknown[] } };
     expect(parsed.format).toBe('workout-conductor-backup');
     expect(parsed.data.locations).toHaveLength(2);
-    expect(store.getSnapshot().localSettings.lastExportAt).toBe(TEST_NOW);
+    await waitFor(() => expect(store.getSnapshot().localSettings.lastExportAt).toBe(TEST_NOW));
   });
 
   it('previews an import, then restores it with verification', async () => {

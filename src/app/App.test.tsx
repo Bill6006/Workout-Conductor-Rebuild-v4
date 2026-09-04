@@ -37,8 +37,8 @@ describe('App', () => {
     const { store } = createTestStore();
     renderApp(store);
     expect(screen.getByText('Workout Conductor')).toBeInTheDocument();
-    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 6');
-    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 6$/);
+    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 7');
+    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 7$/);
     await screen.findByRole('heading', { level: 1, name: 'What are you training for?' });
   });
 
@@ -179,7 +179,7 @@ describe('App', () => {
 
 describe('App recalibration', () => {
   it('recalibrates from the duration dropdown with an overlay and a change summary', async () => {
-    const handle = createTestStore({ minOverlayMs: 60 });
+    const handle = createTestStore({ minOverlayMs: 300 });
     await handle.store.hydrate();
     await handle.store.completeOnboarding(
       createDefaultProfile(TEST_NOW),

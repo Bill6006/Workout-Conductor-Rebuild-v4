@@ -4,7 +4,15 @@ import { muscleName } from '../../catalog/muscles/muscles';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import { allEntries, workingSets } from '../../engine/workout/types';
 import type { UserProfile } from '../validation/profile';
+import type { TrainingRole } from '../../catalog/exercises/exerciseSchema';
+import { recommendNextTarget } from '../../engine/progression/progression';
+import { prescribe } from '../../engine/progression/roles';
 import { sessionFeedback } from '../../engine/strategy/strategy';
+import {
+  computeExposure,
+  computeMusclePriorities,
+  computeWeeklyVolume,
+} from '../../engine/volume/weeklyVolume';
 import type { LoggedExercise, SessionRating, WorkoutRecord } from '../validation/workoutRecord';
 import type { CompletionSummary, WorkoutSession } from './session';
 
@@ -85,6 +93,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
           jointDiscomfort: [...session.constraints.readiness.jointDiscomfort],
         }
       : null,
+    prs: [],
   };
 }
 
@@ -107,6 +116,17 @@ function nextImplication(record: WorkoutRecord, muscles: readonly MuscleId[]): s
         : 'Nothing logged, so the next session starts from the plan defaults.';
   }
 }
+
+const MODE_LABEL: Record<string, string> = {
+  start: 'first target',
+  weight: 'load up',
+  reps: 'reps up',
+  sets: 'extra set on offer',
+  maintain: 'hold',
+  deload: 'micro-deload',
+  regress: 'reset',
+  double: 'double progression',
+};
 
 export function buildCompletion(
   session: WorkoutSession,
@@ -169,6 +189,45 @@ export function buildCompletion(
     );
   if (record.endedEarly) highlights.push('Ended early; logged work is saved exactly as entered.');
 
+  const after = [...history.filter((candidate) => candidate.id !== record.id), record];
+  const completedAtIso = record.completedAt ?? record.startedAt;
+  const nextTargets = trained.slice(0, 6).map((entry) => {
+    const exercise = requireExercise(entry.exerciseId);
+    const role = (entry.role as TrainingRole | undefined) ?? exercise.defaultRole;
+    const target = recommendNextTarget({
+      exercise,
+      role,
+      prescription: prescribe(exercise, role, profile),
+      history: after,
+      profile,
+    });
+    const load = target.weight === null ? 'log a weight' : `${target.weight} ${profile.units}`;
+    return `${exercise.name}: ${load} × ${target.reps[0]}-${target.reps[1]} (${MODE_LABEL[target.mode]})`;
+  });
+  const priorities = computeMusclePriorities(
+    profile,
+    computeWeeklyVolume(after, completedAtIso),
+    computeExposure(after, completedAtIso),
+  );
+  const nextFocus = `Next focus: ${priorities
+    .slice(0, 3)
+    .map((priority) => muscleName(priority.muscle))
+    .join(', ')}.`;
+  const recoveryNote = [
+    muscles.length > 0
+      ? `Give ${muscles
+          .slice(0, 3)
+          .map((muscle) => muscleName(muscle as MuscleId))
+          .join(', ')} about 48 h before loading them again.`
+      : 'Nothing was trained hard enough to need recovery time.',
+    record.rating?.effort === 'too-hard' ? 'Rated too hard: an easier day or a rest day next.' : '',
+    record.rating?.pain || (record.painJoints ?? []).length > 0
+      ? 'Pain was reported: the next session protects that joint first.'
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return {
     recordId: record.id,
     completedAt: record.completedAt ?? session.completed.startedAt ?? '',
@@ -187,5 +246,9 @@ export function buildCompletion(
     endedEarly: record.endedEarly,
     nextImplication: nextImplication(record, muscles),
     feedback: sessionFeedback(record, history, profile),
+    prs: record.prs ?? [],
+    recoveryNote,
+    nextTargets,
+    nextFocus,
   };
 }

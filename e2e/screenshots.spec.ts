@@ -113,6 +113,19 @@ test.describe('screenshots @screenshots', () => {
       await page.goto('./#/workout');
       await expect(page.getByTestId('calibration-log')).toBeVisible();
       await capture(page, testInfo, 'workout-recalibration-log');
+
+      // Phase 7: Plan with the week, targets, recovery, and a saved workout; Progress with
+      // explained scores and history.
+      await page.goto('./#/plan');
+      await expect(page.getByTestId('week-plan')).toBeVisible();
+      await page.getByTestId('saved-workout-name').fill('Push day A');
+      await page.getByTestId('save-workout-button').click();
+      await expect(page.getByTestId('saved-workout-row')).toHaveCount(1);
+      await capture(page, testInfo, 'plan-week-and-saved', true);
+      await page.goto('./#/progress');
+      await expect(page.getByTestId('consistency-hero')).toBeVisible();
+      await page.getByTestId('score-panel').first().locator('summary').click();
+      await capture(page, testInfo, 'progress-scores', true);
     }
   });
 

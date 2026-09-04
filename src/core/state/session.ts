@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { PersonalRecord } from '../../engine/scoring/personalRecords';
+import { PersonalRecordSchema } from '../validation/workoutRecord';
 import { getExercise } from '../../catalog/exercises/catalog';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
@@ -86,6 +88,10 @@ export interface CompletionSummary {
   nextImplication: string;
   /** Coach feedback on the session, exercise by exercise. */
   feedback: string[];
+  prs: PersonalRecord[];
+  recoveryNote: string;
+  nextTargets: string[];
+  nextFocus: string;
 }
 
 export interface WorkoutSession {
@@ -232,6 +238,10 @@ const CompletionSchema = z.looseObject({
   endedEarly: z.boolean(),
   nextImplication: z.string(),
   feedback: z.array(z.string()).default([]),
+  prs: z.array(PersonalRecordSchema).default([]),
+  recoveryNote: z.string().default(''),
+  nextTargets: z.array(z.string()).default([]),
+  nextFocus: z.string().default(''),
 });
 
 const SessionSchema = z.looseObject({

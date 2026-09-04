@@ -29,8 +29,14 @@ test.describe('adaptive coach', () => {
     await page.getByTestId('readiness-open').click();
     const sheet = page.getByRole('dialog', { name: 'Quick check-in' });
     await expect(sheet).toBeVisible();
-    await sheet.getByRole('radiogroup', { name: 'Energy' }).getByRole('radio', { name: '1' }).click();
-    await sheet.getByRole('radiogroup', { name: 'Sleep' }).getByRole('radio', { name: '1' }).click();
+    await sheet
+      .getByRole('radiogroup', { name: 'Energy' })
+      .getByRole('radio', { name: '1' })
+      .click();
+    await sheet
+      .getByRole('radiogroup', { name: 'Sleep' })
+      .getByRole('radio', { name: '1' })
+      .click();
     await sheet
       .getByRole('radiogroup', { name: 'Soreness' })
       .getByRole('radio', { name: '5' })
@@ -41,7 +47,9 @@ test.describe('adaptive coach', () => {
     await expect(page.getByTestId('recalibration-summary')).toContainText(/Adjusted for today/);
     await expect(page.getByTestId('readiness-summary')).toContainText('Energy 1/5');
     await expect(page.getByTestId('coach-card')).toHaveAttribute('data-domain', 'recovery');
-    await expect(page.getByTestId('coach-headline')).toContainText(/Fatigue is building|Recovery first/);
+    await expect(page.getByTestId('coach-headline')).toContainText(
+      /Fatigue is building|Recovery first/,
+    );
   });
 
   test('every card carries a load target and its evidence during the workout', async ({ page }) => {
@@ -61,7 +69,11 @@ test.describe('adaptive coach', () => {
     await page.getByTestId('save-workout').click();
     const summary = page.getByTestId('completion-summary');
     await expect(summary).toBeVisible();
-    await expect(page.getByText(/^1 progressed, 0 on target, 0 short\.|^0 progressed, 1 on target, 0 short\.|^0 progressed, 0 on target, 1 short\./)).toBeVisible();
+    await expect(
+      page.getByText(
+        /^1 progressed, 0 on target, 0 short\.|^0 progressed, 1 on target, 0 short\.|^0 progressed, 0 on target, 1 short\./,
+      ),
+    ).toBeVisible();
     await page.getByTestId('completion-done').click();
     await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
     await expect(page.getByTestId('coach-card')).toBeVisible();

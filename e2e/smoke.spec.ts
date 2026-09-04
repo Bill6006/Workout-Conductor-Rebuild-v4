@@ -11,9 +11,9 @@ test.describe('app shell', () => {
     await page.goto('./');
     await expect(page.getByText('Workout Conductor', { exact: true })).toBeVisible();
     await expect(page.getByText('Adaptive Strength + Hypertrophy')).toBeVisible();
-    await expect(page.getByTestId('phase-chip')).toHaveText(/Phase 6/);
+    await expect(page.getByTestId('phase-chip')).toHaveText(/Phase 7/);
     await expect(page.getByTestId('build-marker')).toHaveText(
-      /^Build \S+ · \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC · Phase 6$/,
+      /^Build \S+ · \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC · Phase 7$/,
     );
     await expectNoHorizontalOverflow(page);
   });

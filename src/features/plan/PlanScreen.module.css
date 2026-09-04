@@ -70,3 +70,90 @@
   font-weight: 700;
   cursor: pointer;
 }
+
+/* Phase 7: week plan, weekly targets, saved workouts */
+.planList {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.planRow {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-bg);
+}
+
+.planRow[data-today='true'] {
+  border-color: var(--color-accent);
+}
+
+.planDay {
+  grid-row: span 2;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.planTitle {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.planFocus {
+  color: var(--color-text-subtle);
+  font-size: 0.8rem;
+}
+
+.targetList {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.targetRow {
+  display: grid;
+  gap: 4px;
+}
+
+.targetName {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.bandLabel {
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.saveRow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.nameInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}

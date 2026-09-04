@@ -10,7 +10,7 @@
  * per origin, so the name carries the app generation to stay clear of earlier apps.
  */
 export const DB_NAME = 'workout-conductor-v4';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const STORE_NAMES = [
   'profile',
@@ -20,6 +20,7 @@ export const STORE_NAMES = [
   'customExercises',
   'customInstructions',
   'customMedia',
+  'savedWorkouts',
 ] as const;
 export type StoreName = (typeof STORE_NAMES)[number];
 

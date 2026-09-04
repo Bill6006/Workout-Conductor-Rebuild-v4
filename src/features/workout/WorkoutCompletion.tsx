@@ -63,6 +63,18 @@ export function WorkoutCompletion({ session, units }: WorkoutCompletionProps) {
             ))}
           </div>
         ) : null}
+        {summary.prs.length > 0 ? (
+          <div className={styles.chips} aria-label="Personal records" data-testid="completion-prs">
+            {summary.prs.map((pr) => (
+              <span
+                key={`${pr.exerciseId}-${pr.kind}`}
+                className={`${styles.chip} ${styles.prChip}`}
+              >
+                PR · {pr.detail}
+              </span>
+            ))}
+          </div>
+        ) : null}
         <FactList
           items={[
             ...summary.highlights.map((line, index) => ({
@@ -84,8 +96,27 @@ export function WorkoutCompletion({ session, units }: WorkoutCompletionProps) {
                 : 'not rated',
             },
             { label: 'Next time', value: summary.nextImplication },
+            {
+              label: 'Records',
+              value:
+                summary.prs.length > 0
+                  ? `${summary.prs.length} personal ${summary.prs.length === 1 ? 'record' : 'records'}`
+                  : 'none this time',
+            },
+            { label: 'Recovery', value: summary.recoveryNote },
+            { label: 'Focus', value: summary.nextFocus },
           ]}
         />
+        {summary.nextTargets.length > 0 ? (
+          <div data-testid="next-targets">
+            <FactList
+              items={summary.nextTargets.map((line, index) => ({
+                label: index === 0 ? 'Next targets' : '',
+                value: line,
+              }))}
+            />
+          </div>
+        ) : null}
         {summary.feedback.length > 0 ? (
           <FactList
             items={summary.feedback.map((line, index) => ({
@@ -95,8 +126,8 @@ export function WorkoutCompletion({ session, units }: WorkoutCompletionProps) {
           />
         ) : null}
         <p className={styles.panelNote}>
-          Weekly volume, recent exposure, and every logged set now feed the next targets. Personal
-          records and the progress views arrive in Phase 7.
+          Personal records, next targets, and next focus were computed from this record. Progress
+          and Plan read the same history.
         </p>
         <Button
           variant="primary"

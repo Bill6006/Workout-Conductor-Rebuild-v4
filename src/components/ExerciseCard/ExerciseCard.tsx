@@ -22,6 +22,8 @@ export interface ExerciseCardProps {
   /** A1 / A2 prefix inside a superset card. */
   prefix?: string;
   active?: boolean;
+  /** Compact personal-record feedback from the logged sets, for example "Weight PR". */
+  badge?: string | null;
 }
 
 function roleLabel(entry: WorkoutEntry): string {
@@ -59,6 +61,7 @@ export function ExerciseCard({
   panels,
   prefix,
   active = true,
+  badge = null,
 }: ExerciseCardProps) {
   const exercise = requireExercise(entry.exerciseId);
   const working = workingSets(entry).filter((set) => set.kind === 'working');
@@ -79,6 +82,11 @@ export function ExerciseCard({
           {prefix ? <span className={styles.prefix}>{prefix}</span> : null}
           <h3 className={styles.name}>{exercise.name}</h3>
           <span className={styles.badge}>{roleLabel(entry)}</span>
+          {badge ? (
+            <span className={`${styles.badge} ${styles.pr}`} data-testid="pr-badge">
+              {badge}
+            </span>
+          ) : null}
           {entry.pinned ? <span className={`${styles.badge} ${styles.quiet}`}>Pinned</span> : null}
           {entry.replacedFrom ? (
             <span className={`${styles.badge} ${styles.quiet}`}>Swapped in</span>

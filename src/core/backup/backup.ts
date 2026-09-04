@@ -8,6 +8,7 @@ import {
 } from '../validation/backup';
 import type { LocationProfile } from '../validation/location';
 import type { UserProfile } from '../validation/profile';
+import type { SavedWorkout } from '../validation/savedWorkout';
 import type { LocalSettings } from '../validation/settings';
 import type { CustomExercise, CustomInstruction, CustomMedia } from '../validation/customExercise';
 
@@ -33,6 +34,7 @@ export interface BackupSource {
   customExercises: CustomExercise[];
   customInstructions: CustomInstruction[];
   customMedia: CustomMedia[];
+  savedWorkouts: SavedWorkout[];
 }
 
 export function buildBackup(source: BackupSource, app: BackupAppInfo, exportedAt: string): Backup {
@@ -49,6 +51,7 @@ export function buildBackup(source: BackupSource, app: BackupAppInfo, exportedAt
       customExercises: source.customExercises,
       customInstructions: source.customInstructions,
       customMedia: source.customMedia,
+      savedWorkouts: source.savedWorkouts as unknown as Backup['data']['savedWorkouts'],
     },
   };
 }
@@ -121,6 +124,7 @@ const RESTORED_STORES = [
   'customExercises',
   'customInstructions',
   'customMedia',
+  'savedWorkouts',
 ] as const;
 
 type StoreSnapshot = Record<(typeof RESTORED_STORES)[number], Identified[]>;
@@ -176,6 +180,10 @@ export async function restoreBackup(
     await db.clear('customMedia');
     for (const record of backup.data.customMedia) {
       await putVerified(db, 'customMedia', record, options);
+    }
+    await db.clear('savedWorkouts');
+    for (const record of backup.data.savedWorkouts) {
+      await putVerified(db, 'savedWorkouts', record, options);
     }
     await db.clear('profile');
     if (backup.data.profile) {

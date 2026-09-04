@@ -20,6 +20,7 @@ import { useTicker } from '../../core/time/useTicker';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { SessionRating } from '../../core/validation/workoutRecord';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
+import { liveSetRecords } from '../../engine/scoring/personalRecords';
 import type { CoachAction } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
 import { ReadinessSheet } from '../today/ReadinessSheet';
@@ -163,6 +164,16 @@ export function ActiveWorkoutScreen() {
     setSelected(null);
     void store.recalibrate(trigger);
   };
+
+  // Compact PR feedback: what the logged sets of this exercise have already beaten.
+  const prBadge = (entry: { id: string; exerciseId: string }) =>
+    liveSetRecords(
+      entry.exerciseId,
+      session.completed.sets.filter((set) => set.entryId === entry.id),
+      history,
+    )
+      .map((pr) => pr.label)
+      .join(' · ') || null;
 
   const onCoachAction = (action: CoachAction) => {
     switch (action.kind) {
@@ -329,6 +340,7 @@ export function ActiveWorkoutScreen() {
           logged={session.completed.sets.filter((set) => set.entryId === entry.id)}
           previous={previousPerformance(history, entry.exerciseId)}
           availableEquipment={context.availableEquipment}
+          badge={prBadge(entry)}
         >
           {loggerFor(entry, block)}
         </ExerciseCard>
@@ -357,6 +369,7 @@ export function ActiveWorkoutScreen() {
             availableEquipment={context.availableEquipment}
             prefix={block.kind === 'superset' ? `A${index + 1}` : `${index + 1}`}
             active={position?.entryId === entry.id}
+            badge={prBadge(entry)}
           >
             {loggerFor(entry, block)}
           </ExerciseCard>

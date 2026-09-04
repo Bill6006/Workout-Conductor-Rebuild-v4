@@ -41,6 +41,14 @@ export const SessionRatingSchema = z.looseObject({
   note: z.string().max(500).default(''),
 });
 
+export const PersonalRecordSchema = z.looseObject({
+  exerciseId: z.string().min(1),
+  kind: z.enum(['weight', 'reps-at-weight', 'volume', 'top-of-range']),
+  value: z.number(),
+  previous: z.number().nullable().default(null),
+  detail: z.string(),
+});
+
 export const WorkoutRecordSchema = z.looseObject({
   id: z.string().min(1),
   startedAt: z.iso.datetime(),
@@ -70,6 +78,8 @@ export const WorkoutRecordSchema = z.looseObject({
     })
     .nullable()
     .default(null),
+  /** Personal records set by this session, detected when it was saved. */
+  prs: z.array(PersonalRecordSchema).default([]),
 });
 
 export type WorkoutRecord = z.infer<typeof WorkoutRecordSchema>;

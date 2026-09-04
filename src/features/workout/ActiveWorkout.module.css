@@ -495,3 +495,9 @@
     grid-template-columns: 1fr;
   }
 }
+
+.prChip {
+  border-color: var(--color-gold);
+  background: var(--color-gold-soft);
+  color: var(--color-text);
+}

@@ -25,6 +25,7 @@ function sampleBackup() {
       customExercises: [],
       customInstructions: [],
       customMedia: [],
+      savedWorkouts: [],
     },
     { version: '0.0.1', commit: 'abc' },
     NOW,

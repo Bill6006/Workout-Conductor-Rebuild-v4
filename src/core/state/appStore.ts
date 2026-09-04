@@ -62,6 +62,8 @@ import {
   type SessionRating,
   type WorkoutRecord as WorkoutHistoryRecord,
 } from '../validation/workoutRecord';
+import { parseSavedWorkouts, type SavedWorkout } from '../validation/savedWorkout';
+import { detectPersonalRecords } from '../../engine/scoring/personalRecords';
 import {
   CALIBRATION_LOG_LIMIT,
   IDLE_CALIBRATION,
@@ -110,6 +112,7 @@ export interface AppState {
   customExercises: CustomExercise[];
   /** Per-exercise notes and cue memory. */
   customInstructions: CustomInstruction[];
+  savedWorkouts: SavedWorkout[];
   customCounts: { exercises: number; instructions: number; media: number };
 }
 
@@ -234,6 +237,7 @@ export class AppStore {
       lastReceipt: null,
       workoutCount: 0,
       history: [],
+      savedWorkouts: [],
       session: null,
       calibration: IDLE_CALIBRATION,
       customExercises: [],
@@ -301,6 +305,7 @@ export class AppStore {
         localSettings: readLocalSettings(this.storage),
         workoutCount: workouts.length,
         history: parseWorkoutRecords(workouts),
+        savedWorkouts: parseSavedWorkouts(await db.getAll<Identified>('savedWorkouts')),
         customExercises: validCustom,
         customInstructions: validInstructions,
         customCounts: {
@@ -937,6 +942,7 @@ export class AppStore {
       rating,
       endedEarly: options.endedEarly ?? false,
     });
+    record.prs = detectPersonalRecords(record, this.state.history, profile.units);
     const db = await this.getDatabase();
     const receipt = await putVerified(db, 'workouts', record, { now: this.now });
     const completion = buildCompletion(session, record, profile, this.state.history);
@@ -956,6 +962,75 @@ export class AppStore {
       completed: { ...session.completed, elapsedSeconds: elapsed },
     });
     return completion;
+  }
+
+  /** Saves today's workout to reuse later; the saved copy is a plain snapshot. */
+  async saveCurrentWorkout(name: string): Promise<SavedWorkout> {
+    const session = this.requireSession();
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Give the workout a name.');
+    const saved: SavedWorkout = {
+      id: `saved-${this.now().replace(/\D/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`,
+      name: trimmed.slice(0, 60),
+      createdAt: this.now(),
+      locationId: session.workout.locationId,
+      duration: session.duration,
+      workout: session.workout,
+    };
+    const db = await this.getDatabase();
+    const receipt = await putVerified(db, 'savedWorkouts', saved, { now: this.now });
+    this.setState({ savedWorkouts: [saved, ...this.state.savedWorkouts], lastReceipt: receipt });
+    return saved;
+  }
+
+  async deleteSavedWorkout(id: string): Promise<void> {
+    const db = await this.getDatabase();
+    await deleteVerified(db, 'savedWorkouts', id);
+    this.setState({ savedWorkouts: this.state.savedWorkouts.filter((item) => item.id !== id) });
+  }
+
+  /** Starts a fresh preview session from a saved workout; everything after that recalibrates as usual. */
+  loadSavedWorkout(id: string): void {
+    const saved = this.state.savedWorkouts.find((item) => item.id === id);
+    const session = this.state.session;
+    if (!saved || !session || session.status !== 'preview') return;
+    const now = this.now();
+    const workout = {
+      ...saved.workout,
+      id: `wk-${now.slice(0, 10)}-saved-${saved.id}`,
+      generatedAt: now,
+      recalibration: { version: 1, lastTrigger: null },
+    };
+    const headline = `Loaded "${saved.name}".`;
+    this.setSession({
+      ...createSession(session.baseKey, workout, now),
+      duration: saved.duration,
+      lastSummary: {
+        headline,
+        details: [
+          `Saved ${saved.createdAt.slice(0, 10)}. Change the length or any exercise and it recalibrates as usual.`,
+        ],
+        counts: {
+          added: 0,
+          removed: 0,
+          replaced: 0,
+          adjusted: 0,
+          supersetsAdded: 0,
+          supersetsRemoved: 0,
+          setsTrimmed: 0,
+        },
+      },
+      log: [
+        {
+          at: now,
+          trigger: 'saved-workout',
+          label: 'Saved workout',
+          scope: 'full' as const,
+          headline,
+          durationMs: 0,
+        },
+      ],
+    });
   }
 
   /** Leaves the completion surface; the next session is generated from the new history. */
@@ -1135,6 +1210,7 @@ export class AppStore {
         customExercises,
         customInstructions,
         customMedia,
+        savedWorkouts: this.state.savedWorkouts,
       },
       app,
       exportedAt,

@@ -28,6 +28,7 @@ export const BackupSchema = z.looseObject({
     customExercises: z.array(CustomExerciseSchema).default([]),
     customInstructions: z.array(CustomInstructionSchema).default([]),
     customMedia: z.array(CustomMediaSchema).default([]),
+    savedWorkouts: z.array(z.looseObject({ id: z.string().min(1) })).default([]),
   }),
 });
 

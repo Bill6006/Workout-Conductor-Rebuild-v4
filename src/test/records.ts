@@ -25,6 +25,7 @@ export function record(
     skippedExerciseIds: [],
     painJoints: [],
     readiness: null,
+    prs: [],
     entries: [
       {
         exerciseId,

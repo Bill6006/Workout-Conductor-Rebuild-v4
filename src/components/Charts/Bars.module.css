@@ -1,0 +1,122 @@
+.weekChart {
+  margin: 8px 0 4px;
+}
+
+.weekBars {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.weekBar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.weekTrack {
+  position: relative;
+  width: 100%;
+  max-width: 22px;
+  height: 72px;
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.weekFill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 4px 4px 0 0;
+  background: var(--color-accent);
+  transition: height 240ms ease-out;
+}
+
+.weekFill[data-empty='true'] {
+  height: 2px !important;
+  background: var(--color-border-strong);
+  border-radius: 0;
+}
+
+.weekPlanned {
+  position: absolute;
+  right: -3px;
+  left: -3px;
+  height: 0;
+  border-top: 2px dashed var(--color-text-subtle);
+  opacity: 0.7;
+}
+
+.weekValue {
+  position: absolute;
+  top: -18px;
+  right: 0;
+  left: 0;
+  color: var(--color-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.weekLabel {
+  min-height: 1em;
+  color: var(--color-text-subtle);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+.band {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bandTrack {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--color-bg-raised);
+}
+
+.bandTarget {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 2px solid var(--color-text-subtle);
+  border-left: 2px solid var(--color-text-subtle);
+  opacity: 0.6;
+}
+
+.bandDirect {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  border-radius: 0 4px 4px 0;
+  background: var(--color-accent);
+}
+
+.bandIndirect {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 0 4px 4px 0;
+  background: repeating-linear-gradient(45deg, var(--color-accent) 0 3px, transparent 3px 6px);
+  opacity: 0.75;
+}
+
+.bandText {
+  flex-shrink: 0;
+  min-width: 78px;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
