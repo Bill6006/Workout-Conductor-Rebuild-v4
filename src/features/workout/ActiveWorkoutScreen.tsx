@@ -341,6 +341,7 @@ export function ActiveWorkoutScreen() {
           previous={previousPerformance(history, entry.exerciseId)}
           availableEquipment={context.availableEquipment}
           badge={prBadge(entry)}
+          onShowDetail={() => setSelected({ entry, block })}
         >
           {loggerFor(entry, block)}
         </ExerciseCard>
@@ -370,6 +371,7 @@ export function ActiveWorkoutScreen() {
             prefix={block.kind === 'superset' ? `A${index + 1}` : `${index + 1}`}
             active={position?.entryId === entry.id}
             badge={prBadge(entry)}
+            onShowDetail={() => setSelected({ entry, block })}
           >
             {loggerFor(entry, block)}
           </ExerciseCard>

@@ -133,7 +133,8 @@
   flex-shrink: 0;
   align-items: center;
   gap: 6px;
-  width: 4.6rem;
+  min-width: 4.4rem;
+  white-space: nowrap;
   font-size: 0.84rem;
   font-weight: 700;
 }
@@ -500,4 +501,40 @@
   border-color: var(--color-gold);
   background: var(--color-gold-soft);
   color: var(--color-text);
+}
+
+/* Collapsed remaining sets and the right-hand aside */
+.setAside {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--color-text-subtle);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.setRow[data-state='current'] .setAside {
+  color: var(--color-text-muted);
+}
+
+.setRow[data-state='summary'] {
+  color: var(--color-text-muted);
+}
+
+.setsToggle {
+  flex: 1;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.setsCompact .setRow[data-state='summary'] {
+  display: flex;
 }

@@ -63,6 +63,24 @@ _Gate: YELLOW, awaiting the owner's review on Android._
    Save today's workout, reload, and tap Use.
 4. Beat a lift next time: the card shows "Weight PR" as you log, and the summary lists it.
 
+## Review-gate fix (YELLOW - FIX)
+
+The owner reviewed the active workout on the phone and asked for four things: the
+demonstration visible on every exercise card right away, a tempo and a visual cue per exercise,
+the set list collapsed so it stops taking most of the screen, and something useful in the empty
+right-hand column of each set row.
+
+- Every exercise card now carries the demonstration thumbnail at the top right, labelled "How
+  to"; tapping it opens the full animated demonstration and details. The How to panel keeps the
+  larger demonstration.
+- A tempo line follows the set's job (strength 2-1-X, hypertrophy 3-0-1, isolation 2-1-2, ramp
+  and drop sets 2-0-1) with a plain reason, plus a one-line form cue taken from the exercise's
+  own first execution step. Tempo is guidance and never changes what is logged.
+- The set list shows logged rows and the current row; sets still to come collapse into one line
+  ("4 more sets · 4-6 reps @ RIR 2 · 1 ramp") that expands on tap and collapses again.
+- The right-hand column now carries the current set's target load (or "log below" before a
+  weight is known) and, when expanded, each upcoming set's load and rest.
+
 ## Decisions and notes
 
 - Charts are plain HTML marks: one series, one hue, thin marks with rounded data ends, recessive

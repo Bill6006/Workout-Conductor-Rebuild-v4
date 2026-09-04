@@ -5,6 +5,8 @@ import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
 import { workingSets, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
 import type { PreviousPerformance } from '../../features/workout/previousPerformance';
+import { tempoCue } from '../../features/workout/tempo';
+import { ExerciseThumb } from '../ExerciseDetail/ExerciseMedia';
 import styles from './ExerciseCard.module.css';
 
 export interface ExerciseCardProps {
@@ -24,6 +26,8 @@ export interface ExerciseCardProps {
   active?: boolean;
   /** Compact personal-record feedback from the logged sets, for example "Weight PR". */
   badge?: string | null;
+  /** Opens the exercise's demonstration and details; the thumbnail is the tap target. */
+  onShowDetail?: () => void;
 }
 
 function roleLabel(entry: WorkoutEntry): string {
@@ -45,9 +49,10 @@ function roleLabel(entry: WorkoutEntry): string {
 }
 
 /**
- * The current exercise: name, role, the set target for right now, previous
- * performance, then the set rows and logger from the screen. Rest, target,
- * and equipment read in one line so the current set is unmistakable.
+ * The current exercise: demonstration thumbnail, name, role, the set target
+ * for right now, previous performance, tempo and form cue, then the set rows
+ * and logger from the screen. Rest, target, and equipment read in one line so
+ * the current set is unmistakable.
  */
 export function ExerciseCard({
   entry,
@@ -62,12 +67,14 @@ export function ExerciseCard({
   prefix,
   active = true,
   badge = null,
+  onShowDetail,
 }: ExerciseCardProps) {
   const exercise = requireExercise(entry.exerciseId);
   const working = workingSets(entry).filter((set) => set.kind === 'working');
   const doneWorking = logged.filter((set) => set.kind === 'working' && !set.skipped).length;
   const target = position?.set ?? working[0] ?? entry.sets[0];
   const rest = block.kind === 'straight' ? entry.restSeconds : block.restBetweenRoundsSeconds;
+  const tempo = tempoCue(entry.role, target?.kind ?? 'working', exercise);
 
   return (
     <section
@@ -78,33 +85,52 @@ export function ExerciseCard({
       data-active={active ? 'true' : 'false'}
     >
       <header className={styles.head}>
-        <div className={styles.titleRow}>
-          {prefix ? <span className={styles.prefix}>{prefix}</span> : null}
-          <h3 className={styles.name}>{exercise.name}</h3>
-          <span className={styles.badge}>{roleLabel(entry)}</span>
-          {badge ? (
-            <span className={`${styles.badge} ${styles.pr}`} data-testid="pr-badge">
-              {badge}
-            </span>
-          ) : null}
-          {entry.pinned ? <span className={`${styles.badge} ${styles.quiet}`}>Pinned</span> : null}
-          {entry.replacedFrom ? (
-            <span className={`${styles.badge} ${styles.quiet}`}>Swapped in</span>
-          ) : null}
+        <div className={styles.headMain}>
+          <div className={styles.titleRow}>
+            {prefix ? <span className={styles.prefix}>{prefix}</span> : null}
+            <h3 className={styles.name}>{exercise.name}</h3>
+            <span className={styles.badge}>{roleLabel(entry)}</span>
+            {badge ? (
+              <span className={`${styles.badge} ${styles.pr}`} data-testid="pr-badge">
+                {badge}
+              </span>
+            ) : null}
+            {entry.pinned ? (
+              <span className={`${styles.badge} ${styles.quiet}`}>Pinned</span>
+            ) : null}
+            {entry.replacedFrom ? (
+              <span className={`${styles.badge} ${styles.quiet}`}>Swapped in</span>
+            ) : null}
+          </div>
+          <p className={styles.targetLine} data-testid="target-line">
+            {target
+              ? `${position && position.kind === 'warmup' ? 'Ramp set' : position && position.kind === 'drop' ? 'Drop set' : `Set ${Math.min(working.length, doneWorking + 1)} of ${working.length}`}${target.targetWeight !== null ? ` · ${target.targetWeight} ${units}` : ''} · ${target.targetReps[0]}-${target.targetReps[1]} reps${target.kind === 'working' ? ` @ RIR ${target.targetRir}` : ''}`
+              : `${working.length} sets done`}
+            {' · '}
+            {rest >= 60 ? `${Math.round((rest / 60) * 10) / 10} min rest` : `${rest} s rest`}
+          </p>
+          <p className={styles.meta}>
+            {exerciseEquipmentLabel(exercise, availableEquipment)}
+            {previous
+              ? ` · last time ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}`
+              : ' · first time logged'}
+          </p>
+          <p className={styles.tempo} data-testid="tempo-line">
+            <strong>Tempo {tempo.tempo}</strong> · {tempo.why}
+          </p>
+          {tempo.cue ? <p className={styles.cue}>Cue: {tempo.cue}</p> : null}
         </div>
-        <p className={styles.targetLine} data-testid="target-line">
-          {target
-            ? `${position && position.kind === 'warmup' ? 'Ramp set' : position && position.kind === 'drop' ? 'Drop set' : `Set ${Math.min(working.length, doneWorking + 1)} of ${working.length}`}${target.targetWeight !== null ? ` · ${target.targetWeight} ${units}` : ''} · ${target.targetReps[0]}-${target.targetReps[1]} reps${target.kind === 'working' ? ` @ RIR ${target.targetRir}` : ''}`
-            : `${working.length} sets done`}
-          {' · '}
-          {rest >= 60 ? `${Math.round((rest / 60) * 10) / 10} min rest` : `${rest} s rest`}
-        </p>
-        <p className={styles.meta}>
-          {exerciseEquipmentLabel(exercise, availableEquipment)}
-          {previous
-            ? ` · last time ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}`
-            : ' · first time logged'}
-        </p>
+        <button
+          type="button"
+          className={styles.thumbButton}
+          onClick={onShowDetail}
+          disabled={!onShowDetail}
+          aria-label={`How to do ${exercise.name}: demonstration and details`}
+          data-testid="card-thumb"
+        >
+          <ExerciseThumb exercise={exercise} />
+          <span className={styles.thumbLabel}>How to</span>
+        </button>
       </header>
       {children}
       {panels}

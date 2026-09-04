@@ -79,3 +79,56 @@
   background: var(--color-gold);
   color: var(--color-on-gold);
 }
+
+/* Demonstration thumbnail, tempo, and cue */
+.head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: start;
+}
+
+.headMain {
+  min-width: 0;
+}
+
+.thumbButton {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.thumbButton:disabled {
+  cursor: default;
+}
+
+.thumbLabel {
+  color: var(--color-accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tempo {
+  margin: 6px 0 0;
+  color: var(--color-text);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.tempo strong {
+  color: var(--color-accent);
+  font-weight: 800;
+}
+
+.cue {
+  margin: 2px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
