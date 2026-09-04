@@ -138,7 +138,7 @@ export function SetLogger({
   const repsHint =
     target.kind === 'drop'
       ? `Drop set · aim ${low}-${high}`
-      : `Target ${low}-${high}${target.kind === 'warmup' ? ' · ramp, not counted' : ''}`;
+      : `Target ${low}-${high}${target.kind === 'warmup' ? ' · warm-up, not counted' : ''}`;
 
   const dial = (
     field: Field,
@@ -247,7 +247,11 @@ export function SetLogger({
           'in reserve',
           () => nudgeRir(1),
           () => nudgeRir(-1),
-          `Target RIR ${target.rir}`,
+          target.kind === 'warmup'
+            ? `Target RIR ${target.rir} · easy warm-up`
+            : target.kind === 'drop'
+              ? 'Last clean rep'
+              : `Target RIR ${target.rir}`,
         )}
       </div>
       <div className={styles.actions}>
@@ -270,7 +274,7 @@ export function SetLogger({
           disabled={disabled || cooling}
           data-testid="log-set"
         >
-          {mode === 'edit' ? 'Save set' : target.kind === 'warmup' ? 'Log ramp set' : 'Log set'}
+          {mode === 'edit' ? 'Save set' : target.kind === 'warmup' ? 'Log warm-up set' : 'Log set'}
         </button>
       </div>
     </section>

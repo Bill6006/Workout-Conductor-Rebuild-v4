@@ -103,6 +103,31 @@ tempo to be evidence-based rather than conventional:
   repeats, with the phase legend brightening as each phase plays; it stands still under reduced
   motion. Tapping the bar or the chip opens the reason, the cue, and the evidence lines.
 
+A fifth look asked whether the RIR targets match each other and are evidence-based, whether the
+rest times are research-based, and for the header target line to end at the reps:
+
+- The targets do match. Working sets of a main lift are prescribed at RIR 2 (4 to 6 reps), while
+  ramp sets are warm-ups prescribed at RIR 5, deliberately far from failure and never counted as
+  work. The card now says so: warm-up rows read "warm-up" and "easy, RIR 5", drop rows "last
+  clean rep", and the logger's target reads "Target RIR 5 · easy warm-up" on a ramp set. Ramp is
+  explained as warm-up wherever it appears (set tags, the next-set label, the skip buttons,
+  history, and the completion summary).
+- Effort targets carry their evidence: strength roles RIR 2 because strength gains do not need
+  failure and 1 to 3 in reserve limits fatigue (Grgic et al. 2022; Robinson et al. 2024);
+  hypertrophy and isolation RIR 1 because growth improves a little closer to failure (Robinson
+  et al. 2024; Refalo et al. 2023); finisher and drop sets RIR 0; ramp sets RIR 5. The RIR scale
+  itself tracks true effort in trained lifters (Zourdos et al. 2016; Helms et al. 2016).
+- Rest defaults were checked against the rest-interval research and three were short. Primary
+  hypertrophy rises from 90 s to 2 min, secondary hypertrophy from 75 s to 90 s, and
+  specialization from 60 s to 75 s (Schoenfeld et al. 2016; Grgic et al. 2017 and 2018; Singer
+  et al. 2024). Strength stays at 2.5 and 2.25 min, isolation at 1 min, finisher and warm-up at
+  45 s. The floors used when a session is fitted to less time are unchanged.
+- The tempo detail now adds an Effort line and a Rest line for the set at hand, with their
+  evidence in the same list, and the How to panel's "Why this target" list ends with the same
+  lines. `docs/tempo-guidance.md` now covers tempo, effort, and rest with full references.
+- The header target line ends at the reps ("Set 1 of 4 · 4-6 reps"). RIR and rest remain on the
+  set rows, in the logger, and in the tempo detail.
+
 ## Decisions and notes
 
 - Charts are plain HTML marks: one series, one hue, thin marks with rounded data ends, recessive

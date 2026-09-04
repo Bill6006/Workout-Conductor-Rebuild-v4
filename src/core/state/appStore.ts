@@ -197,7 +197,7 @@ export function describePosition(workout: GeneratedWorkout, position: SetPositio
   const entry = allEntries(workout.blocks).find((candidate) => candidate.id === position.entryId);
   const count = entry ? entry.sets.filter((set) => set.kind === position.kind).length : 0;
   const [low, high] = position.set.targetReps;
-  if (position.kind === 'warmup') return `${name} · ramp set ${position.ordinal} of ${count}`;
+  if (position.kind === 'warmup') return `${name} · warm-up set ${position.ordinal} of ${count}`;
   if (position.kind === 'drop') return `${name} · drop set: strip about 20% and go`;
   return `${name} · set ${position.ordinal} of ${count} · ${low}-${high} reps @ RIR ${position.set.targetRir}`;
 }

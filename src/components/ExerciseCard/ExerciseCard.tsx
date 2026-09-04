@@ -5,6 +5,7 @@ import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
 import { workingSets, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
 import type { PreviousPerformance } from '../../features/workout/previousPerformance';
+import { effortGuidance, restGuidance } from '../../features/workout/effort';
 import { tempoCue } from '../../features/workout/tempo';
 import { ExerciseThumb } from '../ExerciseDetail/ExerciseMedia';
 import { TempoBar } from '../TempoBar/TempoBar';
@@ -76,6 +77,12 @@ export function ExerciseCard({
   const target = position?.set ?? working[0] ?? entry.sets[0];
   const rest = block.kind === 'straight' ? entry.restSeconds : block.restBetweenRoundsSeconds;
   const tempo = tempoCue(entry.role, target?.kind ?? 'working', exercise);
+  const effort = effortGuidance(
+    target?.kind ?? 'working',
+    target?.targetRir ?? entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
+    entry.role,
+  );
+  const restNote = restGuidance(entry.role, rest);
 
   return (
     <section
@@ -105,10 +112,8 @@ export function ExerciseCard({
           </div>
           <p className={styles.targetLine} data-testid="target-line">
             {target
-              ? `${position && position.kind === 'warmup' ? 'Ramp set' : position && position.kind === 'drop' ? 'Drop set' : `Set ${Math.min(working.length, doneWorking + 1)} of ${working.length}`}${target.targetWeight !== null ? ` · ${target.targetWeight} ${units}` : ''} · ${target.targetReps[0]}-${target.targetReps[1]} reps${target.kind === 'working' ? ` @ RIR ${target.targetRir}` : ''}`
+              ? `${position && position.kind === 'warmup' ? 'Ramp set' : position && position.kind === 'drop' ? 'Drop set' : `Set ${Math.min(working.length, doneWorking + 1)} of ${working.length}`}${target.targetWeight !== null ? ` · ${target.targetWeight} ${units}` : ''} · ${target.targetReps[0]}-${target.targetReps[1]} reps`
               : `${working.length} sets done`}
-            {' · '}
-            {rest >= 60 ? `${Math.round((rest / 60) * 10) / 10} min rest` : `${rest} s rest`}
           </p>
           <p className={styles.meta}>
             {previous
@@ -158,8 +163,14 @@ export function ExerciseCard({
             you can. {tempo.why}.
           </p>
           {tempo.cue ? <p className={styles.tempoDetailLine}>Cue: {tempo.cue}</p> : null}
-          <ul className={styles.tempoEvidence} aria-label="Why this tempo">
-            {tempo.evidence.map((line) => (
+          <p className={styles.tempoDetailLine} data-testid="effort-line">
+            Effort {effort.label}: {effort.why}.
+          </p>
+          <p className={styles.tempoDetailLine} data-testid="rest-line">
+            {restNote.label}: {restNote.why}.
+          </p>
+          <ul className={styles.tempoEvidence} aria-label="Why this tempo, effort, and rest">
+            {[...tempo.evidence, ...effort.evidence, ...restNote.evidence].map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ul>

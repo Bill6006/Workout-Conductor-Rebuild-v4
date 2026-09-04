@@ -64,14 +64,14 @@ export function prescribe(
         sets: style === 'hypertrophy-focus' ? 4 : 3,
         reps: style === 'strength-focus' ? strengthReps : hypertrophyReps,
         rir: 1,
-        restSeconds: 90,
+        restSeconds: 120,
       };
       break;
     case 'secondary-hypertrophy':
-      base = { sets: 3, reps: hypertrophyReps, rir: 1, restSeconds: 75 };
+      base = { sets: 3, reps: hypertrophyReps, rir: 1, restSeconds: 90 };
       break;
     case 'specialization':
-      base = { sets: 4, reps: hypertrophyReps, rir: 1, restSeconds: 60 };
+      base = { sets: 4, reps: hypertrophyReps, rir: 1, restSeconds: 75 };
       break;
     case 'finisher':
       base = { sets: 2, reps: hypertrophyReps, rir: 0, restSeconds: 45 };

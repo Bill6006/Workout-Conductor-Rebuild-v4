@@ -7,6 +7,7 @@ import { plateMath } from '../../engine/plateMath/plateMath';
 import type { WorkoutBlock, WorkoutEntry } from '../../engine/workout/types';
 import { useCustomMedia } from '../library/useCustomMedia';
 import styles from './ActiveWorkout.module.css';
+import { effortGuidance, restGuidance } from './effort';
 import type { PreviousPerformance } from './previousPerformance';
 
 export interface EntryPanelsProps {
@@ -120,19 +121,25 @@ export function EntryPanels({
               {previous.rir === null ? '' : ` @ RIR ${previous.rir}`}, {previous.sets} working sets.
             </p>
           ) : null}
-          {entry.progression ? (
-            <>
-              <h4 className={styles.panelTitle}>Why this target</h4>
-              <ul className={styles.panelList} data-testid="progression-evidence">
-                {entry.progression.evidence.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-                {entry.manual?.weight || entry.manual?.reps ? (
-                  <li>You set this by hand; the engines keep your values.</li>
-                ) : null}
-              </ul>
-            </>
-          ) : null}
+          <h4 className={styles.panelTitle}>Why this target</h4>
+          <ul className={styles.panelList} data-testid="progression-evidence">
+            {(entry.progression?.evidence ?? []).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+            {entry.manual?.weight || entry.manual?.reps ? (
+              <li>You set this by hand; the engines keep your values.</li>
+            ) : null}
+            {[
+              ...effortGuidance(
+                'working',
+                entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
+                entry.role,
+              ).evidence,
+              ...restGuidance(entry.role, entry.restSeconds).evidence,
+            ].map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
           <h4 className={styles.panelTitle}>Setup</h4>
           <ol className={styles.panelList}>
             {(instruction?.setup.length ? instruction.setup : exercise.instructions.setup).map(

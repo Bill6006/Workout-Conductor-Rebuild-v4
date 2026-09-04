@@ -33,7 +33,7 @@ function describeUpcoming(sets: readonly SetPrescription[]): string {
   if (first) {
     parts.push(`${first.targetReps[0]}-${first.targetReps[1]} reps @ RIR ${first.targetRir}`);
   }
-  if (ramps > 0) parts.push(`${ramps} ramp`);
+  if (ramps > 0) parts.push(`${ramps} warm-up`);
   if (drops > 0) parts.push('1 drop');
   return parts.join(' · ');
 }
@@ -90,7 +90,7 @@ export function LoggedSets({
           <li key={set.index} className={styles.setRow} data-state={state} data-testid="set-row">
             <span className={styles.setName}>
               {describeSet(set, entry)}
-              {set.kind === 'warmup' ? <span className={styles.setTag}>ramp</span> : null}
+              {set.kind === 'warmup' ? <span className={styles.setTag}>warm-up</span> : null}
               {set.kind === 'drop' ? <span className={styles.setTag}>drop</span> : null}
             </span>
             {done ? (
@@ -111,7 +111,11 @@ export function LoggedSets({
                 <span className={styles.setTarget}>
                   {current ? 'now · ' : ''}
                   {set.targetReps[0]}-{set.targetReps[1]} reps
-                  {set.kind === 'working' ? ` @ RIR ${set.targetRir}` : ''}
+                  {set.kind === 'working'
+                    ? ` @ RIR ${set.targetRir}`
+                    : set.kind === 'warmup'
+                      ? ` · easy, RIR ${set.targetRir}`
+                      : ' · last clean rep'}
                 </span>
                 <span className={styles.setAside} data-testid="set-aside">
                   {aside(set, units, current)}

@@ -305,7 +305,7 @@ export function ActiveWorkoutScreen() {
                   onClick={() => store.skipWarmup(entry.id)}
                   data-testid="skip-warmup"
                 >
-                  Skip ramp sets
+                  Skip warm-up sets
                 </button>
                 <span className={styles.panelNote}>Ramp sets never count as working sets.</span>
               </div>

@@ -48,7 +48,7 @@ describe('ExerciseCard', () => {
     expect(screen.getByTestId('tempo-bar')).toBeInTheDocument();
     await user.click(chip);
     expect(screen.getByTestId('tempo-detail')).toHaveTextContent(/Cue: /);
-    expect(screen.getByRole('list', { name: 'Why this tempo' }).children.length).toBeGreaterThan(1);
+    expect(screen.getByRole('list', { name: 'Why this tempo, effort, and rest' }).children.length).toBeGreaterThan(1);
     expect(chip).toHaveAttribute('aria-expanded', 'true');
     await user.click(chip);
     expect(screen.queryByTestId('tempo-detail')).not.toBeInTheDocument();

@@ -237,7 +237,7 @@ export function ExerciseDetailSheet({
                 className={styles.actionButton}
                 onClick={editActions.onSkipWarmup}
               >
-                Skip ramp sets
+                Skip warm-up sets
               </button>
             ) : null}
             {editActions.canReorder ? (

@@ -46,7 +46,7 @@ export function WorkoutCompletion({ session, units }: WorkoutCompletionProps) {
             <span className={styles.statValue}>
               {summary.setsCompleted}/{summary.setsPlanned}
             </span>
-            <span className={styles.statSub}>+{summary.warmupSets} ramp</span>
+            <span className={styles.statSub}>+{summary.warmupSets} warm-up</span>
           </div>
           <div className={styles.stat}>
             <span className={styles.statLabel}>Volume</span>

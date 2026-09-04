@@ -78,7 +78,7 @@ export function HistoryDetailSheet({ record, units, notesFor, onClose }: History
                       : entry.sets
                           .map(
                             (set) =>
-                              `${set.kind === 'warmup' ? 'ramp ' : set.kind === 'drop' ? 'drop ' : ''}${set.weight ?? 'bw'} × ${set.reps}${set.rir !== null ? ` @ RIR ${set.rir}` : ''}${set.completed ? '' : ' (not done)'}`,
+                              `${set.kind === 'warmup' ? 'warm-up ' : set.kind === 'drop' ? 'drop ' : ''}${set.weight ?? 'bw'} × ${set.reps}${set.rir !== null ? ` @ RIR ${set.rir}` : ''}${set.completed ? '' : ' (not done)'}`,
                           )
                           .join(' · ')}
                     {units ? '' : ''}

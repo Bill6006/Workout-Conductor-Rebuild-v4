@@ -83,7 +83,7 @@ describe('active workout in the store', () => {
     expect(current.completed.sets).toHaveLength(1);
     expect(current.rest?.seconds).toBe(45);
     expect(current.rest?.endsAt).toBe(new Date(Date.parse(TEST_NOW) + 45_000).toISOString());
-    expect(current.rest?.nextLabel).toMatch(/^Next: Barbell Bench Press · ramp set 2 of 2/);
+    expect(current.rest?.nextLabel).toMatch(/^Next: Barbell Bench Press · warm-up set 2 of 2/);
     expect(current.drafts.e1).toEqual({ weight: 95, reps: 8, rir: 5 });
 
     const superset = current.workout.blocks.find(
