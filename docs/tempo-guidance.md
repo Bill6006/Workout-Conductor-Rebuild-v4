@@ -46,5 +46,7 @@ bar).
 
 - The chip under the demonstration (`Tempo 2-1-X-0`) opens the reason, the form cue from the
   exercise's own first execution step, and the evidence lines.
-- The bar under the target line shows one rep with lower, hold, lift, and squeeze sized by their
-  seconds and a marker sweeping at the real pace; it stops when the phone prefers reduced motion.
+- The bar under "last time" is a loading bar that moves like the weight: the fill drops at the
+  lowering pace, pauses at the bottom for the hold, rises at the lifting pace, holds at the top
+  for the squeeze, then repeats; the phase legend brightens as each phase plays. Everything
+  stands still when the phone prefers reduced motion.

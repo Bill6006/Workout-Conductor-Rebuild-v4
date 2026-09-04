@@ -97,9 +97,11 @@ tempo to be evidence-based rather than conventional:
   can) with lower-pause-lift-squeeze notation, and every choice carries its evidence (Schoenfeld,
   Ogborn and Krieger 2015; Behm and Sale 1993; Wilk, Zajac and Tufano 2021; Roig et al. 2009;
   Schoenfeld and Contreras 2016; Schoenfeld et al. 2018). See `docs/tempo-guidance.md`.
-- A one-rep tempo bar fills that space: segments sized by their seconds with a marker sweeping
-  at the real pace; it stops under reduced motion. Tapping the bar or the chip opens the reason,
-  the cue, and the evidence lines.
+- A one-rep tempo bar fills that space. After a fourth look asked for it to move like the
+  weight rather than sweep left to right, the fill now drops at the lowering pace, pauses at
+  the bottom for the hold, rises at the lifting pace, holds at the top for the squeeze, and
+  repeats, with the phase legend brightening as each phase plays; it stands still under reduced
+  motion. Tapping the bar or the chip opens the reason, the cue, and the evidence lines.
 
 ## Decisions and notes
 
