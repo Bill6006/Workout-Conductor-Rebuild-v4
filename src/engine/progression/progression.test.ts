@@ -440,4 +440,35 @@ describe('targets from the estimated max', () => {
     expect(target.weight).toBe(85);
     expect(target.evidence.join(' ')).toMatch(/New variation: 90% of the family estimate/);
   });
+
+  describe('learning from overrides in the next target', () => {
+    it('steps the target up when the lifter kept lifting above the suggestion', () => {
+      const above = [2, 5, 8, 11].map((daysAgo) => {
+        const base = record(daysAgo, bench.id, [
+          [5, 190, 2],
+          [5, 190, 2],
+        ]);
+        return {
+          ...base,
+          entries: base.entries.map((entry) => ({
+            ...entry,
+            sets: entry.sets.map((set) => ({ ...set, targetWeight: 185 })),
+          })),
+        };
+      });
+      const target = recommendNextTarget({
+        exercise: bench,
+        role: 'primary-strength',
+        prescription: strengthRx,
+        history: above,
+        profile,
+      });
+      // Clean sessions at 190 earn +5, and the habit of lifting above the target adds another step.
+      expect(target.mode).toBe('weight');
+      expect(target.weight).toBe(200);
+      expect(target.evidence.join(' ')).toMatch(
+        /lifted above the suggested load in 4 of the last 4 sessions/,
+      );
+    });
+  });
 });

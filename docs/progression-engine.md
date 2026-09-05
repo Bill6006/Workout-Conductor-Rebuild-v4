@@ -126,3 +126,17 @@ estimate instead of the last load:
   replaces the estimate with real numbers.
 
 Warm-up ramps stay proportional to the working load, so they follow the estimate too.
+
+## Learning from overrides (`src/engine/progression/overrides.ts`)
+
+Saved sets keep the suggested load next to the logged one. When the first working set of a lift
+was logged at least half a step above the suggestion in three of the last four sessions, the
+next target steps up one more step and says so; three of four below, it steps down. Only the
+ordinary modes follow the habit (load up, reps up, hold, double progression); deloads, resets,
+returns from a break, and estimates do not.
+
+## Declined offers (`recordDecline`, `isDeclined` in the coach conductor)
+
+"Not now" on the coach card records the offer by its source and lift in the meta store. A
+declined offer stays away for seven days; declined twice, it stays away until the record is
+cleared by a restore. Safety signals are never put away.

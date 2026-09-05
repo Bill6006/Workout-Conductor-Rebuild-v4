@@ -25,6 +25,7 @@ export function useCoach(): CoachContext | null {
   const lastExportAt = useAppSelector((state) => state.localSettings.lastExportAt);
   const workoutCount = useAppSelector((state) => state.workoutCount);
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
+  const coachDeclines = useAppSelector((state) => state.coachDeclines);
   const nowEpoch = useNow();
 
   return useMemo(() => {
@@ -48,7 +49,8 @@ export function useCoach(): CoachContext | null {
       workoutCount,
       policy,
       routes: coachRoutes,
+      declines: coachDeclines,
     });
     return { card, fatigue, strategy, policy };
-  }, [session, profile, history, lastExportAt, workoutCount, coachRoutes, nowEpoch]);
+  }, [session, profile, history, lastExportAt, workoutCount, coachRoutes, coachDeclines, nowEpoch]);
 }

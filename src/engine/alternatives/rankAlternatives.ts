@@ -1,5 +1,6 @@
 import { allExercises, exerciseEquipmentLabel } from '../../catalog/exercises/catalog';
 import type { CatalogExercise, Joint, StressLevel } from '../../catalog/exercises/exerciseSchema';
+import type { MuscleId } from '../../catalog/muscles/muscles';
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
 import {
@@ -21,6 +22,14 @@ export interface RankingSignals {
   preferredIds?: ReadonlySet<string>;
   /** Ids the user has performed before; progression continuity boost. */
   familiarIds?: ReadonlySet<string>;
+  /** When and how each familiar exercise was last done. */
+  lastPerformance?: ReadonlyMap<string, { daysAgo: number; line: string }>;
+  /** How loaded each muscle already is this week. */
+  muscleLoad?: Readonly<Record<MuscleId, 'behind' | 'open' | 'covered'>>;
+  /** Joints reported painful in this session; high stress excludes, moderate costs. */
+  sessionPainJoints?: ReadonlySet<Joint>;
+  /** The coach route for the current lift is at its variation step. */
+  routeWantsVariation?: boolean;
 }
 
 export interface AlternativeRequest {
@@ -45,6 +54,8 @@ export interface AlternativeCandidate {
   /** 0-100 */
   score: number;
   primaryReason: string;
+  /** The two strongest reasons for the rank and, when one weighs, the strongest against. */
+  reasons: string[];
   keyDifference: string;
   equipment: string;
   setupSeconds: number;
@@ -60,6 +71,13 @@ export interface AlternativeResult {
 }
 
 const STRESS_RANK: Record<StressLevel, number> = { low: 0, moderate: 1, high: 2 };
+
+const GENERIC_REASONS = new Set([
+  'same primary muscles',
+  'same movement pattern',
+  'similar strength and hypertrophy role',
+  'similar stimulus',
+]);
 
 function overlapRatio(a: readonly string[], b: readonly string[]): number {
   const setB = new Set(b);
@@ -147,6 +165,11 @@ export function rankAlternatives(request: AlternativeRequest): AlternativeResult
 
     const muscleOverlap = overlapRatio(candidate.primaryMuscles, current.primaryMuscles);
     if (muscleOverlap === 0) continue; // wrong primary muscle
+    const sessionPain = request.signals?.sessionPainJoints;
+    if (sessionPain && [...sessionPain].some((joint) => candidate.jointStress[joint] === 'high')) {
+      excludedForFit += 1;
+      continue;
+    }
 
     const contributions: [number, string][] = [];
     contributions.push([Math.round(30 * muscleOverlap), 'same primary muscles']);
@@ -164,8 +187,48 @@ export function rankAlternatives(request: AlternativeRequest): AlternativeResult
       contributions.push([10, 'keeps progression history']);
     if (request.signals?.preferredIds?.has(candidate.id))
       contributions.push([10, 'one of your preferred exercises']);
-    if (request.signals?.familiarIds?.has(candidate.id))
+    const last = request.signals?.lastPerformance?.get(candidate.id);
+    if (last) {
+      contributions.push([last.daysAgo <= 30 ? 9 : 5, last.line]);
+    } else if (request.signals?.familiarIds?.has(candidate.id)) {
       contributions.push([5, 'you have done it before']);
+    }
+    const loads = request.signals?.muscleLoad;
+    if (loads) {
+      const added = candidate.primaryMuscles.find(
+        (muscle) => !current.primaryMuscles.includes(muscle) && loads[muscle] === 'behind',
+      );
+      if (added)
+        contributions.push([
+          6,
+          `adds ${muscleName(added).toLowerCase()}, behind its weekly target`,
+        ]);
+      else if (candidate.primaryMuscles.every((muscle) => loads[muscle] === 'covered')) {
+        contributions.push([
+          -5,
+          `${muscleName(candidate.primaryMuscles[0] as MuscleId).toLowerCase()} is well covered this week`,
+        ]);
+      }
+    }
+    if (sessionPain) {
+      for (const joint of sessionPain) {
+        if (candidate.jointStress[joint] === 'moderate')
+          contributions.push([
+            -12,
+            `moderate stress on your ${joint.replace('-', ' ')}, which hurts today`,
+          ]);
+      }
+    }
+    if (request.signals?.routeWantsVariation) {
+      const variation =
+        candidate.movementPattern === current.movementPattern &&
+        (candidate.progressionFamily !== current.progressionFamily ||
+          candidate.load !== current.load);
+      if (variation)
+        contributions.push([8, 'a variation for the stalled lift, as the coach route asked']);
+      else if (candidate.progressionFamily === current.progressionFamily)
+        contributions.push([-4, 'too close to the stalled lift to count as a variation']);
+    }
     if (current.substitutions.includes(candidate.id))
       contributions.push([8, 'listed substitution']);
     if (request.dropSetPlanned && candidate.dropSetSafe)
@@ -206,14 +269,23 @@ export function rankAlternatives(request: AlternativeRequest): AlternativeResult
         contributions.reduce((sum, [points]) => sum + points, 0),
       ),
     );
-    const primaryReason =
-      contributions.filter(([points]) => points > 0).sort((a, b) => b[0] - a[0])[0]?.[1] ??
-      'fits your equipment';
+    const positives = contributions.filter(([points]) => points > 0).sort((a, b) => b[0] - a[0]);
+    const negatives = contributions.filter(([points]) => points <= -5).sort((a, b) => a[0] - b[0]);
+    // The specific reasons (history, load, route, preference) come first; the generic
+    // baseline (same muscles, same pattern) fills in only when nothing specific applies.
+    const specific = positives.filter(([, reason]) => !GENERIC_REASONS.has(reason));
+    const generic = positives.filter(([, reason]) => GENERIC_REASONS.has(reason));
+    const reasons = [
+      ...[...specific, ...generic].slice(0, 2).map(([, reason]) => reason),
+      ...negatives.slice(0, 1).map(([, reason]) => reason),
+    ];
+    const primaryReason = positives[0]?.[1] ?? 'fits your equipment';
 
     candidates.push({
       exercise: candidate,
       score,
       primaryReason,
+      reasons: reasons.length > 0 ? reasons : [primaryReason],
       keyDifference: keyDifference(current, candidate),
       equipment: exerciseEquipmentLabel(candidate, context.availableEquipment),
       setupSeconds: candidate.setupSeconds,

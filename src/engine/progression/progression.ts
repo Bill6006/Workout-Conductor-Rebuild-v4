@@ -3,6 +3,7 @@ import type { CatalogExercise, TrainingRole } from '../../catalog/exercises/exer
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { coachingPolicy, policyLabel } from '../coach/experience';
+import { overrideBias } from './overrides';
 import { weightStep } from '../plateMath/plateMath';
 import type { EntryProgression, ProgressionMode, SetPrescription } from '../workout/types';
 import { restCategory, type Prescription } from './roles';
@@ -193,7 +194,22 @@ export function loadFromEstimate(
   return roundToStep((e1rm / (1 + effective / 30)) * fraction, step);
 }
 
+/** Modes that follow the lifter's own habit of lifting above or below the suggestion. */
+const BIASABLE: ReadonlySet<ProgressionMode> = new Set(['weight', 'reps', 'maintain', 'double']);
+
 export function recommendNextTarget(input: NextTargetInput): NextTarget {
+  const target = recommendBaseTarget(input);
+  if (target.weight === null || !BIASABLE.has(target.mode)) return target;
+  const bias = overrideBias(input.history, input.exercise.id, target.increment);
+  if (bias.steps === 0 || !bias.evidence) return target;
+  return {
+    ...target,
+    weight: roundToStep(target.weight + bias.steps * target.increment, target.increment),
+    evidence: [...target.evidence, bias.evidence],
+  };
+}
+
+function recommendBaseTarget(input: NextTargetInput): NextTarget {
   const { exercise, role, prescription, history, profile } = input;
   const units = profile.units;
   const step = weightStep(exercise, units);

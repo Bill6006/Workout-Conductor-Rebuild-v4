@@ -149,4 +149,16 @@ test.describe('adaptive coach', () => {
     await expect(card.getByTestId('coach-action')).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
   });
+
+  test('Not now puts a declined offer away and the card goes quiet', async ({ page }) => {
+    await ensureProfile(page);
+    await importStalledBench(page);
+    const card = page.getByTestId('coach-card');
+    await expect(card).toHaveAttribute('data-domain', 'plateau');
+    await card.getByTestId('coach-dismiss').click();
+    await expect(card).toHaveAttribute('data-domain', 'clear');
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+    await expect(page.getByTestId('coach-card')).toHaveAttribute('data-domain', 'clear');
+  });
 });

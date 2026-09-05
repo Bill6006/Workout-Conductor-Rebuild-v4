@@ -37,6 +37,7 @@ test.describe('exercise library', () => {
       dialog.getByRole('heading', { name: /Alternatives, best match first/ }),
     ).toBeVisible();
     await expect(dialog.getByText('Pull-Up', { exact: true })).toBeVisible();
+    await expect(dialog.getByTestId('alternative-reasons').first()).not.toBeEmpty();
 
     await dialog.getByRole('button', { name: 'Prefer' }).click();
     await expect(page.getByText('Lat Pulldown marked preferred')).toBeVisible();

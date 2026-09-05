@@ -107,4 +107,20 @@ describe('AdaptiveCoachCard', () => {
     expect(screen.getByRole('list', { name: 'Why' }).children).toHaveLength(3);
     expect(screen.getByText(/Checked 3 signals across plateau/)).toBeInTheDocument();
   });
+
+  it('offers Not now beside an action and hands the signal to onDismiss', () => {
+    const onDismiss = vi.fn();
+    const shown = card('advanced');
+    render(
+      <AdaptiveCoachCard
+        card={shown}
+        fatigue={fatigue}
+        policy={coachingPolicy('advanced')}
+        onAction={vi.fn()}
+        onDismiss={onDismiss}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('coach-dismiss'));
+    expect(onDismiss).toHaveBeenCalledWith(shown.signal);
+  });
 });

@@ -9,7 +9,14 @@ import { analyzeStrategy } from '../strategy/strategy';
 import { applyRouteStep, emptyRoutes } from '../strategy/plateau';
 import { allEntries } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
-import { conductCoach, gatherSignals, type CoachInput } from './coachConductor';
+import {
+  conductCoach,
+  emptyDeclines,
+  gatherSignals,
+  isDeclined,
+  recordDecline,
+  type CoachInput,
+} from './coachConductor';
 import type { ExperienceLevel } from './experience';
 
 const NOW = RECORD_NOW;
@@ -201,5 +208,28 @@ describe('coaching by experience', () => {
     expect(allEntries(without.blocks).some((entry) => entry.exerciseId === BENCH)).toBe(false);
     expect(card?.signal.domain).toBe('plateau');
     expect(card?.signal.action).toBeNull();
+  });
+
+  it('stays quiet about a declined offer for a week, and for good after two declines', () => {
+    const history = stalled();
+    const base = withBench(input('intermediate', history));
+    const card = conductCoach(base);
+    expect(card?.signal.source).toBe('stall: route');
+    const once = recordDecline(emptyDeclines(), card!.signal, NOW);
+    expect(isDeclined(once, card!.signal, NOW)).toBe(true);
+    const later = new Date(Date.parse(NOW) + 8 * 86_400_000).toISOString();
+    expect(isDeclined(once, card!.signal, later)).toBe(false);
+    const twice = recordDecline(once, card!.signal, later);
+    expect(isDeclined(twice, card!.signal, '2027-01-01T00:00:00.000Z')).toBe(true);
+    const quiet = conductCoach({ ...base, declines: once });
+    expect(quiet?.signal.source ?? 'none').not.toBe('stall: route');
+    // Safety never goes quiet.
+    expect(
+      isDeclined(
+        recordDecline(emptyDeclines(), { source: 'session pain', exerciseId: BENCH }, NOW),
+        { ...card!.signal, domain: 'safety', source: 'session pain' },
+        NOW,
+      ),
+    ).toBe(false);
   });
 });

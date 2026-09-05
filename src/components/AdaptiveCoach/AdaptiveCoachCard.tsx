@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CoachAction, CoachCard } from '../../engine/coach/coachConductor';
+import type { CoachAction, CoachCard, CoachSignal } from '../../engine/coach/coachConductor';
 import type { CoachingPolicy } from '../../engine/coach/experience';
 import type { FatigueSignal } from '../../engine/recovery/fatigue';
 import styles from './AdaptiveCoachCard.module.css';
@@ -9,6 +9,8 @@ interface AdaptiveCoachCardProps {
   fatigue: FatigueSignal;
   policy: CoachingPolicy;
   onAction: (action: CoachAction) => void;
+  /** Not now: the offer is remembered and not repeated for a while. */
+  onDismiss?: (signal: CoachSignal) => void;
 }
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -28,7 +30,13 @@ const DOMAIN_LABELS: Record<string, string> = {
  * at most one action. Major changes ask for a second tap. Nothing here happens
  * on its own.
  */
-export function AdaptiveCoachCard({ card, fatigue, policy, onAction }: AdaptiveCoachCardProps) {
+export function AdaptiveCoachCard({
+  card,
+  fatigue,
+  policy,
+  onAction,
+  onDismiss,
+}: AdaptiveCoachCardProps) {
   const [confirming, setConfirming] = useState(false);
   const signal = card?.signal ?? null;
   const action = signal?.action ?? null;
@@ -103,6 +111,15 @@ export function AdaptiveCoachCard({ card, fatigue, policy, onAction }: AdaptiveC
           </button>
           {confirming ? (
             <button type="button" className={styles.cancel} onClick={() => setConfirming(false)}>
+              Not now
+            </button>
+          ) : onDismiss && signal ? (
+            <button
+              type="button"
+              className={styles.cancel}
+              onClick={() => onDismiss(signal)}
+              data-testid="coach-dismiss"
+            >
               Not now
             </button>
           ) : null}

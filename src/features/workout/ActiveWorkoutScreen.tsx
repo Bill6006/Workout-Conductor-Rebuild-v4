@@ -22,11 +22,11 @@ import { useTicker } from '../../core/time/useTicker';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { SessionRating } from '../../core/validation/workoutRecord';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
+import { buildRankingSignals } from '../../engine/alternatives/signals';
 import { liveSetRecords } from '../../engine/scoring/personalRecords';
 import type { CoachAction } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
 import { ReadinessSheet } from '../today/ReadinessSheet';
-import { preferredIdsOf } from '../../engine/conflicts/context';
 import { estimateWorkout } from '../../engine/duration/duration';
 import { plateMath, weightStep } from '../../engine/plateMath/plateMath';
 import { contextFor } from '../../engine/recalibration/recalibrate';
@@ -128,6 +128,7 @@ export function ActiveWorkoutScreen() {
   const [endedEarly, setEndedEarly] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const coach = useCoach();
+  const coachRoutes = useAppSelector((state) => state.coachRoutes);
   /** Weight currently shown in a logger, so Plate Math follows it before the set is logged. */
   const [liveWeights, setLiveWeights] = useState<Record<string, number | null>>({});
   const active = session?.status === 'active';
@@ -404,7 +405,14 @@ export function ActiveWorkoutScreen() {
             sets: selected.entry.sets.length,
             restSeconds: selected.entry.restSeconds,
           },
-          signals: { preferredIds: preferredIdsOf(profile) },
+          signals: buildRankingSignals({
+            profile,
+            history,
+            now: new Date().toISOString(),
+            sessionPainJoints: session.constraints.painJoints,
+            coachRoutes,
+            currentExerciseId: selectedExercise.id,
+          }),
           limit: 6,
         })
       : null;
@@ -522,6 +530,7 @@ export function ActiveWorkoutScreen() {
           fatigue={coach.fatigue}
           policy={coach.policy}
           onAction={onCoachAction}
+          onDismiss={(signal) => void store.declineCoachSignal(signal)}
         />
       ) : null}
 

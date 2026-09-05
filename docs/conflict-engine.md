@@ -47,3 +47,18 @@ Profile limitations map to catalog metadata like this:
 - The library shows a "Not here" badge for exercises blocked at the current place.
 - Phase 3 generation and Phase 4 recalibration validate every workout with
   `checkWorkoutConflicts` before it is shown.
+
+## Alternatives, what a swap costs (`src/engine/alternatives/rankAlternatives.ts`)
+
+Beyond the catalog match (muscles, pattern, role, equipment here, limitations, setup time), the
+ranking reads signals built from the app state (`src/engine/alternatives/signals.ts`):
+
+- what you have done and when: a candidate done in the last 30 days scores higher and its last
+  load and reps appear in the reasons line;
+- this week's load per muscle: a candidate that adds a muscle behind its weekly target scores
+  higher, one whose muscles are already covered scores lower;
+- joints that hurt today: high stress excludes the candidate, moderate stress costs it;
+- the coach route: at its variation step, same-pattern candidates of a different family or load
+  type score higher and the same family scores lower.
+
+Each candidate shows up to two specific reasons and the strongest reason against.

@@ -103,4 +103,17 @@ describe('coach routes in the store', () => {
     await logAndFinish(handle, 100, 8);
     expect(handle.store.getSnapshot().coachRoutes.routes[BENCH]).toBeUndefined();
   });
+
+  it('remembers a declined offer across a reload', async () => {
+    const handle = await seededWithStall();
+    await handle.store.declineCoachSignal({ source: 'stall: route', exerciseId: BENCH });
+    expect(handle.store.getSnapshot().coachDeclines.declines['stall: route|' + BENCH]?.count).toBe(
+      1,
+    );
+    const reopened = createTestStore({ factory: handle.factory, storage: handle.storage });
+    await reopened.store.hydrate();
+    expect(
+      reopened.store.getSnapshot().coachDeclines.declines['stall: route|' + BENCH]?.count,
+    ).toBe(1);
+  });
 });

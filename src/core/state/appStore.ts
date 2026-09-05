@@ -27,7 +27,14 @@ import {
 import { allEntries, type DurationChoice, type GeneratedWorkout } from '../../engine/workout/types';
 import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import { normalizeName } from '../backup/legacyImport';
-import type { CoachAction } from '../../engine/coach/coachConductor';
+import {
+  COACH_DECLINES_ID,
+  emptyDeclines,
+  recordDecline,
+  type CoachAction,
+  type CoachDeclines,
+  type CoachSignal,
+} from '../../engine/coach/coachConductor';
 import { coachingPolicy } from '../../engine/coach/experience';
 import {
   COACH_ROUTES_ID,
@@ -150,6 +157,18 @@ export interface AppState {
   customCounts: { exercises: number; instructions: number; media: number };
   /** Coach routes for stalled lifts, kept in the meta store and backed up. */
   coachRoutes: CoachRoutes;
+  /** Declined coach offers, kept in the meta store and backed up. */
+  coachDeclines: CoachDeclines;
+}
+
+function parseCoachDeclines(raw: unknown): CoachDeclines {
+  if (raw && typeof raw === 'object') {
+    const declines = (raw as { declines?: unknown }).declines;
+    if (declines && typeof declines === 'object') {
+      return { id: COACH_DECLINES_ID, declines: declines as CoachDeclines['declines'] };
+    }
+  }
+  return emptyDeclines();
 }
 
 function parseCoachRoutes(raw: unknown): CoachRoutes {
@@ -339,6 +358,7 @@ export class AppStore {
       customInstructions: [],
       customCounts: { exercises: 0, instructions: 0, media: 0 },
       coachRoutes: emptyRoutes(),
+      coachDeclines: emptyDeclines(),
     };
   }
 
@@ -375,6 +395,7 @@ export class AppStore {
         customMedia,
         savedRaw,
         routesRaw,
+        declinesRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -384,6 +405,7 @@ export class AppStore {
         db.count('customMedia'),
         db.getAll<Identified>('savedWorkouts'),
         db.get<Identified>('meta', COACH_ROUTES_ID),
+        db.get<Identified>('meta', COACH_DECLINES_ID),
       ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
       const validLocations = locations
@@ -421,6 +443,7 @@ export class AppStore {
           media: customMedia,
         },
         coachRoutes: parseCoachRoutes(routesRaw),
+        coachDeclines: parseCoachDeclines(declinesRaw),
       });
       this.ensureSession();
     } catch (error) {
@@ -1612,6 +1635,14 @@ export class AppStore {
   }
 
   // ---------------------------------------------------------------- coach routes
+
+  /** Remembers a declined offer so the coach stops repeating it for a while. */
+  async declineCoachSignal(signal: Pick<CoachSignal, 'source' | 'exerciseId'>): Promise<void> {
+    const next = recordDecline(this.state.coachDeclines, signal, this.now());
+    const db = await this.getDatabase();
+    await putVerified(db, 'meta', next, { now: this.now });
+    this.setState({ coachDeclines: next });
+  }
 
   /** Records that the lifter took a coach route step; the step itself is applied elsewhere. */
   async noteCoachAction(action: CoachAction): Promise<void> {

@@ -6,10 +6,10 @@ import { Card } from '../../components/Card/Card';
 import { ExerciseDetailSheet } from '../../components/ExerciseDetail/ExerciseDetailSheet';
 import { FactList } from '../../components/FactList/FactList';
 import { ScreenHeader } from '../../components/Screen/Screen';
-import { useAppState, useAppStore } from '../../core/state/useAppStore';
+import { useAppState, useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { formatDayLabel, useNow } from '../../core/time/clock';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
-import { preferredIdsOf } from '../../engine/conflicts/context';
+import { buildRankingSignals } from '../../engine/alternatives/signals';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import { allEntries, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
 import type { CoachAction } from '../../engine/coach/coachConductor';
@@ -41,6 +41,8 @@ export function TodayScreen() {
   const [selected, setSelected] = useState<Selection | null>(null);
   const [checkingIn, setCheckingIn] = useState(false);
   const coach = useCoach();
+  const history = useAppSelector((state) => state.history);
+  const coachRoutes = useAppSelector((state) => state.coachRoutes);
 
   if (!today) {
     return (
@@ -78,7 +80,14 @@ export function TodayScreen() {
             sets: selected.entry.sets.length,
             restSeconds: selected.entry.restSeconds,
           },
-          signals: { preferredIds: preferredIdsOf(profile) },
+          signals: buildRankingSignals({
+            profile,
+            history,
+            now: new Date().toISOString(),
+            sessionPainJoints: session.constraints.painJoints,
+            coachRoutes,
+            currentExerciseId: selectedExercise.id,
+          }),
           limit: 6,
         })
       : null;
@@ -150,6 +159,7 @@ export function TodayScreen() {
           fatigue={coach.fatigue}
           policy={coach.policy}
           onAction={onCoachAction}
+          onDismiss={(signal) => void store.declineCoachSignal(signal)}
         />
       ) : null}
 

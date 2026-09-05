@@ -86,6 +86,51 @@ export interface CoachSignal {
   source: string;
   /** Restates a target the lifter can read from the card; hidden past beginner level. */
   obvious?: boolean;
+  /** The lift the signal is about, when it is about one; declines are remembered per lift. */
+  exerciseId?: string;
+}
+
+/** Declined offers, kept in the meta store: key `source|exerciseId` (or `*`). */
+export interface CoachDeclines {
+  id: 'coach-declines';
+  declines: Record<string, { count: number; lastAt: string }>;
+}
+
+export const COACH_DECLINES_ID = 'coach-declines';
+/** A declined offer stays away this long; twice declined, it stays away until the count is cleared. */
+export const DECLINE_SUPPRESS_DAYS = 7;
+
+export function emptyDeclines(): CoachDeclines {
+  return { id: COACH_DECLINES_ID, declines: {} };
+}
+
+export function declineKey(signal: Pick<CoachSignal, 'source' | 'exerciseId'>): string {
+  return `${signal.source}|${signal.exerciseId ?? '*'}`;
+}
+
+export function recordDecline(
+  declines: CoachDeclines,
+  signal: Pick<CoachSignal, 'source' | 'exerciseId'>,
+  now: string,
+): CoachDeclines {
+  const key = declineKey(signal);
+  const current = declines.declines[key];
+  return {
+    ...declines,
+    declines: { ...declines.declines, [key]: { count: (current?.count ?? 0) + 1, lastAt: now } },
+  };
+}
+
+export function isDeclined(
+  declines: CoachDeclines | undefined,
+  signal: CoachSignal,
+  now: string,
+): boolean {
+  if (!declines || signal.domain === 'safety') return false;
+  const entry = declines.declines[declineKey(signal)];
+  if (!entry) return false;
+  if (entry.count >= 2) return true;
+  return Date.parse(now) - Date.parse(entry.lastAt) < DECLINE_SUPPRESS_DAYS * DAY_MS;
 }
 
 export interface CoachCard {
@@ -112,6 +157,7 @@ export interface CoachInput {
   policy?: CoachingPolicy;
   stalls?: StallDiagnosis[];
   routes?: CoachRoutes;
+  declines?: CoachDeclines;
 }
 
 const DAY_MS = 86_400_000;
@@ -372,6 +418,7 @@ function strategySignals(input: CoachInput): CoachSignal[] {
     confidence: insight.confidence,
     severity: insight.severity,
     source: `strategy: ${insight.kind}`,
+    exerciseId: insight.exerciseId,
     obvious: insight.recommendation === 'add-weight' || insight.recommendation === 'add-reps',
   }));
 }
@@ -557,6 +604,7 @@ function tipSignals(input: CoachInput): CoachSignal[] {
         confidence: 'medium',
         severity: 1,
         source: 'drop-set opportunity',
+        exerciseId: candidate.exerciseId,
       });
     }
   }
@@ -718,6 +766,7 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
         confidence: 'medium',
         severity: 2,
         source: 'stall: undershooting',
+        exerciseId: stall.exerciseId,
       });
       continue;
     }
@@ -748,6 +797,7 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
       confidence: stall.effortUnknown === 0 ? 'high' : 'medium',
       severity: route.exhausted ? 3 : 2,
       source: 'stall: route',
+      exerciseId: stall.exerciseId,
     });
   }
   return signals;
@@ -773,7 +823,9 @@ const CONFIDENCE_RANK = { high: 3, medium: 2, low: 1 } as const;
 /** Picks the one card: highest-priority domain first, then severity, then confidence. */
 export function conductCoach(input: CoachInput): CoachCard | null {
   const policy = input.policy ?? coachingPolicy(input.profile.experience);
-  const all = gatherSignals(input);
+  const all = gatherSignals(input).filter(
+    (signal) => !isDeclined(input.declines, signal, input.now),
+  );
   const signals = policy.hideObvious ? all.filter((signal) => !signal.obvious) : all;
   if (signals.length === 0) return null;
   const ranked = [...signals].sort(

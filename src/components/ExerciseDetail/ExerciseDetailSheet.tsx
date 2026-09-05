@@ -360,7 +360,8 @@ export function ExerciseDetailSheet({
         <section className={styles.section} aria-label="Alternatives">
           <h3 className={styles.sectionTitle}>Alternatives, best match first</h3>
           <p className={styles.text}>
-            Ranked by muscles, pattern, role, equipment here, and your limitations.
+            Ranked by muscles, pattern, role, equipment here, your limitations, what you have done,
+            this week's load, and any joint that hurts today.
             {sessionActions
               ? ' Use one to swap only this exercise; the rest of the workout stays put.'
               : ''}
@@ -377,7 +378,9 @@ export function ExerciseDetailSheet({
                       <span className={styles.alternativeName}>{candidate.exercise.name}</span>
                       <span className={styles.score}>{candidate.score}</span>
                     </div>
-                    <span className={styles.alternativeMeta}>{candidate.primaryReason}</span>
+                    <span className={styles.alternativeMeta} data-testid="alternative-reasons">
+                      {candidate.reasons.join(' · ')}
+                    </span>
                     <span className={styles.alternativeMeta}>
                       {candidate.keyDifference} · {candidate.equipment} · ~{candidate.setupSeconds}s
                       setup
