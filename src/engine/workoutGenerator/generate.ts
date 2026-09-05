@@ -1,7 +1,15 @@
+import { muscleLoads, type MuscleLoad } from '../alternatives/signals';
+import {
+  DELOAD_LOAD_SCALE,
+  DELOAD_RIR_DELTA,
+  DELOAD_SETS_DELTA,
+  formatWindow,
+  type DeloadWindow,
+} from '../planning/deload';
 import { exercisesByPattern, requireExercise } from '../../catalog/exercises/catalog';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
-import { muscleName, type MuscleId } from '../../catalog/muscles/muscles';
+import { MUSCLE_IDS, muscleName, type MuscleId } from '../../catalog/muscles/muscles';
 import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
@@ -33,6 +41,7 @@ import {
   applyProgression,
   recommendNextTarget,
   summarizeProgression,
+  type NextTarget,
 } from '../progression/progression';
 import type { Readiness } from '../recalibration/types';
 import { interpretFatigue } from '../recovery/fatigue';
@@ -79,6 +88,8 @@ export interface PrescriptionAdjustment {
   /** Reps in reserve to add to new entries. */
   rir: number;
   restFactor: number;
+  /** Multiplier on every target load (a deload week uses 0.9). */
+  loadScale?: number;
 }
 
 export interface GenerationConstraints {
@@ -98,6 +109,8 @@ export interface GenerationConstraints {
   adjust?: PrescriptionAdjustment;
   /** Today's check-in, so fatigue can hold loads. */
   readiness?: Readiness | null;
+  /** A planned deload week covering this session: fewer sets, more reserve, lighter loads. */
+  deload?: DeloadWindow | null;
 }
 
 export interface GenerationInput {
@@ -215,6 +228,7 @@ function chooseTemplate(
   profile: UserProfile,
   priorities: MusclePriority[],
   exposure: Exposure,
+  loads: Readonly<Record<MuscleId, MuscleLoad>>,
 ): Template {
   const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
   const strengthGoal =
@@ -234,7 +248,18 @@ function chooseTemplate(
       template.muscles.length;
     const rotation = recent.includes(template.id) ? -0.35 : 0;
     const strengthBonus = strengthGoal && template.strengthPriority ? 0.15 : 0;
-    const score = average + rotation + strengthBonus;
+    // Week awareness: muscles trained in the last two days count against a template,
+    // muscles behind their weekly target count for it.
+    const weekTerm =
+      template.muscles.reduce((sum, muscle) => {
+        const days = exposure.daysSinceMuscle[muscle];
+        return (
+          sum +
+          (days !== undefined && days < 2 ? -0.25 : 0) +
+          (loads[muscle] === 'behind' ? 0.15 : 0)
+        );
+      }, 0) / template.muscles.length;
+    const score = average + rotation + strengthBonus + weekTerm;
     if (score > bestScore + 1e-9) {
       best = template;
       bestScore = score;
@@ -273,6 +298,7 @@ interface Picker {
   context: ConflictContext;
   preferredIds: ReadonlySet<string>;
   exposure: Exposure;
+  loads: Readonly<Record<MuscleId, MuscleLoad>>;
 }
 
 function stressPenalty(exercise: CatalogExercise): number {
@@ -302,10 +328,14 @@ function pickForSlot(
     const preferred = picker.preferredIds.has(exercise.id) ? 15 : 0;
     const days = picker.exposure.daysSinceExercise[exercise.id];
     const familiarity = days === undefined ? 0 : days < 1.5 ? -8 : days <= 21 ? 6 : 0;
+    const behind = exercise.primaryMuscles.some((muscle) => picker.loads[muscle] === 'behind')
+      ? 3
+      : 0;
     return (
       suitability +
       preferred +
-      familiarity -
+      familiarity +
+      behind -
       stressPenalty(exercise) * 2 -
       exercise.setupSeconds / 60
     );
@@ -358,6 +388,21 @@ function capFor(targetMinutes: number): number {
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const round5 = (seconds: number) => Math.round(seconds / 5) * 5;
 
+/** A deload week's lighter loads, applied to the target and said in its evidence. */
+function scaleForDeload(
+  target: NextTarget,
+  adjust: PrescriptionAdjustment | undefined,
+  step: number,
+): NextTarget {
+  const scale = adjust?.loadScale;
+  if (!scale || scale === 1 || target.weight === null) return target;
+  return {
+    ...target,
+    weight: Math.max(step, Math.round((target.weight * scale) / step) * step),
+    evidence: [...target.evidence, `Deload week: loads ${Math.round((1 - scale) * 100)}% lighter.`],
+  };
+}
+
 function adjustPrescription(
   prescription: Prescription,
   role: TrainingRole,
@@ -386,17 +431,27 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const exposure = computeExposure(history, now);
   const priorities = computeMusclePriorities(profile, volume, exposure);
   const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
+  const loads = muscleLoads(history, profile, now);
   const template =
     (constraints.templateId
       ? TEMPLATES.find((candidate) => candidate.id === constraints.templateId)
-      : undefined) ?? chooseTemplate(profile, priorities, exposure);
+      : undefined) ?? chooseTemplate(profile, priorities, exposure, loads);
+  const deload = constraints.deload ?? null;
+  const adjust: PrescriptionAdjustment | undefined = deload
+    ? {
+        sets: (constraints.adjust?.sets ?? 0) + DELOAD_SETS_DELTA,
+        rir: (constraints.adjust?.rir ?? 0) + DELOAD_RIR_DELTA,
+        restFactor: constraints.adjust?.restFactor ?? 1,
+        loadScale: DELOAD_LOAD_SCALE,
+      }
+    : constraints.adjust;
   const defaultMinutes = profile.schedule.typicalDurationMinutes;
   const targetMinutes =
     constraints.targetMinutesOverride ?? resolveTargetMinutes(duration, defaultMinutes);
   const hardCap = constraints.hardCap ?? false;
   const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
   const compromises: string[] = [];
-  const picker: Picker = { context, preferredIds, exposure };
+  const picker: Picker = { context, preferredIds, exposure, loads };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 
   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
@@ -441,10 +496,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     const prescription = adjustPrescription(
       prescribe(pick, slotSpec.role, profile),
       slotSpec.role,
-      constraints.adjust,
+      adjust,
     );
     const warmupSets = rampSetsFor(pick, slotSpec.role, targetMinutes);
-    const target = recommendNextTarget({
+    const baseTarget = recommendNextTarget({
       exercise: pick,
       role: slotSpec.role,
       prescription,
@@ -453,6 +508,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       fatigueLevel: fatigue.level,
       now,
     });
+    const target = scaleForDeload(baseTarget, adjust, weightStep(pick, profile.units));
     const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
     entries.push({
       id: `e${index + 1}`,
@@ -751,6 +807,26 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     );
   }
 
+  // 5. Week-aware order: after the anchor, accessories for muscles behind their weekly target lead.
+  const behindNames: string[] = [];
+  if (keep.length === 0 && blocks.length > 2) {
+    const isBehind = (block: WorkoutBlock) =>
+      block.kind === 'straight' &&
+      (block.entries[0] as WorkoutEntry).chosenFor.some((muscle) => loads[muscle] === 'behind');
+    const [first, ...rest] = blocks;
+    const led = rest.filter(isBehind);
+    if (led.length > 0 && led.length < rest.length) {
+      blocks = [first as WorkoutBlock, ...led, ...rest.filter((block) => !isBehind(block))];
+      for (const block of led) {
+        for (const muscle of (block.entries[0] as WorkoutEntry).chosenFor) {
+          if (loads[muscle] === 'behind' && !behindNames.includes(muscleName(muscle))) {
+            behindNames.push(muscleName(muscle));
+          }
+        }
+      }
+    }
+  }
+
   const anchorExercise = anchor ? exerciseOf(anchor.exerciseId) : undefined;
   const topPriorities = priorities.slice(0, 3);
   const reasons: string[] = [
@@ -768,6 +844,40 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     );
   if (exposure.sessionsLast14Days === 0)
     reasons.push('No history yet, so weekly volume starts from the plan defaults.');
+  if (exposure.sessionsLast14Days > 0) {
+    const ready = template.muscles.filter((muscle) => {
+      const days = exposure.daysSinceMuscle[muscle];
+      return days === undefined || days >= 2;
+    });
+    const resting = MUSCLE_IDS.filter(
+      (muscle) =>
+        !template.muscles.includes(muscle) && (exposure.daysSinceMuscle[muscle] ?? 99) < 2,
+    );
+    const readyDays = Math.floor(
+      Math.min(...ready.map((muscle) => exposure.daysSinceMuscle[muscle] ?? 7)),
+    );
+    reasons.push(
+      `${
+        ready.length > 0
+          ? `${ready.slice(0, 3).map(muscleName).join(', ')} ${ready.length === 1 ? 'has' : 'have'} had ${readyDays}+ days to recover`
+          : `${template.title} muscles are the freshest available`
+      }${
+        resting.length > 0
+          ? `; ${resting.slice(0, 2).map(muscleName).join(' and ')} trained in the last two days, so ${resting.length === 1 ? 'it sits' : 'they sit'} out`
+          : ''
+      }: ${template.title.toLowerCase()} today.`,
+    );
+  }
+  if (behindNames.length > 0) {
+    reasons.push(
+      `${behindNames.slice(0, 3).join(', ')} ${behindNames.length === 1 ? 'is' : 'are'} behind this week: the accessories lead with ${behindNames.length === 1 ? 'it' : 'them'}.`,
+    );
+  }
+  if (deload) {
+    reasons.push(
+      `Deload week (${formatWindow(deload)}): one set fewer per exercise, one more rep in reserve, loads ${Math.round((1 - DELOAD_LOAD_SCALE) * 100)}% lighter.`,
+    );
+  }
   reasons.push(
     `${profile.restStyle.charAt(0).toUpperCase() + profile.restStyle.slice(1)} rests; supersets ${profile.techniques.supersets ? 'on' : 'off'}, drop sets ${profile.techniques.dropSets ? 'on' : 'off'}, circuits ${profile.techniques.circuits ? 'on' : 'off'}.`,
   );

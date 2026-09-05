@@ -161,4 +161,13 @@ test.describe('adaptive coach', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
     await expect(page.getByTestId('coach-card')).toHaveAttribute('data-domain', 'clear');
   });
+
+  test('Why this workout says which muscles the accessories lead with', async ({ page }) => {
+    await ensureProfile(page);
+    await importStalledBench(page);
+    await page.getByText('Why this workout').click();
+    await expect(page.locator('details', { hasText: 'Why this workout' })).toContainText(
+      /behind this week: the accessories lead with|days to recover/,
+    );
+  });
 });

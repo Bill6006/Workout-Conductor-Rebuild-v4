@@ -98,6 +98,7 @@ export function emptyConstraints(): SessionConstraints {
     avoidExerciseIds: [],
     painJoints: [],
     endBy: null,
+    deload: null,
     readiness: null,
     intensity: 0,
   };
@@ -201,6 +202,7 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
     endBy: constraints.endBy,
     readiness: constraints.readiness ? { ...constraints.readiness } : null,
     intensity: constraints.intensity,
+    deload: constraints.deload ? { ...constraints.deload } : null,
   };
 }
 
@@ -322,6 +324,7 @@ function rebuild(
     isSetDone: classified.isDone,
     adjust: options.adjust,
     readiness: constraints.readiness,
+    deload: constraints.deload,
   };
   return generateWorkout({
     profile: request.profile,

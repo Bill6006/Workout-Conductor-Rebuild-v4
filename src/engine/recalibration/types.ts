@@ -1,3 +1,4 @@
+import type { DeloadWindow } from '../planning/deload';
 import type { AutoregulationPlan } from './autoregulate';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import type { LocationProfile } from '../../core/validation/location';
@@ -97,6 +98,8 @@ export interface SessionConstraints {
   readiness: Readiness | null;
   /** -2 (much easier) to 2 (much harder) for the remaining work. */
   intensity: number;
+  /** A planned deload week that covers this session, if any. */
+  deload: DeloadWindow | null;
 }
 
 export interface RecalibrationRequest {

@@ -161,6 +161,10 @@ const ConstraintsSchema = z.looseObject({
   endBy: z.iso.datetime().nullable(),
   readiness: ReadinessSchema.nullable(),
   intensity: z.number().int().min(-2).max(2),
+  deload: z
+    .object({ startsAt: z.iso.datetime(), endsAt: z.iso.datetime() })
+    .nullable()
+    .default(null),
 });
 
 const CompletedSchema = z.looseObject({

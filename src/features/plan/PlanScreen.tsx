@@ -7,7 +7,9 @@ import { BandBar } from '../../components/Charts/Bars';
 import { ScreenHeader } from '../../components/Screen/Screen';
 import { useNow } from '../../core/time/clock';
 import { durationLabel } from '../../engine/duration/duration';
+import { formatWindow, inDeloadWindow, recommendDeload } from '../../engine/planning/deload';
 import { describeFocus, planWeek, recoveryBalance } from '../../engine/planning/weeklyPlan';
+import { interpretFatigue } from '../../engine/recovery/fatigue';
 import { muscleCoverage } from '../../engine/scoring/analytics';
 import { allEntries } from '../../engine/workout/types';
 import { useToast } from '../../components/Toast/useToast';
@@ -59,6 +61,15 @@ export function PlanScreen() {
     [profile, state.history, nowIso],
   );
   const recovery = useMemo(() => recoveryBalance(state.history, nowIso), [state.history, nowIso]);
+  const deloadAdvice = useMemo(() => {
+    if (!profile) return null;
+    const fatigue = interpretFatigue(
+      state.history,
+      nowIso,
+      state.session?.constraints.readiness ?? null,
+    );
+    return recommendDeload(state.history, fatigue, profile, nowIso);
+  }, [profile, state.history, state.session, nowIso]);
   const [savedName, setSavedName] = useState('');
   const defaultSavedName = state.session
     ? `${state.session.workout.title} · ${nowIso.slice(0, 10)}`
@@ -169,6 +180,40 @@ export function PlanScreen() {
             );
           })}
         </div>
+        {state.deloadWeek ? (
+          <div className={styles.status} data-testid="deload-planned">
+            <strong>Deload week planned</strong>: {formatWindow(state.deloadWeek)}
+            {inDeloadWindow(state.deloadWeek, nowIso)
+              ? ', running now: one set fewer per exercise, one more rep in reserve, loads 10% lighter'
+              : ''}
+            .{' '}
+            <button
+              type="button"
+              className={styles.smallButton}
+              onClick={() => void store.cancelDeloadWeek()}
+              data-testid="deload-cancel"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : deloadAdvice?.recommended && deloadAdvice.window ? (
+          <div className={styles.status} data-testid="deload-suggested">
+            <strong>A deload week is suggested</strong> from {formatWindow(deloadAdvice.window)}:{' '}
+            {deloadAdvice.reasons.join(' ')}{' '}
+            <button
+              type="button"
+              className={styles.smallButton}
+              onClick={() => void store.planDeloadWeek(deloadAdvice)}
+              data-testid="deload-plan"
+            >
+              Plan it
+            </button>
+          </div>
+        ) : (
+          <p className={styles.status} data-testid="deload-none">
+            No deload week needed. {deloadAdvice?.reasons[deloadAdvice.reasons.length - 1] ?? ''}
+          </p>
+        )}
       </Card>
 
       <Card eyebrow="Saved workouts" title="Reuse a session you liked">

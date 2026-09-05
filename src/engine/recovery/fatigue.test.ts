@@ -68,4 +68,45 @@ describe('fatigue interpretation', () => {
     expect(fresh.level).toBe('fresh');
     expect(fresh.evidence).toContain('Feeling fresh in today’s check-in.');
   });
+
+  it('reads the check-in trend, long rests, and performance drift', () => {
+    const tired = {
+      energy: 2,
+      sleep: 2,
+      soreness: 4,
+      motivation: 3,
+      jointDiscomfort: [],
+      timePressure: false,
+    };
+    const slow = (daysAgo: number, weight: number) => {
+      const base = record(daysAgo, 'barbell-bench-press', [
+        [5, weight, 2],
+        [5, weight, 2],
+        [5, weight, 2],
+      ]);
+      const start = Date.parse(base.startedAt);
+      return {
+        ...base,
+        readiness: tired,
+        entries: base.entries.map((entry) => ({
+          ...entry,
+          role: 'primary-strength',
+          sets: entry.sets.map((set, index) => ({
+            ...set,
+            loggedAt: new Date(start + index * 6 * 60_000).toISOString(),
+          })),
+        })),
+      };
+    };
+    const history = [slow(1, 165), slow(3, 180), slow(5, 185), slow(7, 185)];
+    const signal = interpretFatigue(history, NOW);
+    expect(signal.readinessTrend).toBe(3);
+    expect(signal.longRests).toBe(4);
+    expect(signal.performanceDrift).toBeLessThanOrEqual(-5);
+    expect(signal.evidence.join(' ')).toMatch(/Low energy or sleep in 3 of the last 3 check-ins/);
+    expect(signal.evidence.join(' ')).toMatch(/Sore in 3 of the last 3 check-ins/);
+    expect(signal.evidence.join(' ')).toMatch(/Rests ran long: 4 sets/);
+    expect(signal.evidence.join(' ')).toMatch(/Estimated maxes fell/);
+    expect(signal.level).toBe('high');
+  });
 });

@@ -140,3 +140,21 @@ returns from a break, and estimates do not.
 "Not now" on the coach card records the offer by its source and lift in the meta store. A
 declined offer stays away for seven days; declined twice, it stays away until the record is
 cleared by a restore. Safety signals are never put away.
+
+## Fatigue signals beyond the session count (`src/engine/recovery/fatigue.ts`)
+
+Fatigue now also reads the saved check-ins as a trend (low energy or sleep, or soreness, in two of
+the last three), rests that ran long between logged sets in the last two sessions (a sign of
+grinding), and performance drift, the average change of each lift's estimated max from its
+previous exposure to its newest. Each adds to the same score, so the levels fresh, normal,
+elevated, and high keep their meaning.
+
+## Deload week (`src/engine/planning/deload.ts`)
+
+A deload week is recommended on the Plan tab when the last fortnight held six or more sessions,
+fatigue is elevated or high, and at least one sign says the body is not keeping up: maxes
+slipping, sets running closer to failure than planned, hard ratings, or poor check-ins. "Plan
+it" saves the week (the next available training day plus seven days) in the meta store. While it
+runs, every generated session carries one set fewer per exercise, one more rep in reserve, and
+loads ten percent lighter, and "Why this workout" says so. Cancel removes it. A planned week that
+has passed is dropped on load.

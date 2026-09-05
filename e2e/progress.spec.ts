@@ -64,6 +64,7 @@ test.describe('progress and plan', () => {
     );
     await expect(page.getByTestId('weekly-targets')).toBeVisible();
     await expect(page.getByTestId('recovery-balance')).toContainText(/Fresh/);
+    await expect(page.getByTestId('deload-none')).toContainText(/No deload week needed/);
 
     await page.getByTestId('saved-workout-name').fill('Push day A');
     await page.getByTestId('save-workout-button').click();

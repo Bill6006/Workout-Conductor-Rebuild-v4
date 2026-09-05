@@ -37,6 +37,13 @@ import {
 } from '../../engine/coach/coachConductor';
 import { coachingPolicy } from '../../engine/coach/experience';
 import {
+  DELOAD_WEEK_ID,
+  inDeloadWindow,
+  windowIsPast,
+  type DeloadRecommendation,
+  type DeloadWeek,
+} from '../../engine/planning/deload';
+import {
   COACH_ROUTES_ID,
   applyRouteStep,
   detectStalls,
@@ -159,6 +166,24 @@ export interface AppState {
   coachRoutes: CoachRoutes;
   /** Declined coach offers, kept in the meta store and backed up. */
   coachDeclines: CoachDeclines;
+  /** A planned deload week, kept in the meta store and backed up; null when none. */
+  deloadWeek: DeloadWeek | null;
+}
+
+function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const candidate = raw as Partial<DeloadWeek>;
+  if (typeof candidate.startsAt !== 'string' || typeof candidate.endsAt !== 'string') return null;
+  const week: DeloadWeek = {
+    id: DELOAD_WEEK_ID,
+    startsAt: candidate.startsAt,
+    endsAt: candidate.endsAt,
+    plannedAt: typeof candidate.plannedAt === 'string' ? candidate.plannedAt : now,
+    reasons: Array.isArray(candidate.reasons)
+      ? candidate.reasons.filter((r): r is string => typeof r === 'string')
+      : [],
+  };
+  return windowIsPast(week, now) ? null : week;
 }
 
 function parseCoachDeclines(raw: unknown): CoachDeclines {
@@ -359,6 +384,7 @@ export class AppStore {
       customCounts: { exercises: 0, instructions: 0, media: 0 },
       coachRoutes: emptyRoutes(),
       coachDeclines: emptyDeclines(),
+      deloadWeek: null,
     };
   }
 
@@ -396,6 +422,7 @@ export class AppStore {
         savedRaw,
         routesRaw,
         declinesRaw,
+        deloadRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -406,6 +433,7 @@ export class AppStore {
         db.getAll<Identified>('savedWorkouts'),
         db.get<Identified>('meta', COACH_ROUTES_ID),
         db.get<Identified>('meta', COACH_DECLINES_ID),
+        db.get<Identified>('meta', DELOAD_WEEK_ID),
       ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
       const validLocations = locations
@@ -444,6 +472,7 @@ export class AppStore {
         },
         coachRoutes: parseCoachRoutes(routesRaw),
         coachDeclines: parseCoachDeclines(declinesRaw),
+        deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
       });
       this.ensureSession();
     } catch (error) {
@@ -505,14 +534,21 @@ export class AppStore {
       if (this.state.session !== current) this.setState({ session: current });
       return;
     }
+    const now = this.now();
+    const deload =
+      this.state.deloadWeek && inDeloadWindow(this.state.deloadWeek, now)
+        ? { startsAt: this.state.deloadWeek.startsAt, endsAt: this.state.deloadWeek.endsAt }
+        : null;
     const workout = generateWorkout({
       profile,
       location: this.currentLocation(),
       history: this.state.history,
-      now: this.now(),
+      now,
       duration: 'default',
+      constraints: deload ? { deload } : undefined,
     });
-    this.setSession(createSession(key, workout, this.now()));
+    const session = createSession(key, workout, now);
+    this.setSession({ ...session, constraints: { ...session.constraints, deload } });
   }
 
   /** Re-checks the session against today's inputs; a new day starts a fresh session. */
@@ -1635,6 +1671,41 @@ export class AppStore {
   }
 
   // ---------------------------------------------------------------- coach routes
+
+  /** Plans the recommended deload week; today's preview regenerates if the week already covers it. */
+  async planDeloadWeek(recommendation: DeloadRecommendation): Promise<DeloadWeek> {
+    if (!recommendation.window) throw new Error('No deload week is recommended right now.');
+    const week: DeloadWeek = {
+      id: DELOAD_WEEK_ID,
+      startsAt: recommendation.window.startsAt,
+      endsAt: recommendation.window.endsAt,
+      plannedAt: this.now(),
+      reasons: recommendation.reasons,
+    };
+    const db = await this.getDatabase();
+    await putVerified(db, 'meta', week, { now: this.now });
+    this.setState({ deloadWeek: week });
+    this.regeneratePreview();
+    return week;
+  }
+
+  async cancelDeloadWeek(): Promise<void> {
+    const db = await this.getDatabase();
+    if ((await db.get<Identified>('meta', DELOAD_WEEK_ID)) !== undefined) {
+      await deleteVerified(db, 'meta', DELOAD_WEEK_ID);
+    }
+    this.setState({ deloadWeek: null });
+    this.regeneratePreview();
+  }
+
+  /** A previewed (not started) session is rebuilt from today's inputs. */
+  private regeneratePreview(): void {
+    const session = this.state.session;
+    if (!session || session.status !== 'preview') return;
+    clearSession(this.storage);
+    this.setState({ session: null });
+    this.ensureSession();
+  }
 
   /** Remembers a declined offer so the coach stops repeating it for a while. */
   async declineCoachSignal(signal: Pick<CoachSignal, 'source' | 'exerciseId'>): Promise<void> {

@@ -51,3 +51,13 @@ per round and a 15 s switch; circuits pay one rest per round and 12 s per switch
 - The workout-length choice lives in app state for the current workout only. The Default option
   shows the complete generated session's length (for example "Default: 50 min"); the planning
   budget behind it is the profile's typical workout length, editable in Settings.
+
+## Week-aware selection (Maintenance 4)
+
+The template choice counts muscles trained in the last two days against a template and muscles
+behind their weekly target for it, on top of priority weights and rotation. Within a template,
+candidates whose primary muscles are behind score a little higher, and after the anchor lift the
+straight accessories for behind muscles are ordered first (never during a recalibration that
+keeps logged work). "Why this workout" says which muscles have had time to recover, which sit out
+because they trained in the last two days, which muscles the accessories lead with, and, during a
+planned deload week, what the week changes.
