@@ -58,7 +58,10 @@ test.describe('progress and plan', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Plan' })).toBeVisible();
     const week = page.getByTestId('week-plan');
     await expect(week).toBeVisible();
-    await expect(week.getByRole('listitem').first()).toContainText('Today');
+    // On a training day the first row is Today; on a rest day it is the next scheduled day.
+    await expect(week.getByRole('listitem').first()).toContainText(
+      /Today|Tomorrow|(Mon|Tue|Wed|Thu|Fri|Sat|Sun), /,
+    );
     await expect(page.getByTestId('weekly-targets')).toBeVisible();
     await expect(page.getByTestId('recovery-balance')).toContainText(/Fresh/);
 
