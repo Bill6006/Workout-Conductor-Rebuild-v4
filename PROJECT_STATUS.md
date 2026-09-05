@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                                                                                                                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                                                            |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                                                            |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                    |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                               |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                   |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3 GREEN. Maintenance 4, richer fatigue and recovery signals and week-aware selection, in progress                                                                                                                                                             |
-| Phase gate             | Maintenance 3 **GREEN** (owner approved on Android, 2026-09-05). Maintenance 4 in progress; no gate yet                                                                                                                                                                                                             |
-| Current branch         | `main`                                                                                                                                                                                                                                                                                                              |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                        |
-| Work in progress       | Maintenance 4: fatigue read from more signals (readiness trend, grinding sets, performance drift) with a scheduled deload week on the Plan tab; the next session chosen from what the week still lacks and what has recovered, with the reason in the preview. Report to follow in `docs/reports/maintenance-4.md`. |
-| Latest commit          | Maintenance 3 status and report (this commit); app build under review is `b427b9c`                                                                                                                                                                                                                                  |
-| Latest deployment      | `b427b9c` deployed by Deploy Pages run 33971991045 (success); full browser suite passed against the live URL (120 passed + 14 skipped by design)                                                                                                                                                                    |
-| Test totals            | Unit: 323 passed (59 files). Browser/mobile: 120 passed + 14 skipped by design locally and against the live URL                                                                                                                                                                                                     |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                                                                                        |
+| Item                   | Value                                                                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                          |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                          |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                  |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                             |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                 |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3 GREEN. Maintenance 4, richer fatigue and recovery signals and week-aware selection, at its review gate    |
+| Phase gate             | Maintenance 4 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 3 GREEN (2026-09-05)                                   |
+| Current branch         | `main`                                                                                                                                                            |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                      |
+| Work in progress       | None. Maintenance 4 is at its review gate (`docs/reports/maintenance-4.md`) and completes the owner's smarter-coach list; further work starts from a new request. |
+| Latest commit          | Maintenance 4 status and report (this commit); app build under review is `13da3d1`                                                                                |
+| Latest deployment      | `13da3d1` deployed by Deploy Pages run 33998192126 (success); full browser suite passed against the live URL (123 passed + 14 skipped by design)                  |
+| Test totals            | Unit: 332 passed (62 files). Browser/mobile: 123 passed + 14 skipped by design locally and against the live URL                                                   |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                      |
 
 ## Phase checklist
 
@@ -138,6 +138,13 @@ _Last updated: _
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 4: richer fatigue and recovery signals, and week-aware selection (YELLOW - awaiting review)
+
+- Fatigue also reads the saved check-ins as a trend, rests that ran long between logged sets, and performance drift across each lift's estimated max; the same score and levels feed progression, the coach, and the strategy engine.
+- The Plan tab's recovery card suggests a deload week, with its reasons and one "Plan it" button, when a dense fortnight meets elevated or high fatigue and a sign the body is not keeping up. A planned week lightens every generated session (one set fewer, one more rep in reserve, loads 10 percent lighter), says so in "Why this workout", is backed up, can be cancelled, and expires on its own.
+- The template choice counts muscles trained in the last two days against a session and muscles behind their weekly target for it; accessories for behind muscles lead after the anchor lift; "Why this workout" says which muscles recovered, which sit out, and which lead.
+- Report: `docs/reports/maintenance-4.md`; engine notes in `docs/progression-engine.md` and `docs/workout-engine.md`.
+
 ## Maintenance 3: smarter alternatives, and learning from overrides (GREEN)
 
 - Alternatives are ranked by what a swap costs: your history with each candidate (when, and at what load and reps), how loaded each muscle already is this week, joints that hurt today (high stress excludes, moderate costs), and whether the coach route for the current lift asks for a variation. Each candidate shows up to two specific reasons and the strongest reason against.
@@ -169,6 +176,8 @@ _Last updated: _
 
 ## Mobile screenshots
 
+Maintenance 4, captured by Playwright from the deployed build `13da3d1` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-4](docs/screenshots/maintenance-4)): [Plan](docs/screenshots/maintenance-4/android-412-plan.png) · [Today](docs/screenshots/maintenance-4/android-412-today.png) · [Combined preview sheet](docs/screenshots/maintenance-4/preview-sheet.png).
+
 Maintenance 1, captured by Playwright from the deployed build `223c767` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-1](docs/screenshots/maintenance-1)): [Stall route on the coach card](docs/screenshots/maintenance-1/android-412-today-coach-stall-route.png) · [After the first step](docs/screenshots/maintenance-1/android-412-today-coach-stall-applied.png) · [Quiet coach line](docs/screenshots/maintenance-1/android-412-today-coach-card.png) · [Combined preview sheet](docs/screenshots/maintenance-1/preview-sheet.png).
 
 Phase 8, captured by Playwright from the deployed build `5691ed7` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-8](docs/screenshots/phase-8)): [Settings with backups, automatic backups, and storage check](docs/screenshots/phase-8/android-412-settings-data-safety.png) · [Legacy import preview](docs/screenshots/phase-8/android-412-settings-legacy-preview.png) · [Import preview](docs/screenshots/phase-8/android-412-settings-import-preview.png) · [Combined preview sheet](docs/screenshots/phase-8/preview-sheet.png); the full set is in the folder.
@@ -184,7 +193,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone, opens an exercise's details from Today and reads the
-reasons under each alternative, taps "Not now" on a coach card with an action and sees it go quiet,
-and, over three sessions of lifting above a suggested load, reads that the target stepped up to meet
-them. Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
+Owner opens the live link on an Android phone, reads the Plan tab's recovery card (a deload line, with
+"Plan it" only after a dense, hard fortnight), and opens "Why this workout" on Today to read which
+muscles recovered, which sit out, and which the accessories lead with. Reply with `GREEN - NEXT PHASE`,
+`YELLOW - FIX: <issue>`, or `RED - STOP`. This round completes the smarter-coach list.
