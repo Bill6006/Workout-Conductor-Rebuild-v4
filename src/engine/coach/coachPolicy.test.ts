@@ -139,6 +139,10 @@ describe('coaching by experience', () => {
   it('walks the route: the applied step is done, the next step is on offer', () => {
     const history = stalled();
     const routes = applyRouteStep(emptyRoutes(), BENCH, 0, 215.8, NOW);
+    // Just applied: the step stays in place with no action until the exposures decide.
+    const justApplied = conductCoach(withBench(input('advanced', history, { routes })));
+    expect(justApplied?.signal.why[1]).toMatch(/1 shift the rep range \(applied\)/);
+    expect(justApplied?.signal.action).toBeNull();
     const advanced = { ...routes, routes: { [BENCH]: { ...routes.routes[BENCH]!, step: 1 } } };
     const card = conductCoach(withBench(input('advanced', history, { routes: advanced })));
     expect(card?.signal.why[1]).toMatch(

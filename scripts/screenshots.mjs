@@ -15,7 +15,8 @@ import path from 'node:path';
 const args = process.argv.slice(2);
 const phaseIndex = args.indexOf('--phase');
 const phase = phaseIndex >= 0 ? args[phaseIndex + 1] : '0';
-const label = `phase-${phase}`;
+const labelIndex = args.indexOf('--label');
+const label = labelIndex >= 0 ? args[labelIndex + 1] : `phase-${phase}`;
 const outDir = path.join('docs', 'screenshots', label);
 mkdirSync(outDir, { recursive: true });
 

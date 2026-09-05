@@ -131,8 +131,9 @@ test.describe('adaptive coach', () => {
     await importStalledBench(page);
     const card = page.getByTestId('coach-card');
     await expect(card).toHaveAttribute('data-domain', 'plateau');
+    // Imported sets carry no target effort, so the headline states the stall alone.
     await expect(card.getByTestId('coach-headline')).toHaveText(
-      'Barbell Bench Press has stalled for 4 exposures at the prescribed effort',
+      'Barbell Bench Press has stalled for 4 exposures',
     );
     await expect(card).toContainText(/Route: 1 shift the rep range \(now\)/);
     const action = card.getByTestId('coach-action');
@@ -143,6 +144,9 @@ test.describe('adaptive coach', () => {
     await expect(
       page.locator('[data-testid="workout-entry"][data-exercise-id="barbell-bench-press"]'),
     ).toContainText('6-10');
+    // The step is recorded: it reads as applied and is not offered again.
+    await expect(card).toContainText(/Route: 1 shift the rep range \(applied\)/);
+    await expect(card.getByTestId('coach-action')).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
   });
 });

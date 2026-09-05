@@ -588,6 +588,14 @@ function routeAction(
   const ref = { exerciseId: route.exerciseId, step: route.step, baselineE1rm: route.baselineE1rm };
   const usable = entry !== undefined && !started(input, entry);
   const first = entry ? workingSets(entry).find((set) => set.kind === 'working') : undefined;
+  const applied = route.applied.find((entry) => entry.step === route.step);
+  if (applied && !route.exhausted) {
+    const policy = input.policy ?? coachingPolicy(input.profile.experience);
+    return {
+      action: null,
+      explain: `Step ${route.step + 1} is in place since ${new Date(applied.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}; the next ${policy.exposuresPerRouteStep} exposures decide whether it moved the max.`,
+    };
+  }
   if (route.exhausted) {
     return {
       action:
@@ -724,11 +732,15 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
       domain: 'plateau',
       headline: route.exhausted
         ? `${exercise.name}: every route step tried, still stalled`
-        : `${exercise.name} has stalled for ${stall.exposures} exposures at the prescribed effort`,
+        : `${exercise.name} has stalled for ${stall.exposures} exposures${
+            stall.effortUnknown < stall.exposures ? ' at the prescribed effort' : ''
+          }`,
       why: [
         stall.why[0] as string,
         `Route: ${describeRoute(route)}.`,
-        inSession ? explain : `${explain} Applies when ${exercise.name} is next in a session.`,
+        inSession || action === null
+          ? explain
+          : `${explain} Applies when ${exercise.name} is next in a session.`,
       ],
       action,
       confidence: stall.effortUnknown === 0 ? 'high' : 'medium',

@@ -303,7 +303,10 @@ export function describeRoute(route: Pick<CoachRoute, 'step' | 'applied' | 'exha
     if (route.applied.some((entry) => entry.step === index) && index !== route.step) {
       return `${label} (done)`;
     }
-    if (index === route.step) return `${label} (${route.exhausted ? 'tried' : 'now'})`;
+    if (index === route.step) {
+      const applied = route.applied.some((entry) => entry.step === index);
+      return `${label} (${route.exhausted ? 'tried' : applied ? 'applied' : 'now'})`;
+    }
     return label;
   }).join(' → ');
 }
