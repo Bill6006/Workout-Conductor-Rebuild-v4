@@ -2,6 +2,7 @@ import { getExercise } from '../../catalog/exercises/catalog';
 import type { CatalogExercise, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { coachingPolicy, policyLabel } from '../coach/experience';
 import { weightStep } from '../plateMath/plateMath';
 import type { EntryProgression, ProgressionMode, SetPrescription } from '../workout/types';
 import { restCategory, type Prescription } from './roles';
@@ -216,6 +217,15 @@ export function recommendNextTarget(input: NextTargetInput): NextTarget {
     if (!point.topAll) break;
     consecutiveTop += 1;
   }
+  const policy = coachingPolicy(profile.experience);
+  const clean = (point: PerformancePoint) =>
+    point.floorAll &&
+    (point.avgRir === null || point.avgRir >= prescription.rir - policy.reserveTolerance);
+  let consecutiveClean = 0;
+  for (const point of points) {
+    if (!clean(point)) break;
+    consecutiveClean += 1;
+  }
   const confidence: NextTarget['confidence'] =
     points.length >= 3 && !last.viaFamily ? 'high' : points.length >= 2 ? 'medium' : 'low';
   const weight = last.bestWeight;
@@ -278,12 +288,21 @@ export function recommendNextTarget(input: NextTargetInput): NextTarget {
   }
 
   if (strength) {
-    const reserve = last.avgRir === null || last.avgRir >= prescription.rir - 0.5;
-    if (last.floorAll && reserve) {
+    if (clean(last)) {
+      if (consecutiveClean >= policy.cleanSessionsToProgress) {
+        return result(
+          'weight',
+          roundToStep(weight + step, step),
+          policy.cleanSessionsToProgress > 1
+            ? `${consecutiveClean} clean sessions in a row, every set past the floor with reps in reserve: add ${step} ${units}.`
+            : `Every set cleared the floor with reps in reserve: add ${step} ${units}.`,
+          { setsAdvice, evidence: setsLine },
+        );
+      }
       return result(
-        'weight',
-        roundToStep(weight + step, step),
-        `Every set cleared the floor with reps in reserve: add ${step} ${units}.`,
+        'maintain',
+        weight,
+        `${policyLabel(policy)} policy: load moves after ${policy.cleanSessionsToProgress} clean sessions in a row; ${consecutiveClean} banked, hold the load once more.`,
         { setsAdvice, evidence: setsLine },
       );
     }
@@ -291,16 +310,28 @@ export function recommendNextTarget(input: NextTargetInput): NextTarget {
       'maintain',
       weight,
       last.floorAll
-        ? 'Hit the reps with little in reserve: hold the load and bank a cleaner session.'
+        ? policy.reserveTolerance === 0
+          ? 'Hit the reps but under the prescribed reserve: hold the load and bank a cleaner session.'
+          : 'Hit the reps with little in reserve: hold the load and bank a cleaner session.'
         : 'Hold the load until every set clears the floor.',
     );
   }
 
   if (last.topAll) {
+    if (consecutiveTop >= policy.topSessionsToProgress) {
+      return result(
+        'weight',
+        roundToStep(weight + step, step),
+        policy.topSessionsToProgress > 1
+          ? `Top of the range on every set ${consecutiveTop} sessions running: add ${step} ${units} and work back up the range.`
+          : `Top of the range on every set: add ${step} ${units} and work back up the range.`,
+        { setsAdvice, evidence: setsLine },
+      );
+    }
     return result(
-      'weight',
-      roundToStep(weight + step, step),
-      `Top of the range on every set: add ${step} ${units} and work back up the range.`,
+      'reps',
+      weight,
+      `${policyLabel(policy)} policy: load moves after ${policy.topSessionsToProgress} sessions at the top of the range; ${consecutiveTop} so far, so one more rep per set first.`,
       { setsAdvice, evidence: setsLine },
     );
   }

@@ -312,3 +312,75 @@ describe('progression engine', () => {
     expect(estimateOneRepMax(185, 5)).toBe(215.8);
   });
 });
+
+describe('progression by experience', () => {
+  const advanced = { ...profile, experience: 'advanced' as const };
+  const advancedRx = prescribe(bench, 'primary-strength', advanced);
+  const clean = (daysAgo: number, rir = 2) =>
+    record(daysAgo, bench.id, [
+      [5, 185, rir],
+      [5, 185, rir],
+      [5, 185, rir],
+    ]);
+
+  it('makes an advanced lifter bank two clean strength sessions before load moves', () => {
+    const base = {
+      exercise: bench,
+      role: 'primary-strength' as const,
+      prescription: advancedRx,
+      profile: advanced,
+    };
+    const one = recommendNextTarget({ ...base, history: [clean(3)] });
+    expect(one.mode).toBe('maintain');
+    expect(one.weight).toBe(185);
+    expect(one.evidence.join(' ')).toMatch(/Advanced policy: load moves after 2 clean sessions/);
+
+    const two = recommendNextTarget({ ...base, history: [clean(3), clean(7)] });
+    expect(two.mode).toBe('weight');
+    expect(two.weight).toBe(190);
+    expect(two.evidence.join(' ')).toMatch(/2 clean sessions in a row/);
+
+    // Under the prescribed reserve does not count as clean for an advanced lifter.
+    const tight = recommendNextTarget({ ...base, history: [clean(3, 1.5), clean(7)] });
+    expect(tight.mode).toBe('maintain');
+    expect(tight.evidence.join(' ')).toMatch(/under the prescribed reserve/);
+  });
+
+  it('keeps intermediate progression as before and asks advanced lifters for two top sessions', () => {
+    const top = isoRx.reps[1];
+    const session = (daysAgo: number) =>
+      record(
+        daysAgo,
+        fly.id,
+        [
+          [top, 40, 1],
+          [top, 40, 1],
+        ],
+        isoRx.reps,
+        1,
+      );
+    const intermediate = recommendNextTarget({
+      exercise: fly,
+      role: 'isolation',
+      prescription: isoRx,
+      history: [session(3)],
+      profile,
+    });
+    expect(intermediate.mode).toBe('weight');
+
+    const advancedIso = prescribe(fly, 'isolation', advanced);
+    const base = {
+      exercise: fly,
+      role: 'isolation' as const,
+      prescription: advancedIso,
+      profile: advanced,
+    };
+    const once = recommendNextTarget({ ...base, history: [session(3)] });
+    expect(once.mode).toBe('reps');
+    expect(once.evidence.join(' ')).toMatch(
+      /Advanced policy: load moves after 2 sessions at the top/,
+    );
+    const twice = recommendNextTarget({ ...base, history: [session(3), session(7)] });
+    expect(twice.mode).toBe('weight');
+  });
+});

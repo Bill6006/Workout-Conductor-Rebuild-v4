@@ -76,3 +76,39 @@ length, not a separate mode.
 Actions map to existing systems: recalibration triggers (target weight, rep range, sets, rest
 adjust, drop set, duration), the rest timer, the readiness check-in, the alternatives sheet, or a
 backup export.
+
+## Coaching policy by experience (`src/engine/coach/experience.ts`)
+
+The experience level chosen in Settings sets a policy the coach, the progression engine, and
+the stall detector all read:
+
+| Policy                                                                                                   | Beginner    | Intermediate   | Advanced       |
+| -------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------------- |
+| Tone / reasons shown                                                                                     | explain / 3 | brief / 2      | brief / 2      |
+| "Follow today's plan" card when nothing outranks the plan                                                | yes         | one quiet line | one quiet line |
+| Signals that restate a target (load goes up, ready for more load, aim one rep higher, superset readouts) | shown       | hidden         | hidden         |
+| Strength roles: clean sessions before load moves                                                         | 1           | 1              | 2              |
+| Reserve tolerance under the prescribed RIR                                                               | 0.5         | 0.5            | 0              |
+| Double progression: top-of-range sessions before load moves                                              | 1           | 1              | 2              |
+| Exposures without a better max before a stall                                                            | 3           | 4              | 4              |
+| Exposures a route step gets before the next                                                              | 2           | 2              | 2              |
+
+Deloads, resets, extra-set offers, safety, recovery, coverage, and stalls speak to every level.
+
+## Stall detection and coach routes (`src/engine/strategy/plateau.ts`)
+
+- An exposure is one session with completed working sets of a lift; the estimated max is the
+  best set's Epley estimate.
+- A stall is the newest N exposures with no estimated max more than 1 percent above the oldest
+  of them, at the prescribed effort (average RIR within half a rep of the target). Sets ending
+  1.5 reps or more above the target RIR in at least half the exposures are diagnosed as
+  undershooting instead, and the next load step is offered. Two or more exposures under the rep
+  floor are left to the deload rules, and a latest exposure at the top of the range is left to
+  progression.
+- A stalled lift opens a route: shift the rep range (strength range to hypertrophy range or
+  back), swap for a variation (the alternatives sheet), short deload (10 percent, second tap),
+  add a working set. The card shows the route with the current step marked and offers that step
+  as its one action; tapping records the step. After the policy's exposures without a better
+  max the next step is offered; when the max moves the route closes; after the last step the
+  card asks for a different exercise for the pattern.
+- Routes are one record (`coach-routes`) in the meta store, backed up with everything else.

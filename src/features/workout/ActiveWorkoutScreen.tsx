@@ -178,6 +178,7 @@ export function ActiveWorkoutScreen() {
       .join(' · ') || null;
 
   const onCoachAction = (action: CoachAction) => {
+    void store.noteCoachAction(action);
     switch (action.kind) {
       case 'recalibrate':
         void store.recalibrate(action.trigger);
@@ -516,7 +517,12 @@ export function ActiveWorkoutScreen() {
       </Card>
 
       {coach ? (
-        <AdaptiveCoachCard card={coach.card} fatigue={coach.fatigue} onAction={onCoachAction} />
+        <AdaptiveCoachCard
+          card={coach.card}
+          fatigue={coach.fatigue}
+          policy={coach.policy}
+          onAction={onCoachAction}
+        />
       ) : null}
 
       {session.rest && position ? (

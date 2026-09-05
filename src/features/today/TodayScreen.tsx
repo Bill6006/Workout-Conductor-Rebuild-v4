@@ -91,6 +91,7 @@ export function TodayScreen() {
 
   // Coach actions are taps the user makes; the card never applies anything itself.
   const onCoachAction = (action: CoachAction) => {
+    void store.noteCoachAction(action);
     switch (action.kind) {
       case 'recalibrate':
         void store.recalibrate(action.trigger);
@@ -144,7 +145,12 @@ export function TodayScreen() {
       />
 
       {coach ? (
-        <AdaptiveCoachCard card={coach.card} fatigue={coach.fatigue} onAction={onCoachAction} />
+        <AdaptiveCoachCard
+          card={coach.card}
+          fatigue={coach.fatigue}
+          policy={coach.policy}
+          onAction={onCoachAction}
+        />
       ) : null}
 
       <Card eyebrow="Readiness" title={readiness ? 'Checked in for today' : 'Quick check-in'}>

@@ -11,7 +11,17 @@ import type {
   SessionConstraints,
 } from '../recalibration/types';
 import type { FatigueSignal } from '../recovery/fatigue';
+import {
+  ROUTE_STEPS,
+  describeRoute,
+  detectStalls,
+  emptyRoutes,
+  type CoachRoute,
+  type CoachRoutes,
+  type StallDiagnosis,
+} from '../strategy/plateau';
 import type { StrategyInsight } from '../strategy/strategy';
+import { coachingPolicy, type CoachingPolicy } from './experience';
 import {
   computeExposure,
   computeMusclePriorities,
@@ -50,12 +60,21 @@ export const DOMAIN_PRIORITY: readonly CoachDomain[] = [
   'tips',
 ];
 
-export type CoachAction =
+/** Ties an action to the coach route step it carries out, so the store can record it. */
+export interface RouteRef {
+  exerciseId: string;
+  step: number;
+  baselineE1rm: number;
+}
+
+type CoachActionBase =
   | { kind: 'recalibrate'; trigger: RecalibrationTrigger; label: string; major?: boolean }
   | { kind: 'rest'; deltaSeconds: number; label: string }
   | { kind: 'readiness'; label: string }
   | { kind: 'alternatives'; entryId: string; label: string }
   | { kind: 'backup'; label: string };
+
+export type CoachAction = CoachActionBase & { route?: RouteRef };
 
 export interface CoachSignal {
   domain: CoachDomain;
@@ -65,12 +84,15 @@ export interface CoachSignal {
   confidence: 'low' | 'medium' | 'high';
   severity: number;
   source: string;
+  /** Restates a target the lifter can read from the card; hidden past beginner level. */
+  obvious?: boolean;
 }
 
 export interface CoachCard {
   signal: CoachSignal;
   considered: number;
   domains: CoachDomain[];
+  policy: CoachingPolicy;
 }
 
 export interface CoachInput {
@@ -86,6 +108,10 @@ export interface CoachInput {
   strategy: readonly StrategyInsight[];
   lastExportAt: string | null;
   workoutCount: number;
+  /** Defaults derive from the profile and history; tests and the store pass them in. */
+  policy?: CoachingPolicy;
+  stalls?: StallDiagnosis[];
+  routes?: CoachRoutes;
 }
 
 const DAY_MS = 86_400_000;
@@ -346,6 +372,7 @@ function strategySignals(input: CoachInput): CoachSignal[] {
     confidence: insight.confidence,
     severity: insight.severity,
     source: `strategy: ${insight.kind}`,
+    obvious: insight.recommendation === 'add-weight' || insight.recommendation === 'add-reps',
   }));
 }
 
@@ -380,6 +407,7 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       confidence: 'medium',
       severity: 1.5,
       source: 'superset evidence',
+      obvious: true,
     });
     return signals;
   }
@@ -410,6 +438,7 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       confidence: next.progression.confidence,
       severity: next.progression.mode === 'deload' || next.progression.mode === 'regress' ? 2 : 1,
       source: 'progression',
+      obvious: !['deload', 'regress', 'sets'].includes(next.progression.mode),
     });
   }
   return signals;
@@ -549,11 +578,174 @@ function tipSignals(input: CoachInput): CoachSignal[] {
   return signals;
 }
 
+function routeAction(
+  input: CoachInput,
+  entry: WorkoutEntry | undefined,
+  route: CoachRoute,
+): { action: CoachAction | null; explain: string } {
+  const exercise = requireExercise(route.exerciseId);
+  const units = input.profile.units;
+  const ref = { exerciseId: route.exerciseId, step: route.step, baselineE1rm: route.baselineE1rm };
+  const usable = entry !== undefined && !started(input, entry);
+  const first = entry ? workingSets(entry).find((set) => set.kind === 'working') : undefined;
+  if (route.exhausted) {
+    return {
+      action:
+        entry && usable
+          ? {
+              kind: 'alternatives',
+              entryId: entry.id,
+              label: 'Pick a different exercise',
+              route: ref,
+            }
+          : null,
+      explain:
+        'Every step was tried without the max moving: change the exercise for this pattern for a block.',
+    };
+  }
+  const step = ROUTE_STEPS[route.step];
+  switch (step) {
+    case 'rep-range': {
+      const current = first?.targetReps ?? exercise.repRanges.hypertrophy;
+      const strengthRange = exercise.repRanges.strength ?? exercise.repRanges.hypertrophy;
+      const target: [number, number] =
+        current[0] === strengthRange[0] && current[1] === strengthRange[1]
+          ? exercise.repRanges.hypertrophy
+          : strengthRange;
+      const same = target[0] === current[0] && target[1] === current[1];
+      const reps: [number, number] = same ? [current[0] + 2, current[1] + 2] : target;
+      return {
+        action:
+          entry && usable
+            ? {
+                kind: 'recalibrate',
+                trigger: { type: 'rep-range', entryId: entry.id, reps },
+                label: `Shift to ${reps[0]}-${reps[1]} reps for two weeks`,
+                route: ref,
+              }
+            : null,
+        explain: `Step 1: a different rep range gives the lift a new stimulus at the same effort.`,
+      };
+    }
+    case 'variation':
+      return {
+        action:
+          entry && usable
+            ? { kind: 'alternatives', entryId: entry.id, label: 'Swap for a variation', route: ref }
+            : null,
+        explain:
+          'Step 2: a variation of the same pattern moves the weak point without losing the lift.',
+      };
+    case 'deload': {
+      const current = first?.targetWeight ?? null;
+      const stepSize = weightStep(exercise, units);
+      const lighter =
+        current === null
+          ? null
+          : Math.max(stepSize, Math.round((current * 0.9) / stepSize) * stepSize);
+      return {
+        action:
+          entry && usable && lighter !== null
+            ? {
+                kind: 'recalibrate',
+                trigger: { type: 'target-weight', entryId: entry.id, weight: lighter },
+                label: `Deload to ${lighter} ${units} this week`,
+                major: true,
+                route: ref,
+              }
+            : null,
+        explain: 'Step 3: a short deload sheds fatigue that hides progress.',
+      };
+    }
+    case 'volume':
+    default:
+      return {
+        action:
+          entry && usable
+            ? {
+                kind: 'recalibrate',
+                trigger: { type: 'sets', entryId: entry.id, workingDelta: 1 },
+                label: 'Add a working set',
+                route: ref,
+              }
+            : null,
+        explain: 'Step 4: one more working set adds the volume a stalled lift often needs.',
+      };
+  }
+}
+
+function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[] {
+  const stalls = input.stalls ?? detectStalls(input.history, input.profile, policy);
+  const routes = input.routes ?? emptyRoutes();
+  const signals: CoachSignal[] = [];
+  for (const stall of stalls) {
+    const exercise = requireExercise(stall.exerciseId);
+    const entry = allEntries(input.workout.blocks).find(
+      (candidate) => candidate.exerciseId === stall.exerciseId,
+    );
+    const inSession = entry !== undefined;
+    if (stall.kind === 'undershooting') {
+      const first = entry ? workingSets(entry).find((set) => set.kind === 'working') : undefined;
+      const current = first?.targetWeight ?? null;
+      const stepSize = weightStep(exercise, input.profile.units);
+      signals.push({
+        domain: 'plateau',
+        headline: `${exercise.name}: ${stall.exposures} exposures without progress, sets ending too easy`,
+        why: [
+          ...stall.why,
+          inSession
+            ? 'Work to the prescribed effort, or take the next load step now.'
+            : `Applies when ${exercise.name} is next in a session.`,
+        ],
+        action:
+          entry && !started(input, entry) && current !== null
+            ? {
+                kind: 'recalibrate',
+                trigger: { type: 'target-weight', entryId: entry.id, weight: current + stepSize },
+                label: `Take ${current + stepSize} ${input.profile.units} today`,
+              }
+            : null,
+        confidence: 'medium',
+        severity: 2,
+        source: 'stall: undershooting',
+      });
+      continue;
+    }
+    const route: CoachRoute = routes.routes[stall.exerciseId] ?? {
+      exerciseId: stall.exerciseId,
+      step: 0,
+      startedAt: input.now,
+      baselineE1rm: stall.latestE1rm,
+      applied: [],
+      exhausted: false,
+    };
+    const { action, explain } = routeAction(input, entry, route);
+    signals.push({
+      domain: 'plateau',
+      headline: route.exhausted
+        ? `${exercise.name}: every route step tried, still stalled`
+        : `${exercise.name} has stalled for ${stall.exposures} exposures at the prescribed effort`,
+      why: [
+        stall.why[0] as string,
+        `Route: ${describeRoute(route)}.`,
+        inSession ? explain : `${explain} Applies when ${exercise.name} is next in a session.`,
+      ],
+      action,
+      confidence: stall.effortUnknown === 0 ? 'high' : 'medium',
+      severity: route.exhausted ? 3 : 2,
+      source: 'stall: route',
+    });
+  }
+  return signals;
+}
+
 export function gatherSignals(input: CoachInput): CoachSignal[] {
+  const policy = input.policy ?? coachingPolicy(input.profile.experience);
   return [
     ...safetySignals(input),
     ...saveSignals(input),
     ...recoverySignals(input),
+    ...plateauSignals(input, policy),
     ...strategySignals(input),
     ...progressionSignals(input),
     ...restSignals(input),
@@ -566,7 +758,9 @@ const CONFIDENCE_RANK = { high: 3, medium: 2, low: 1 } as const;
 
 /** Picks the one card: highest-priority domain first, then severity, then confidence. */
 export function conductCoach(input: CoachInput): CoachCard | null {
-  const signals = gatherSignals(input);
+  const policy = input.policy ?? coachingPolicy(input.profile.experience);
+  const all = gatherSignals(input);
+  const signals = policy.hideObvious ? all.filter((signal) => !signal.obvious) : all;
   if (signals.length === 0) return null;
   const ranked = [...signals].sort(
     (a, b) =>
@@ -576,9 +770,11 @@ export function conductCoach(input: CoachInput): CoachCard | null {
       CONFIDENCE_RANK[b.confidence] - CONFIDENCE_RANK[a.confidence] ||
       a.headline.localeCompare(b.headline),
   );
+  const winner = ranked[0] as CoachSignal;
   return {
-    signal: ranked[0] as CoachSignal,
-    considered: signals.length,
+    signal: { ...winner, why: winner.why.slice(0, policy.whyLines) },
+    considered: all.length,
     domains: [...new Set(signals.map((signal) => signal.domain))],
+    policy,
   };
 }

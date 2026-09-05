@@ -13,6 +13,7 @@ import { generateWorkout } from '../workoutGenerator/generate';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import { DOMAIN_PRIORITY, conductCoach, gatherSignals, type CoachInput } from './coachConductor';
+import { coachingPolicy } from './experience';
 
 const NOW = '2026-09-10T12:00:00.000Z';
 const profile = createDefaultProfile(NOW);
@@ -97,7 +98,9 @@ describe('coach conductor', () => {
         [5, 185, 2],
       ]),
     ];
-    const plateau = conductCoach(input(history));
+    // The load nudge is obvious past beginner level; a beginner still gets it as a plateau card.
+    const beginner = { policy: coachingPolicy('beginner') };
+    const plateau = conductCoach(input(history, beginner));
     expect(plateau?.signal.domain).toBe('plateau');
     expect(plateau?.signal.headline).toBe('Barbell Bench Press is ready for more load');
     const loadedJoint = allEntries(plateau ? input(history).workout.blocks : []).flatMap((entry) =>

@@ -25,6 +25,16 @@ import {
 import { allEntries, type DurationChoice, type GeneratedWorkout } from '../../engine/workout/types';
 import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import { normalizeName } from '../backup/legacyImport';
+import type { CoachAction } from '../../engine/coach/coachConductor';
+import { coachingPolicy } from '../../engine/coach/experience';
+import {
+  COACH_ROUTES_ID,
+  applyRouteStep,
+  detectStalls,
+  emptyRoutes,
+  reconcileRoutes,
+  type CoachRoutes,
+} from '../../engine/strategy/plateau';
 import { WorkoutRecordSchema } from '../validation/workoutRecord';
 import {
   buildBackup,
@@ -136,6 +146,18 @@ export interface AppState {
   customInstructions: CustomInstruction[];
   savedWorkouts: SavedWorkout[];
   customCounts: { exercises: number; instructions: number; media: number };
+  /** Coach routes for stalled lifts, kept in the meta store and backed up. */
+  coachRoutes: CoachRoutes;
+}
+
+function parseCoachRoutes(raw: unknown): CoachRoutes {
+  if (raw && typeof raw === 'object') {
+    const routes = (raw as { routes?: unknown }).routes;
+    if (routes && typeof routes === 'object') {
+      return { id: COACH_ROUTES_ID, routes: routes as CoachRoutes['routes'] };
+    }
+  }
+  return emptyRoutes();
 }
 
 export type SnapshotReason = 'workout' | 'pre-import' | 'manual' | 'legacy-import';
@@ -315,6 +337,7 @@ export class AppStore {
       customExercises: [],
       customInstructions: [],
       customCounts: { exercises: 0, instructions: 0, media: 0 },
+      coachRoutes: emptyRoutes(),
     };
   }
 
@@ -350,6 +373,7 @@ export class AppStore {
         customInstructions,
         customMedia,
         savedRaw,
+        routesRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -358,6 +382,7 @@ export class AppStore {
         db.getAll<Identified>('customInstructions'),
         db.count('customMedia'),
         db.getAll<Identified>('savedWorkouts'),
+        db.get<Identified>('meta', COACH_ROUTES_ID),
       ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
       const validLocations = locations
@@ -394,6 +419,7 @@ export class AppStore {
           instructions: validInstructions.length,
           media: customMedia,
         },
+        coachRoutes: parseCoachRoutes(routesRaw),
       });
       this.ensureSession();
     } catch (error) {
@@ -1032,6 +1058,7 @@ export class AppStore {
       workoutCount: this.state.workoutCount + 1,
       lastReceipt: receipt,
     });
+    await this.reconcileCoachRoutes(db, profile, now);
     this.setSession({
       ...session,
       status: 'completed',
@@ -1546,6 +1573,44 @@ export class AppStore {
     await deleteVerified(db, 'meta', receiptId);
     await this.hydrate();
     return removed;
+  }
+
+  // ---------------------------------------------------------------- coach routes
+
+  /** Records that the lifter took a coach route step; the step itself is applied elsewhere. */
+  async noteCoachAction(action: CoachAction): Promise<void> {
+    if (!action.route) return;
+    const next = applyRouteStep(
+      this.state.coachRoutes,
+      action.route.exerciseId,
+      action.route.step,
+      action.route.baselineE1rm,
+      this.now(),
+    );
+    if (next === this.state.coachRoutes) return;
+    const db = await this.getDatabase();
+    await putVerified(db, 'meta', next, { now: this.now });
+    this.setState({ coachRoutes: next });
+  }
+
+  /** After a saved workout: open routes for new stalls, advance applied steps, close moved lifts. */
+  private async reconcileCoachRoutes(
+    db: Database,
+    profile: UserProfile,
+    now: string,
+  ): Promise<void> {
+    const policy = coachingPolicy(profile.experience);
+    const stalls = detectStalls(this.state.history, profile, policy);
+    const { routes, events } = reconcileRoutes(
+      this.state.coachRoutes,
+      stalls,
+      this.state.history,
+      policy,
+      now,
+    );
+    if (events.length === 0) return;
+    await putVerified(db, 'meta', routes, { now: this.now });
+    this.setState({ coachRoutes: routes });
   }
 
   // ---------------------------------------------------------------- storage diagnostics

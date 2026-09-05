@@ -63,7 +63,13 @@ test.describe('accessibility', () => {
     await expect(page.getByTestId('workout-stats')).toBeVisible();
     await checkPage(page, 'active workout');
     await page.getByTestId('exercise-card').first().getByTestId('card-thumb').click();
-    await expect(page.getByRole('dialog')).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // The sheet fades and slides in; axe must sample the settled colours, not the transition.
+    await expect
+      .poll(() => dialog.evaluate((el) => getComputedStyle(el).opacity), { timeout: 5_000 })
+      .toBe('1');
+    await page.waitForTimeout(400);
     await checkPage(page, 'exercise details');
   });
 });

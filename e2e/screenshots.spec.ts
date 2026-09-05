@@ -174,6 +174,51 @@ test.describe('screenshots @screenshots', () => {
     await capture(page, testInfo, 'settings-legacy-preview');
     await page.keyboard.press('Escape');
   });
+  test('coach stall route', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');
+    await ensureProfile(page);
+    await page.goto('./#/settings');
+    await page.getByTestId('legacy-file-input').setInputFiles({
+      name: 'old-history.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(
+        JSON.stringify({
+          history: [28, 21, 14, 7].map((daysAgo) => ({
+            date: new Date(Date.now() - daysAgo * 86_400_000).toISOString(),
+            unit: 'lb',
+            exercises: [
+              {
+                name: 'Barbell Bench Press',
+                sets: [
+                  { weight: 185, reps: 5, rir: 2 },
+                  { weight: 185, reps: 5, rir: 2 },
+                  { weight: 185, reps: 5, rir: 2 },
+                ],
+              },
+            ],
+          })),
+        }),
+      ),
+    });
+    await expect(page.getByRole('dialog', { name: 'Import these workouts?' })).toBeVisible();
+    await page.getByTestId('legacy-confirm').click();
+    await expect(
+      page.locator('[role="status"]').filter({ hasText: 'Imported and verified 4 workouts' }),
+    ).toBeVisible();
+    // A fresh backup, so the coach's save reminder does not outrank the stall.
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
+    await download;
+    await page.goto('./#/today');
+    await expect(page.getByTestId('coach-card')).toHaveAttribute('data-domain', 'plateau');
+    await page.getByTestId('coach-card').scrollIntoViewIfNeeded();
+    await capture(page, testInfo, 'today-coach-stall-route');
+    await page.getByTestId('coach-action').click();
+    await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
+    await expect(page.getByTestId('recalibration-summary')).toBeVisible();
+    await capture(page, testInfo, 'today-coach-stall-applied');
+  });
+
   test('active workout', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');
     await ensureProfile(page);
