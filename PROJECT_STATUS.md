@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                                                                                                                                                                                                            |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                                                                         |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                                                                         |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                 |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                            |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 and 2 GREEN. Maintenance 3, smarter alternatives and learning from overrides, in progress                                                                                                                                                                                     |
-| Phase gate             | Maintenance 2 **GREEN** (owner approved on Android, 2026-09-05). Maintenance 3 in progress; no gate yet                                                                                                                                                                                                                          |
-| Current branch         | `main`                                                                                                                                                                                                                                                                                                                           |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                     |
-| Work in progress       | Maintenance 3: alternatives ranked by what a swap costs (history with the candidate, fatigue on its muscles, flagged joints, a route that wants a variation) with a reason per candidate; the engines learn from repeated overrides of suggested loads and declined offers. Report to follow in `docs/reports/maintenance-3.md`. |
-| Latest commit          | Maintenance 2 status and report (this commit); app build under review is `fc3f4e3`                                                                                                                                                                                                                                               |
-| Latest deployment      | `fc3f4e3` deployed by Deploy Pages run 33964153907 (success); full browser suite passed against the live URL (117 passed + 14 skipped by design)                                                                                                                                                                                 |
-| Test totals            | Unit: 312 passed (57 files). Browser/mobile: 117 passed + 14 skipped by design locally and against the live URL                                                                                                                                                                                                                  |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                                                                                                     |
+| Item                   | Value                                                                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                     |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                     |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                             |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                        |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                            |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 and 2 GREEN. Maintenance 3, smarter alternatives and learning from overrides, at its review gate                                          |
+| Phase gate             | Maintenance 3 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 2 GREEN (2026-09-05)                                                              |
+| Current branch         | `main`                                                                                                                                                                                       |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                 |
+| Work in progress       | None. Maintenance 3 is at its review gate (`docs/reports/maintenance-3.md`). Remaining candidates from the owner's list: richer fatigue and recovery signals, week-aware exercise selection. |
+| Latest commit          | Maintenance 3 status and report (this commit); app build under review is `b427b9c`                                                                                                           |
+| Latest deployment      | `b427b9c` deployed by Deploy Pages run 33971991045 (success); full browser suite passed against the live URL (120 passed + 14 skipped by design)                                             |
+| Test totals            | Unit: 323 passed (59 files). Browser/mobile: 120 passed + 14 skipped by design locally and against the live URL                                                                              |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                 |
 
 ## Phase checklist
 
@@ -138,6 +138,13 @@ _Last updated: _
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 3: smarter alternatives, and learning from overrides (YELLOW - awaiting review)
+
+- Alternatives are ranked by what a swap costs: your history with each candidate (when, and at what load and reps), how loaded each muscle already is this week, joints that hurt today (high stress excludes, moderate costs), and whether the coach route for the current lift asks for a variation. Each candidate shows up to two specific reasons and the strongest reason against.
+- The next target follows your habit: above the suggested load in three of the last four sessions steps it up one more step, below steps it down, always with the reason; deloads, resets, returns from a break, and estimates are never biased.
+- One small "Not now" link beside a coach action remembers a declined offer by source and lift: away for seven days, for good after two declines, never for safety. Declines live in the meta store and are backed up.
+- Report: `docs/reports/maintenance-3.md`; engine notes in `docs/conflict-engine.md` and `docs/progression-engine.md`.
+
 ## Maintenance 2: in-session autoregulation, and targets from the estimated max (GREEN)
 
 - After every logged working set with sets still to come, the remaining sets of that exercise adjust from the reps and RIR just logged and the earlier sets this session: up a load step when the set was clearly easy, far past the top, or the second in a row past the top; down a step after a grind under the floor or far under it; rep targets shift when there is no load. One missed floor with reps in reserve changes nothing. Done sets and other exercises never change; the summary line names the set and the reason.
@@ -177,7 +184,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone, starts a workout, skips the warm-up, and logs the first
-working set at the top of the range with 4 in reserve: the summary says the next sets go up a step and
-the next row shows the new load; then logs a set under the floor with 0 in reserve and sees the next
-sets come down. Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
+Owner opens the live link on an Android phone, opens an exercise's details from Today and reads the
+reasons under each alternative, taps "Not now" on a coach card with an action and sees it go quiet,
+and, over three sessions of lifting above a suggested load, reads that the target stepped up to meet
+them. Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
