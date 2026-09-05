@@ -2,22 +2,22 @@
 
 _Last updated: _
 
-| Item                   | Value                                                                                                                                                                                                                 |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                              |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                              |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                      |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                 |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                     |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 GREEN. Maintenance 2, in-session autoregulation and estimated-max targets, in progress                                                                             |
-| Phase gate             | Maintenance 1 **GREEN** (owner approved on Android, 2026-09-05). Maintenance 2 in progress; no gate yet                                                                                                               |
-| Current branch         | `main`                                                                                                                                                                                                                |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                          |
-| Work in progress       | Maintenance 2: remaining sets of an exercise adjust from the reps and RIR just logged; targets after a break or for a new variation come from the estimated max. Report to follow in `docs/reports/maintenance-2.md`. |
-| Latest commit          | Maintenance 1 status, report, and screenshots (this commit); app build under review is `223c767`                                                                                                                      |
-| Latest deployment      | `223c767` deployed by Deploy Pages run 33941004535 (success); full browser suite passed against the live URL (114 passed + 14 skipped by design); 49 screenshots captured from the deployed build                     |
-| Test totals            | Unit: 305 passed (56 files). Browser/mobile: 114 passed + 14 skipped by design locally and against the live URL                                                                                                       |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                          |
+| Item                   | Value                                                                                                                                                                                                     |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                  |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                  |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                          |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                     |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                         |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 GREEN. Maintenance 2, in-session autoregulation and estimated-max targets, at its review gate                                                          |
+| Phase gate             | Maintenance 2 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 1 GREEN (2026-09-05)                                                                           |
+| Current branch         | `main`                                                                                                                                                                                                    |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                              |
+| Work in progress       | None. Maintenance 2 is at its review gate (`docs/reports/maintenance-2.md`). Next candidates from the owner's list: smarter alternatives, fatigue signals, learning from overrides, week-aware selection. |
+| Latest commit          | Maintenance 2 status and report (this commit); app build under review is `fc3f4e3`                                                                                                                        |
+| Latest deployment      | `fc3f4e3` deployed by Deploy Pages run 33964153907 (success); full browser suite passed against the live URL (117 passed + 14 skipped by design)                                                          |
+| Test totals            | Unit: 312 passed (57 files). Browser/mobile: 117 passed + 14 skipped by design locally and against the live URL                                                                                           |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                              |
 
 ## Phase checklist
 
@@ -138,6 +138,12 @@ _Last updated: _
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 2: in-session autoregulation, and targets from the estimated max (YELLOW - awaiting review)
+
+- After every logged working set with sets still to come, the remaining sets of that exercise adjust from the reps and RIR just logged and the earlier sets this session: up a load step when the set was clearly easy, far past the top, or the second in a row past the top; down a step after a grind under the floor or far under it; rep targets shift when there is no load. One missed floor with reps in reserve changes nothing. Done sets and other exercises never change; the summary line names the set and the reason.
+- Back after 21 days or more, a lift starts at 90 percent of the load its estimated max implies for the rep range at the prescribed RIR (85 percent after 42 days); a new variation with family history starts at 90 percent of the family's estimate. "Why this target" says so; warm-up ramps follow.
+- No new buttons or surfaces. Report: `docs/reports/maintenance-2.md`; engine notes in `docs/recalibration-engine.md` and `docs/progression-engine.md`.
+
 ## Maintenance 1: coaching by experience, and stall routes (GREEN)
 
 - The experience level in Settings now drives a coaching policy: beginners get explained cards, three reasons, the footer, the "follow today's plan" card, and every progression nudge; intermediate and advanced lifters get two reasons, no footer, one quiet line when nothing outranks the plan, and no card that only restates a target ("load goes up", "ready for more load", "aim one rep higher", superset readouts). Deloads, resets, extra-set offers, safety, recovery, coverage, and stalls speak to everyone.
@@ -171,8 +177,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone, sets experience to Advanced in Settings, and reads
-that Today's coach becomes one quiet line when nothing outranks the plan and never repeats a target;
-then imports an older export with four sessions of one bench load at the prescribed effort, reads the
-stall card and its route, taps the first step, and sees the bench target change for the session.
-Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
+Owner opens the live link on an Android phone, starts a workout, skips the warm-up, and logs the first
+working set at the top of the range with 4 in reserve: the summary says the next sets go up a step and
+the next row shows the new load; then logs a set under the floor with 0 in reserve and sees the next
+sets come down. Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
