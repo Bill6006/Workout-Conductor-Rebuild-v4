@@ -9,11 +9,11 @@ _Last updated: _
 | Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                  |
 | Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                             |
 | Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                 |
-| Current phase          | Phase 8 - Data Safety, Optional Migration, PWA, Polish, and Acceptance                                                                                                                            |
-| Phase gate             | **YELLOW** - Phase 8 built, deployed, and verified; awaiting the owner's Android review                                                                                                           |
+| Current phase          | Complete. Phase 8 was the last phase in the plan; every phase is GREEN                                                                                                                            |
+| Phase gate             | Phase 8 **GREEN** (owner approved on Android, 2026-09-04). The rebuild is complete; see `docs/cutover-report.md`                                                                                  |
 | Current branch         | `main`                                                                                                                                                                                            |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                      |
-| Work in progress       | None. Phase 8 is at its review gate; the cutover report is in `docs/cutover-report.md`. Nothing beyond Phase 8 exists in the plan.                                                                |
+| Work in progress       | None. Phases 0 to 8 are GREEN. Any further change would be maintenance outside the plan and starts from a new owner request.                                                                      |
 | Latest commit          | Phase 8 status, report, and screenshots (this commit); app build under review is `5691ed7` (Phase 8 `ffaeb0f`, `f4d22dc`, `5691ed7`)                                                              |
 | Latest deployment      | `5691ed7` deployed by Deploy Pages run 33924564630 (success); full browser suite passed against the live URL (110 passed + 12 skipped by design); 47 screenshots captured from the deployed build |
 | Test totals            | Unit: 282 passed (51 files). Browser/mobile: 110 passed + 12 skipped by design locally and against the live URL                                                                                   |
@@ -21,17 +21,17 @@ _Last updated: _
 
 ## Phase checklist
 
-| Phase | Name                                                         | Status               |
-| ----- | ------------------------------------------------------------ | -------------------- |
-| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner)        |
-| 1     | Product Foundation and First Useful Live Preview             | GREEN (owner)        |
-| 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner)        |
-| 3     | Workout Generation and Duration Engine                       | GREEN (owner)        |
-| 4     | Central Recalibration Engine                                 | GREEN (owner)        |
-| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner)        |
-| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | GREEN (owner)        |
-| 7     | Progress, Plan, Coverage, PRs, and Session Summary           | GREEN                |
-| 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | YELLOW (review gate) |
+| Phase | Name                                                         | Status        |
+| ----- | ------------------------------------------------------------ | ------------- |
+| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner) |
+| 1     | Product Foundation and First Useful Live Preview             | GREEN (owner) |
+| 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner) |
+| 3     | Workout Generation and Duration Engine                       | GREEN (owner) |
+| 4     | Central Recalibration Engine                                 | GREEN (owner) |
+| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner) |
+| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | GREEN (owner) |
+| 7     | Progress, Plan, Coverage, PRs, and Session Summary           | GREEN         |
+| 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | GREEN         |
 
 ## Phase 7 deliverables
 
@@ -125,7 +125,7 @@ _Last updated: _
 - Later rounds: RIR and rest targets now carry their evidence (effort and rest lines in the tempo detail and the How to panel; ramp sets labelled warm-up beside their RIR; three hypertrophy rest defaults raised to match the research; header line ends at the reps); the card demonstration plays the same loop as the details and shows your own GIF, photo, or video picked from the details view (on device, 3 MB, Replace and Remove); Pause and Replay are gone; the rating step offers End without saving behind a Discard this workout? confirmation. See `docs/tempo-guidance.md` and `docs/media-license-register.md`.
 - Fix: a larger demonstration (96 × 72) sits at the top right of every card and opens the full demonstration; a tempo chip under it and a one-rep tempo bar in the header (the fill moves like the weight: down at the lowering pace, hold, up at the lifting pace, squeeze) reveal the reason, a one-line form cue, and the evidence on tap (tempo modelled as phases with research-backed reasons, see `docs/tempo-guidance.md`); the equipment line is gone from the card header; logged and current rows stay open while the remaining sets collapse into one expandable line; the right column carries the current set's target load (or "log below"), and each upcoming set's load and rest when expanded.
 
-## Phase 8 deliverables (YELLOW - awaiting review)
+## Phase 8 deliverables (GREEN)
 
 - Full Backup JSON schema 2: profile, places, settings, workouts, notes and cues, custom exercises, your demonstrations, saved workouts, meta; schema 1 files migrate forward; unknown fields kept at every level; history and settings exports on their own (`docs/backup-and-restore.md`).
 - Exact restore with verified writes and a verified rollback; the pre-import state is kept as an automatic backup so any import can be undone; restore reports counts per store.
@@ -161,8 +161,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone and, in Settings, exports and imports a Full Backup JSON,
-restores an automatic backup, runs the save check, previews Clear temporary data, and tries an older
-export with Undo; then starts a workout and reads that a new version is only offered after it. Reply
-with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`. Phase 8 is the last phase in the
-plan; on GREEN the rebuild is complete (`docs/cutover-report.md`).
+None required. The plan's eight phases are complete and approved on the owner's Android phone; the
+acceptance rules are walked with evidence in `docs/cutover-report.md`. Keep using the app from the
+permanent Pages link; export a Full Backup JSON now and then. Any future change is maintenance
+outside the plan and begins with a new request from the owner.
