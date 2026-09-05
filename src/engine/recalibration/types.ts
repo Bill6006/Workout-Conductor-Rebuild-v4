@@ -1,3 +1,4 @@
+import type { AutoregulationPlan } from './autoregulate';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
@@ -34,7 +35,15 @@ export type RecalibrationTrigger =
   | { type: 'pain'; entryId: string; joint: Joint }
   | { type: 'uncomfortable'; entryId: string }
   | { type: 'pin'; entryId: string; pinned: boolean }
-  | { type: 'performance'; entryId: string; setIndex: number; actualReps: number }
+  | {
+      type: 'performance';
+      entryId: string;
+      setIndex: number;
+      actualReps: number;
+      actualWeight?: number | null;
+      /** In-session autoregulation decision; without it only reps far from target move the rep targets. */
+      plan?: AutoregulationPlan;
+    }
   | { type: 'target-weight'; entryId: string; weight: number | null }
   | { type: 'sets'; entryId: string; workingDelta: -1 | 1 }
   | { type: 'add-warmup'; entryId: string }

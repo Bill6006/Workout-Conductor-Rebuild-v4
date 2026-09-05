@@ -170,3 +170,25 @@ test.describe('end without saving', () => {
     ).toBeVisible();
   });
 });
+
+test.describe('in-session autoregulation', () => {
+  test('an easy first set raises the next sets and the summary says why', async ({ page }) => {
+    await ensureProfile(page);
+    await page.getByTestId('start-workout').click();
+    await expect(page.getByTestId('workout-stats')).toBeVisible();
+    await page.getByTestId('skip-warmup').click();
+    await page.getByTestId('logger-weight').click();
+    await page.getByRole('spinbutton', { name: 'Weight' }).fill('185');
+    await page.keyboard.press('Enter');
+    await page.getByTestId('logger-reps').click();
+    await page.getByRole('spinbutton', { name: 'Reps' }).fill('9');
+    await page.keyboard.press('Enter');
+    await page.getByTestId('log-set').click();
+    await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
+    await expect(page.getByTestId('recalibration-summary')).toContainText(
+      /well past the .* target: the next \d sets go up 5 lb/,
+    );
+    const current = page.locator('[data-testid="set-row"][data-state="current"]').first();
+    await expect(current.getByTestId('set-aside')).toContainText('190');
+  });
+});

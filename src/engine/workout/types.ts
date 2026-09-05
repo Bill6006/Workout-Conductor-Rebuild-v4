@@ -13,7 +13,18 @@ export type DurationChoice = 15 | 30 | 45 | 'default';
 export type SetKind = 'warmup' | 'working' | 'drop';
 
 export type ProgressionMode =
-  'start' | 'double' | 'weight' | 'reps' | 'sets' | 'maintain' | 'deload' | 'regress';
+  | 'start'
+  | 'double'
+  | 'weight'
+  | 'reps'
+  | 'sets'
+  | 'maintain'
+  | 'deload'
+  | 'regress'
+  /** Back after three weeks or more: a percentage of the estimated max. */
+  | 'return'
+  /** A new variation: a discounted percentage of the family's estimated max. */
+  | 'estimate';
 
 /** Why an entry's loads and reps are what they are, from the progression engine. */
 export interface EntryProgression {

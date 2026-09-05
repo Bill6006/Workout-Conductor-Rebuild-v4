@@ -427,6 +427,8 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       sets: 'extra set on offer',
       double: 'double progression',
       start: 'first time',
+      return: 'back from a break',
+      estimate: 'from the family estimate',
     };
     signals.push({
       domain: 'progression',

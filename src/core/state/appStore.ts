@@ -8,6 +8,8 @@ import {
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import { resolveTargetMinutes } from '../../engine/duration/duration';
+import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
+import { weightStep } from '../../engine/plateMath/plateMath';
 import { recalibrate as runRecalibration } from '../../engine/recalibration/recalibrate';
 import { describeTrigger, type TriggerContext } from '../../engine/recalibration/triggers';
 import type {
@@ -244,7 +246,6 @@ type Listener = () => void;
 
 const DEFAULT_MIN_OVERLAY_MS = 450;
 const LONG_INTERRUPTION_SECONDS = 20 * 60;
-const FAR_FROM_TARGET_REPS = 3;
 const TECHNIQUES = ['supersets', 'dropSets', 'circuits'] as const;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -875,18 +876,53 @@ export class AppStore {
     });
 
     if (!isEdit && set.kind === 'working') {
-      const [low, high] = set.targetReps;
-      const remaining = entry.sets.some(
+      const remaining = entry.sets.filter(
         (candidate) =>
           candidate.kind === 'working' &&
-          candidate.index !== setIndex &&
+          candidate.index > setIndex &&
           !isDone(entryId, candidate.index),
-      );
-      if (
-        remaining &&
-        (reps >= high + FAR_FROM_TARGET_REPS || reps <= low - FAR_FROM_TARGET_REPS)
-      ) {
-        await this.recalibrate({ type: 'performance', entryId, setIndex, actualReps: reps });
+      ).length;
+      if (remaining > 0) {
+        const done = this.requireSession().completed.sets;
+        const earlier = done
+          .filter(
+            (candidate) =>
+              candidate.entryId === entryId &&
+              candidate.kind === 'working' &&
+              !candidate.skipped &&
+              candidate.setIndex < setIndex,
+          )
+          .sort((a, b) => a.setIndex - b.setIndex)
+          .map((candidate) =>
+            outcomeFor(
+              entry.sets.find((prescribed) => prescribed.index === candidate.setIndex) ?? set,
+              {
+                reps: candidate.reps,
+                rir: candidate.rir ?? null,
+                weight: candidate.weight ?? null,
+              },
+            ),
+          );
+        const units = this.state.profile?.units ?? 'lb';
+        const exercise = getExercise(entry.exerciseId);
+        const plan = autoregulate({
+          set: outcomeFor(set, { reps, rir: values.rir, weight: values.weight }),
+          earlier,
+          step: exercise ? weightStep(exercise, units) : 5,
+          remaining,
+          setNumber: earlier.length + 1,
+          units,
+        });
+        if (plan.kind !== 'none') {
+          await this.recalibrate({
+            type: 'performance',
+            entryId,
+            setIndex,
+            actualReps: reps,
+            actualWeight: values.weight,
+            plan,
+          });
+        }
       }
     }
   }

@@ -25,33 +25,33 @@ timestamp. The engine is pure: it never mutates the request.
 `triggers.ts` lists all 25 triggers with a label, a default scope, and the short list of things
 the overlay shows while the engine works.
 
-| Trigger        | Default scope | What it does                                                                                                |
-| -------------- | ------------- | ----------------------------------------------------------------------------------------------------------- |
-| duration       | full          | Rebuilds for 15, 30, 45, or Default time. Partial once anything is logged or locked.                        |
-| location       | full          | Rebuilds for the place switched to; unavailable exercises go automatically.                                 |
-| equipment      | full          | Rebuilds after the current place's equipment was edited.                                                    |
-| equipment-busy | local         | Marks the station busy for this session and substitutes every remaining exercise that needs it.             |
-| replace        | local         | Swaps one exercise for an accepted alternative and locks it.                                                |
-| skip           | local         | Removes one row and remembers the exercise for this session.                                                |
-| pain           | local         | Adds a session pain joint, replaces stressful exercises with gentler ones, removes what cannot be replaced. |
-| uncomfortable  | local         | Swaps one exercise for the best alternative and avoids it this session.                                     |
-| pin            | local         | Locks or unlocks one row against drops and swaps.                                                           |
-| performance    | local         | Reps far above or below target shift the next sets' rep targets.                                            |
-| target-weight  | local         | Sets the target weight on the remaining working sets.                                                       |
-| technique      | full          | Supersets, drop sets, or circuits toggled in Settings.                                                      |
-| profile        | full          | Goals, schedule, limitations, preferences, style, or rest style changed.                                    |
-| readiness      | partial       | Energy, soreness, sleep, motivation, joint discomfort, time pressure.                                       |
-| resume         | partial       | Back after a long interruption: remaining time recounted, light re-warm-up.                                 |
-| finish-early   | partial       | Keeps logged work and the current exercise, drops the rest.                                                 |
-| intensity      | partial       | Harder or easier for the remaining work.                                                                    |
-| end-by         | partial       | Exact end time: a hard cap with no tolerance.                                                               |
-| sets           | local         | Adds or removes one working set of an exercise (never a logged one).                                        |
-| add-warmup     | local         | Adds a light ramp set; ramp sets never count as working sets.                                               |
-| rep-range      | local         | Sets the rep target on the remaining working sets.                                                          |
-| reorder        | local         | Moves an unstarted row up or down; started work keeps its place.                                            |
-| split-superset | local         | Turns an unstarted superset into straight sets.                                                             |
-| drop-set       | local         | Adds or removes an optional drop set (only when the move is drop-set safe; a logged one stays).             |
-| rest-adjust    | local         | Changes the rest for the remaining sets of one exercise (30 s to 5 min).                                    |
+| Trigger        | Default scope | What it does                                                                                                                                    |
+| -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| duration       | full          | Rebuilds for 15, 30, 45, or Default time. Partial once anything is logged or locked.                                                            |
+| location       | full          | Rebuilds for the place switched to; unavailable exercises go automatically.                                                                     |
+| equipment      | full          | Rebuilds after the current place's equipment was edited.                                                                                        |
+| equipment-busy | local         | Marks the station busy for this session and substitutes every remaining exercise that needs it.                                                 |
+| replace        | local         | Swaps one exercise for an accepted alternative and locks it.                                                                                    |
+| skip           | local         | Removes one row and remembers the exercise for this session.                                                                                    |
+| pain           | local         | Adds a session pain joint, replaces stressful exercises with gentler ones, removes what cannot be replaced.                                     |
+| uncomfortable  | local         | Swaps one exercise for the best alternative and avoids it this session.                                                                         |
+| pin            | local         | Locks or unlocks one row against drops and swaps.                                                                                               |
+| performance    | local         | In-session autoregulation: the reps and RIR just logged move the remaining sets' load a step, or shift their rep targets when there is no load. |
+| target-weight  | local         | Sets the target weight on the remaining working sets.                                                                                           |
+| technique      | full          | Supersets, drop sets, or circuits toggled in Settings.                                                                                          |
+| profile        | full          | Goals, schedule, limitations, preferences, style, or rest style changed.                                                                        |
+| readiness      | partial       | Energy, soreness, sleep, motivation, joint discomfort, time pressure.                                                                           |
+| resume         | partial       | Back after a long interruption: remaining time recounted, light re-warm-up.                                                                     |
+| finish-early   | partial       | Keeps logged work and the current exercise, drops the rest.                                                                                     |
+| intensity      | partial       | Harder or easier for the remaining work.                                                                                                        |
+| end-by         | partial       | Exact end time: a hard cap with no tolerance.                                                                                                   |
+| sets           | local         | Adds or removes one working set of an exercise (never a logged one).                                                                            |
+| add-warmup     | local         | Adds a light ramp set; ramp sets never count as working sets.                                                                                   |
+| rep-range      | local         | Sets the rep target on the remaining working sets.                                                                                              |
+| reorder        | local         | Moves an unstarted row up or down; started work keeps its place.                                                                                |
+| split-superset | local         | Turns an unstarted superset into straight sets.                                                                                                 |
+| drop-set       | local         | Adds or removes an optional drop set (only when the move is drop-set safe; a logged one stays).                                                 |
+| rest-adjust    | local         | Changes the rest for the remaining sets of one exercise (30 s to 5 min).                                                                        |
 
 ## Scope
 
@@ -108,3 +108,19 @@ only.
 Measured in unit tests on every run: local changes complete in well under 250 ms and full or
 partial rebuilds in well under 700 ms; typical engine times are a few milliseconds. No network is
 involved anywhere.
+
+## In-session autoregulation (`src/engine/recalibration/autoregulate.ts`)
+
+After every logged working set with sets still to come, a pure decision reads the set's reps,
+its reps in reserve, and the earlier sets of the same exercise this session:
+
+- Clearly easy (top of the range with two or more reps in reserve beyond the target), far past
+  the top (three or more reps over), or two sets in a row past the top: the remaining sets go up
+  one load step. Without a load, their rep targets rise by two.
+- A grind under the floor (nothing in reserve) or far under it (three or more reps short): the
+  remaining sets come down one load step, or their rep targets fall by two.
+- Anything else, including one missed floor with reps in reserve, changes nothing.
+
+The store turns the decision into a `performance` recalibration of that exercise's remaining
+sets only, and the summary line says which set and why ("Set 1: 6 reps with 4 in reserve
+against a target of 2: the next 3 sets go up 5 lb."). Done sets never change.

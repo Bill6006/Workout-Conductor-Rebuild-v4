@@ -172,6 +172,25 @@ export interface NextTargetInput {
   history: readonly WorkoutRecord[];
   profile: UserProfile;
   fatigueLevel?: 'fresh' | 'normal' | 'elevated' | 'high';
+  /** When given, a gap of RETURN_AFTER_DAYS or more since the last session starts from the estimate. */
+  now?: string;
+}
+
+const DAY_MS = 86_400_000;
+/** A break this long makes the last load an unsafe guess; the estimated max carries over. */
+export const RETURN_AFTER_DAYS = 21;
+export const LONG_BREAK_DAYS = 42;
+
+/** Load for a rep target at a given reserve from an estimated one-rep max (Epley, inverted). */
+export function loadFromEstimate(
+  e1rm: number,
+  reps: number,
+  rir: number,
+  fraction: number,
+  step: number,
+): number {
+  const effective = Math.min(reps + rir, 12);
+  return roundToStep((e1rm / (1 + effective / 30)) * fraction, step);
 }
 
 export function recommendNextTarget(input: NextTargetInput): NextTarget {
@@ -244,6 +263,30 @@ export function recommendNextTarget(input: NextTargetInput): NextTarget {
     evidence: [...evidence, line, ...(extra.evidence ?? [])],
   });
 
+  if (last.viaFamily) {
+    const estimate =
+      last.e1rm === null
+        ? null
+        : loadFromEstimate(last.e1rm, prescription.reps[1], prescription.rir, 0.9, step);
+    return result(
+      'estimate',
+      estimate,
+      last.e1rm === null
+        ? 'New variation with no load history in its family: log a set and the target follows.'
+        : `New variation: 90% of the family estimate (${last.e1rm} ${units} max) for ${prescription.reps[0]}-${prescription.reps[1]} reps at RIR ${prescription.rir}; log a set and the target follows.`,
+    );
+  }
+  const daysSince = input.now
+    ? Math.floor((Date.parse(input.now) - Date.parse(last.date)) / DAY_MS)
+    : 0;
+  if (daysSince >= RETURN_AFTER_DAYS && last.e1rm !== null) {
+    const fraction = daysSince >= LONG_BREAK_DAYS ? 0.85 : 0.9;
+    return result(
+      'return',
+      loadFromEstimate(last.e1rm, prescription.reps[1], prescription.rir, fraction, step),
+      `${daysSince} days since the last session: back at ${Math.round(fraction * 100)}% of the estimated max (${last.e1rm} ${units}) and rebuilding from there.`,
+    );
+  }
   if (consecutiveUnder >= 3) {
     return result(
       'regress',

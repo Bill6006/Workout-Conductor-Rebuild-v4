@@ -451,6 +451,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       history,
       profile,
       fatigueLevel: fatigue.level,
+      now,
     });
     const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
     entries.push({

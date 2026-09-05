@@ -118,6 +118,8 @@ function nextImplication(record: WorkoutRecord, muscles: readonly MuscleId[]): s
 }
 
 const MODE_LABEL: Record<string, string> = {
+  return: 'back from a break',
+  estimate: 'from the family estimate',
   start: 'first target',
   weight: 'load up',
   reps: 'reps up',

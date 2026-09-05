@@ -384,3 +384,60 @@ describe('progression by experience', () => {
     expect(twice.mode).toBe('weight');
   });
 });
+
+describe('targets from the estimated max', () => {
+  const clean = (daysAgo: number) =>
+    record(daysAgo, bench.id, [
+      [5, 185, 2],
+      [5, 185, 2],
+    ]);
+
+  it('comes back from a break at a percentage of the estimated max, deeper after a long one', () => {
+    const base = {
+      exercise: bench,
+      role: 'primary-strength' as const,
+      prescription: strengthRx,
+      profile,
+    };
+    const now = '2026-09-10T12:00:00.000Z';
+    const recent = recommendNextTarget({ ...base, history: [clean(10)], now });
+    expect(recent.mode).toBe('weight');
+
+    const back = recommendNextTarget({ ...base, history: [clean(25)], now });
+    expect(back.mode).toBe('return');
+    // e1rm 215.8; 6 reps at RIR 2 = 8 effective reps; 90% of 215.8 / (1 + 8/30) = 153 -> 155.
+    expect(back.weight).toBe(155);
+    expect(back.evidence.join(' ')).toMatch(
+      /25 days since the last session: back at 90% of the estimated max \(215\.8 lb\)/,
+    );
+
+    const long = recommendNextTarget({ ...base, history: [clean(50)], now });
+    expect(long.mode).toBe('return');
+    expect(long.weight).toBe(145);
+    expect(long.evidence.join(' ')).toMatch(/back at 85%/);
+
+    // Without a clock the rule stays off, so older callers behave as before.
+    expect(recommendNextTarget({ ...base, history: [clean(50)] }).mode).toBe('weight');
+  });
+
+  it('starts a new variation from a discounted family estimate', () => {
+    const sibling = EXERCISES.find(
+      (candidate) =>
+        candidate.id !== bench.id && candidate.progressionFamily === bench.progressionFamily,
+    );
+    if (!sibling) return;
+    const history = [record(3, sibling.id, [[5, 100, 2]])];
+    const target = recommendNextTarget({
+      exercise: bench,
+      role: 'primary-strength',
+      prescription: strengthRx,
+      history,
+      profile,
+    });
+    expect(target.mode).toBe('estimate');
+    expect(target.viaFamily).toBe(true);
+    // e1rm 116.7; 8 effective reps; 90% of 116.7 / 1.2667 = 82.9 -> 85.
+    expect(target.weight).toBe(85);
+    expect(target.evidence.join(' ')).toMatch(/New variation: 90% of the family estimate/);
+  });
+});

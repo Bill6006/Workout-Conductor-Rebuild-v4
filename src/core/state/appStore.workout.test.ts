@@ -216,15 +216,39 @@ describe('active workout in the store', () => {
     await store.logSet('e1', first!.setIndex, { weight: 135, reps: high + 3, rir: 3 });
     const current = session(handle);
     expect(current.log[0]?.trigger).toBe('performance');
-    expect(current.lastSummary?.headline).toMatch(/add a little weight/);
+    expect(current.lastSummary?.headline).toMatch(
+      /well past the .* target: the next 3 sets go up 5 lb/,
+    );
     const next = position(handle);
     expect(next?.entryId).toBe('e1');
-    expect(next?.set.targetReps[1]).toBe(high + 2);
+    expect(next?.set.targetReps[1]).toBe(high);
+    expect(next?.set.targetWeight).toBe(140);
     const others = allEntries(current.workout.blocks).filter((entry) => entry.id !== 'e1');
     const before = allEntries(current.previous!.workout.blocks).filter(
       (entry) => entry.id !== 'e1',
     );
     expect(others).toEqual(before);
+  });
+
+  it('an easy set raises the next sets a step, and a grind lowers them', async () => {
+    const clock = makeClock();
+    const handle = await seeded(clock);
+    const { store } = handle;
+    store.startWorkout();
+    store.skipWarmup('e1');
+    const first = position(handle);
+    const [, high] = first!.set.targetReps;
+    const targetRir = first!.set.targetRir;
+    await store.logSet('e1', first!.setIndex, { weight: 135, reps: high, rir: targetRir + 2 });
+    expect(session(handle).lastSummary?.headline).toMatch(/in reserve against a target of/);
+    const second = position(handle);
+    expect(second?.set.targetWeight).toBe(140);
+    expect(second?.set.targetReps[1]).toBe(high);
+
+    const [low] = second!.set.targetReps;
+    await store.logSet('e1', second!.setIndex, { weight: 140, reps: low - 1, rir: 0 });
+    expect(session(handle).lastSummary?.headline).toMatch(/nothing in reserve, under the .* floor/);
+    expect(position(handle)?.set.targetWeight).toBe(135);
   });
 
   it('keeps notes and cues per exercise, and an active session survives a new day', async () => {

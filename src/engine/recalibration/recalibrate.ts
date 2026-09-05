@@ -383,6 +383,7 @@ function applySubstitution(
       prescription,
       history: request.history,
       profile: request.profile,
+      now: request.timestamp,
     });
     entry.sets = applyProgression(
       buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
@@ -763,8 +764,25 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         (set) =>
           set.kind === 'working' && set.index > trigger.setIndex && !isDone(entry.id, set.index),
       );
-      const shift =
-        trigger.actualReps >= max + FAR_FROM_TARGET_REPS
+      const plan = trigger.plan;
+      if (plan?.kind === 'weight' && remaining.length > 0) {
+        const stepSize = weightStep(requireExercise(entry.exerciseId), request.profile.units);
+        for (const set of remaining) {
+          const current = set.targetWeight ?? trigger.actualWeight ?? null;
+          if (current !== null) {
+            set.targetWeight = Math.max(
+              stepSize,
+              Math.round((current + plan.delta) / stepSize) * stepSize,
+            );
+          }
+        }
+        return { ...base, workout, headline: `${name}: ${plan.reason}` };
+      }
+      const shift = plan
+        ? plan.kind === 'reps'
+          ? plan.shift
+          : 0
+        : trigger.actualReps >= max + FAR_FROM_TARGET_REPS
           ? 2
           : trigger.actualReps <= min - FAR_FROM_TARGET_REPS
             ? -2
@@ -775,7 +793,9 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           workout,
           headline:
             shift === 0
-              ? `${trigger.actualReps} reps is close to the ${min}-${max} target on ${name}: no change.`
+              ? plan
+                ? `${name}: ${plan.reason}`
+                : `${trigger.actualReps} reps is close to the ${min}-${max} target on ${name}: no change.`
               : `No sets left to adjust on ${name}.`,
         };
       }
@@ -786,6 +806,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         ];
       }
       const first = remaining[0] as SetPrescription;
+      if (plan) return { ...base, workout, headline: `${name}: ${plan.reason}` };
       return {
         ...base,
         workout,

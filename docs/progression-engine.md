@@ -112,3 +112,17 @@ Deloads, resets, extra-set offers, safety, recovery, coverage, and stalls speak 
   max the next step is offered; when the max moves the route closes; after the last step the
   card asks for a different exercise for the pattern.
 - Routes are one record (`coach-routes`) in the meta store, backed up with everything else.
+
+## Targets from the estimated max (`recommendNextTarget`)
+
+Every completed set carries an Epley estimate of the one-rep max. Two cases start from that
+estimate instead of the last load:
+
+- **Back from a break.** Twenty-one days or more since the lift's last session: the target is
+  90 percent of the load the estimate implies for the top of the rep range at the prescribed
+  RIR; forty-two days or more, 85 percent. Mode `return`.
+- **A new variation.** No history for the exact exercise but history in its progression family:
+  90 percent of the load implied by the family's estimate. Mode `estimate`. Logging a set
+  replaces the estimate with real numbers.
+
+Warm-up ramps stay proportional to the working load, so they follow the estimate too.
