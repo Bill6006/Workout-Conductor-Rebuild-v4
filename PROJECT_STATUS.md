@@ -9,14 +9,14 @@ _Last updated: _
 | Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                  |
 | Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                             |
 | Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                 |
-| Current phase          | Complete. Phase 8 was the last phase in the plan; every phase is GREEN                                                                                                                            |
-| Phase gate             | Phase 8 **GREEN** (owner approved on Android, 2026-09-04). The rebuild is complete; see `docs/cutover-report.md`                                                                                  |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN). Maintenance 1, coaching by experience and stall routes, at its review gate                                                                                   |
+| Phase gate             | Maintenance 1 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Phase 8 GREEN (2026-09-04)                                                                         |
 | Current branch         | `main`                                                                                                                                                                                            |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                      |
-| Work in progress       | None. Phases 0 to 8 are GREEN. Any further change would be maintenance outside the plan and starts from a new owner request.                                                                      |
-| Latest commit          | Phase 8 status, report, and screenshots (this commit); app build under review is `5691ed7` (Phase 8 `ffaeb0f`, `f4d22dc`, `5691ed7`)                                                              |
-| Latest deployment      | `5691ed7` deployed by Deploy Pages run 33924564630 (success); full browser suite passed against the live URL (110 passed + 12 skipped by design); 47 screenshots captured from the deployed build |
-| Test totals            | Unit: 282 passed (51 files). Browser/mobile: 110 passed + 12 skipped by design locally and against the live URL                                                                                   |
+| Work in progress       | None. Maintenance 1 is at its review gate (`docs/reports/maintenance-1.md`). Next candidates from the owner's list: in-session autoregulation, estimated-max targets, smarter alternatives.       |
+| Latest commit          | Maintenance 1 status, report, and screenshots (this commit); app build under review is `223c767`                                                                                                  |
+| Latest deployment      | `223c767` deployed by Deploy Pages run 33941004535 (success); full browser suite passed against the live URL (114 passed + 14 skipped by design); 49 screenshots captured from the deployed build |
+| Test totals            | Unit: 305 passed (56 files). Browser/mobile: 114 passed + 14 skipped by design locally and against the live URL                                                                                   |
 | Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                      |
 
 ## Phase checklist
@@ -138,6 +138,14 @@ _Last updated: _
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 1: coaching by experience, and stall routes (YELLOW - awaiting review)
+
+- The experience level in Settings now drives a coaching policy: beginners get explained cards, three reasons, the footer, the "follow today's plan" card, and every progression nudge; intermediate and advanced lifters get two reasons, no footer, one quiet line when nothing outranks the plan, and no card that only restates a target ("load goes up", "ready for more load", "aim one rep higher", superset readouts). Deloads, resets, extra-set offers, safety, recovery, coverage, and stalls speak to everyone.
+- Progression follows the policy: advanced lifters bank two clean strength sessions (floor cleared with reps in reserve, no tolerance under the prescribed RIR) and two top-of-range sessions in double progression before load moves; the "Why this target" line names the policy.
+- Stalls are read by exposure: the newest 3 (beginner) or 4 exposures with no better estimated max, at the prescribed effort. Sets ending far from failure are diagnosed as undershooting with the next load step on offer; missed reps stay with the deload rules; a top-of-range session is left to progression.
+- A stalled lift opens a route on the one gold card: shift the rep range, swap for a variation, short deload, add a set. Each step is the card's one action; tapping records it; after two more flat exposures the next step is offered; when the max moves the route closes. Routes live in the meta store and are backed up.
+- No new buttons or surfaces. Report: `docs/reports/maintenance-1.md`; engine notes in `docs/progression-engine.md`.
+
 ## Known limitations
 
 - Progress scores need records: with none logged the cards show their definitions and "none" confidence until sessions accumulate.
@@ -147,6 +155,8 @@ _Last updated: _
 - Automatic backups include your demonstrations inline, so three of them cost about three times the size of your media.
 
 ## Mobile screenshots
+
+Maintenance 1, captured by Playwright from the deployed build `223c767` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-1](docs/screenshots/maintenance-1)): [Stall route on the coach card](docs/screenshots/maintenance-1/android-412-today-coach-stall-route.png) · [After the first step](docs/screenshots/maintenance-1/android-412-today-coach-stall-applied.png) · [Quiet coach line](docs/screenshots/maintenance-1/android-412-today-coach-card.png) · [Combined preview sheet](docs/screenshots/maintenance-1/preview-sheet.png).
 
 Phase 8, captured by Playwright from the deployed build `5691ed7` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/phase-8](docs/screenshots/phase-8)): [Settings with backups, automatic backups, and storage check](docs/screenshots/phase-8/android-412-settings-data-safety.png) · [Legacy import preview](docs/screenshots/phase-8/android-412-settings-legacy-preview.png) · [Import preview](docs/screenshots/phase-8/android-412-settings-import-preview.png) · [Combined preview sheet](docs/screenshots/phase-8/preview-sheet.png); the full set is in the folder.
 
@@ -161,7 +171,8 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-None required. The plan's eight phases are complete and approved on the owner's Android phone; the
-acceptance rules are walked with evidence in `docs/cutover-report.md`. Keep using the app from the
-permanent Pages link; export a Full Backup JSON now and then. Any future change is maintenance
-outside the plan and begins with a new request from the owner.
+Owner opens the live link on an Android phone, sets experience to Advanced in Settings, and reads
+that Today's coach becomes one quiet line when nothing outranks the plan and never repeats a target;
+then imports an older export with four sessions of one bench load at the prescribed effort, reads the
+stall card and its route, taps the first step, and sees the bench target change for the session.
+Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
