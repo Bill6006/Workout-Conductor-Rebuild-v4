@@ -72,7 +72,7 @@ function readForeign(
 describe('IndexedDB upgrade', () => {
   it('recovers when another app on the origin owns the name at a higher version', async () => {
     const factory = new IDBFactory();
-    await createForeignDatabase(factory, 'shared-name', 5);
+    await createForeignDatabase(factory, 'shared-name', DB_VERSION + 1);
 
     const db = await openDatabase({ factory, name: 'shared-name' });
     expect(await db.count('profile')).toBe(0);
@@ -81,7 +81,7 @@ describe('IndexedDB upgrade', () => {
     db.close();
 
     const foreign = await readForeign(factory, 'shared-name');
-    expect(foreign.version).toBe(6);
+    expect(foreign.version).toBe(DB_VERSION + 2);
     expect(foreign.stores).toEqual(expect.arrayContaining(['legacyStuff', ...STORE_NAMES]));
     expect(foreign.record).toEqual({ id: 'keep-me', note: 'belongs to another app' });
 
@@ -89,7 +89,20 @@ describe('IndexedDB upgrade', () => {
     const again = await openDatabase({ factory, name: 'shared-name' });
     expect(await again.get('profile', 'current')).toEqual({ id: 'current', units: 'lb' });
     again.close();
-    expect((await readForeign(factory, 'shared-name')).version).toBe(6);
+    expect((await readForeign(factory, 'shared-name')).version).toBe(DB_VERSION + 2);
+  });
+
+  it('adds missing stores when another app created the name at exactly our version', async () => {
+    const factory = new IDBFactory();
+    await createForeignDatabase(factory, 'same-version', DB_VERSION);
+    const db = await openDatabase({ factory, name: 'same-version' });
+    await db.put('profile', { id: 'current', units: 'lb' });
+    expect(await db.get('profile', 'current')).toEqual({ id: 'current', units: 'lb' });
+    db.close();
+    const foreign = await readForeign(factory, 'same-version');
+    expect(foreign.version).toBe(DB_VERSION + 1);
+    expect(foreign.stores).toEqual(expect.arrayContaining(['legacyStuff', ...STORE_NAMES]));
+    expect(foreign.record).toEqual({ id: 'keep-me', note: 'belongs to another app' });
   });
 
   it('adds the custom-content stores without touching existing data', async () => {
@@ -97,7 +110,7 @@ describe('IndexedDB upgrade', () => {
     await createVersionOne(factory, 'upgrade');
 
     const db = await openDatabase({ factory, name: 'upgrade' });
-    expect(DB_VERSION).toBe(4);
+    expect(DB_VERSION).toBe(5);
     expect(DB_NAME).toBe('workout-conductor-v4');
     expect(await db.get('profile', 'current')).toEqual({ id: 'current', units: 'kg' });
     for (const store of STORE_NAMES) {

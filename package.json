@@ -33,6 +33,7 @@
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "workbox-window": "^7.4.1",

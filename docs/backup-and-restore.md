@@ -2,9 +2,11 @@
 
 Everything the app knows lives in the browser on the phone: IndexedDB `workout-conductor-v4`
 (profile, places, workouts, notes and cues, custom exercises, your demonstrations, saved
-workouts, meta, automatic backups) and three small localStorage keys (settings, an unfinished
-onboarding draft, the current session). Nothing is uploaded anywhere, and no user data is ever
-committed to this repository.
+workouts, meta, automatic backups, and, for the optional cloud copy, an outbox and the pasted token)
+and three small localStorage keys (settings, an unfinished onboarding draft, the current session).
+Nothing is uploaded anywhere unless the owner pastes a database token into Settings > Cloud copy,
+and then only to the owner's own database at the URL shown there (`docs/cloud-copy.md`). No user
+data is ever committed to this repository.
 
 ## Files you can export
 
@@ -14,7 +16,12 @@ committed to this repository.
 | History JSON     | `workout-conductor-history`  | workouts only                                                                                                          |
 | Settings JSON    | `workout-conductor-settings` | profile, places, local settings                                                                                        |
 
-Only a Full Backup JSON can be imported. History and settings files are for other tools.
+Only a Full Backup JSON can be imported. History and settings files are for other tools. No
+export carries the cloud copy's token, its sync state, the outbox, or the device id.
+
+A restore writes through the same durable-data owner as everything else, so with a token on the
+device the restored records are queued for the cloud copy and records the restore removed are
+queued as deletions. The phone stays the source of truth.
 
 ## Schema and migration
 

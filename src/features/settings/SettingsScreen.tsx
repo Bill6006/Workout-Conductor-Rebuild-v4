@@ -12,6 +12,7 @@ import { StyleEditor } from '../profile/editors/StyleEditor';
 import { UnitsEditor } from '../profile/editors/UnitsEditor';
 import { useProfileEditor } from '../profile/useProfileEditor';
 import { BackupCard } from './BackupCard';
+import { CloudCopyCard } from './CloudCopyCard';
 import { DiagnosticsCard } from './DiagnosticsCard';
 import { LegacyImportCard } from './LegacyImportCard';
 import { SnapshotsCard } from './SnapshotsCard';
@@ -88,6 +89,7 @@ export function SettingsScreen() {
         </Card>
       )}
 
+      <CloudCopyCard />
       <BackupCard />
       <SnapshotsCard />
       <StorageCard />

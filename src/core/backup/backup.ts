@@ -61,7 +61,8 @@ export function buildBackup(source: BackupSource, app: BackupAppInfo, exportedAt
     data: {
       profile: source.profile,
       locations: source.locations,
-      localSettings: source.localSettings,
+      // The device id identifies this install to the cloud copy; a restore must not clone it.
+      localSettings: { ...source.localSettings, deviceId: null },
       workouts: source.workouts,
       customExercises: source.customExercises,
       customInstructions: source.customInstructions,
@@ -98,7 +99,7 @@ export function buildSettingsExport(
     app: appInfo(app),
     profile: source.profile,
     locations: source.locations,
-    localSettings: source.localSettings,
+    localSettings: { ...source.localSettings, deviceId: null },
   };
 }
 

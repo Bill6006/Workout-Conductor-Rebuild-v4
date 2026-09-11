@@ -72,6 +72,20 @@ const CONTENT_RULES = [
       /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,})\b|-----BEGIN [A-Z ]*PRIVATE KEY-----/g,
   },
   {
+    id: 'jwt-token',
+    scope: 'all',
+    description:
+      'Database and bearer tokens (JWT-shaped) must never be committed or shipped; the cloud copy token lives only in IndexedDB on the device.',
+    pattern: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+  },
+  {
+    id: 'cloud-host',
+    scope: 'dist',
+    description:
+      "The bundle may reference only the owner's own database URL (a constant, not a secret) and no other libsql host.",
+    pattern: /libsql:\/\/(?!life-record-bill6006\.aws-us-east-1\.turso\.io\b)[A-Za-z0-9.-]+/g,
+  },
+  {
     id: 'telemetry-endpoint',
     scope: 'dist',
     description: 'The shipped bundle must not reference analytics or telemetry services.',

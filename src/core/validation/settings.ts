@@ -12,6 +12,8 @@ export const LocalSettingsSchema = z.looseObject({
   onboardingCompletedAt: z.iso.datetime().nullable(),
   lastExportAt: z.iso.datetime().nullable(),
   lastImportAt: z.iso.datetime().nullable(),
+  /** This device's id for the cloud copy; generated once, never exported or restored. */
+  deviceId: z.string().min(1).nullable().default(null),
 });
 
 export type LocalSettings = z.infer<typeof LocalSettingsSchema>;
@@ -21,4 +23,5 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   onboardingCompletedAt: null,
   lastExportAt: null,
   lastImportAt: null,
+  deviceId: null,
 };

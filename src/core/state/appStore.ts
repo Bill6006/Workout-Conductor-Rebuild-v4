@@ -11,6 +11,18 @@ import { resolveTargetMinutes } from '../../engine/duration/duration';
 import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
 import { weightStep } from '../../engine/plateMath/plateMath';
 import {
+  clearCloudToken,
+  pendingCount,
+  readCloudState,
+  readCloudToken,
+  saveCloudToken,
+  syncOnce,
+  type SyncOutcome,
+} from '../cloud/cloudSync';
+import { deviceLabel, ensureDeviceId } from '../cloud/deviceId';
+import { createLibsqlCloudClient } from '../cloud/libsqlClient';
+import { CLOUD_URL, PULL_INTERVAL_MS, type CloudClient } from '../cloud/model';
+import {
   STRENGTH_MAXES_ID,
   emptyMaxes,
   parseStrengthMaxes,
@@ -179,7 +191,33 @@ export interface AppState {
   deloadWeek: DeloadWeek | null;
   /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
   strengthMaxes: StrengthMaxes;
+  /** The optional cloud copy: on only while a token is on this device. */
+  cloud: CloudStatus;
 }
+
+export interface CloudStatus {
+  url: string;
+  configured: boolean;
+  syncing: boolean;
+  /** Local changes the cloud copy has not received yet. */
+  pending: number;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  deviceId: string | null;
+}
+
+const CLOUD_OFF: CloudStatus = {
+  url: CLOUD_URL,
+  configured: false,
+  syncing: false,
+  pending: 0,
+  lastSyncAt: null,
+  lastError: null,
+  deviceId: null,
+};
+
+/** Pushes wait this long after the last write so a burst of saves goes as one batch. */
+const DRAIN_DELAY_MS = 1500;
 
 function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -269,6 +307,10 @@ export interface AppStoreOptions {
   openDb?: () => Promise<Database>;
   storage?: KeyValueStorage;
   now?: () => string;
+  /** The cloud client for a token; tests inject the fake, the app uses the libsql driver. */
+  cloudClient?: (token: string) => Promise<CloudClient>;
+  /** Whether the device is online; tests flip it to prove the outbox waits. */
+  isOnline?: () => boolean;
   /** The recalibration engine; tests inject a failing one to prove rollback. */
   recalibrate?: typeof runRecalibration;
   /** Minimum time the calibration overlay stays up so a fast rebuild still reads as a change. */
@@ -374,6 +416,13 @@ export class AppStore {
   private readonly minOverlayMs: number;
   private dbPromise: Promise<Database> | null = null;
   private calibrationQueue: Promise<unknown> = Promise.resolve();
+  private readonly makeCloudClient: (token: string) => Promise<CloudClient>;
+  private readonly isOnline: () => boolean;
+  private cloudClient: { token: string; client: CloudClient } | null = null;
+  private syncRun: Promise<SyncOutcome | null> = Promise.resolve(null);
+  private cloudTimer: number | null = null;
+  private drainTimer: number | null = null;
+  private onlineHandler: (() => void) | null = null;
 
   constructor(options: AppStoreOptions = {}) {
     this.openDb = options.openDb ?? (() => openDatabase());
@@ -381,6 +430,9 @@ export class AppStore {
     this.now = options.now ?? (() => new Date().toISOString());
     this.engine = options.recalibrate ?? runRecalibration;
     this.minOverlayMs = options.minOverlayMs ?? DEFAULT_MIN_OVERLAY_MS;
+    this.makeCloudClient = options.cloudClient ?? createLibsqlCloudClient;
+    this.isOnline =
+      options.isOnline ?? (() => typeof navigator === 'undefined' || navigator.onLine !== false);
     this.state = {
       status: 'loading',
       error: null,
@@ -400,6 +452,7 @@ export class AppStore {
       coachDeclines: emptyDeclines(),
       deloadWeek: null,
       strengthMaxes: emptyMaxes(),
+      cloud: CLOUD_OFF,
     };
   }
 
@@ -416,7 +469,11 @@ export class AppStore {
   }
 
   getDatabase(): Promise<Database> {
-    this.dbPromise ??= this.openDb();
+    this.dbPromise ??= this.openDb().then((db) => {
+      // Every local write to a synced store lands in the outbox; the push follows shortly.
+      db.watchOutbox(() => this.scheduleDrain());
+      return db;
+    });
     return this.dbPromise;
   }
 
@@ -451,6 +508,12 @@ export class AppStore {
         db.get<Identified>('meta', COACH_DECLINES_ID),
         db.get<Identified>('meta', DELOAD_WEEK_ID),
         db.get<Identified>('meta', STRENGTH_MAXES_ID),
+      ]);
+      const deviceId = ensureDeviceId(this.storage);
+      const [cloudToken, cloudState, pending] = await Promise.all([
+        readCloudToken(db),
+        readCloudState(db),
+        pendingCount(db),
       ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
       const validLocations = locations
@@ -491,6 +554,14 @@ export class AppStore {
         coachDeclines: parseCoachDeclines(declinesRaw),
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
         strengthMaxes: parseStrengthMaxes(maxesRaw),
+        cloud: {
+          ...this.state.cloud,
+          configured: cloudToken !== null,
+          pending,
+          lastSyncAt: cloudState.lastSyncAt,
+          lastError: cloudState.lastError,
+          deviceId,
+        },
       });
       this.ensureSession();
     } catch (error) {
@@ -1726,6 +1797,166 @@ export class AppStore {
     clearSession(this.storage);
     this.setState({ session: null });
     this.ensureSession();
+  }
+
+  // ---------------------------------------------------------------- cloud copy
+
+  /**
+   * Pull on open and every fifteen minutes, and again when the device comes back
+   * online. Does nothing without a token. Returns true when it started the schedule.
+   */
+  startCloud(): boolean {
+    if (this.cloudTimer !== null || typeof window === 'undefined') return false;
+    if (!this.state.cloud.configured) return false;
+    this.cloudTimer = window.setInterval(() => {
+      void this.syncNow({ pull: true });
+    }, PULL_INTERVAL_MS);
+    this.onlineHandler = () => {
+      void this.syncNow({ pull: true, force: true });
+    };
+    window.addEventListener('online', this.onlineHandler);
+    void this.syncNow({ pull: true });
+    return true;
+  }
+
+  stopCloud(): void {
+    if (typeof window === 'undefined') return;
+    if (this.cloudTimer !== null) window.clearInterval(this.cloudTimer);
+    if (this.drainTimer !== null) window.clearTimeout(this.drainTimer);
+    if (this.onlineHandler) window.removeEventListener('online', this.onlineHandler);
+    this.cloudTimer = null;
+    this.drainTimer = null;
+    this.onlineHandler = null;
+  }
+
+  /** Saves the pasted token on this device and syncs at once; the first pull restores everything. */
+  async setCloudToken(raw: string): Promise<void> {
+    const value = raw.trim();
+    if (value.length === 0) throw new Error('Paste the token first.');
+    const db = await this.getDatabase();
+    await saveCloudToken(db, value, this.now());
+    this.dropCloudClient();
+    this.setState({ cloud: { ...this.state.cloud, configured: true, lastError: null } });
+    if (!this.startCloud()) await this.syncNow({ pull: true, force: true });
+  }
+
+  /** Removes the token; the cloud copy is off and nothing leaves the device. The outbox is kept. */
+  async clearCloudToken(): Promise<void> {
+    const db = await this.getDatabase();
+    await clearCloudToken(db);
+    this.stopCloud();
+    this.dropCloudClient();
+    this.setState({
+      cloud: { ...this.state.cloud, configured: false, syncing: false, lastError: null },
+    });
+  }
+
+  /**
+   * One sync now: push the outbox, then pull when asked. Concurrent calls queue
+   * behind each other; without a token it returns null and touches no network.
+   */
+  syncNow(
+    options: { pull: boolean; force?: boolean } = { pull: true },
+  ): Promise<SyncOutcome | null> {
+    const run = this.syncRun.then(() => this.runSync(options));
+    this.syncRun = run.catch(() => null);
+    this.pendingWork = this.pendingWork.then(() => this.syncRun.then(() => undefined));
+    return run;
+  }
+
+  private async runSync(options: { pull: boolean; force?: boolean }): Promise<SyncOutcome | null> {
+    const db = await this.getDatabase();
+    const token = await readCloudToken(db);
+    if (token === null) {
+      if (this.state.cloud.configured) {
+        this.setState({ cloud: { ...this.state.cloud, configured: false } });
+      }
+      return null;
+    }
+    const client = await this.cloudClientFor(token);
+    this.setState({ cloud: { ...this.state.cloud, syncing: true } });
+    let outcome: SyncOutcome;
+    try {
+      outcome = await syncOnce(
+        db,
+        client,
+        {
+          now: this.now,
+          deviceId: ensureDeviceId(this.storage),
+          deviceLabel: deviceLabel(),
+          isOnline: this.isOnline,
+        },
+        options,
+      );
+    } catch (error) {
+      outcome = {
+        ran: true,
+        pushed: 0,
+        applied: 0,
+        removed: 0,
+        error: error instanceof Error ? error.message : 'Sync failed.',
+      };
+    }
+    const cloudState = await readCloudState(db);
+    const pending = await pendingCount(db);
+    this.setState({
+      cloud: {
+        ...this.state.cloud,
+        configured: true,
+        syncing: false,
+        pending,
+        lastSyncAt: cloudState.lastSyncAt,
+        lastError: outcome.ran
+          ? outcome.error
+          : outcome.reason === 'offline'
+            ? 'Offline; it will sync when the device is back online.'
+            : cloudState.lastError,
+      },
+    });
+    // Records that arrived from the cloud are on disk; the state reloads from it.
+    if (outcome.applied + outcome.removed > 0) await this.hydrate();
+    return outcome;
+  }
+
+  private async cloudClientFor(token: string): Promise<CloudClient> {
+    if (this.cloudClient && this.cloudClient.token === token) return this.cloudClient.client;
+    this.dropCloudClient();
+    const client = await this.makeCloudClient(token);
+    this.cloudClient = { token, client };
+    return client;
+  }
+
+  private dropCloudClient(): void {
+    if (this.cloudClient) {
+      try {
+        this.cloudClient.client.close();
+      } catch {
+        // a closed client is closed
+      }
+      this.cloudClient = null;
+    }
+  }
+
+  /** After a local write: refresh the pending count and, with a token, push shortly. */
+  private scheduleDrain(): void {
+    void this.refreshPending();
+    if (!this.state.cloud.configured || typeof window === 'undefined') return;
+    if (this.drainTimer !== null) window.clearTimeout(this.drainTimer);
+    this.drainTimer = window.setTimeout(() => {
+      this.drainTimer = null;
+      void this.syncNow({ pull: false });
+    }, DRAIN_DELAY_MS);
+  }
+
+  private async refreshPending(): Promise<void> {
+    try {
+      const pending = await pendingCount(await this.getDatabase());
+      if (pending !== this.state.cloud.pending) {
+        this.setState({ cloud: { ...this.state.cloud, pending } });
+      }
+    } catch {
+      // the count is a status line, never a reason to fail a save
+    }
   }
 
   // ---------------------------------------------------------------- entered maxes

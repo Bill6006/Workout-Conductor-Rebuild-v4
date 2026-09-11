@@ -9,7 +9,8 @@ interface AppStoreProviderProps {
 
 export function AppStoreProvider({ store, children }: AppStoreProviderProps) {
   useEffect(() => {
-    void store.hydrate();
+    void store.hydrate().then(() => store.startCloud());
+    return () => store.stopCloud();
   }, [store]);
 
   return <AppStoreContext.Provider value={store}>{children}</AppStoreContext.Provider>;

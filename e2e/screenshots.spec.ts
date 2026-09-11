@@ -141,6 +141,8 @@ test.describe('screenshots @screenshots', () => {
     await page.goto('./#/settings');
     await page.locator('#age').scrollIntoViewIfNeeded();
     await capture(page, testInfo, 'settings-units-and-body');
+    await page.getByTestId('cloud-token').scrollIntoViewIfNeeded();
+    await capture(page, testInfo, 'settings-cloud-copy');
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
     const download = await downloadPromise;
