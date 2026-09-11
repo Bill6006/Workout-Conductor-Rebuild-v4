@@ -29,6 +29,8 @@ import { useCoach } from '../coach/useCoach';
 import { ReadinessSheet } from '../today/ReadinessSheet';
 import { estimateWorkout } from '../../engine/duration/duration';
 import { plateMath, weightStep } from '../../engine/plateMath/plateMath';
+import { maxPromptHidden } from '../../engine/progression/maxes';
+import { startRatio } from '../../engine/progression/startingLoad';
 import { contextFor } from '../../engine/recalibration/recalibrate';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import { currentPosition, workoutProgress } from '../../engine/workout/sequence';
@@ -43,6 +45,7 @@ import { EntryPanels } from './EntryPanels';
 import { LoggedSets } from './LoggedSets';
 import { describeSet } from './setFormat';
 import { RatingSheet } from './RatingSheet';
+import { MaxSheet } from './MaxSheet';
 import { previousPerformance } from './previousPerformance';
 
 interface Editing {
@@ -66,30 +69,35 @@ function roundTo(value: number, step: number): number {
   return Math.max(0, Math.round(value / step) * step);
 }
 
-/** Prefilled logger values: the last set of this exercise, else the target, else previous performance. */
+/**
+ * Prefilled logger values. Ramp and drop sets carry loads the engine already
+ * scaled, so they prefill as prescribed; only a set with no target falls back
+ * to a fraction of the last working weight. A working set follows the last
+ * logged working set of this exercise, else the target, else last time.
+ */
 function initialFor(
   session: WorkoutSession,
   entry: WorkoutEntry,
   set: SetPrescription,
   previousWeight: number | null,
   step: number,
+  workingLogged: boolean,
 ): SetLoggerValues {
-  const draft = session.drafts[entry.id];
+  const draft = workingLogged ? session.drafts[entry.id] : undefined;
+  if (set.kind === 'warmup' || set.kind === 'drop') {
+    const rir = set.kind === 'warmup' ? 5 : 0;
+    if (set.targetWeight !== null) {
+      return { weight: set.targetWeight, reps: set.targetReps[1], rir };
+    }
+    const base = draft?.weight ?? previousWeight;
+    const fraction = set.kind === 'warmup' ? 0.6 : 0.8;
+    return {
+      weight: base === null || base === undefined ? null : roundTo(base * fraction, step),
+      reps: set.targetReps[1],
+      rir,
+    };
+  }
   const base = draft?.weight ?? set.targetWeight ?? previousWeight;
-  if (set.kind === 'warmup') {
-    return {
-      weight: base === null || base === undefined ? null : roundTo(base * 0.6, step),
-      reps: set.targetReps[1],
-      rir: 5,
-    };
-  }
-  if (set.kind === 'drop') {
-    return {
-      weight: base === null || base === undefined ? null : roundTo(base * 0.8, step),
-      reps: set.targetReps[1],
-      rir: 0,
-    };
-  }
   return {
     weight: base ?? null,
     reps: draft?.reps ?? set.targetReps[1],
@@ -127,8 +135,10 @@ export function ActiveWorkoutScreen() {
   const [finishing, setFinishing] = useState<'idle' | 'rating' | 'discard'>('idle');
   const [endedEarly, setEndedEarly] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [maxFor, setMaxFor] = useState<Selection | null>(null);
   const coach = useCoach();
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
+  const strengthMaxes = useAppSelector((state) => state.strengthMaxes);
   /** Weight currently shown in a logger, so Plate Math follows it before the set is logged. */
   const [liveWeights, setLiveWeights] = useState<Record<string, number | null>>({});
   const active = session?.status === 'active';
@@ -177,6 +187,21 @@ export function ActiveWorkoutScreen() {
     )
       .map((pr) => pr.label)
       .join(' · ') || null;
+
+  // The one-time max offer: a lift without its own history, nothing logged yet, not declined.
+  const knowMaxFor = (entry: WorkoutEntry, block: WorkoutBlock) => {
+    const mode = entry.progression?.mode;
+    if (mode !== 'start' && mode !== 'estimate' && mode !== 'return') return undefined;
+    if (startRatio(requireExercise(entry.exerciseId)) === null) return undefined;
+    const logged = session.completed.sets.some(
+      (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
+    );
+    if (logged) return undefined;
+    if (maxPromptHidden(strengthMaxes, entry.exerciseId, new Date().toISOString())) {
+      return undefined;
+    }
+    return () => setMaxFor({ entry, block });
+  };
 
   const onCoachAction = (action: CoachAction) => {
     void store.noteCoachAction(action);
@@ -282,7 +307,7 @@ export function ActiveWorkoutScreen() {
         ) : currentHere ? (
           <>
             <SetLogger
-              key={`log-${entry.id}-${currentHere.setIndex}`}
+              key={`log-${entry.id}-${currentHere.setIndex}-${currentHere.set.targetWeight ?? 'none'}`}
               units={units}
               target={{
                 kind: currentHere.kind,
@@ -291,12 +316,27 @@ export function ActiveWorkoutScreen() {
                 weight: currentHere.set.targetWeight,
                 label: describeSet(currentHere.set, entry),
               }}
-              initial={initialFor(session, entry, currentHere.set, previous?.weight ?? null, step)}
+              initial={initialFor(
+                session,
+                entry,
+                currentHere.set,
+                previous?.weight ?? null,
+                step,
+                logged.some((set) => set.kind === 'working' && !set.skipped),
+              )}
               mode="log"
               weightStep={step}
               onCommit={(values) => commitLog(entry, currentHere.set, values)}
               disabled={calibrating}
               helper={helper}
+              weightHint={
+                currentHere.set.targetWeight === null &&
+                (exercise.load === 'bodyweight' || exercise.load === 'band')
+                  ? exercise.load === 'band'
+                    ? 'Band tension'
+                    : 'Bodyweight'
+                  : undefined
+              }
               onChange={(values) =>
                 setLiveWeights((current) => ({ ...current, [entry.id]: values.weight }))
               }
@@ -346,6 +386,7 @@ export function ActiveWorkoutScreen() {
           availableEquipment={context.availableEquipment}
           badge={prBadge(entry)}
           onShowDetail={() => setSelected({ entry, block })}
+          onKnowMax={knowMaxFor(entry, block)}
         >
           {loggerFor(entry, block)}
         </ExerciseCard>
@@ -376,6 +417,7 @@ export function ActiveWorkoutScreen() {
             active={position?.entryId === entry.id}
             badge={prBadge(entry)}
             onShowDetail={() => setSelected({ entry, block })}
+            onKnowMax={knowMaxFor(entry, block)}
           >
             {loggerFor(entry, block)}
           </ExerciseCard>
@@ -636,6 +678,17 @@ export function ActiveWorkoutScreen() {
         }
         editActions={editActions}
       />
+
+      {maxFor ? (
+        <MaxSheet
+          key={maxFor.entry.id}
+          exercise={requireExercise(maxFor.entry.exerciseId)}
+          entry={maxFor.entry}
+          units={units}
+          open
+          onClose={() => setMaxFor(null)}
+        />
+      ) : null}
 
       <ReadinessSheet
         key={session.constraints.readiness ? 'set' : 'unset'}

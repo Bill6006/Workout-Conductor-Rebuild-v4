@@ -4,6 +4,7 @@ import type {
   PrimaryGoal,
   RestStyle,
   SecondaryGoal,
+  Sex,
   ShoulderLimitation,
   TrainingStyle,
   UnitSystem,
@@ -75,6 +76,12 @@ export const REST_STYLE_OPTIONS: readonly LabelledOption<RestStyle>[] = [
   { value: 'short', label: 'Short', description: 'Dense sessions, quicker pace' },
   { value: 'standard', label: 'Standard', description: 'Programmed rests as written' },
   { value: 'long', label: 'Long', description: 'Full recovery between heavy sets' },
+];
+
+export const SEX_OPTIONS: readonly LabelledOption<Sex | 'unspecified'>[] = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+  { value: 'unspecified', label: 'Prefer not to say' },
 ];
 
 export const UNIT_OPTIONS: readonly LabelledOption<UnitSystem>[] = [

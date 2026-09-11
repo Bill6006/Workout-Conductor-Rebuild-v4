@@ -84,6 +84,11 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
     scope: 'local',
     evaluating: ['Updating the remaining sets'],
   },
+  max: {
+    label: 'Max entered',
+    scope: 'local',
+    evaluating: ['Setting the first target from your max', 'Recalculating the ramp sets'],
+  },
   sets: {
     label: 'Sets changed',
     scope: 'local',
@@ -195,6 +200,8 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
       return 'Adjusting the next sets';
     case 'target-weight':
       return 'Updating the target weight';
+    case 'max':
+      return `Setting the first target for ${name}`;
     case 'sets':
       return trigger.workingDelta > 0 ? `Adding a set to ${name}` : `Removing a set from ${name}`;
     case 'add-warmup':

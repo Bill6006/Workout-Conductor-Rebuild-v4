@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EXERCISES, requireExercise } from '../../catalog/exercises/catalog';
 import { createDefaultProfile } from '../../core/validation/profile';
 import { record } from '../../test/records';
+import { emptyMaxes, recordMax } from './maxes';
 import { buildSets, prescribe } from './roles';
 import {
   applyProgression,
@@ -19,7 +20,7 @@ const strengthRx = prescribe(bench, 'primary-strength', profile);
 const isoRx = prescribe(fly, 'isolation', profile);
 
 describe('progression engine', () => {
-  it('starts without a load when nothing was logged', () => {
+  it('starts a bar lift at the empty bar and a stack lift without a load when nothing was logged', () => {
     const target = recommendNextTarget({
       exercise: bench,
       role: 'primary-strength',
@@ -27,8 +28,55 @@ describe('progression engine', () => {
       history: [],
       profile,
     });
-    expect(target).toMatchObject({ mode: 'start', weight: null, sessions: 0, confidence: 'low' });
+    expect(target).toMatchObject({ mode: 'start', weight: 45, sessions: 0, confidence: 'low' });
     expect(target.reps).toEqual(strengthRx.reps);
+    expect(target.evidence.join(' ')).toMatch(/start with the empty bar \(45 lb\)/);
+    expect(target.evidence.join(' ')).toMatch(/Add your bodyweight in Settings/);
+
+    const stack = recommendNextTarget({
+      exercise: fly,
+      role: 'isolation',
+      prescription: isoRx,
+      history: [],
+      profile,
+    });
+    expect(stack).toMatchObject({ mode: 'start', weight: null });
+    expect(stack.evidence.join(' ')).toMatch(/enter the weight you use/);
+  });
+
+  it('starts from the bodyweight estimate, and from an entered max before that', () => {
+    const heavier = { ...profile, bodyweight: 180, sex: 'male' as const, age: 30 };
+    const estimated = recommendNextTarget({
+      exercise: bench,
+      role: 'primary-strength',
+      prescription: strengthRx,
+      history: [],
+      profile: heavier,
+    });
+    // Reference max 1.0 x 180 lb; 8 effective reps: 180 / 1.2667 = 142.1; 85% = 120.8 -> 120.
+    expect(estimated).toMatchObject({ mode: 'start', weight: 120, confidence: 'low' });
+    expect(estimated.evidence.join(' ')).toMatch(
+      /Starting estimate from your 180 lb bodyweight, intermediate lifter, male, age 30: about 180 lb max/,
+    );
+
+    const maxes = recordMax(
+      emptyMaxes(),
+      bench.id,
+      { kind: 'set', weight: 185, reps: 5 },
+      'lb',
+      '2026-09-10T12:00:00.000Z',
+    );
+    const entered = recommendNextTarget({
+      exercise: bench,
+      role: 'primary-strength',
+      prescription: strengthRx,
+      history: [],
+      profile: heavier,
+      maxes,
+    });
+    // 185 x 5 -> 215.8 max; 215.8 / 1.2667 = 170.4; 90% = 153.3 -> 155.
+    expect(entered).toMatchObject({ mode: 'start', weight: 155, viaFamily: false });
+    expect(entered.evidence.join(' ')).toMatch(/Your max for Barbell Bench Press: 215.8 lb/);
   });
 
   it('adds a load step to a strength lift once every set clears the floor with reps in reserve', () => {
@@ -420,25 +468,34 @@ describe('targets from the estimated max', () => {
     expect(recommendNextTarget({ ...base, history: [clean(50)] }).mode).toBe('weight');
   });
 
-  it('starts a new variation from a discounted family estimate', () => {
-    const sibling = EXERCISES.find(
-      (candidate) =>
-        candidate.id !== bench.id && candidate.progressionFamily === bench.progressionFamily,
-    );
-    if (!sibling) return;
-    const history = [record(3, sibling.id, [[5, 100, 2]])];
-    const target = recommendNextTarget({
+  it('starts a new variation from a discounted family estimate, converted between load types', () => {
+    const closeGrip = requireExercise('close-grip-bench-press');
+    const sameBar = recommendNextTarget({
       exercise: bench,
       role: 'primary-strength',
       prescription: strengthRx,
-      history,
+      history: [record(3, closeGrip.id, [[5, 100, 2]])],
       profile,
     });
-    expect(target.mode).toBe('estimate');
-    expect(target.viaFamily).toBe(true);
-    // e1rm 116.7; 8 effective reps; 90% of 116.7 / 1.2667 = 82.9 -> 85.
-    expect(target.weight).toBe(85);
-    expect(target.evidence.join(' ')).toMatch(/New variation: 90% of the family estimate/);
+    expect(sameBar.mode).toBe('estimate');
+    expect(sameBar.viaFamily).toBe(true);
+    // e1rm 116.7 on the close grip (reference 0.85) -> 137.3 on the flat bench; 90% of 137.3 / 1.2667 = 97.6 -> 100.
+    expect(sameBar.weight).toBe(100);
+    expect(sameBar.evidence.join(' ')).toContain(
+      `New variation: 90% of the family estimate (137.3 lb max, converted from ${closeGrip.name})`,
+    );
+
+    const dumbbell = requireExercise('dumbbell-bench-press');
+    const perHand = recommendNextTarget({
+      exercise: bench,
+      role: 'primary-strength',
+      prescription: strengthRx,
+      history: [record(3, dumbbell.id, [[8, 60, 2]])],
+      profile,
+    });
+    // 60 lb per hand x 8 -> 76 max per hand; x 1 / 0.4 -> 190 on the bar; 90% of 190 / 1.2667 = 135.
+    expect(perHand.weight).toBe(135);
+    expect(perHand.evidence.join(' ')).toContain(`converted from ${dumbbell.name}`);
   });
 
   describe('learning from overrides in the next target', () => {

@@ -10,6 +10,15 @@ import type { MovementPatternId } from '../../catalog/movementPatterns/movementP
 import { resolveTargetMinutes } from '../../engine/duration/duration';
 import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
 import { weightStep } from '../../engine/plateMath/plateMath';
+import {
+  STRENGTH_MAXES_ID,
+  emptyMaxes,
+  parseStrengthMaxes,
+  recordMax,
+  snoozeMaxPrompt,
+  type MaxInput,
+  type StrengthMaxes,
+} from '../../engine/progression/maxes';
 import { recalibrate as runRecalibration } from '../../engine/recalibration/recalibrate';
 import { describeTrigger, type TriggerContext } from '../../engine/recalibration/triggers';
 import type {
@@ -168,6 +177,8 @@ export interface AppState {
   coachDeclines: CoachDeclines;
   /** A planned deload week, kept in the meta store and backed up; null when none. */
   deloadWeek: DeloadWeek | null;
+  /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
+  strengthMaxes: StrengthMaxes;
 }
 
 function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
@@ -324,6 +335,9 @@ export function profileTrigger(
       { ...profile.limitations, notes: '' },
       profile.trainingStyle,
       profile.restStyle,
+      profile.bodyweight ?? null,
+      profile.age ?? null,
+      profile.sex ?? null,
     ]);
   return relevant(previous) !== relevant(next) ? { type: 'profile' } : null;
 }
@@ -385,6 +399,7 @@ export class AppStore {
       coachRoutes: emptyRoutes(),
       coachDeclines: emptyDeclines(),
       deloadWeek: null,
+      strengthMaxes: emptyMaxes(),
     };
   }
 
@@ -423,6 +438,7 @@ export class AppStore {
         routesRaw,
         declinesRaw,
         deloadRaw,
+        maxesRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -434,6 +450,7 @@ export class AppStore {
         db.get<Identified>('meta', COACH_ROUTES_ID),
         db.get<Identified>('meta', COACH_DECLINES_ID),
         db.get<Identified>('meta', DELOAD_WEEK_ID),
+        db.get<Identified>('meta', STRENGTH_MAXES_ID),
       ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
       const validLocations = locations
@@ -473,6 +490,7 @@ export class AppStore {
         coachRoutes: parseCoachRoutes(routesRaw),
         coachDeclines: parseCoachDeclines(declinesRaw),
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
+        strengthMaxes: parseStrengthMaxes(maxesRaw),
       });
       this.ensureSession();
     } catch (error) {
@@ -546,6 +564,7 @@ export class AppStore {
       now,
       duration: 'default',
       constraints: deload ? { deload } : undefined,
+      maxes: this.state.strengthMaxes,
     });
     const session = createSession(key, workout, now);
     this.setSession({ ...session, constraints: { ...session.constraints, deload } });
@@ -568,6 +587,7 @@ export class AppStore {
       allEntries(session.workout.blocks).find((entry) => entry.id === id);
     switch (trigger.type) {
       case 'replace':
+      case 'max':
         return { exerciseName: getExercise(trigger.exerciseId)?.name };
       case 'pin':
       case 'sets':
@@ -634,6 +654,7 @@ export class AppStore {
       location: this.currentLocation(),
       history,
       constraints: session.constraints,
+      maxes: this.state.strengthMaxes,
       reason: reason ?? described.title,
       timestamp: this.now(),
     };
@@ -1705,6 +1726,34 @@ export class AppStore {
     clearSession(this.storage);
     this.setState({ session: null });
     this.ensureSession();
+  }
+
+  // ---------------------------------------------------------------- entered maxes
+
+  /** Saves a max the lifter entered; unlogged sets of that lift in today's session start from it. */
+  async recordStrengthMax(exerciseId: string, input: MaxInput): Promise<void> {
+    const profile = this.state.profile;
+    if (!profile) throw new Error('Finish setup before entering a max.');
+    const next = recordMax(this.state.strengthMaxes, exerciseId, input, profile.units, this.now());
+    const db = await this.getDatabase();
+    await putVerified(db, 'meta', next, { now: this.now });
+    this.setState({ strengthMaxes: next });
+    const session = this.state.session;
+    if (
+      session &&
+      session.status !== 'completed' &&
+      allEntries(session.workout.blocks).some((entry) => entry.exerciseId === exerciseId)
+    ) {
+      await this.recalibrate({ type: 'max', exerciseId });
+    }
+  }
+
+  /** "Not now" hides the max link for a week; "Don't ask for this lift" hides it for good. */
+  async snoozeMaxPrompt(exerciseId: string, forGood: boolean): Promise<void> {
+    const next = snoozeMaxPrompt(this.state.strengthMaxes, exerciseId, this.now(), forGood);
+    const db = await this.getDatabase();
+    await putVerified(db, 'meta', next, { now: this.now });
+    this.setState({ strengthMaxes: next });
   }
 
   /** Remembers a declined offer so the coach stops repeating it for a while. */

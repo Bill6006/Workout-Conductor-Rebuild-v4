@@ -404,7 +404,8 @@ describe('recalibration: techniques and effort', () => {
     const before = build();
     const result = run({ type: 'target-weight', entryId: 'e1', weight: 185 }, { workout: before });
     expect(working(result.workout, 'e1').every((set) => set.targetWeight === 185)).toBe(true);
-    expect(entry(result.workout, 'e1').sets[0]?.targetWeight).toBeNull();
+    // The ramp keeps its own load: a first-time bar lift ramps at the empty bar.
+    expect(entry(result.workout, 'e1').sets[0]?.targetWeight).toBe(45);
     expect(result.summary.headline).toBe('Target 185 lb for Barbell Bench Press.');
   });
 

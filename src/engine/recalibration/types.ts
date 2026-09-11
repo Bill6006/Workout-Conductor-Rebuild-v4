@@ -1,3 +1,4 @@
+import type { StrengthMaxes } from '../progression/maxes';
 import type { DeloadWindow } from '../planning/deload';
 import type { AutoregulationPlan } from './autoregulate';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
@@ -46,6 +47,8 @@ export type RecalibrationTrigger =
       plan?: AutoregulationPlan;
     }
   | { type: 'target-weight'; entryId: string; weight: number | null }
+  /** A max was entered for a lift: its unlogged sets take their first target from it. */
+  | { type: 'max'; exerciseId: string }
   | { type: 'sets'; entryId: string; workingDelta: -1 | 1 }
   | { type: 'add-warmup'; entryId: string }
   | { type: 'rep-range'; entryId: string; reps: [number, number] }
@@ -116,6 +119,8 @@ export interface RecalibrationRequest {
   constraints: SessionConstraints;
   reason: string;
   timestamp: string;
+  /** Maxes the lifter entered by hand, for lifts without their own history. */
+  maxes?: StrengthMaxes | null;
 }
 
 export type ChangeKind = 'added' | 'removed' | 'replaced' | 'adjusted';

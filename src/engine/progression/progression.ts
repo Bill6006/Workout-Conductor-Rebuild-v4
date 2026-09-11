@@ -3,7 +3,16 @@ import type { CatalogExercise, TrainingRole } from '../../catalog/exercises/exer
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { coachingPolicy, policyLabel } from '../coach/experience';
+import { enteredMaxFor, type StrengthMaxes } from './maxes';
 import { overrideBias } from './overrides';
+import {
+  ENTERED_FRACTION,
+  START_FRACTION,
+  barWeightFor,
+  convertEstimate,
+  estimateStartingMax,
+  startRatio,
+} from './startingLoad';
 import { weightStep } from '../plateMath/plateMath';
 import type { EntryProgression, ProgressionMode, SetPrescription } from '../workout/types';
 import { restCategory, type Prescription } from './roles';
@@ -175,6 +184,8 @@ export interface NextTargetInput {
   fatigueLevel?: 'fresh' | 'normal' | 'elevated' | 'high';
   /** When given, a gap of RETURN_AFTER_DAYS or more since the last session starts from the estimate. */
   now?: string;
+  /** Maxes the lifter entered by hand; they set the first target of a lift without its own history. */
+  maxes?: StrengthMaxes | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -198,14 +209,28 @@ export function loadFromEstimate(
 const BIASABLE: ReadonlySet<ProgressionMode> = new Set(['weight', 'reps', 'maintain', 'double']);
 
 export function recommendNextTarget(input: NextTargetInput): NextTarget {
-  const target = recommendBaseTarget(input);
+  const target = floorTarget(recommendBaseTarget(input), input);
   if (target.weight === null || !BIASABLE.has(target.mode)) return target;
   const bias = overrideBias(input.history, input.exercise.id, target.increment);
   if (bias.steps === 0 || !bias.evidence) return target;
+  return floorTarget(
+    {
+      ...target,
+      weight: roundToStep(target.weight + bias.steps * target.increment, target.increment),
+      evidence: [...target.evidence, bias.evidence],
+    },
+    input,
+  );
+}
+
+/** A bar lift never targets less than the empty bar, whatever the mode said. */
+function floorTarget(target: NextTarget, input: NextTargetInput): NextTarget {
+  const bar = barWeightFor(input.exercise, input.profile.units);
+  if (bar === null || target.weight === null || target.weight >= bar) return target;
   return {
     ...target,
-    weight: roundToStep(target.weight + bias.steps * target.increment, target.increment),
-    evidence: [...target.evidence, bias.evidence],
+    weight: bar,
+    evidence: [...target.evidence, `Never below the empty bar (${bar} ${input.profile.units}).`],
   };
 }
 
@@ -223,14 +248,68 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     setsAdvice: 0,
   };
   const last = points[0];
+  const maxes = input.maxes ?? null;
+  // A max the lifter entered sets the first target of a lift without its own history.
+  const entered =
+    maxes && (!last || last.viaFamily) ? enteredMaxFor(maxes, exercise.id, units) : null;
+  if (entered !== null) {
+    return {
+      ...base,
+      viaFamily: false,
+      mode: 'start',
+      weight: loadFromEstimate(
+        entered,
+        prescription.reps[1],
+        prescription.rir,
+        ENTERED_FRACTION,
+        step,
+      ),
+      confidence: 'low',
+      evidence: [
+        `Your max for ${exercise.name}: ${entered} ${units}. The first target is ${Math.round(ENTERED_FRACTION * 100)}% of what it implies for ${prescription.reps[0]}-${prescription.reps[1]} reps at RIR ${prescription.rir}; log a set and the target follows.`,
+      ],
+    };
+  }
   if (!last) {
+    const estimate = estimateStartingMax(exercise, profile);
+    if (estimate) {
+      return {
+        ...base,
+        mode: 'start',
+        weight: loadFromEstimate(
+          estimate.e1rm,
+          prescription.reps[1],
+          prescription.rir,
+          START_FRACTION,
+          step,
+        ),
+        confidence: 'low',
+        evidence: [estimate.evidence],
+      };
+    }
+    const hint =
+      profile.bodyweight === undefined && startRatio(exercise) !== null
+        ? ' Add your bodyweight in Settings for a starting estimate.'
+        : '';
+    const bar = barWeightFor(exercise, units);
+    if (bar !== null) {
+      return {
+        ...base,
+        mode: 'start',
+        weight: bar,
+        confidence: 'low',
+        evidence: [
+          `First time logged: start with the empty bar (${bar} ${units}), log what you do, and the next target follows from it.${hint}`,
+        ],
+      };
+    }
     return {
       ...base,
       mode: 'start',
       weight: null,
       confidence: 'low',
       evidence: [
-        'First time logged: enter the weight you use and the next target follows from it.',
+        `First time logged: enter the weight you use and the next target follows from it.${hint}`,
       ],
     };
   }
@@ -280,21 +359,45 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   });
 
   if (last.viaFamily) {
-    const estimate =
+    // A dumbbell per hand is not a barbell: convert the family estimate between load types.
+    const source = getExercise(last.exerciseId);
+    const familyMax =
       last.e1rm === null
         ? null
-        : loadFromEstimate(last.e1rm, prescription.reps[1], prescription.rir, 0.9, step);
+        : source
+          ? convertEstimate(last.e1rm, source, exercise)
+          : { e1rm: last.e1rm, converted: false };
+    const estimate =
+      familyMax === null
+        ? null
+        : loadFromEstimate(familyMax.e1rm, prescription.reps[1], prescription.rir, 0.9, step);
     return result(
       'estimate',
       estimate,
-      last.e1rm === null
+      familyMax === null
         ? 'New variation with no load history in its family: log a set and the target follows.'
-        : `New variation: 90% of the family estimate (${last.e1rm} ${units} max) for ${prescription.reps[0]}-${prescription.reps[1]} reps at RIR ${prescription.rir}; log a set and the target follows.`,
+        : `New variation: 90% of the family estimate (${familyMax.e1rm} ${units} max${familyMax.converted ? `, converted from ${source?.name ?? 'the family lift'}` : ''}) for ${prescription.reps[0]}-${prescription.reps[1]} reps at RIR ${prescription.rir}; log a set and the target follows.`,
     );
   }
   const daysSince = input.now
     ? Math.floor((Date.parse(input.now) - Date.parse(last.date)) / DAY_MS)
     : 0;
+  const enteredRecord = maxes?.maxes[exercise.id];
+  if (
+    daysSince >= RETURN_AFTER_DAYS &&
+    maxes &&
+    enteredRecord &&
+    enteredRecord.enteredAt > last.date
+  ) {
+    const fresh = enteredMaxFor(maxes, exercise.id, units);
+    if (fresh !== null) {
+      return result(
+        'return',
+        loadFromEstimate(fresh, prescription.reps[1], prescription.rir, ENTERED_FRACTION, step),
+        `${daysSince} days since the last session: starting from the max you entered (${fresh} ${units}) at ${Math.round(ENTERED_FRACTION * 100)}%; log a set and the target follows.`,
+      );
+    }
+  }
   if (daysSince >= RETURN_AFTER_DAYS && last.e1rm !== null) {
     const fraction = daysSince >= LONG_BREAK_DAYS ? 0.85 : 0.9;
     return result(
@@ -424,13 +527,17 @@ export function applyProgression(
   target: NextTarget,
   step: number,
   manual: { weight?: boolean; reps?: boolean } = {},
+  /** The empty bar for bar lifts: no ramp, drop, or working load goes under it. */
+  floor: number | null = null,
 ): SetPrescription[] {
   const warmups = sets.filter((set) => set.kind === 'warmup');
   const ramps = rampWeights(target.weight, warmups.length, step);
+  const clamp = (weight: number | null) =>
+    weight === null || floor === null ? weight : Math.max(weight, floor);
   let rampIndex = 0;
   return sets.map((set) => {
     if (set.kind === 'warmup') {
-      const weight = ramps[rampIndex] ?? null;
+      const weight = clamp(ramps[rampIndex] ?? null);
       rampIndex += 1;
       return { ...set, targetWeight: manual.weight ? set.targetWeight : weight };
     }
@@ -440,12 +547,12 @@ export function applyProgression(
         targetWeight:
           manual.weight || target.weight === null
             ? set.targetWeight
-            : roundToStep(target.weight * 0.8, step),
+            : clamp(roundToStep(target.weight * 0.8, step)),
       };
     }
     return {
       ...set,
-      targetWeight: manual.weight ? set.targetWeight : target.weight,
+      targetWeight: manual.weight ? set.targetWeight : clamp(target.weight),
       targetReps: manual.reps ? set.targetReps : [target.reps[0], target.reps[1]],
       targetRir: manual.reps ? set.targetRir : target.rir,
     };

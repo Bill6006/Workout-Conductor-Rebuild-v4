@@ -39,7 +39,8 @@ describe('LoggedSets', () => {
     expect(screen.getByTestId('sets-summary')).toHaveTextContent(
       `${entry.sets.length - 1} more sets · ${firstWorking.targetReps[0]}-${firstWorking.targetReps[1]} reps @ RIR ${firstWorking.targetRir}`,
     );
-    expect(screen.getByTestId('set-aside')).toHaveTextContent('log below');
+    // A first-time bar lift starts at the empty bar, so the current ramp already carries a load.
+    expect(screen.getByTestId('set-aside')).toHaveTextContent('45 lb');
 
     await user.click(screen.getByTestId('sets-summary'));
     expect(screen.getAllByTestId('set-row')).toHaveLength(entry.sets.length);

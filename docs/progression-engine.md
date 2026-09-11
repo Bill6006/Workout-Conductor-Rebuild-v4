@@ -14,24 +14,25 @@ alternative keeps its lineage.
 `recommendNextTarget` returns the load, rep range, RIR, a mode, evidence lines, a session count,
 and a confidence:
 
-| Situation (from the last sessions)                                 | Mode                                      | Load               |
-| ------------------------------------------------------------------ | ----------------------------------------- | ------------------ |
-| Nothing logged for the exercise or its family                      | `start`                                   | none; user enters  |
-| Strength role, every set cleared the floor with reps in reserve    | `weight`                                  | + one increment    |
-| Strength role, floor cleared but little in reserve, or a set under | `maintain`                                | same               |
-| Hypertrophy or isolation, every set at the top of the range        | `weight`                                  | + one increment    |
-| Hypertrophy or isolation, every set inside the range               | `reps`                                    | same, one more rep |
-| One session under the floor                                        | `maintain`                                | same               |
-| Two sessions in a row under the floor                              | `deload`                                  | −10 %              |
-| Three sessions in a row under the floor                            | `regress`                                 | −15 %              |
-| Fatigue high (from `interpretFatigue`)                             | `maintain`                                | same               |
+| Situation (from the last sessions)                                 | Mode                                      | Load                                                       |
+| ------------------------------------------------------------------ | ----------------------------------------- | ---------------------------------------------------------- |
+| Nothing logged for the exercise or its family                      | `start`                                   | entered max, else body estimate, else empty bar, else none |
+| Strength role, every set cleared the floor with reps in reserve    | `weight`                                  | + one increment                                            |
+| Strength role, floor cleared but little in reserve, or a set under | `maintain`                                | same                                                       |
+| Hypertrophy or isolation, every set at the top of the range        | `weight`                                  | + one increment                                            |
+| Hypertrophy or isolation, every set inside the range               | `reps`                                    | same, one more rep                                         |
+| One session under the floor                                        | `maintain`                                | same                                                       |
+| Two sessions in a row under the floor                              | `deload`                                  | −10 %                                                      |
+| Three sessions in a row under the floor                            | `regress`                                 | −15 %                                                      |
+| Fatigue high (from `interpretFatigue`)                             | `maintain`                                | same                                                       |
 | Two sessions at the top of the range (hypertrophy)                 | `setsAdvice` = 1 (offered, never applied) |
 
 Increments come from the equipment: 5 lb or 2.5 kg on bars, 5 lb or 2 kg per dumbbell, 10 lb or
 5 kg on stacks. `applyProgression` writes the load and reps into the working sets, calculated ramp
 loads into the warm-up sets (60 %; 50 % and 75 %), and about 80 % into a drop set, and leaves any
-value the user set by hand (`entry.manual`) untouched. The generator and every substitution call
-it, so every card shows a load and a "Why this target".
+value the user set by hand (`entry.manual`) untouched. Its `floor` argument is the empty bar for
+bar lifts: no ramp, drop, or working load goes under it. The generator and every substitution
+call it, so every card shows a load and a "Why this target".
 
 ## Fatigue (`src/engine/recovery/fatigue.ts`)
 
@@ -126,6 +127,54 @@ estimate instead of the last load:
   replaces the estimate with real numbers.
 
 Warm-up ramps stay proportional to the working load, so they follow the estimate too.
+
+## Where the first weight comes from (`src/engine/progression/startingLoad.ts`, `maxes.ts`)
+
+A lift with no history of its own takes its first target from the first of these that exists:
+
+1. **A max the lifter entered** (`StrengthMaxes`, meta record `strength-maxes`, backed up). One
+   small "Know your max?" link on the card of a lift in `start`, `estimate`, or `return` mode
+   opens a sheet that takes a one-rep max or a remembered set (Epley, reps capped at twelve) and
+   shows the first target it would set. The first target is 90 percent of the load the max
+   implies for the top of the rep range at the prescribed RIR. Saving fires the `max` trigger,
+   which re-targets that lift's unlogged, untouched entries in today's session and recalculates
+   their ramps; entries with a logged working set are left alone and the next session starts
+   from the max. "Not now" hides the link for seven days; "Don't ask for this lift" hides it
+   for good; a logged working set hides it because the running estimate takes over. After a
+   break of twenty-one days or more, a max entered since the last session is used at 90 percent
+   (mode `return`).
+2. **A starting estimate from the body** (`estimateStartingMax`). With a bodyweight in
+   Settings, the reference max is a fraction of bodyweight per movement pattern and load type
+   (bars by pattern; dumbbells per hand at 0.4 of the bar figure; stacks at 0.9; machines,
+   single-bell moves, and heavier bars from a per-exercise table), scaled by experience (0.6,
+   1, 1.3), sex (women 0.6 for upper-body patterns and 0.7 for lower-body ones; unspecified
+   0.8 and 0.85), and age (1 under 35, then 0.92, 0.84, 0.76, and 0.68 by decade). The first
+   target is 85 percent of the load that estimate implies. The ratios are conservative
+   reference points in the spirit of published norms such as the ACSM bench press and leg press
+   tables, not standards: the first logged set replaces them, and in-session autoregulation
+   corrects the remaining sets.
+3. **The empty bar** for bar lifts (`barWeightFor`: 45 lb or 20 kg for a barbell, and the
+   catalog's EZ-bar, trap-bar, and Smith weights), with an evidence line that says so and a
+   nudge to add bodyweight in Settings.
+4. **Nothing** for stacks, dumbbells, and bodyweight moves without a bodyweight: the lifter
+   enters the weight, as before.
+
+Two rules apply everywhere. A bar lift never targets, ramps, or drops below the empty bar
+(`floorTarget`, and the `floor` argument of `applyProgression`). A family estimate converts
+between load types by the same reference ratios (`convertEstimate`), so 60 lb per hand on a
+dumbbell press stands in as about 190 lb on the barbell, not 60. The in-session performance
+trigger moves the next sets from the weight actually lifted, not from the planned target, so a
+lifter who starts at the bar and logs 135 lb is not sent to 50 lb.
+
+No re-test is scheduled. Reps-in-reserve estimates track a true max well in trained lifters
+(Zourdos et al., 2016; Helms et al., 2016), autoregulated loading matches or beats
+percentage-of-max loading over a training block (Helms et al., 2018; Graham and Cleather,
+2021), and a tested max goes stale within weeks for newer lifters while the running estimate
+updates every session. The link only returns after a long break.
+
+The set logger's line under the weight always says what to load: "Target 155 lb", "Warm-up
+80 lb", "Drop 125 lb", or "Bodyweight"; ramp and drop sets prefill with the load the engine
+already scaled rather than a second discount of it.
 
 ## Learning from overrides (`src/engine/progression/overrides.ts`)
 

@@ -72,7 +72,7 @@ export function SettingsScreen() {
             <LimitationsEditor draft={draft} onChange={editor.update} />
           </Card>
 
-          <Card eyebrow="Units" title="Units and bodyweight">
+          <Card eyebrow="Units" title="Units and body">
             <UnitsEditor draft={draft} onChange={editor.update} />
           </Card>
         </>

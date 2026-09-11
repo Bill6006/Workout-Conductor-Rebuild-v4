@@ -31,6 +31,8 @@ export interface ExerciseCardProps {
   badge?: string | null;
   /** Opens the exercise's demonstration and details; the thumbnail is the tap target. */
   onShowDetail?: () => void;
+  /** The one-time max offer on a lift with no history; absent once a set is logged or it was declined. */
+  onKnowMax?: () => void;
 }
 
 function roleLabel(entry: WorkoutEntry): string {
@@ -70,6 +72,7 @@ export function ExerciseCard({
   active = true,
   badge = null,
   onShowDetail,
+  onKnowMax,
 }: ExerciseCardProps) {
   const [tempoOpen, setTempoOpen] = useState(false);
   const exercise = requireExercise(entry.exerciseId);
@@ -121,6 +124,19 @@ export function ExerciseCard({
             {previous
               ? `Last time ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}`
               : 'First time logged'}
+            {onKnowMax ? (
+              <>
+                {' · '}
+                <button
+                  type="button"
+                  className={styles.maxLink}
+                  onClick={onKnowMax}
+                  data-testid="know-max"
+                >
+                  Know your max?
+                </button>
+              </>
+            ) : null}
           </p>
           <button
             type="button"

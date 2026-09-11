@@ -37,12 +37,14 @@ import {
   type Prescription,
 } from '../progression/roles';
 import { weightStep } from '../plateMath/plateMath';
+import type { StrengthMaxes } from '../progression/maxes';
 import {
   applyProgression,
   recommendNextTarget,
   summarizeProgression,
   type NextTarget,
 } from '../progression/progression';
+import { barWeightFor } from '../progression/startingLoad';
 import type { Readiness } from '../recalibration/types';
 import { interpretFatigue } from '../recovery/fatigue';
 import {
@@ -120,6 +122,8 @@ export interface GenerationInput {
   now: string;
   duration: DurationChoice;
   constraints?: GenerationConstraints;
+  /** Maxes the lifter entered by hand, for lifts without their own history. */
+  maxes?: StrengthMaxes | null;
 }
 
 interface Slot {
@@ -403,6 +407,12 @@ function scaleForDeload(
   };
 }
 
+/** A deload can scale a bar lift under the empty bar; the bar is the floor. */
+function floorTarget(target: NextTarget, floor: number | null): NextTarget {
+  if (floor === null || target.weight === null || target.weight >= floor) return target;
+  return { ...target, weight: floor };
+}
+
 function adjustPrescription(
   prescription: Prescription,
   role: TrainingRole,
@@ -424,6 +434,7 @@ function adjustPrescription(
 export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const { profile, location, history, now, duration } = input;
   const constraints = input.constraints ?? {};
+  const maxes = input.maxes ?? null;
   const exerciseOf = (id: string) => requireExercise(id);
   const context = sessionConflictContext(profile, location, constraints);
   const preferredIds = preferredIdsOf(profile);
@@ -507,8 +518,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       profile,
       fatigueLevel: fatigue.level,
       now,
+      maxes,
     });
-    const target = scaleForDeload(baseTarget, adjust, weightStep(pick, profile.units));
+    const floor = barWeightFor(pick, profile.units);
+    const target = floorTarget(
+      scaleForDeload(baseTarget, adjust, weightStep(pick, profile.units)),
+      floor,
+    );
     const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
     entries.push({
       id: `e${index + 1}`,
@@ -518,6 +534,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
         buildSets(prescription, warmupSets),
         target,
         weightStep(pick, profile.units),
+        {},
+        floor,
       ),
       progression: summarizeProgression(target),
       restSeconds: prescription.restSeconds,

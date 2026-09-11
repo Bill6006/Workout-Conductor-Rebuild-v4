@@ -40,6 +40,8 @@ interface SetLoggerProps {
   disabled?: boolean;
   /** Plate Math or a per-hand clarification for the current weight. */
   helper?: string | null;
+  /** Replaces the line under the weight, for example "Bodyweight" on a bodyweight move. */
+  weightHint?: string;
 }
 
 type Field = 'weight' | 'reps' | 'rir';
@@ -70,6 +72,7 @@ export function SetLogger({
   onDelete,
   disabled = false,
   helper = null,
+  weightHint,
 }: SetLoggerProps) {
   const [values, setValues] = useState<SetLoggerValues>(initial);
   const [typing, setTyping] = useState<Field | null>(null);
@@ -135,6 +138,16 @@ export function SetLogger({
 
   const [low, high] = target.reps;
   const inRange = values.reps >= low && values.reps <= high;
+  // The line under the weight always says what to load for this set.
+  const weightLabel =
+    target.kind === 'warmup' ? 'Warm-up' : target.kind === 'drop' ? 'Drop' : 'Target';
+  const weightHintText =
+    weightHint ??
+    (target.weight === null
+      ? target.kind === 'warmup'
+        ? 'Warm-up · light'
+        : 'Enter a weight'
+      : `${weightLabel} ${target.weight} ${units}`);
   const repsHint =
     target.kind === 'drop'
       ? `Drop set · aim ${low}-${high}`
@@ -221,12 +234,12 @@ export function SetLogger({
         {dial(
           'weight',
           'Weight',
-          'weight',
+          `weight by ${weightStep} ${units}`,
           values.weight === null ? '—' : String(values.weight),
           units,
           () => nudgeWeight(1),
           () => nudgeWeight(-1),
-          target.weight === null ? `Step ${weightStep}` : `Target ${target.weight}`,
+          weightHintText,
         )}
         {dial(
           'reps',

@@ -33,6 +33,9 @@ export type RestStyle = (typeof REST_STYLES)[number];
 export const UNIT_SYSTEMS = ['lb', 'kg'] as const;
 export type UnitSystem = (typeof UNIT_SYSTEMS)[number];
 
+export const SEXES = ['male', 'female'] as const;
+export type Sex = (typeof SEXES)[number];
+
 export const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
 
@@ -97,6 +100,9 @@ export const UserProfileSchema = z.looseObject({
   restStyle: z.enum(REST_STYLES),
   units: z.enum(UNIT_SYSTEMS),
   bodyweight: z.number().positive().max(1000).optional(),
+  /** Optional and local only: with bodyweight they sharpen the starting weight of a lift with no history. */
+  age: z.number().int().min(13).max(100).optional(),
+  sex: z.enum(SEXES).optional(),
   createdAt: isoDate,
   updatedAt: isoDate,
 });

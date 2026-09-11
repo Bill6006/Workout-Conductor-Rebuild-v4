@@ -47,7 +47,7 @@ describe('SetLogger', () => {
         onCommit={onCommit}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+    await user.click(screen.getByRole('button', { name: 'Increase weight by 2.5 kg' }));
     expect(screen.getByTestId('logger-weight')).toHaveTextContent('2.5');
     await user.click(screen.getByRole('button', { name: 'Decrease reps' }));
     expect(screen.getByTestId('logger-reps')).toHaveTextContent('5');

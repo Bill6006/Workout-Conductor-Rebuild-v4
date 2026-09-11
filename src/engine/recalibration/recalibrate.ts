@@ -17,6 +17,7 @@ import {
   summarizeProgression,
 } from '../progression/progression';
 import { buildSets, prescribe, rampSetsFor } from '../progression/roles';
+import { barWeightFor } from '../progression/startingLoad';
 import {
   generateWorkout,
   sessionConflictContext,
@@ -72,6 +73,7 @@ const LOCAL_TRIGGERS = new Set<TriggerType>([
   'pin',
   'performance',
   'target-weight',
+  'max',
   'sets',
   'add-warmup',
   'rep-range',
@@ -333,6 +335,7 @@ function rebuild(
     now: request.timestamp,
     duration: choice,
     constraints: generation,
+    maxes: request.maxes,
   });
 }
 
@@ -387,11 +390,14 @@ function applySubstitution(
       history: request.history,
       profile: request.profile,
       now: request.timestamp,
+      maxes: request.maxes,
     });
     entry.sets = applyProgression(
       buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
       target,
       weightStep(exercise, request.profile.units),
+      {},
+      barWeightFor(exercise, request.profile.units),
     );
     entry.progression = summarizeProgression(target);
     entry.warmupSets = warmupSets;
@@ -769,12 +775,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       );
       const plan = trigger.plan;
       if (plan?.kind === 'weight' && remaining.length > 0) {
-        const stepSize = weightStep(requireExercise(entry.exerciseId), request.profile.units);
+        const lifted = requireExercise(entry.exerciseId);
+        const stepSize = weightStep(lifted, request.profile.units);
+        const floor = barWeightFor(lifted, request.profile.units) ?? 0;
         for (const set of remaining) {
-          const current = set.targetWeight ?? trigger.actualWeight ?? null;
+          // The weight actually lifted is the ground truth; the plan moves from it.
+          const current = trigger.actualWeight ?? set.targetWeight ?? null;
           if (current !== null) {
             set.targetWeight = Math.max(
               stepSize,
+              floor,
               Math.round((current + plan.delta) / stepSize) * stepSize,
             );
           }
@@ -817,6 +827,53 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           shift > 0
             ? `Adjusted the next ${remaining.length} ${remaining.length === 1 ? 'set' : 'sets'} of ${name}: aim for ${first.targetReps[0]}-${first.targetReps[1]} reps and add a little weight.`
             : `Adjusted the next ${remaining.length} ${remaining.length === 1 ? 'set' : 'sets'} of ${name}: aim for ${first.targetReps[0]}-${first.targetReps[1]} reps at the same weight.`,
+      };
+    }
+
+    case 'max': {
+      // The lifter entered a max: every unlogged, untouched entry of that lift starts from it.
+      const workout = cloneWorkout(request.workout);
+      const exercise = requireExercise(trigger.exerciseId);
+      let updated = 0;
+      for (const entry of allEntries(workout.blocks)) {
+        if (entry.exerciseId !== trigger.exerciseId) continue;
+        const logged = request.completed.sets.some(
+          (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
+        );
+        if (logged || entry.manual?.weight) continue;
+        const prescription = prescribe(exercise, entry.role, request.profile);
+        const working =
+          entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
+        const target = recommendNextTarget({
+          exercise,
+          role: entry.role,
+          prescription,
+          history: request.history,
+          profile: request.profile,
+          now: request.timestamp,
+          maxes: request.maxes,
+        });
+        entry.sets = applyProgression(
+          buildSets(
+            { ...prescription, sets: working, restSeconds: entry.restSeconds },
+            entry.warmupSets,
+          ),
+          target,
+          weightStep(exercise, request.profile.units),
+          {},
+          barWeightFor(exercise, request.profile.units),
+        );
+        if (entry.dropSet && exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
+        entry.progression = summarizeProgression(target);
+        updated += 1;
+      }
+      return {
+        ...base,
+        workout,
+        headline:
+          updated > 0
+            ? `First target for ${exercise.name} set from your max.`
+            : `${exercise.name} already has logged sets; the next session starts from your max.`,
       };
     }
 

@@ -204,3 +204,14 @@
   font-size: 0.76rem;
   line-height: 1.4;
 }
+
+.maxLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
