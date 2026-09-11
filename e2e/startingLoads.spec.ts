@@ -33,7 +33,7 @@ test.describe('where the first weight comes from', () => {
     await sheet.getByTestId('max-weight').fill('185');
     await sheet.getByTestId('max-reps').fill('5');
     await expect(sheet.getByTestId('max-preview')).toContainText(
-      'About 216 lb max. First target: 155 lb × 4-6 reps at RIR 2.',
+      'Estimated max about 216 lb from that set. First target: 155 lb × 4-6 reps at RIR 2.',
     );
     await sheet.getByTestId('max-save').click();
     await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });

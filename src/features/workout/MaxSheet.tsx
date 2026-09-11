@@ -116,7 +116,8 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
       }
     >
       <p className={styles.note}>
-        A set you remember, or a max you know, sets today's first target. It is used once: after
+        No max attempt needed. Enter a recent set you did, weight and reps, and the app estimates
+        your one-rep max from it and sets today's first target under that estimate. Used once: after
         your first logged set, the targets follow what you actually lift.
       </p>
       <div className={styles.segmented} role="radiogroup" aria-label="What you know">
@@ -127,7 +128,7 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
           className={styles.segment}
           onClick={() => setMode('set')}
         >
-          A set I remember
+          A recent set
         </button>
         <button
           type="button"
@@ -136,7 +137,7 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
           className={styles.segment}
           onClick={() => setMode('max')}
         >
-          My one-rep max
+          I know my max
         </button>
       </div>
       {mode === 'set' ? (
@@ -157,7 +158,7 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
             />
           </label>
           <label className={styles.field}>
-            <span className={styles.label}>Reps</span>
+            <span className={styles.label}>Reps you got</span>
             <input
               className={styles.input}
               type="number"
@@ -191,8 +192,10 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
       )}
       <p className={styles.preview} data-testid="max-preview" aria-live="polite">
         {e1rm !== null && working && firstTarget !== null
-          ? `About ${Math.round(e1rm)} ${units} max${perHand}. First target: ${firstTarget} ${units} × ${working.targetReps[0]}-${working.targetReps[1]} reps at RIR ${working.targetRir}.`
-          : 'The first target appears here as you type.'}
+          ? `${mode === 'set' ? `Estimated max about ${Math.round(e1rm)} ${units}${perHand} from that set` : `Max ${Math.round(e1rm)} ${units}${perHand}`}. First target: ${firstTarget} ${units} × ${working.targetReps[0]}-${working.targetReps[1]} reps at RIR ${working.targetRir}.`
+          : mode === 'set'
+            ? 'Type a set you did, for example 135 for 8, and the first target appears here.'
+            : 'Type your max and the first target appears here.'}
       </p>
       {error ? (
         <p className={styles.error} role="alert">
