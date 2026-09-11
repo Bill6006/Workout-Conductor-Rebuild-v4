@@ -139,6 +139,8 @@ test.describe('screenshots @screenshots', () => {
     await page.keyboard.press('Escape');
 
     await page.goto('./#/settings');
+    await page.locator('#age').scrollIntoViewIfNeeded();
+    await capture(page, testInfo, 'settings-units-and-body');
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
     const download = await downloadPromise;
@@ -225,6 +227,17 @@ test.describe('screenshots @screenshots', () => {
     await page.getByTestId('start-workout').click();
     await expect(page.getByTestId('workout-stats')).toBeVisible();
     await capture(page, testInfo, 'workout-active-start');
+    await page.getByTestId('exercise-card').first().getByTestId('know-max').click();
+    const maxSheet = page.getByRole('dialog', { name: /Your max for/ });
+    await expect(maxSheet).toBeVisible();
+    await maxSheet.getByTestId('max-weight').fill('185');
+    await maxSheet.getByTestId('max-reps').fill('5');
+    await expect(maxSheet.getByTestId('max-preview')).toContainText('First target');
+    await capture(page, testInfo, 'workout-know-max-sheet');
+    await maxSheet.getByTestId('max-save').click();
+    await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
+    await expect(page.getByTestId('recalibration-summary')).toContainText('from your max');
+    await capture(page, testInfo, 'workout-first-target-from-max');
     await page.getByTestId('exercise-card').first().getByTestId('card-thumb').click();
     await expect(page.getByRole('dialog').getByTestId('demo-pick')).toBeVisible();
     await capture(page, testInfo, 'workout-how-to-sheet');

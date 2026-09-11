@@ -1,6 +1,6 @@
 # Workout Conductor - Project Status
 
-_Last updated: _
+_Last updated: 2026-09-11_
 
 | Item                   | Value                                                                                                                                                             |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -9,14 +9,14 @@ _Last updated: _
 | Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                  |
 | Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                             |
 | Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                 |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3 GREEN. Maintenance 4, richer fatigue and recovery signals and week-aware selection, at its review gate    |
-| Phase gate             | Maintenance 4 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 3 GREEN (2026-09-05)                                   |
+| Current phase | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3 GREEN. Maintenance 5, the numbers you lift (round one of the owner's second list), at its review gate |
+| Phase gate | Maintenance 5 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 4 YELLOW (its review is still open; the owner started round one of the next list on 2026-09-11) |
 | Current branch         | `main`                                                                                                                                                            |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                      |
-| Work in progress       | None. Maintenance 4 is at its review gate (`docs/reports/maintenance-4.md`) and completes the owner's smarter-coach list; further work starts from a new request. |
-| Latest commit          | Maintenance 4 status and report (this commit); app build under review is `13da3d1`                                                                                |
-| Latest deployment      | `13da3d1` deployed by Deploy Pages run 33998192126 (success); full browser suite passed against the live URL (123 passed + 14 skipped by design)                  |
-| Test totals            | Unit: 332 passed (62 files). Browser/mobile: 123 passed + 14 skipped by design locally and against the live URL                                                   |
+| Work in progress | None. Maintenance 5 is at its review gate (`docs/reports/maintenance-5.md`). Rounds two (the coach) and three (session polish) of the owner's list follow on GREEN. |
+| Latest commit | Maintenance 5 status and report (this commit); app build under review is `0fbf169` |
+| Latest deployment | `0fbf169` deployed by Deploy Pages run 34628259310 (success); full browser suite passed against the live URL (132 passed + 14 skipped by design) |
+| Test totals | Unit: 346 passed (67 files). Browser/mobile: 132 passed + 14 skipped by design locally and against the live URL |
 | Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                      |
 
 ## Phase checklist
@@ -138,6 +138,14 @@ _Last updated: _
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 5: the numbers you lift (YELLOW - awaiting review)
+
+- A lift with no history of its own carries one "Know your max?" link: a remembered set or a one-rep max sets the first target of its unlogged sets, ramps included, through the recalibration engine; "Not now" for a week, "Don't ask for this lift" for good; hidden once a set is logged; back only after a three-week break. Entered maxes are kept in the meta store and backed up.
+- Settings' units card takes optional age and sex beside bodyweight; with a bodyweight, every first-time lift starts from a reference max per pattern and load type scaled by experience, sex, and age, and "Why this target" names the numbers used.
+- Bar lifts never target, ramp, or drop below the empty bar; family estimates convert between load types (a dumbbell per hand is not a barbell); in-session autoregulation moves from the weight actually lifted.
+- The line under the logger's weight always says what to load ("Target 155 lb", "Warm-up 80 lb", "Bodyweight"); ramp, drop, and first working sets prefill as prescribed.
+- Report: `docs/reports/maintenance-5.md`; engine notes in `docs/progression-engine.md`.
+
 ## Maintenance 4: richer fatigue and recovery signals, and week-aware selection (YELLOW - awaiting review)
 
 - Fatigue also reads the saved check-ins as a trend, rests that ran long between logged sets, and performance drift across each lift's estimated max; the same score and levels feed progression, the coach, and the strategy engine.
@@ -193,7 +201,8 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone, reads the Plan tab's recovery card (a deload line, with
-"Plan it" only after a dense, hard fortnight), and opens "Why this workout" on Today to read which
-muscles recovered, which sit out, and which the accessories lead with. Reply with `GREEN - NEXT PHASE`,
-`YELLOW - FIX: <issue>`, or `RED - STOP`. This round completes the smarter-coach list.
+Owner opens the live link on an Android phone, starts the workout, reads the empty-bar start
+and the "Warm-up 45 lb" line on a first-time bar lift, taps "Know your max?" and saves a
+remembered set, then enters bodyweight, age, and sex in Settings and reads the estimated
+starting loads on Today. Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or
+`RED - STOP`. On GREEN, round two (the coach) begins.
