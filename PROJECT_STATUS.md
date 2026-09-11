@@ -2,22 +2,22 @@
 
 _Last updated: 2026-09-11_
 
-| Item                   | Value                                                                                                                                                                                                      |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                   |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                   |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                           |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                      |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                          |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3 GREEN. Maintenance 5, the numbers you lift (round one of the owner's second list), at its review gate                                              |
-| Phase gate             | Maintenance 5 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 4 YELLOW (its review is still open; the owner started round one of the next list on 2026-09-11) |
-| Current branch         | `main`                                                                                                                                                                                                     |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                               |
-| Work in progress       | None. Maintenance 5 is at its review gate (`docs/reports/maintenance-5.md`). Rounds two (the coach) and three (session polish) of the owner's list follow on GREEN.                                        |
-| Latest commit          | Maintenance 5 status and report (this commit); app build under review is `62fd7da` (wording fix on top of `0fbf169`)                                                                                       |
-| Latest deployment      | `62fd7da` deployed by Deploy Pages run 34630045514 (success); full browser suite passed against the live URL (132 passed + 14 skipped by design)                                                           |
-| Test totals            | Unit: 346 passed (67 files). Browser/mobile: 132 passed + 14 skipped by design locally and against the live URL                                                                                            |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                               |
+| Item                   | Value                                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                            |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                            |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                    |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                               |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                   |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3 GREEN. Maintenance 6, the cloud copy, at its review gate; Maintenance 4 and 5 at their gates                |
+| Phase gate             | Maintenance 6 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 5 YELLOW and Maintenance 4 YELLOW (reviews still open)   |
+| Current branch         | `main`                                                                                                                                                              |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                        |
+| Work in progress       | None. Maintenance 6 is at its review gate (`docs/reports/maintenance-6.md`). Rounds two (the coach) and three (session polish) of the owner's list follow on GREEN. |
+| Latest commit          | Maintenance 6 status and report (this commit); app build under review is `d619160`                                                                                  |
+| Latest deployment      | `d619160` deployed by Deploy Pages run 34655405909 (success); full browser suite passed against the live URL (138 passed + 14 skipped by design)                    |
+| Test totals            | Unit: 357 passed (69 files). Browser/mobile: 138 passed + 14 skipped by design locally and against the live URL                                                     |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                        |
 
 ## Phase checklist
 
@@ -138,6 +138,13 @@ _Last updated: 2026-09-11_
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 6: the cloud copy (YELLOW - awaiting review)
+
+- Settings > Cloud copy: the database URL (a constant), a token pasted once and kept in the app's own IndexedDB on that device, a status line, the pending count, "Sync now", and "Remove token"; off until a token exists. The token is never in source, the bundle, tests, CI, logs, a backup, or an export, and the privacy scan now fails on any JWT-shaped token anywhere and on any libSQL host in the bundle other than the owner's URL.
+- An outbox behind the IndexedDB wrapper for the seven mirrored stores (never demonstrations, never automatic backups), written in the same transaction as every put, delete, and clear; records from the cloud are applied without touching it, so pulls never re-enqueue.
+- Push in batches of fifty over the libSQL web driver, loaded on demand; pull on open, every fifteen minutes, on reconnect, and on demand; a fresh install restores everything on its first pull before it pushes anything; retries back off to ten minutes; offline queues. One device id per install, registered in `devices`, stripped from exports. The shared schema is untouched.
+- Report: `docs/reports/maintenance-6.md`; design in `docs/cloud-copy.md`; rules amended in `docs/privacy-rules.md`, `docs/data-model.md`, and `docs/backup-and-restore.md`.
+
 ## Maintenance 5: the numbers you lift (YELLOW - awaiting review)
 
 - A lift with no history of its own carries one "Know your max?" link: a remembered set or a one-rep max sets the first target of its unlogged sets, ramps included, through the recalibration engine; "Not now" for a week, "Don't ask for this lift" for good; hidden once a set is logged; back only after a three-week break. Entered maxes are kept in the meta store and backed up.
@@ -201,8 +208,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone, starts the workout, reads the empty-bar start
-and the "Warm-up 45 lb" line on a first-time bar lift, taps "Know your max?" and saves a
-remembered set, then enters bodyweight, age, and sex in Settings and reads the estimated
-starting loads on Today. Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or
-`RED - STOP`. On GREEN, round two (the coach) begins.
+Owner opens the live link on the Android phone, goes to Settings > Cloud copy, pastes the
+database token, and watches the status line and the pending count; then installs the app on a
+second device, pastes the same token, and sees everything arrive. Reply with `GREEN - NEXT PHASE`,
+`YELLOW - FIX: <issue>`, or `RED - STOP`. On GREEN, round two of the list (the coach) begins.
