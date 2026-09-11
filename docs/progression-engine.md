@@ -134,7 +134,7 @@ A lift with no history of its own takes its first target from the first of these
 
 1. **A max the lifter entered** (`StrengthMaxes`, meta record `strength-maxes`, backed up). One
    small "Know your max?" link on the card of a lift in `start`, `estimate`, or `return` mode
-   opens a sheet that takes a one-rep max or a remembered set (Epley, reps capped at twelve) and
+   opens a sheet that takes a recent set (weight and reps, turned into an estimated max with Epley, reps capped at twelve) or a known one-rep max, and
    shows the first target it would set. The first target is 90 percent of the load the max
    implies for the top of the rep range at the prescribed RIR. Saving fires the `max` trigger,
    which re-targets that lift's unlogged, untouched entries in today's session and recalculates

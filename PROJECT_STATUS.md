@@ -2,22 +2,22 @@
 
 _Last updated: 2026-09-11_
 
-| Item                   | Value                                                                                                                                                             |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                          |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                          |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                  |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                             |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                 |
-| Current phase | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3 GREEN. Maintenance 5, the numbers you lift (round one of the owner's second list), at its review gate |
-| Phase gate | Maintenance 5 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 4 YELLOW (its review is still open; the owner started round one of the next list on 2026-09-11) |
-| Current branch         | `main`                                                                                                                                                            |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                      |
-| Work in progress | None. Maintenance 5 is at its review gate (`docs/reports/maintenance-5.md`). Rounds two (the coach) and three (session polish) of the owner's list follow on GREEN. |
-| Latest commit | Maintenance 5 status and report (this commit); app build under review is `0fbf169` |
-| Latest deployment | `0fbf169` deployed by Deploy Pages run 34628259310 (success); full browser suite passed against the live URL (132 passed + 14 skipped by design) |
-| Test totals | Unit: 346 passed (67 files). Browser/mobile: 132 passed + 14 skipped by design locally and against the live URL |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                      |
+| Item                   | Value                                                                                                                                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                   |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                   |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                           |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                      |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                          |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3 GREEN. Maintenance 5, the numbers you lift (round one of the owner's second list), at its review gate                                              |
+| Phase gate             | Maintenance 5 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 4 YELLOW (its review is still open; the owner started round one of the next list on 2026-09-11) |
+| Current branch         | `main`                                                                                                                                                                                                     |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                               |
+| Work in progress       | None. Maintenance 5 is at its review gate (`docs/reports/maintenance-5.md`). Rounds two (the coach) and three (session polish) of the owner's list follow on GREEN.                                        |
+| Latest commit          | Maintenance 5 status and report (this commit); app build under review is `62fd7da` (wording fix on top of `0fbf169`)                                                                                       |
+| Latest deployment      | `62fd7da` deployed by Deploy Pages run 34630045514 (success); full browser suite passed against the live URL (132 passed + 14 skipped by design)                                                           |
+| Test totals            | Unit: 346 passed (67 files). Browser/mobile: 132 passed + 14 skipped by design locally and against the live URL                                                                                            |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                               |
 
 ## Phase checklist
 

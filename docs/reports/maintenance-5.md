@@ -6,7 +6,7 @@ from, and a weight line that always says what to load.
 ## Delivered
 
 - **A max you enter.** A lift with no history of its own carries one small lime link beside
-  "First time logged": "Know your max?". It opens a sheet that takes a set you remember (weight
+  "First time logged": "Know your max?". It opens a sheet that takes a recent set you did (weight
   and reps, converted with Epley) or a one-rep max, shows the first target it would set, and
   saves with one tap. Saving re-targets that lift's unlogged sets in today's session, ramps
   included, through the recalibration engine with the usual change banner. "Not now" brings the
@@ -61,7 +61,7 @@ from, and a weight line that always says what to load.
 1. Today: a first-time bar lift now shows a load in its row (for example "4 × 45 × 4-6"). Start
    the workout: the card reads "Ramp set · 45 lb", the dial shows 45, and the line under it says
    "Warm-up 45 lb".
-2. Tap "Know your max?" beside "First time logged". Enter a set you remember, watch the first
+2. Tap "Know your max?" beside "First time logged". Enter a recent set you did, watch the first
    target preview update, tap Save: the banner says the first target was set from your max, the
    card and the dial follow, and "Why this target" explains it. "Not now" keeps the link away
    for a week.
