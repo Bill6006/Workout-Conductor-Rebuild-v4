@@ -1,6 +1,6 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CLOUD_APP, CLOUD_URL } from '../../core/cloud/model';
+import { CLOUD_APP, DEFAULT_CLOUD_URL } from '../../core/cloud/model';
 import { TEST_NOW, createTestStore } from '../../test/testStore';
 import { createFakeCloud, type FakeCloud } from '../../test/fakeCloud';
 import { openDatabase, type Identified } from '../storage/indexedDb';
@@ -50,7 +50,7 @@ describe('cloud copy in the store', () => {
     const handle = storeWith(cloud);
     await onboard(handle.store);
     const state = handle.store.getSnapshot();
-    expect(state.cloud).toMatchObject({ url: CLOUD_URL, configured: false, syncing: false });
+    expect(state.cloud).toMatchObject({ url: DEFAULT_CLOUD_URL, configured: false, syncing: false });
     expect(state.cloud.deviceId).toBeTruthy();
     expect(state.cloud.pending).toBeGreaterThan(0);
     expect(await handle.store.syncNow()).toBeNull();

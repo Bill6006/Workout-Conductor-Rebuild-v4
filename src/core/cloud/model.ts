@@ -1,21 +1,24 @@
 import type { Identified, SyncedStore } from '../storage/indexedDb';
 
 /**
- * The cloud copy: a Turso database the owner already runs, shared with another
- * of their apps. Its schema is fixed and never created or altered here. This
- * app writes only rows where `app = 'workout-conductor'` and may read others.
+ * The cloud copy: a Turso database, one per person. Its schema is fixed and
+ * never created or altered here. This app writes only rows where
+ * `app = 'workout-conductor'` and may read others.
  *
  *   records(app, store, id, day, body, updated_at, deleted, device_id, synced_at)
  *     primary key (app, store, id)
  *   devices(device_id, app, label, first_seen, last_sync)
  *   schema_meta
  *
- * The URL is a constant, not a secret. The token is pasted once into Settings
- * and lives in IndexedDB on the device; it never appears in source, the built
- * bundle, tests, CI, or logs.
+ * The address is not a secret and ships as a default; a person with their own
+ * database types theirs instead, and it is kept beside the token. The token is
+ * pasted once into Settings and lives in IndexedDB on the device; it never
+ * appears in source, the built bundle, tests, CI, or logs.
  */
 
-export const CLOUD_URL = 'libsql://life-record-bill6006.aws-us-east-1.turso.io';
+export const DEFAULT_CLOUD_URL = 'libsql://life-record-bill6006.aws-us-east-1.turso.io';
+/** The tables this app needs; a database without them is not set up yet. */
+export const REQUIRED_TABLES = ['records', 'devices'] as const;
 export const CLOUD_APP = 'workout-conductor';
 export const PUSH_BATCH = 50;
 export const PULL_PAGE = 500;
@@ -57,6 +60,42 @@ export interface RemoteRow {
 
 export const CLOUD_TOKEN_ID = 'token';
 export const CLOUD_STATE_ID = 'state';
+export const CLOUD_CONFIG_ID = 'config';
+
+/** The database this device syncs with. Not a secret, but not in the bundle either once changed. */
+export interface CloudConfig extends Identified {
+  id: typeof CLOUD_CONFIG_ID;
+  url: string;
+  savedAt: string;
+}
+
+/** What a database looks like before this device commits to it. */
+export interface CloudInspection {
+  missingTables: string[];
+  rows: number;
+  deviceIds: string[];
+}
+
+export function looksLikeLibsqlUrl(raw: string): boolean {
+  const value = raw.trim();
+  if (!/^(libsql|wss|https):[/][/][^\s]+$/i.test(value)) return false;
+  return !/[\s"'<>]/.test(value);
+}
+
+export function schemaProbeStatement(): CloudStatement {
+  return {
+    sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('records', 'devices')",
+    args: [],
+  };
+}
+
+/** How much of this app's history a database already holds, and which devices wrote it. */
+export function occupancyStatement(): CloudStatement {
+  return {
+    sql: 'SELECT count(*) AS rows, group_concat(DISTINCT device_id) AS devices FROM records WHERE app = ?',
+    args: [CLOUD_APP],
+  };
+}
 
 export interface CloudToken extends Identified {
   id: typeof CLOUD_TOKEN_ID;

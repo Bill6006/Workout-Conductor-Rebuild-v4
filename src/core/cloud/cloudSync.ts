@@ -1,4 +1,5 @@
 import {
+  SYNCED_STORES,
   isSyncedStore,
   outboxKey,
   type Database,
@@ -6,8 +7,13 @@ import {
   type OutboxEntry,
 } from '../storage/indexedDb';
 import {
+  CLOUD_CONFIG_ID,
   CLOUD_STATE_ID,
   CLOUD_TOKEN_ID,
+  DEFAULT_CLOUD_URL,
+  REQUIRED_TABLES,
+  occupancyStatement,
+  schemaProbeStatement,
   PULL_PAGE,
   PUSH_BATCH,
   backoffMs,
@@ -20,6 +26,8 @@ import {
   tombstoneStatement,
   upsertStatement,
   type CloudClient,
+  type CloudConfig,
+  type CloudInspection,
   type CloudState,
   type CloudStatement,
   type CloudToken,
@@ -65,6 +73,63 @@ export async function saveCloudToken(db: Database, value: string, now: string): 
 
 export async function clearCloudToken(db: Database): Promise<void> {
   await db.delete('cloud', CLOUD_TOKEN_ID);
+}
+
+/** The database this device syncs with: the one saved here, else the shipped default. */
+export async function readCloudUrl(db: Database): Promise<string> {
+  const record = await db.get<CloudConfig>('cloud', CLOUD_CONFIG_ID);
+  return record && typeof record.url === 'string' && record.url.length > 0
+    ? record.url
+    : DEFAULT_CLOUD_URL;
+}
+
+export async function saveCloudUrl(db: Database, url: string, now: string): Promise<void> {
+  const config: CloudConfig = { id: CLOUD_CONFIG_ID, url: url.trim(), savedAt: now };
+  await db.put('cloud', config);
+}
+
+/**
+ * What a database looks like before this device commits to it: whether it
+ * carries the tables this app needs, and how much of this app's history it
+ * already holds. Reads only; it never creates or alters anything.
+ */
+export async function inspectCloud(client: CloudClient): Promise<CloudInspection> {
+  const tables = await client.execute(schemaProbeStatement());
+  const present = new Set(
+    tables.rows.map((row) => String(row.name ?? '')).filter((name) => name.length > 0),
+  );
+  const missingTables = REQUIRED_TABLES.filter((name) => !present.has(name));
+  if (missingTables.length > 0)
+    return { missingTables: [...missingTables], rows: 0, deviceIds: [] };
+  const occupancy = await client.execute(occupancyStatement());
+  const row = occupancy.rows[0] ?? {};
+  const rows = Number(row.rows ?? 0);
+  const devices = typeof row.devices === 'string' ? row.devices : '';
+  return {
+    missingTables: [],
+    rows: Number.isFinite(rows) ? rows : 0,
+    deviceIds: devices
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0),
+  };
+}
+
+/**
+ * Queues every mirrored record for a push. Used when the device changes which
+ * database it syncs with, so the new one receives the whole history rather than
+ * only what changes next.
+ */
+export async function seedOutbox(db: Database): Promise<number> {
+  let queued = 0;
+  for (const store of SYNCED_STORES) {
+    const records = await db.getAll<Identified>(store);
+    for (const record of records) {
+      await db.put(store, record);
+      queued += 1;
+    }
+  }
+  return queued;
 }
 
 export async function readCloudState(db: Database): Promise<CloudState> {

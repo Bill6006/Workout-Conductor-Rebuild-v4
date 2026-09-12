@@ -7,10 +7,12 @@ import { type RouteId } from './navigation';
 import { UpdatePrompt } from './pwa/UpdatePrompt';
 import { ActiveScreen } from './routes';
 import { useHashRoute } from './useHashRoute';
+import { useSetupLink } from './useSetupLink';
 
 export function App() {
   const routeId = useHashRoute();
   const state = useAppState();
+  useSetupLink();
 
   // First run (or a storage error with nothing saved) goes straight to setup.
   const needsOnboarding = state.status === 'ready' && state.profile === null;

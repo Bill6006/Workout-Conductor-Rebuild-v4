@@ -6,13 +6,13 @@ itself by installing the app and pasting the same token. Off until a token exist
 
 ## What goes where
 
-| Thing                                 | Where it lives                                                        | Ever in a backup? | Ever in the repository? |
-| ------------------------------------- | --------------------------------------------------------------------- | ----------------- | ----------------------- |
-| Database URL                          | A constant in `src/core/cloud/model.ts`; shown in Settings            | no                | yes (not a secret)      |
-| Token                                 | IndexedDB store `cloud`, record `token`, on the device that pasted it | never             | never                   |
-| Sync state (cursor, last sync, retry) | IndexedDB store `cloud`, record `state`                               | never             | never                   |
-| Outbox (writes not yet pushed)        | IndexedDB store `outbox`, one entry per record, latest operation wins | never             | never                   |
-| Device id                             | localStorage `wc.v1.settings.deviceId`; stripped from every export    | never             | never                   |
+| Thing                                 | Where it lives                                                                       | Ever in a backup? | Ever in the repository? |
+| ------------------------------------- | ------------------------------------------------------------------------------------ | ----------------- | ----------------------- |
+| Database address                      | IndexedDB store `cloud`, record `config`; the shipped default is `DEFAULT_CLOUD_URL` | no                | yes (not a secret)      |
+| Token                                 | IndexedDB store `cloud`, record `token`, on the device that pasted it                | never             | never                   |
+| Sync state (cursor, last sync, retry) | IndexedDB store `cloud`, record `state`                                              | never             | never                   |
+| Outbox (writes not yet pushed)        | IndexedDB store `outbox`, one entry per record, latest operation wins                | never             | never                   |
+| Device id                             | localStorage `wc.v1.settings.deviceId`; stripped from every export                   | never             | never                   |
 
 The token never appears in source, the built bundle, tests, CI, or logs. The privacy scan fails
 the build on any JWT-shaped string in the repository or the bundle, and on any libSQL host in
@@ -84,9 +84,35 @@ devices claim the same id.
 
 ## Settings > Cloud copy
 
-The card shows the database URL, whether a token is saved on this device, one status line
-(last sync, last error, or offline), the pending count, "Sync now", and "Remove token".
-Removing the token turns the copy off; the outbox is kept and pushes when a token returns.
+The card shows the database address, whether a token is saved on this device, one status line
+(last sync, last error, or offline), the pending count, "Sync now", "Change database", and
+"Remove token". Removing the token turns the copy off; the outbox is kept and pushes when a
+token returns.
+
+## One database per person
+
+A database belongs to one person. The address sits beside the token, both on the device and
+neither in a backup or the built files, so somebody given the app can point it at a database of
+their own. Adopting a database this device has never used is checked first, and only then:
+
+- **It must answer.** Offline, or unreachable, the address is not saved on a promise.
+- **It must carry the tables.** `inspectCloud` probes `sqlite_master`; a database without
+  `records` or `devices` is reported as not set up rather than failing later mid-sync.
+- **It must not already hold somebody else.** Rows for this app written by devices other than
+  this one stop the save with a count, because two people on one database would write to the
+  same fixed ids (the profile is always `current`) and overwrite each other. Going ahead is a
+  second, deliberate tap.
+
+Changing the address re-seeds: the cursor resets so the next sync pulls from the new database
+first, and `seedOutbox` queues every mirrored record so the new database receives the whole
+history rather than only what changes next. The old database keeps its own copy.
+
+A **setup link** (`src/features/settings/setupLink.ts`) carries the address and token in the URL
+fragment, which browsers never send to a server. The app applies it, rewrites the entry with
+`replaceState` so it is gone from Back and from a reload, and lands on Settings, which reports
+the outcome. It is watched for on arrival as well as at mount, because opening a link while the
+app is already running only changes the hash. A link never accepts an occupied database; that
+stays a deliberate tap. The link is a key to that person's history, so it goes to one person.
 
 ## Tests
 

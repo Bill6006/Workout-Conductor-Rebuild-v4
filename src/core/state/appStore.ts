@@ -12,16 +12,26 @@ import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulat
 import { weightStep } from '../../engine/plateMath/plateMath';
 import {
   clearCloudToken,
+  inspectCloud,
   pendingCount,
   readCloudState,
   readCloudToken,
+  readCloudUrl,
+  resetCloudState,
   saveCloudToken,
+  saveCloudUrl,
+  seedOutbox,
   syncOnce,
   type SyncOutcome,
 } from '../cloud/cloudSync';
 import { deviceLabel, ensureDeviceId } from '../cloud/deviceId';
 import { createLibsqlCloudClient } from '../cloud/libsqlClient';
-import { CLOUD_URL, PULL_INTERVAL_MS, type CloudClient } from '../cloud/model';
+import {
+  DEFAULT_CLOUD_URL,
+  PULL_INTERVAL_MS,
+  looksLikeLibsqlUrl,
+  type CloudClient,
+} from '../cloud/model';
 import {
   STRENGTH_MAXES_ID,
   emptyMaxes,
@@ -215,8 +225,23 @@ export interface CloudStatus {
   deviceId: string | null;
 }
 
+/** Thrown when a database already holds another person's history; the card asks before it goes ahead. */
+export class CloudOccupiedError extends Error {
+  readonly rows: number;
+  readonly devices: number;
+
+  constructor(rows: number, devices: number) {
+    super(
+      `That database already holds ${rows} ${rows === 1 ? 'record' : 'records'} from ${devices === 1 ? 'another device' : `${devices} other devices`}. Using it would merge two people's histories.`,
+    );
+    this.name = 'CloudOccupiedError';
+    this.rows = rows;
+    this.devices = devices;
+  }
+}
+
 const CLOUD_OFF: CloudStatus = {
-  url: CLOUD_URL,
+  url: DEFAULT_CLOUD_URL,
   configured: false,
   syncing: false,
   pending: 0,
@@ -425,9 +450,9 @@ export class AppStore {
   private readonly minOverlayMs: number;
   private dbPromise: Promise<Database> | null = null;
   private calibrationQueue: Promise<unknown> = Promise.resolve();
-  private readonly makeCloudClient: (token: string) => Promise<CloudClient>;
+  private readonly makeCloudClient: (token: string, url: string) => Promise<CloudClient>;
   private readonly isOnline: () => boolean;
-  private cloudClient: { token: string; client: CloudClient } | null = null;
+  private cloudClient: { token: string; url: string; client: CloudClient } | null = null;
   private syncRun: Promise<SyncOutcome | null> = Promise.resolve(null);
   private cloudTimer: number | null = null;
   private drainTimer: number | null = null;
@@ -522,8 +547,9 @@ export class AppStore {
         db.get<Identified>('meta', COACH_FOCUS_ID),
       ]);
       const deviceId = ensureDeviceId(this.storage);
-      const [cloudToken, cloudState, pending] = await Promise.all([
+      const [cloudToken, cloudUrl, cloudState, pending] = await Promise.all([
         readCloudToken(db),
+        readCloudUrl(db),
         readCloudState(db),
         pendingCount(db),
       ]);
@@ -569,6 +595,7 @@ export class AppStore {
         coachFocus: parseCoachFocus(focusRaw, this.now()),
         cloud: {
           ...this.state.cloud,
+          url: cloudUrl,
           configured: cloudToken !== null,
           pending,
           lastSyncAt: cloudState.lastSyncAt,
@@ -1847,15 +1874,76 @@ export class AppStore {
     this.onlineHandler = null;
   }
 
-  /** Saves the pasted token on this device and syncs at once; the first pull restores everything. */
+  /** Saves the pasted token against the current database; the first pull restores everything. */
   async setCloudToken(raw: string): Promise<void> {
-    const value = raw.trim();
-    if (value.length === 0) throw new Error('Paste the token first.');
+    await this.setCloudCredentials({ token: raw });
+  }
+
+  /**
+   * Saves the database address and token this device syncs with. Before it
+   * commits to a database it has not used, it checks the tables exist and that
+   * the database is not already carrying somebody else's history; the second
+   * needs `acceptExisting` to go ahead. Changing the address re-seeds: the next
+   * sync pulls from the new database first, then pushes everything local.
+   */
+  async setCloudCredentials(input: {
+    token: string;
+    url?: string;
+    acceptExisting?: boolean;
+  }): Promise<void> {
+    const token = input.token.trim();
+    if (token.length === 0) throw new Error('Paste the token first.');
     const db = await this.getDatabase();
-    await saveCloudToken(db, value, this.now());
-    this.dropCloudClient();
-    this.setState({ cloud: { ...this.state.cloud, configured: true, lastError: null } });
+    const current = await readCloudUrl(db);
+    const url = (input.url ?? current).trim();
+    if (!looksLikeLibsqlUrl(url)) {
+      throw new Error('That database address does not look right. It starts with libsql://');
+    }
+    const changed = url !== current;
+    // Only adopting a different database needs checking. A token for the one
+    // this device already uses saves as before, and the sync reports any trouble.
+    if (changed) {
+      if (!this.isOnline()) {
+        throw new Error('Connect to the internet to set up a different database.');
+      }
+      const client = await this.makeCloudClient(token, url);
+      let inspection;
+      try {
+        inspection = await inspectCloud(client);
+      } catch (error) {
+        try {
+          client.close();
+        } catch {
+          // a closed client is closed
+        }
+        const message = error instanceof Error ? error.message : 'Could not reach that database.';
+        throw new Error(`Could not reach that database: ${message}`, { cause: error });
+      }
+      if (inspection.missingTables.length > 0) {
+        throw new Error(
+          `That database has no ${inspection.missingTables.join(' or ')} table yet, so it is not set up for this app.`,
+        );
+      }
+      const deviceId = ensureDeviceId(this.storage);
+      const mine = inspection.deviceIds.length === 0 || inspection.deviceIds.includes(deviceId);
+      this.cloudClient = { token, url, client };
+      if (inspection.rows > 0 && !mine && !input.acceptExisting) {
+        throw new CloudOccupiedError(inspection.rows, inspection.deviceIds.length);
+      }
+      await saveCloudUrl(db, url, this.now());
+      await resetCloudState(db);
+      await seedOutbox(db);
+    }
+    await saveCloudToken(db, token, this.now());
+    this.setState({
+      cloud: { ...this.state.cloud, url, configured: true, lastError: null },
+    });
     if (!this.startCloud()) await this.syncNow({ pull: true, force: true });
+  }
+
+  /** Reports a cloud problem where the Cloud copy card already shows one. */
+  noteCloudError(message: string): void {
+    this.setState({ cloud: { ...this.state.cloud, lastError: message } });
   }
 
   /** Removes the token; the cloud copy is off and nothing leaves the device. The outbox is kept. */
@@ -1891,7 +1979,7 @@ export class AppStore {
       }
       return null;
     }
-    const client = await this.cloudClientFor(token);
+    const client = await this.cloudClientFor(token, await readCloudUrl(db));
     this.setState({ cloud: { ...this.state.cloud, syncing: true } });
     let outcome: SyncOutcome;
     try {
@@ -1936,11 +2024,13 @@ export class AppStore {
     return outcome;
   }
 
-  private async cloudClientFor(token: string): Promise<CloudClient> {
-    if (this.cloudClient && this.cloudClient.token === token) return this.cloudClient.client;
+  private async cloudClientFor(token: string, url: string): Promise<CloudClient> {
+    if (this.cloudClient && this.cloudClient.token === token && this.cloudClient.url === url) {
+      return this.cloudClient.client;
+    }
     this.dropCloudClient();
-    const client = await this.makeCloudClient(token);
-    this.cloudClient = { token, client };
+    const client = await this.makeCloudClient(token, url);
+    this.cloudClient = { token, url, client };
     return client;
   }
 

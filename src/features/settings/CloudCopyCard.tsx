@@ -4,31 +4,45 @@ import { Card } from '../../components/Card/Card';
 import { FactList } from '../../components/FactList/FactList';
 import formStyles from '../../components/Form/Form.module.css';
 import { useToast } from '../../components/Toast/useToast';
+import { CloudOccupiedError } from '../../core/state/appStore';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import { formatDateTime } from '../../core/time/clock';
 import styles from './Settings.module.css';
 
 /**
- * Settings > Cloud copy. The database URL is a constant and shown; the token is
- * pasted once and kept in the app's own storage on this device. Off until a
- * token exists. One status line, one "Sync now" button.
+ * Settings > Cloud copy. One database per person: the address and the token are
+ * both kept in the app's own storage on this device, never in a backup and
+ * never in the built files. Off until both are set. Before this device commits
+ * to a database it has not used, the app checks the tables are there and that
+ * the database is not already carrying somebody else's history.
  */
 export function CloudCopyCard() {
   const store = useAppStore();
   const state = useAppState();
   const toast = useToast();
   const cloud = state.cloud;
+  const [editing, setEditing] = useState(false);
+  const [url, setUrl] = useState(cloud.url);
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
+  const [occupied, setOccupied] = useState<string | null>(null);
 
-  const save = async () => {
+  const open = !cloud.configured || editing;
+
+  const save = async (acceptExisting = false) => {
     setBusy(true);
     try {
-      await store.setCloudToken(token);
+      await store.setCloudCredentials({ url, token, acceptExisting });
       setToken('');
-      toast.show('Token saved on this device', 'success');
+      setEditing(false);
+      setOccupied(null);
+      toast.show('Cloud copy saved on this device', 'success');
     } catch (error) {
-      toast.show(error instanceof Error ? error.message : 'Could not save the token', 'error');
+      if (error instanceof CloudOccupiedError) {
+        setOccupied(error.message);
+      } else {
+        toast.show(error instanceof Error ? error.message : 'Could not save', 'error');
+      }
     } finally {
       setBusy(false);
     }
@@ -38,6 +52,8 @@ export function CloudCopyCard() {
     setBusy(true);
     try {
       await store.clearCloudToken();
+      setEditing(false);
+      setOccupied(null);
       toast.show('Token removed; the cloud copy is off', 'success');
     } finally {
       setBusy(false);
@@ -62,12 +78,16 @@ export function CloudCopyCard() {
     }
   };
 
-  const status = !cloud.configured
-    ? 'Off until you paste a token.'
-    : cloud.syncing
-      ? 'Syncing…'
-      : cloud.lastError
+  // A problem is worth saying even while the copy is off, because a setup link
+  // that could not be used leaves it off and owes an explanation.
+  const status = cloud.syncing
+    ? 'Syncing…'
+    : cloud.lastError
+      ? cloud.configured
         ? `Last attempt failed: ${cloud.lastError}`
+        : cloud.lastError
+      : !cloud.configured
+        ? 'Off until you paste a token.'
         : cloud.lastSyncAt
           ? `Last sync ${formatDateTime(cloud.lastSyncAt)}.`
           : 'Waiting for the first sync.';
@@ -76,10 +96,10 @@ export function CloudCopyCard() {
   return (
     <Card eyebrow="Cloud copy" title="Cloud copy">
       <p className={styles.body}>
-        An optional copy of your data in a database you run. It is off until you paste the database
-        token here. The token stays on this device in the app's own storage and is never part of a
-        backup. This device stays the source of truth; another device gets everything by installing
-        the app and pasting the same token.
+        An optional copy of your data in a database of your own. It is off until you paste its
+        address and token here. Both stay on this device in the app's own storage and are never part
+        of a backup. This device stays the source of truth; another of your own devices gets
+        everything by installing the app and pasting the same two values.
       </p>
       <FactList
         items={[
@@ -89,26 +109,45 @@ export function CloudCopyCard() {
           { label: 'Pending', value: pending },
         ]}
       />
-      {cloud.configured ? (
-        <div className={styles.buttonRow}>
-          <Button
-            onClick={() => void sync()}
-            disabled={cloud.syncing || busy}
-            data-testid="cloud-sync-now"
-          >
-            Sync now
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => void remove()}
-            disabled={busy}
-            data-testid="cloud-remove-token"
-          >
-            Remove token
-          </Button>
+
+      {occupied ? (
+        <div className={styles.body} data-testid="cloud-occupied" role="alert">
+          <p>{occupied}</p>
+          <div className={styles.buttonRow}>
+            <Button
+              variant="danger"
+              onClick={() => void save(true)}
+              disabled={busy}
+              data-testid="cloud-accept-existing"
+            >
+              Use it anyway
+            </Button>
+            <Button variant="secondary" onClick={() => setOccupied(null)} disabled={busy}>
+              Cancel
+            </Button>
+          </div>
         </div>
-      ) : (
+      ) : null}
+
+      {open ? (
         <>
+          <label className={styles.body} htmlFor="cloud-url">
+            Database address
+          </label>
+          <div className={formStyles.inputRow}>
+            <input
+              id="cloud-url"
+              className={formStyles.input}
+              type="text"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              placeholder="Paste the database address"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              data-testid="cloud-url"
+            />
+          </div>
           <label className={styles.body} htmlFor="cloud-token">
             Database token
           </label>
@@ -129,13 +168,56 @@ export function CloudCopyCard() {
           <div className={styles.buttonRow}>
             <Button
               onClick={() => void save()}
-              disabled={token.trim().length === 0 || busy}
+              disabled={token.trim().length === 0 || url.trim().length === 0 || busy}
               data-testid="cloud-save-token"
             >
-              Save token
+              Save
             </Button>
+            {cloud.configured ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditing(false);
+                  setOccupied(null);
+                  setUrl(cloud.url);
+                  setToken('');
+                }}
+                disabled={busy}
+              >
+                Cancel
+              </Button>
+            ) : null}
           </div>
         </>
+      ) : (
+        <div className={styles.buttonRow}>
+          <Button
+            onClick={() => void sync()}
+            disabled={cloud.syncing || busy}
+            data-testid="cloud-sync-now"
+          >
+            Sync now
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setUrl(cloud.url);
+              setEditing(true);
+            }}
+            disabled={busy}
+            data-testid="cloud-change"
+          >
+            Change database
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => void remove()}
+            disabled={busy}
+            data-testid="cloud-remove-token"
+          >
+            Remove token
+          </Button>
+        </div>
       )}
     </Card>
   );

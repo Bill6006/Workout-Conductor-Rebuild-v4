@@ -51,7 +51,7 @@ active workout.
 | Credential and private-key patterns                                | repository and bundle |
 | Analytics and telemetry hosts                                      | bundle                |
 | JWT-shaped tokens (the cloud copy's token has that shape)          | repository and bundle |
-| Any libSQL host other than the owner's own database URL            | bundle                |
+| Any libSQL host other than the shipped default address             | bundle                |
 | Backup, export, or workout-history JSON outside synthetic fixtures | repository            |
 
 `.gitignore` additionally excludes `*backup*.json`, `*export*.json`, `workout-history*.json`,

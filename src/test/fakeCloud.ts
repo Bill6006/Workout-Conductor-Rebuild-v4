@@ -46,6 +46,8 @@ export interface FakeCloud {
   seed: (record: Partial<FakeRemoteRecord> & Pick<FakeRemoteRecord, 'store' | 'id'>) => void;
   /** Rows of this app, oldest first. */
   ours: () => FakeRemoteRecord[];
+  /** The tables the fake reports; empty one to test a database that is not set up. */
+  setTables: (names: string[]) => void;
 }
 
 function key(app: string, store: string, id: string): string {
@@ -65,6 +67,7 @@ export function createFakeCloud(): FakeCloud {
   const devices = new Map<string, FakeDevice>();
   let calls = 0;
   let failuresLeft = 0;
+  let tables: string[] = ['records', 'devices', 'schema_meta'];
 
   function apply(statement: CloudStatement): CloudResult {
     const { sql, args } = statement;
@@ -156,6 +159,19 @@ export function createFakeCloud(): FakeCloud {
       });
       return { rows: [], rowsAffected: 1 };
     }
+    if (sql.startsWith('SELECT name FROM sqlite_master')) {
+      // A fake database always carries the tables, unless a test empties them.
+      return { rows: tables.map((name) => ({ name })), rowsAffected: 0 };
+    }
+    if (sql.startsWith('SELECT count(*) AS rows, group_concat(DISTINCT device_id)')) {
+      const app = text(args[0]);
+      const mine = [...records.values()].filter((row) => row.app === app);
+      const ids = [...new Set(mine.map((row) => row.device_id).filter(Boolean))];
+      return {
+        rows: [{ rows: mine.length, devices: ids.length > 0 ? ids.join(',') : null }],
+        rowsAffected: 0,
+      };
+    }
     throw new Error(`fake cloud does not understand: ${sql.slice(0, 40)}`);
   }
 
@@ -184,6 +200,9 @@ export function createFakeCloud(): FakeCloud {
     calls: () => calls,
     fail: (times) => {
       failuresLeft = times;
+    },
+    setTables: (names) => {
+      tables = [...names];
     },
     seed: (record) => {
       const row: FakeRemoteRecord = {
