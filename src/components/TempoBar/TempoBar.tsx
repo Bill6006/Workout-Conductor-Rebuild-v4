@@ -81,14 +81,16 @@ export function TempoBar({ phases, totalSeconds, showLegend = true }: TempoBarPr
           top
         </span>
       </span>
-      <ul ref={legendRef} className={styles.legend} hidden={!showLegend}>
-        {shown.map((phase) => (
-          <li key={phase.key} className={styles.phase} data-phase={phase.key}>
-            <span className={styles.phaseLabel}>{phase.label}</span>
-            <span className={styles.phaseTime}>{phase.fast ? 'fast' : `${phase.seconds}s`}</span>
-          </li>
-        ))}
-      </ul>
+      {showLegend ? (
+        <ul ref={legendRef} className={styles.legend}>
+          {shown.map((phase) => (
+            <li key={phase.key} className={styles.phase} data-phase={phase.key}>
+              <span className={styles.phaseLabel}>{phase.label}</span>
+              <span className={styles.phaseTime}>{phase.fast ? 'fast' : `${phase.seconds}s`}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
