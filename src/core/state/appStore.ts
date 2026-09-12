@@ -58,6 +58,13 @@ import {
 } from '../../engine/coach/coachConductor';
 import { coachingPolicy } from '../../engine/coach/experience';
 import {
+  COACH_FOCUS_ID,
+  createFocus,
+  focusSatisfiedBy,
+  parseCoachFocus,
+  type CoachFocus,
+} from '../../engine/planning/focus';
+import {
   DELOAD_WEEK_ID,
   inDeloadWindow,
   windowIsPast,
@@ -124,7 +131,7 @@ import {
   LocationProfileSchema,
   type LocationProfile,
 } from '../validation/location';
-import { UserProfileSchema, type UserProfile } from '../validation/profile';
+import { UserProfileSchema, type UserProfile, normalizeProfile } from '../validation/profile';
 import type { LocalSettings } from '../validation/settings';
 import {
   parseWorkoutRecords,
@@ -191,6 +198,8 @@ export interface AppState {
   deloadWeek: DeloadWeek | null;
   /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
   strengthMaxes: StrengthMaxes;
+  /** A coach focus for the next session, kept in the meta store and backed up; null when none. */
+  coachFocus: CoachFocus | null;
   /** The optional cloud copy: on only while a token is on this device. */
   cloud: CloudStatus;
 }
@@ -452,6 +461,7 @@ export class AppStore {
       coachDeclines: emptyDeclines(),
       deloadWeek: null,
       strengthMaxes: emptyMaxes(),
+      coachFocus: null,
       cloud: CLOUD_OFF,
     };
   }
@@ -496,6 +506,7 @@ export class AppStore {
         declinesRaw,
         deloadRaw,
         maxesRaw,
+        focusRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -508,6 +519,7 @@ export class AppStore {
         db.get<Identified>('meta', COACH_DECLINES_ID),
         db.get<Identified>('meta', DELOAD_WEEK_ID),
         db.get<Identified>('meta', STRENGTH_MAXES_ID),
+        db.get<Identified>('meta', COACH_FOCUS_ID),
       ]);
       const deviceId = ensureDeviceId(this.storage);
       const [cloudToken, cloudState, pending] = await Promise.all([
@@ -536,7 +548,7 @@ export class AppStore {
           parsedProfile && !parsedProfile.success
             ? 'The stored profile could not be read. Finish setup again to replace it.'
             : null,
-        profile: parsedProfile?.success ? parsedProfile.data : null,
+        profile: parsedProfile?.success ? normalizeProfile(parsedProfile.data) : null,
         locations: sortLocations(validLocations),
         localSettings: readLocalSettings(this.storage),
         workoutCount: workouts.length,
@@ -554,6 +566,7 @@ export class AppStore {
         coachDeclines: parseCoachDeclines(declinesRaw),
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
         strengthMaxes: parseStrengthMaxes(maxesRaw),
+        coachFocus: parseCoachFocus(focusRaw, this.now()),
         cloud: {
           ...this.state.cloud,
           configured: cloudToken !== null,
@@ -628,17 +641,18 @@ export class AppStore {
       this.state.deloadWeek && inDeloadWindow(this.state.deloadWeek, now)
         ? { startsAt: this.state.deloadWeek.startsAt, endsAt: this.state.deloadWeek.endsAt }
         : null;
+    const focus = this.state.coachFocus?.muscle ?? null;
     const workout = generateWorkout({
       profile,
       location: this.currentLocation(),
       history: this.state.history,
       now,
       duration: 'default',
-      constraints: deload ? { deload } : undefined,
+      constraints: { deload, focusMuscle: focus },
       maxes: this.state.strengthMaxes,
     });
     const session = createSession(key, workout, now);
-    this.setSession({ ...session, constraints: { ...session.constraints, deload } });
+    this.setSession({ ...session, constraints: { ...session.constraints, deload, focus } });
   }
 
   /** Re-checks the session against today's inputs; a new day starts a fresh session. */
@@ -1246,6 +1260,7 @@ export class AppStore {
       lastReceipt: receipt,
     });
     await this.reconcileCoachRoutes(db, profile, now);
+    await this.reconcileCoachFocus(db, record);
     this.setSession({
       ...session,
       status: 'completed',
@@ -1430,7 +1445,7 @@ export class AppStore {
 
   async saveProfile(profile: UserProfile): Promise<SaveReceipt> {
     const previous = this.state.profile;
-    const next = UserProfileSchema.parse({ ...profile, updatedAt: this.now() });
+    const next = normalizeProfile(UserProfileSchema.parse({ ...profile, updatedAt: this.now() }));
     const db = await this.getDatabase();
     const receipt = await putVerified(db, 'profile', next, { now: this.now });
     this.setState({ profile: next, lastReceipt: receipt, error: null });
@@ -1491,7 +1506,8 @@ export class AppStore {
   }
 
   /** Saves locations first, then the profile, then marks onboarding complete. */
-  async completeOnboarding(profile: UserProfile, locations: LocationProfile[]): Promise<void> {
+  async completeOnboarding(rawProfile: UserProfile, locations: LocationProfile[]): Promise<void> {
+    const profile = normalizeProfile(rawProfile);
     const db = await this.getDatabase();
     const existing = await db.getAll<Identified>('locations');
     for (const stale of existing) {
@@ -1985,6 +2001,39 @@ export class AppStore {
     const db = await this.getDatabase();
     await putVerified(db, 'meta', next, { now: this.now });
     this.setState({ strengthMaxes: next });
+  }
+
+  // ---------------------------------------------------------------- coach focus
+
+  /** The coverage card's tap when today has no room: the next session leads with the muscle. */
+  async setCoachFocus(muscle: MuscleId): Promise<void> {
+    const focus = createFocus(muscle, this.now());
+    const db = await this.getDatabase();
+    await putVerified(db, 'meta', focus, { now: this.now });
+    this.setState({ coachFocus: focus });
+    this.regeneratePreview();
+  }
+
+  async clearCoachFocus(): Promise<void> {
+    const db = await this.getDatabase();
+    if ((await db.get<Identified>('meta', COACH_FOCUS_ID)) !== undefined) {
+      await deleteVerified(db, 'meta', COACH_FOCUS_ID);
+    }
+    this.setState({ coachFocus: null });
+    this.regeneratePreview();
+  }
+
+  /** A saved session that trained the focus muscle clears the focus. */
+  private async reconcileCoachFocus(
+    db: Database,
+    record: Parameters<typeof focusSatisfiedBy>[1],
+  ): Promise<void> {
+    const focus = this.state.coachFocus;
+    if (!focus || !focusSatisfiedBy(focus, record)) return;
+    if ((await db.get<Identified>('meta', COACH_FOCUS_ID)) !== undefined) {
+      await deleteVerified(db, 'meta', COACH_FOCUS_ID);
+    }
+    this.setState({ coachFocus: null });
   }
 
   /** Remembers a declined offer so the coach stops repeating it for a while. */

@@ -133,8 +133,26 @@ export function createDefaultProfile(now: string, currentLocationId = 'gym'): Us
   };
 }
 
+/**
+ * Goals that are no longer offered map onto what they always did in the
+ * engines: "Balanced development" added nothing, exactly like "Build
+ * muscle", so a stored profile that still says it reads as Build muscle.
+ */
+export function normalizeGoals(goals: UserProfile['goals']): UserProfile['goals'] {
+  const primary: PrimaryGoal = goals.primary === 'balanced' ? 'build-muscle' : goals.primary;
+  let secondary: SecondaryGoal = goals.secondary === 'balanced' ? 'none' : goals.secondary;
+  if (secondary === primary) secondary = 'none';
+  if (primary === goals.primary && secondary === goals.secondary) return goals;
+  return { ...goals, primary, secondary };
+}
+
+export function normalizeProfile(profile: UserProfile): UserProfile {
+  const goals = normalizeGoals(profile.goals);
+  return goals === profile.goals ? profile : { ...profile, goals };
+}
+
 export function parseProfile(raw: unknown): UserProfile {
-  return UserProfileSchema.parse(raw);
+  return normalizeProfile(UserProfileSchema.parse(raw));
 }
 
 export function isValidProfile(raw: unknown): raw is UserProfile {

@@ -75,24 +75,45 @@ and the session's length choice; when recovery comes first, the action is the ex
 length, not a separate mode.
 
 Actions map to existing systems: recalibration triggers (target weight, rep range, sets, rest
-adjust, drop set, duration), the rest timer, the readiness check-in, the alternatives sheet, or a
-backup export.
+adjust, drop set, duration, add exercise), the rest timer, the readiness check-in, the
+alternatives sheet, a backup export, or a coach focus for the next session.
+
+Every card ends in a tap or a must-know. Cards that only restated a target or a fact are gone:
+the superset readout lives on the superset card, the logging tip sits under the first working
+set until a weight is logged, and a coverage note with nothing to tap never reaches the card.
+Two kinds of card carry no action on purpose: a lowered load (micro-deload or reset), whose
+change is already in the plan and whose card says why, and a safety notice with no safe swap.
+The profile pain-area watch offers a swap; an extra set on offer offers "Add the set".
+
+## Coverage that acts or stays quiet (`coverageSignals`, `src/engine/planning/focus.ts`)
+
+The coverage card fires only once half the week's planned sessions are done, for a muscle still
+under 40 percent of its weekly target with nothing for it today, and only when no session still
+to come this week reaches it: the generator's own week plan (`planWeek`) says which muscles
+each coming session trains, week-aware selection included. With four minutes of room or more
+today, its one tap adds two sets of the best accessory for the muscle (`pickAccessoryFor`: fits
+the place and the limits, isolation and hypertrophy-friendly first, low joint stress) through
+the `add-exercise` trigger, locked and placed after the plan. Without room, the tap sets a coach
+focus (meta record `coach-focus`, seven days, backed up): the next session's template choice
+and picks favour the muscle, its accessories lead, and "Why this workout" says so. A saved
+session that trains the muscle clears the focus; the Plan tab shows the focus with a Clear
+button. Plural muscle names read "are".
 
 ## Coaching policy by experience (`src/engine/coach/experience.ts`)
 
 The experience level chosen in Settings sets a policy the coach, the progression engine, and
 the stall detector all read:
 
-| Policy                                                                                                   | Beginner    | Intermediate   | Advanced       |
-| -------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------------- |
-| Tone / reasons shown                                                                                     | explain / 3 | brief / 2      | brief / 2      |
-| "Follow today's plan" card when nothing outranks the plan                                                | yes         | one quiet line | one quiet line |
-| Signals that restate a target (load goes up, ready for more load, aim one rep higher, superset readouts) | shown       | hidden         | hidden         |
-| Strength roles: clean sessions before load moves                                                         | 1           | 1              | 2              |
-| Reserve tolerance under the prescribed RIR                                                               | 0.5         | 0.5            | 0              |
-| Double progression: top-of-range sessions before load moves                                              | 1           | 1              | 2              |
-| Exposures without a better max before a stall                                                            | 3           | 4              | 4              |
-| Exposures a route step gets before the next                                                              | 2           | 2              | 2              |
+| Policy                                                                  | Beginner    | Intermediate   | Advanced       |
+| ----------------------------------------------------------------------- | ----------- | -------------- | -------------- |
+| Tone / reasons shown                                                    | explain / 3 | brief / 2      | brief / 2      |
+| "Follow today's plan" card when nothing outranks the plan               | yes         | one quiet line | one quiet line |
+| Signals that restate a target (ready for more load, aim one rep higher) | shown       | hidden         | hidden         |
+| Strength roles: clean sessions before load moves                        | 1           | 1              | 2              |
+| Reserve tolerance under the prescribed RIR                              | 0.5         | 0.5            | 0              |
+| Double progression: top-of-range sessions before load moves             | 1           | 1              | 2              |
+| Exposures without a better max before a stall                           | 3           | 4              | 4              |
+| Exposures a route step gets before the next                             | 2           | 2              | 2              |
 
 Deloads, resets, extra-set offers, safety, recovery, coverage, and stalls speak to every level.
 

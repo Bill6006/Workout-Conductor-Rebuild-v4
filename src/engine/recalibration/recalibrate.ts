@@ -1,6 +1,7 @@
 import { EQUIPMENT } from '../../catalog/equipment/equipment';
 import { requireExercise } from '../../catalog/exercises/catalog';
-import type { CatalogExercise, Joint } from '../../catalog/exercises/exerciseSchema';
+import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
+import { muscleName } from '../../catalog/muscles/muscles';
 import { rankAlternatives } from '../alternatives/rankAlternatives';
 import {
   checkExerciseFit,
@@ -74,6 +75,7 @@ const LOCAL_TRIGGERS = new Set<TriggerType>([
   'performance',
   'target-weight',
   'max',
+  'add-exercise',
   'sets',
   'add-warmup',
   'rep-range',
@@ -101,6 +103,7 @@ export function emptyConstraints(): SessionConstraints {
     painJoints: [],
     endBy: null,
     deload: null,
+    focus: null,
     readiness: null,
     intensity: 0,
   };
@@ -205,6 +208,7 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
     readiness: constraints.readiness ? { ...constraints.readiness } : null,
     intensity: constraints.intensity,
     deload: constraints.deload ? { ...constraints.deload } : null,
+    focus: constraints.focus ?? null,
   };
 }
 
@@ -327,6 +331,7 @@ function rebuild(
     adjust: options.adjust,
     readiness: constraints.readiness,
     deload: constraints.deload,
+    focusMuscle: constraints.focus,
   };
   return generateWorkout({
     profile: request.profile,
@@ -827,6 +832,66 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           shift > 0
             ? `Adjusted the next ${remaining.length} ${remaining.length === 1 ? 'set' : 'sets'} of ${name}: aim for ${first.targetReps[0]}-${first.targetReps[1]} reps and add a little weight.`
             : `Adjusted the next ${remaining.length} ${remaining.length === 1 ? 'set' : 'sets'} of ${name}: aim for ${first.targetReps[0]}-${first.targetReps[1]} reps at the same weight.`,
+      };
+    }
+
+    case 'add-exercise': {
+      // The coverage card's tap: a few sets of an accessory for a muscle with nothing today,
+      // placed after the plan and locked so a later fit keeps it.
+      const workout = cloneWorkout(request.workout);
+      const exercise = requireExercise(trigger.exerciseId);
+      if (allEntries(workout.blocks).some((entry) => entry.exerciseId === exercise.id)) {
+        throw new Error(`${exercise.name} is already in the workout.`);
+      }
+      const role: TrainingRole = exercise.compound ? 'secondary-hypertrophy' : 'isolation';
+      const prescription = {
+        ...prescribe(exercise, role, request.profile),
+        sets: Math.max(1, Math.round(trigger.sets)),
+      };
+      const target = recommendNextTarget({
+        exercise,
+        role,
+        prescription,
+        history: request.history,
+        profile: request.profile,
+        now: request.timestamp,
+        maxes: request.maxes,
+      });
+      const numbers = allEntries(workout.blocks)
+        .map((entry) => Number(entry.id.replace(/^e/, '')))
+        .filter((value) => Number.isFinite(value));
+      const entry: WorkoutEntry = {
+        id: `e${Math.max(0, ...numbers) + 1}`,
+        exerciseId: exercise.id,
+        role,
+        sets: applyProgression(
+          buildSets(prescription, 0),
+          target,
+          weightStep(exercise, request.profile.units),
+          {},
+          barWeightFor(exercise, request.profile.units),
+        ),
+        progression: summarizeProgression(target),
+        restSeconds: prescription.restSeconds,
+        warmupSets: 0,
+        dropSet: false,
+        chosenFor: [trigger.muscle],
+        locked: true,
+        pinned: false,
+      };
+      workout.blocks.push({
+        id: `b-${entry.id}`,
+        kind: 'straight',
+        label: exercise.name,
+        entries: [entry],
+        rounds: workingSets(entry).length,
+        restBetweenRoundsSeconds: entry.restSeconds,
+      });
+      refresh(workout, request, constraints);
+      return {
+        ...base,
+        workout,
+        headline: `${exercise.name} added: ${prescription.sets} sets for ${muscleName(trigger.muscle).toLowerCase()}.`,
       };
     }
 

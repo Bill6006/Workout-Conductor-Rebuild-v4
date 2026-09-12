@@ -86,6 +86,26 @@ describe('weekly volume and exposure', () => {
     expect(targets.biceps).toBeGreaterThan(targets.chest);
     expect(targets.chest).toBe(10);
     expect(targets.abs).toBeLessThan(targets.chest);
+
+    // More overall size leads with the biggest muscles: legs, back, and chest.
+    const size = {
+      ...profile,
+      goals: { primary: 'overall-size' as const, secondary: 'none' as const },
+    };
+    const sizeTargets = weeklyTargets(size);
+    expect(sizeTargets.chest).toBe(13);
+    expect(sizeTargets.quads).toBe(13);
+    expect(sizeTargets.biceps).toBe(10);
+    // Build muscle and the retired Balanced choice are the same even plan.
+    const balanced = {
+      ...profile,
+      goals: { primary: 'balanced' as const, secondary: 'none' as const },
+    };
+    const even = {
+      ...profile,
+      goals: { primary: 'build-muscle' as const, secondary: 'none' as const },
+    };
+    expect(weeklyTargets(balanced)).toEqual(weeklyTargets(even));
   });
 
   it('prioritises fresh, under-trained, goal muscles', () => {

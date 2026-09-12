@@ -3,6 +3,7 @@ import { useAppSelector } from '../../core/state/useAppStore';
 import { useNow } from '../../core/time/clock';
 import { conductCoach, type CoachCard } from '../../engine/coach/coachConductor';
 import { coachingPolicy, type CoachingPolicy } from '../../engine/coach/experience';
+import { planWeek } from '../../engine/planning/weeklyPlan';
 import { interpretFatigue, type FatigueSignal } from '../../engine/recovery/fatigue';
 import { analyzeStrategy, type StrategyInsight } from '../../engine/strategy/strategy';
 
@@ -26,6 +27,8 @@ export function useCoach(): CoachContext | null {
   const workoutCount = useAppSelector((state) => state.workoutCount);
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
   const coachDeclines = useAppSelector((state) => state.coachDeclines);
+  const coachFocus = useAppSelector((state) => state.coachFocus);
+  const locations = useAppSelector((state) => state.locations);
   const nowEpoch = useNow();
 
   return useMemo(() => {
@@ -34,6 +37,7 @@ export function useCoach(): CoachContext | null {
     const fatigue = interpretFatigue(history, now, session.constraints.readiness);
     const strategy = analyzeStrategy({ history, profile, now, fatigue });
     const policy = coachingPolicy(profile.experience);
+    const location = locations.find((candidate) => candidate.id === profile.currentLocationId);
     const card = conductCoach({
       workout: session.workout,
       status: session.status,
@@ -50,7 +54,21 @@ export function useCoach(): CoachContext | null {
       policy,
       routes: coachRoutes,
       declines: coachDeclines,
+      location,
+      upcoming: planWeek(profile, location, history, now),
+      focus: coachFocus?.muscle ?? null,
     });
     return { card, fatigue, strategy, policy };
-  }, [session, profile, history, lastExportAt, workoutCount, coachRoutes, coachDeclines, nowEpoch]);
+  }, [
+    session,
+    profile,
+    history,
+    lastExportAt,
+    workoutCount,
+    coachRoutes,
+    coachDeclines,
+    coachFocus,
+    locations,
+    nowEpoch,
+  ]);
 }

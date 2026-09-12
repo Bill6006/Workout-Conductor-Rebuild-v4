@@ -5,6 +5,7 @@ import { ChipSelect } from '../../components/Form/ChipSelect';
 import { Field } from '../../components/Form/Field';
 import { BandBar } from '../../components/Charts/Bars';
 import { ScreenHeader } from '../../components/Screen/Screen';
+import { muscleName } from '../../catalog/muscles/muscles';
 import { useNow } from '../../core/time/clock';
 import { durationLabel } from '../../engine/duration/duration';
 import { formatWindow, inDeloadWindow, recommendDeload } from '../../engine/planning/deload';
@@ -180,6 +181,28 @@ export function PlanScreen() {
             );
           })}
         </div>
+        {state.coachFocus ? (
+          <div className={styles.status} data-testid="coach-focus">
+            <strong>
+              Next session leads with {muscleName(state.coachFocus.muscle).toLowerCase()}
+            </strong>
+            : your coach focus until{' '}
+            {new Date(state.coachFocus.until).toLocaleDateString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            })}
+            , or until a session trains it.{' '}
+            <button
+              type="button"
+              className={styles.smallButton}
+              onClick={() => void store.clearCoachFocus()}
+              data-testid="coach-focus-clear"
+            >
+              Clear
+            </button>
+          </div>
+        ) : null}
         {state.deloadWeek ? (
           <div className={styles.status} data-testid="deload-planned">
             <strong>Deload week planned</strong>: {formatWindow(state.deloadWeek)}

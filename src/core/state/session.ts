@@ -165,6 +165,7 @@ const ConstraintsSchema = z.looseObject({
     .object({ startsAt: z.iso.datetime(), endsAt: z.iso.datetime() })
     .nullable()
     .default(null),
+  focus: z.enum(MUSCLE_IDS).nullable().default(null),
 });
 
 const CompletedSchema = z.looseObject({

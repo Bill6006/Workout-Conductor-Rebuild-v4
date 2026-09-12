@@ -23,6 +23,8 @@ export interface PlannedSession {
   templateId: string;
   title: string;
   focus: MuscleId[];
+  /** Every muscle the session trains directly. */
+  muscles: MuscleId[];
   today: boolean;
 }
 
@@ -104,6 +106,13 @@ export function planWeek(
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([muscle]) => muscle);
+    const muscles = [
+      ...new Set(
+        allEntries(workout.blocks).flatMap(
+          (entry) => requireExercise(entry.exerciseId).primaryMuscles,
+        ),
+      ),
+    ];
     sessions.push({
       date,
       weekday,
@@ -111,6 +120,7 @@ export function planWeek(
       templateId: workout.templateId,
       title: workout.title,
       focus,
+      muscles,
       today: offset === 0,
     });
     simulated = [...simulated, syntheticRecord(date, workout)];

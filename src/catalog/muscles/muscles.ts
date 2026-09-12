@@ -75,6 +75,11 @@ export function muscleName(id: MuscleId): string {
   return BY_ID.get(id)?.name ?? id;
 }
 
+/** "is" or "are" (or any singular/plural pair) for a muscle name: "Chest is", "Rear delts are". */
+export function muscleVerb(id: MuscleId, singular = 'is', plural = 'are'): string {
+  return muscleName(id).endsWith('s') ? plural : singular;
+}
+
 export function muscleGroupOf(id: MuscleId): MuscleGroup {
   return BY_ID.get(id)?.group ?? 'core';
 }

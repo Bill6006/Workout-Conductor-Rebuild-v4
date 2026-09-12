@@ -122,6 +122,9 @@ export function TodayScreen() {
       case 'backup':
         window.location.hash = routeHref('settings');
         break;
+      case 'focus':
+        void store.setCoachFocus(action.muscle);
+        break;
     }
   };
   const readiness = session.constraints.readiness;

@@ -1,6 +1,7 @@
 import { requireExercise } from '../../catalog/exercises/catalog';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
-import { muscleName } from '../../catalog/muscles/muscles';
+import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
+import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { estimateWorkout } from '../duration/duration';
@@ -10,6 +11,7 @@ import type {
   RecalibrationTrigger,
   SessionConstraints,
 } from '../recalibration/types';
+import type { PlannedSession } from '../planning/weeklyPlan';
 import type { FatigueSignal } from '../recovery/fatigue';
 import {
   ROUTE_STEPS,
@@ -27,7 +29,7 @@ import {
   computeMusclePriorities,
   computeWeeklyVolume,
 } from '../volume/weeklyVolume';
-import { currentPosition } from '../workout/sequence';
+import { accessoryPicker, pickAccessoryFor } from '../workoutGenerator/generate';
 import {
   allEntries,
   workingSets,
@@ -72,7 +74,9 @@ type CoachActionBase =
   | { kind: 'rest'; deltaSeconds: number; label: string }
   | { kind: 'readiness'; label: string }
   | { kind: 'alternatives'; entryId: string; label: string }
-  | { kind: 'backup'; label: string };
+  | { kind: 'backup'; label: string }
+  /** The next session leads with this muscle (a coach focus). */
+  | { kind: 'focus'; muscle: MuscleId; label: string };
 
 export type CoachAction = CoachActionBase & { route?: RouteRef };
 
@@ -158,6 +162,12 @@ export interface CoachInput {
   stalls?: StallDiagnosis[];
   routes?: CoachRoutes;
   declines?: CoachDeclines;
+  /** The place today trains at, so the coverage action can pick an exercise that fits. */
+  location?: LocationProfile;
+  /** The sessions the generator would produce this week; coverage stays quiet when one reaches the muscle. */
+  upcoming?: readonly PlannedSession[];
+  /** The current coach focus, so it is never offered twice. */
+  focus?: MuscleId | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -241,9 +251,9 @@ function safetySignals(input: CoachInput): CoachSignal[] {
         headline: `Watch your ${jointLabel(joint)} on ${name}`,
         why: [
           `${jointLabel(joint)} is a flagged pain area in your profile.`,
-          `${name} carries moderate stress there; stop the set if it bites.`,
+          `${name} carries moderate stress there; swap it now, or stop the set if it bites.`,
         ],
-        action: null,
+        action: { kind: 'alternatives', entryId: watch.id, label: `Swap ${name}` },
         confidence: 'medium',
         severity: 1,
         source: 'profile limitations',
@@ -410,85 +420,72 @@ function strategySignals(input: CoachInput): CoachSignal[] {
         : insight.kind === 'fatigue' || insight.kind === 'recovery'
           ? 'recovery'
           : 'plateau';
-  return input.strategy.map((insight) => ({
-    domain: domainOf(insight),
-    headline: insight.headline,
-    why: insight.why,
-    action: actionForInsight(input, insight),
-    confidence: insight.confidence,
-    severity: insight.severity,
-    source: `strategy: ${insight.kind}`,
-    exerciseId: insight.exerciseId,
-    obvious: insight.recommendation === 'add-weight' || insight.recommendation === 'add-reps',
-  }));
+  return (
+    input.strategy
+      .map((insight): CoachSignal => ({
+        domain: domainOf(insight),
+        headline: insight.headline,
+        why: insight.why,
+        action: actionForInsight(input, insight),
+        confidence: insight.confidence,
+        severity: insight.severity,
+        source: `strategy: ${insight.kind}`,
+        exerciseId: insight.exerciseId,
+        obvious: insight.recommendation === 'add-weight' || insight.recommendation === 'add-reps',
+      }))
+      // A coverage note with nothing to tap is the conductor's job, not a card.
+      .filter((signal) => !(signal.domain === 'coverage' && signal.action === null))
+  );
 }
 
 function progressionSignals(input: CoachInput): CoachSignal[] {
-  const keys = doneKeys(input.completed);
-  const position = currentPosition(input.workout, (id, index) => keys.has(`${id}:${index}`));
-  const block = position
-    ? input.workout.blocks.find((candidate) => candidate.id === position.blockId)
-    : undefined;
   const signals: CoachSignal[] = [];
-  if (block && block.kind !== 'straight') {
-    const lines = block.entries.map((entry) => {
-      const exercise = requireExercise(entry.exerciseId);
-      const evidence = entry.progression?.evidence[0] ?? 'first time logged';
-      const logged = input.completed.sets.filter(
-        (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
-      );
-      const today =
-        logged.length > 0
-          ? ` · today ${logged.map((set) => `${set.weight ?? 'bw'}×${set.reps}`).join(', ')}`
-          : '';
-      return `${exercise.name}: ${evidence}${today}`;
-    });
-    signals.push({
-      domain: 'progression',
-      headline: `Superset: ${block.entries.map((entry) => requireExercise(entry.exerciseId).name).join(' + ')}`,
-      why: [
-        ...lines,
-        'Only logged rounds count; the next round starts from what you actually did.',
-      ],
-      action: null,
-      confidence: 'medium',
-      severity: 1.5,
-      source: 'superset evidence',
-      obvious: true,
-    });
-    return signals;
-  }
-  const next = remainingEntries(input).find(
-    (entry) => entry.progression && entry.progression.mode !== 'start',
-  );
-  if (next?.progression) {
-    const exercise = requireExercise(next.exerciseId);
-    const first = workingSets(next).find((set) => set.kind === 'working');
-    const load = first?.targetWeight ?? null;
-    const modeLabel: Record<string, string> = {
-      weight: 'load goes up',
-      reps: 'reps go up',
-      maintain: 'hold the load',
-      deload: 'micro-deload',
-      regress: 'reset and rebuild',
-      sets: 'extra set on offer',
-      double: 'double progression',
-      start: 'first time',
-      return: 'back from a break',
-      estimate: 'from the family estimate',
-    };
-    signals.push({
-      domain: 'progression',
-      headline: `${exercise.name}: ${modeLabel[next.progression.mode] ?? next.progression.mode}${
-        load === null ? '' : ` to ${load} ${input.profile.units}`
-      }`,
-      why: next.progression.evidence.slice(0, 3),
-      action: null,
-      confidence: next.progression.confidence,
-      severity: next.progression.mode === 'deload' || next.progression.mode === 'regress' ? 2 : 1,
-      source: 'progression',
-      obvious: !['deload', 'regress', 'sets'].includes(next.progression.mode),
-    });
+  const units = input.profile.units;
+  let lowered = false;
+  let offered = false;
+  for (const entry of remainingEntries(input)) {
+    const progression = entry.progression;
+    if (!progression || progression.mode === 'start') continue;
+    const exercise = requireExercise(entry.exerciseId);
+    const load = workingSets(entry).find((set) => set.kind === 'working')?.targetWeight ?? null;
+    // A lowered load is a must-know: the plan already changed, and the card says why.
+    if (!lowered && (progression.mode === 'deload' || progression.mode === 'regress')) {
+      lowered = true;
+      signals.push({
+        domain: 'progression',
+        headline: `${exercise.name}: ${progression.mode === 'deload' ? 'micro-deload' : 'reset and rebuild'}${
+          load === null ? '' : ` to ${load} ${units}`
+        }`,
+        why: progression.evidence.slice(0, 3),
+        action: null,
+        confidence: progression.confidence,
+        severity: 2,
+        source: 'progression',
+        exerciseId: entry.exerciseId,
+      });
+    }
+    // An extra set on offer ends in a tap.
+    if (!offered && progression.setsAdvice === 1 && !started(input, entry)) {
+      offered = true;
+      signals.push({
+        domain: 'progression',
+        headline: `${exercise.name}: an extra set is on the table`,
+        why: [
+          progression.evidence.find((line) => /extra set/i.test(line)) ??
+            'Two sessions at the top of the range.',
+          'One more working set adds the volume without touching the load.',
+        ],
+        action: {
+          kind: 'recalibrate',
+          trigger: { type: 'sets', entryId: entry.id, workingDelta: 1 },
+          label: 'Add the set',
+        },
+        confidence: progression.confidence,
+        severity: 1,
+        source: 'extra set',
+        exerciseId: entry.exerciseId,
+      });
+    }
   }
   return signals;
 }
@@ -522,36 +519,110 @@ function restSignals(input: CoachInput): CoachSignal[] {
   return [];
 }
 
+/** A muscle under this share of its weekly target counts as a gap. */
+const COVERAGE_GAP = 0.4;
+/** Minutes of room today before two sets of an accessory are offered. */
+const ROOM_MINUTES = 4;
+
+/**
+ * Coverage that acts or stays quiet. The card fires only once half the week's
+ * sessions are done, for a muscle still under 40 percent of its target with
+ * nothing for it today, and only when no session still to come this week
+ * reaches it. With room today the tap adds two sets of the best accessory;
+ * without room it sets a focus so the next session leads with the muscle.
+ */
 function coverageSignals(input: CoachInput): CoachSignal[] {
-  const volume = computeWeeklyVolume(input.history, input.now);
+  if (input.status === 'completed') return [];
   const exposure = computeExposure(input.history, input.now);
+  if (exposure.sessionsLast14Days < 2) return [];
+  const planned = input.profile.schedule.weeklyFrequency;
+  const doneThisWeek = input.history.filter(
+    (record) =>
+      Date.parse(input.now) - Date.parse(record.completedAt ?? record.startedAt) <= 7 * DAY_MS,
+  ).length;
+  if (doneThisWeek < Math.ceil(planned / 2)) return [];
+  const volume = computeWeeklyVolume(input.history, input.now);
   const priorities = computeMusclePriorities(input.profile, volume, exposure);
+  const entries = allEntries(input.workout.blocks);
   const covered = new Set(
-    allEntries(input.workout.blocks).flatMap(
-      (entry) => requireExercise(entry.exerciseId).primaryMuscles,
-    ),
+    entries.flatMap((entry) => requireExercise(entry.exerciseId).primaryMuscles),
   );
   const gap = priorities.find(
     (priority) =>
       priority.weeklyTarget > 0 &&
-      priority.weeklySetsDone / priority.weeklyTarget < 0.4 &&
+      priority.weeklySetsDone / priority.weeklyTarget < COVERAGE_GAP &&
       priority.weight >= 1.1 &&
-      !covered.has(priority.muscle) &&
-      exposure.sessionsLast14Days >= 2,
+      !covered.has(priority.muscle),
   );
   if (!gap) return [];
+  const left = Math.max(0, planned - doneThisWeek - 1);
+  const later = (input.upcoming ?? []).filter((session) => !session.today).slice(0, left);
+  if (later.some((session) => session.muscles.includes(gap.muscle))) return [];
+  if (input.focus === gap.muscle) return [];
+
+  const name = muscleName(gap.muscle);
+  const keys = doneKeys(input.completed);
+  const remaining = estimateWorkout(input.workout.blocks, 0, requireExercise, (id, index) =>
+    keys.has(`${id}:${index}`),
+  ).totalMinutes;
+  const spare = input.workout.duration.targetMinutes - remaining;
+  const why = [
+    `${gap.weeklySetsDone} of ${gap.weeklyTarget} weekly sets so far and nothing for it today.`,
+  ];
+  const base = {
+    domain: 'coverage' as const,
+    headline: `${name} ${muscleVerb(gap.muscle)} under target this week`,
+    confidence: 'medium' as const,
+    severity: 1,
+    source: 'weekly coverage',
+  };
+  const accessory =
+    spare >= ROOM_MINUTES
+      ? pickAccessoryFor(
+          gap.muscle,
+          entries.map((entry) => requireExercise(entry.exerciseId)),
+          accessoryPicker({
+            profile: input.profile,
+            location: input.location,
+            constraints: {
+              excludeExerciseIds: input.constraints.avoidExerciseIds,
+              unavailableEquipment: input.constraints.busyEquipment,
+              painJoints: input.constraints.painJoints,
+            },
+            history: input.history,
+            now: input.now,
+            focus: input.focus ?? null,
+          }),
+        )
+      : undefined;
+  if (accessory) {
+    return [
+      {
+        ...base,
+        why: [
+          ...why,
+          `About ${Math.round(spare)} min of room today: two sets of ${accessory.name} close most of the gap.`,
+        ],
+        action: {
+          kind: 'recalibrate',
+          trigger: { type: 'add-exercise', exerciseId: accessory.id, muscle: gap.muscle, sets: 2 },
+          label: `Add 2 sets of ${accessory.name}`,
+        },
+      },
+    ];
+  }
   return [
     {
-      domain: 'coverage',
-      headline: `${muscleName(gap.muscle)} is under target this week`,
+      ...base,
       why: [
-        `${gap.weeklySetsDone} of ${gap.weeklyTarget} weekly sets so far and nothing for it today.`,
-        'The next session that leads with it will close the gap; no change to today.',
+        ...why,
+        `No room today and no session left this week reaches ${name.toLowerCase()}; the next session can lead with ${muscleVerb(gap.muscle, 'it', 'them')}.`,
       ],
-      action: null,
-      confidence: 'medium',
-      severity: 1,
-      source: 'weekly coverage',
+      action: {
+        kind: 'focus',
+        muscle: gap.muscle,
+        label: `Lead the next session with ${name.toLowerCase()}`,
+      },
     },
   ];
 }
@@ -607,23 +678,6 @@ function tipSignals(input: CoachInput): CoachSignal[] {
         exerciseId: candidate.exerciseId,
       });
     }
-  }
-  const anyWeights = input.history.some((record) =>
-    record.entries.some((entry) => entry.sets.some((set) => set.weight !== null)),
-  );
-  if (!anyWeights && input.workoutCount > 0) {
-    signals.push({
-      domain: 'tips',
-      headline: 'Log weights so targets can follow you',
-      why: [
-        'No weights have been logged yet.',
-        'The next target for every lift is built from your last logged load.',
-      ],
-      action: null,
-      confidence: 'high',
-      severity: 0,
-      source: 'logging habit',
-    });
   }
   return signals;
 }

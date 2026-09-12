@@ -22,7 +22,7 @@ export const GOAL_OPTIONS: readonly LabelledOption<PrimaryGoal>[] = [
   {
     value: 'build-muscle',
     label: 'Build muscle',
-    description: 'Hypertrophy first, strength close behind',
+    description: 'Even volume across every muscle',
   },
   {
     value: 'bigger-arms',
@@ -37,13 +37,12 @@ export const GOAL_OPTIONS: readonly LabelledOption<PrimaryGoal>[] = [
   {
     value: 'overall-size',
     label: 'More overall size',
-    description: 'Balanced volume across every muscle',
+    description: 'Legs, back, and chest lead',
   },
-  { value: 'strength', label: 'Strength progress', description: 'Heavier compounds, longer rests' },
   {
-    value: 'balanced',
-    label: 'Balanced development',
-    description: 'Even coverage, no specialization',
+    value: 'strength',
+    label: 'Strength progress',
+    description: 'Squats, presses, and pulls lead every session',
   },
 ];
 

@@ -6,10 +6,10 @@ import {
   formatWindow,
   type DeloadWindow,
 } from '../planning/deload';
-import { exercisesByPattern, requireExercise } from '../../catalog/exercises/catalog';
+import { allExercises, exercisesByPattern, requireExercise } from '../../catalog/exercises/catalog';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
-import { MUSCLE_IDS, muscleName, type MuscleId } from '../../catalog/muscles/muscles';
+import { MUSCLE_IDS, muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
@@ -113,6 +113,8 @@ export interface GenerationConstraints {
   readiness?: Readiness | null;
   /** A planned deload week covering this session: fewer sets, more reserve, lighter loads. */
   deload?: DeloadWindow | null;
+  /** A coach focus: templates and picks that carry this muscle score higher, and its accessories lead. */
+  focusMuscle?: MuscleId | null;
 }
 
 export interface GenerationInput {
@@ -233,6 +235,7 @@ function chooseTemplate(
   priorities: MusclePriority[],
   exposure: Exposure,
   loads: Readonly<Record<MuscleId, MuscleLoad>>,
+  focus: MuscleId | null = null,
 ): Template {
   const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
   const strengthGoal =
@@ -263,7 +266,9 @@ function chooseTemplate(
           (loads[muscle] === 'behind' ? 0.15 : 0)
         );
       }, 0) / template.muscles.length;
-    const score = average + rotation + strengthBonus + weekTerm;
+    // A coach focus tips the choice toward a template that trains the muscle.
+    const focusTerm = focus !== null && template.muscles.includes(focus) ? 0.4 : 0;
+    const score = average + rotation + strengthBonus + weekTerm + focusTerm;
     if (score > bestScore + 1e-9) {
       best = template;
       bestScore = score;
@@ -298,11 +303,12 @@ export function sessionConflictContext(
   };
 }
 
-interface Picker {
+export interface Picker {
   context: ConflictContext;
   preferredIds: ReadonlySet<string>;
   exposure: Exposure;
   loads: Readonly<Record<MuscleId, MuscleLoad>>;
+  focus: MuscleId | null;
 }
 
 function stressPenalty(exercise: CatalogExercise): number {
@@ -335,11 +341,13 @@ function pickForSlot(
     const behind = exercise.primaryMuscles.some((muscle) => picker.loads[muscle] === 'behind')
       ? 3
       : 0;
+    const focus = picker.focus !== null && exercise.primaryMuscles.includes(picker.focus) ? 6 : 0;
     return (
       suitability +
       preferred +
       familiarity +
-      behind -
+      behind +
+      focus -
       stressPenalty(exercise) * 2 -
       exercise.setupSeconds / 60
     );
@@ -347,6 +355,53 @@ function pickForSlot(
 
   candidates.sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
   return candidates[0];
+}
+
+/**
+ * The coverage card's exercise: the best accessory for one muscle that fits
+ * the place, the limits, and today's picks. Isolation and hypertrophy-friendly
+ * moves first, low joint stress, quick to set up.
+ */
+export function pickAccessoryFor(
+  muscle: MuscleId,
+  chosen: readonly CatalogExercise[],
+  picker: Picker,
+): CatalogExercise | undefined {
+  const chosenIds = new Set(chosen.map((exercise) => exercise.id));
+  const candidates = allExercises()
+    .filter((exercise) => exercise.primaryMuscles.includes(muscle))
+    .filter((exercise) => !chosenIds.has(exercise.id))
+    .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
+    .filter((exercise) => !isBlocked(checkWorkoutConflicts([...chosen, exercise], picker.context)));
+  const score = (exercise: CatalogExercise) =>
+    exercise.hypertrophySuitability * 10 +
+    (exercise.compound ? 0 : 8) +
+    (picker.preferredIds.has(exercise.id) ? 15 : 0) -
+    stressPenalty(exercise) * 2 -
+    exercise.setupSeconds / 60;
+  candidates.sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+  return candidates[0];
+}
+
+/** The picker the coach needs, built without generating a workout. */
+export function accessoryPicker(input: {
+  profile: UserProfile;
+  location: LocationProfile | undefined;
+  constraints?: Pick<
+    GenerationConstraints,
+    'excludeExerciseIds' | 'unavailableEquipment' | 'painJoints'
+  >;
+  history: readonly WorkoutRecord[];
+  now: string;
+  focus?: MuscleId | null;
+}): Picker {
+  return {
+    context: sessionConflictContext(input.profile, input.location, input.constraints ?? {}),
+    preferredIds: preferredIdsOf(input.profile),
+    exposure: computeExposure(input.history, input.now),
+    loads: muscleLoads(input.history, input.profile, input.now),
+    focus: input.focus ?? null,
+  };
 }
 
 function entryValue(
@@ -443,10 +498,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const priorities = computeMusclePriorities(profile, volume, exposure);
   const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
   const loads = muscleLoads(history, profile, now);
+  const focus = constraints.focusMuscle ?? null;
   const template =
     (constraints.templateId
       ? TEMPLATES.find((candidate) => candidate.id === constraints.templateId)
-      : undefined) ?? chooseTemplate(profile, priorities, exposure, loads);
+      : undefined) ?? chooseTemplate(profile, priorities, exposure, loads, focus);
   const deload = constraints.deload ?? null;
   const adjust: PrescriptionAdjustment | undefined = deload
     ? {
@@ -462,7 +518,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const hardCap = constraints.hardCap ?? false;
   const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
   const compromises: string[] = [];
-  const picker: Picker = { context, preferredIds, exposure, loads };
+  const picker: Picker = { context, preferredIds, exposure, loads, focus };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 
   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
@@ -830,14 +886,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   if (keep.length === 0 && blocks.length > 2) {
     const isBehind = (block: WorkoutBlock) =>
       block.kind === 'straight' &&
-      (block.entries[0] as WorkoutEntry).chosenFor.some((muscle) => loads[muscle] === 'behind');
+      (block.entries[0] as WorkoutEntry).chosenFor.some(
+        (muscle) => loads[muscle] === 'behind' || muscle === focus,
+      );
     const [first, ...rest] = blocks;
     const led = rest.filter(isBehind);
     if (led.length > 0 && led.length < rest.length) {
       blocks = [first as WorkoutBlock, ...led, ...rest.filter((block) => !isBehind(block))];
       for (const block of led) {
         for (const muscle of (block.entries[0] as WorkoutEntry).chosenFor) {
-          if (loads[muscle] === 'behind' && !behindNames.includes(muscleName(muscle))) {
+          if (
+            (loads[muscle] === 'behind' || muscle === focus) &&
+            !behindNames.includes(muscleName(muscle))
+          ) {
             behindNames.push(muscleName(muscle));
           }
         }
@@ -889,6 +950,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   if (behindNames.length > 0) {
     reasons.push(
       `${behindNames.slice(0, 3).join(', ')} ${behindNames.length === 1 ? 'is' : 'are'} behind this week: the accessories lead with ${behindNames.length === 1 ? 'it' : 'them'}.`,
+    );
+  }
+  if (
+    focus !== null &&
+    allEntries(blocks).some((entry) => exerciseOf(entry.exerciseId).primaryMuscles.includes(focus))
+  ) {
+    reasons.push(
+      `${muscleName(focus)} ${muscleVerb(focus, 'leads', 'lead')} today: your coach focus.`,
     );
   }
   if (deload) {
@@ -964,7 +1033,7 @@ function goalLabel(
     case 'strength':
       return 'strength progress';
     case 'balanced':
-      return 'balanced development';
+      return 'build muscle';
     case 'none':
       return 'none';
   }

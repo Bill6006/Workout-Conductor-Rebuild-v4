@@ -114,13 +114,14 @@ export function goalWeights(profile: UserProfile): Record<MuscleId, number> {
         boost(['chest', 'upper-chest'], amount);
         break;
       case 'overall-size':
-        boost(['quads', 'hamstrings', 'glutes', 'lats', 'upper-back'], amount / 3);
+        // The biggest muscles carry the most size: legs, back, and chest lead.
+        boost(['quads', 'hamstrings', 'glutes', 'lats', 'upper-back', 'chest'], amount / 2);
         break;
       case 'strength':
         boost(['quads', 'glutes', 'chest', 'upper-back', 'lats'], amount / 2);
         break;
       case 'build-muscle':
-      case 'balanced':
+      case 'balanced': // no longer offered; reads as Build muscle
       case 'none':
         break;
     }

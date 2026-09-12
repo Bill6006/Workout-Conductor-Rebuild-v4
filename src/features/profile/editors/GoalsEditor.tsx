@@ -7,9 +7,14 @@ import styles from './editors.module.css';
 
 export function GoalsEditor({ draft, onChange }: EditorProps) {
   const { goals } = draft.profile;
+  // The goal decides where the volume goes; the programming style decides how each set is done.
+  const strengthHint =
+    goals.primary === 'strength' && draft.profile.trainingStyle !== 'strength-focus'
+      ? 'Decides where the volume goes. For lower reps and longer rests, set Programming style to Strength focus.'
+      : 'Decides where the weekly volume goes; Programming style decides how each set is done.';
   return (
     <div className={styles.stack}>
-      <Field label="Primary goal" hint="Sets the priority order for every session.">
+      <Field label="Primary goal" hint={strengthHint}>
         <ChoiceGroup
           label="Primary goal"
           value={goals.primary}

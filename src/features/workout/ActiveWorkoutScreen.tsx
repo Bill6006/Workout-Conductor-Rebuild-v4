@@ -127,6 +127,11 @@ export function ActiveWorkoutScreen() {
   const session = useAppSelector((state) => state.session);
   const profile = useAppSelector((state) => state.profile);
   const history = useAppSelector((state) => state.history);
+  const workoutCount = useAppSelector((state) => state.workoutCount);
+  // The logging habit line: shown under a working set until any weight has been logged.
+  const anyWeights = history.some((record) =>
+    record.entries.some((entry) => entry.sets.some((set) => set.weight !== null)),
+  );
   const instructions = useAppSelector((state) => state.customInstructions);
   const locations = useAppSelector((state) => state.locations);
   const calibrating = useAppSelector((state) => state.calibration.status !== 'idle');
@@ -225,6 +230,9 @@ export function ActiveWorkoutScreen() {
       }
       case 'backup':
         window.location.hash = '#/settings';
+        break;
+      case 'focus':
+        void store.setCoachFocus(action.muscle);
         break;
     }
   };
@@ -353,6 +361,11 @@ export function ActiveWorkoutScreen() {
                 </button>
                 <span className={styles.panelNote}>Ramp sets never count as working sets.</span>
               </div>
+            ) : null}
+            {currentHere.kind === 'working' && !anyWeights && workoutCount > 0 ? (
+              <p className={styles.panelNote} data-testid="logging-note">
+                No weights logged yet. Targets follow your last logged load.
+              </p>
             ) : null}
           </>
         ) : null}

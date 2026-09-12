@@ -1,3 +1,4 @@
+import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { StrengthMaxes } from '../progression/maxes';
 import type { DeloadWindow } from '../planning/deload';
 import type { AutoregulationPlan } from './autoregulate';
@@ -49,6 +50,8 @@ export type RecalibrationTrigger =
   | { type: 'target-weight'; entryId: string; weight: number | null }
   /** A max was entered for a lift: its unlogged sets take their first target from it. */
   | { type: 'max'; exerciseId: string }
+  /** The coach's coverage action: a few sets of an accessory for a muscle with nothing today. */
+  | { type: 'add-exercise'; exerciseId: string; muscle: MuscleId; sets: number }
   | { type: 'sets'; entryId: string; workingDelta: -1 | 1 }
   | { type: 'add-warmup'; entryId: string }
   | { type: 'rep-range'; entryId: string; reps: [number, number] }
@@ -103,6 +106,8 @@ export interface SessionConstraints {
   intensity: number;
   /** A planned deload week that covers this session, if any. */
   deload: DeloadWindow | null;
+  /** A coach focus: the session leads with this muscle. */
+  focus: MuscleId | null;
 }
 
 export interface RecalibrationRequest {

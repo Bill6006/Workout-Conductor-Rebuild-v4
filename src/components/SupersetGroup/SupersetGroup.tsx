@@ -62,6 +62,9 @@ export function SupersetGroup({
           {block.restBetweenRoundsSeconds} s rest after each round · switch straight away between
           moves
         </p>
+        <p className={styles.note} data-testid="superset-note">
+          Only logged rounds count; the next round starts from what you actually did.
+        </p>
       </header>
 
       <table className={styles.table} aria-label="Rounds">

@@ -191,7 +191,7 @@ describe('coach conductor', () => {
     });
   });
 
-  it('reads both superset moves from logged rounds only and recommends longer rest when reps collapse', () => {
+  it('keeps the superset readout off the card and recommends longer rest when reps collapse', () => {
     const base = input([]);
     const superset = base.workout.blocks.find((block) => block.kind === 'superset') as WorkoutBlock;
     const [a] = superset.entries.map((entry) => entry.id) as [string, string];
@@ -207,13 +207,9 @@ describe('coach conductor', () => {
       ...active,
       workout: { ...active.workout, blocks: [superset] },
     });
-    const evidence = signals.find((signal) => signal.source === 'superset evidence');
+    // The superset readout lives on the superset card now; it is no longer a coach signal.
     expect(position).not.toBeNull();
-    expect(evidence?.headline).toMatch(/^Superset: .+ \+ .+$/);
-    expect(evidence?.why.some((line) => line.includes('today 185×15'))).toBe(true);
-    expect(evidence?.why[evidence.why.length - 1]).toBe(
-      'Only logged rounds count; the next round starts from what you actually did.',
-    );
+    expect(signals.some((signal) => signal.source === 'superset evidence')).toBe(false);
 
     const fading = input([], {
       status: 'active',
