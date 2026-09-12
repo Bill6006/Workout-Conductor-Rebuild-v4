@@ -984,6 +984,8 @@ export class AppStore {
     const now = this.now();
     const nowMs = this.nowMs();
     const reps = Math.max(0, Math.round(values.reps));
+    // Zero reps is not a set: it is a skip, and it never feeds the engines.
+    const skipped = reps === 0;
     const existingAt = session.completed.sets.findIndex(
       (candidate) => candidate.entryId === entryId && candidate.setIndex === setIndex,
     );
@@ -994,10 +996,10 @@ export class AppStore {
       setIndex,
       kind: set.kind,
       reps,
-      weight: values.weight,
-      rir: values.rir,
+      weight: skipped ? null : values.weight,
+      rir: skipped ? null : values.rir,
       completedAt: isEdit ? (session.completed.sets[existingAt] as CompletedSet).completedAt : now,
-      skipped: false,
+      skipped,
     };
     const sets = isEdit
       ? session.completed.sets.map((candidate, index) =>
@@ -1040,7 +1042,7 @@ export class AppStore {
       },
     });
 
-    if (!isEdit && set.kind === 'working') {
+    if (!isEdit && set.kind === 'working' && !skipped) {
       const remaining = entry.sets.filter(
         (candidate) =>
           candidate.kind === 'working' &&

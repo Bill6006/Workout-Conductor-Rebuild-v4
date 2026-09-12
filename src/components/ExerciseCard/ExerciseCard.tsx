@@ -92,10 +92,9 @@ export function ExerciseCard({
     entry.role,
   );
   const restNote = restGuidance(entry.role, rest);
-  const research = evidenceLines(
-    [...tempo.evidence, ...effort.evidence, ...restNote.evidence],
-    { restStyle },
-  );
+  const research = evidenceLines([...tempo.evidence, ...effort.evidence, ...restNote.evidence], {
+    restStyle,
+  });
 
   return (
     <section
@@ -123,29 +122,23 @@ export function ExerciseCard({
               <span className={`${styles.badge} ${styles.quiet}`}>Swapped in</span>
             ) : null}
           </div>
-          <p className={styles.targetLine} data-testid="target-line">
-            {target
-              ? `${position && position.kind === 'warmup' ? 'Ramp set' : position && position.kind === 'drop' ? 'Drop set' : `Set ${Math.min(working.length, doneWorking + 1)} of ${working.length}`}${target.targetWeight !== null ? ` · ${target.targetWeight} ${units}` : ''} · ${target.targetReps[0]}-${target.targetReps[1]} reps`
-              : `${working.length} sets done`}
-          </p>
-          <p className={styles.meta}>
-            {previous
-              ? `Last time ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}`
-              : 'First time logged'}
-            {onKnowMax ? (
-              <>
-                {' · '}
-                <button
-                  type="button"
-                  className={styles.maxLink}
-                  onClick={onKnowMax}
-                  data-testid="know-max"
-                >
-                  Know your max?
-                </button>
-              </>
-            ) : null}
-          </p>
+          {/* Last time and the role live behind How to; this line stays only for the max offer. */}
+          {onKnowMax ? (
+            <p className={styles.meta}>
+              {previous
+                ? `Last time ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}`
+                : 'First time logged'}
+              {' · '}
+              <button
+                type="button"
+                className={styles.maxLink}
+                onClick={onKnowMax}
+                data-testid="know-max"
+              >
+                Know your max?
+              </button>
+            </p>
+          ) : null}
           <button
             type="button"
             className={styles.tempoBarButton}
@@ -153,7 +146,7 @@ export function ExerciseCard({
             aria-expanded={tempoOpen}
             aria-label={`Tempo ${tempo.tempo}: ${tempoOpen ? 'hide' : 'show'} the reason and cue`}
           >
-            <TempoBar phases={tempo.phases} totalSeconds={tempo.totalSeconds} />
+            <TempoBar phases={tempo.phases} totalSeconds={tempo.totalSeconds} showLegend={false} />
           </button>
         </div>
         <div className={styles.headAside}>

@@ -42,7 +42,9 @@ describe('ExerciseCard', () => {
       </ExerciseCard>,
     );
     expect(screen.getByTestId('exercise-thumb')).toHaveAttribute('width', '96');
-    expect(screen.getByText('First time logged')).toBeInTheDocument();
+    // The header no longer repeats last time; it lives behind How to. Only the max offer keeps a line.
+    expect(screen.queryByText(/First time logged/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('target-line')).not.toBeInTheDocument();
     expect(screen.queryByText(/Barbell \+ plates/)).not.toBeInTheDocument();
     expect(screen.queryByTestId('tempo-detail')).not.toBeInTheDocument();
 
@@ -59,8 +61,8 @@ describe('ExerciseCard', () => {
     ]);
     expect(screen.getByTestId('tempo-why')).not.toHaveAttribute('open');
     expect(
-      screen.getByRole('list', { name: 'Why this tempo, effort, and rest', hidden: true })
-        .children.length,
+      screen.getByRole('list', { name: 'Why this tempo, effort, and rest', hidden: true }).children
+        .length,
     ).toBeGreaterThan(1);
     expect(chip).toHaveAttribute('aria-expanded', 'true');
     await user.click(chip);

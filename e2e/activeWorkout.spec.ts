@@ -36,7 +36,7 @@ test.describe('active workout', () => {
   }) => {
     await startWorkout(page);
     const card = page.getByTestId('exercise-card').first();
-    await expect(card.getByTestId('target-line')).toContainText('Ramp set');
+    await expect(card.getByTestId('target-line')).toContainText('Ramp 1 of');
     await page.getByTestId('skip-warmup').click();
     await expect(card.getByTestId('target-line')).toContainText('Set 1 of');
 
@@ -188,7 +188,8 @@ test.describe('in-session autoregulation', () => {
     await expect(page.getByTestId('recalibration-summary')).toContainText(
       /well past the .* target: the next \d sets go up 5 lb/,
     );
-    const current = page.locator('[data-testid="set-row"][data-state="current"]').first();
-    await expect(current.getByTestId('set-aside')).toContainText('190');
+    // The raised target lands on the set in front of you, which the logger states.
+    await expect(page.getByTestId('set-logger')).toContainText('Target 190 lb');
+    await expect(page.getByTestId('set-aside').first()).toContainText('190');
   });
 });

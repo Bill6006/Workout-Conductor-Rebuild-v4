@@ -225,7 +225,7 @@ export function SetLogger({
       data-mode={mode}
     >
       <div className={styles.head}>
-        <span className={styles.label}>
+        <span className={styles.label} data-testid="target-line">
           {mode === 'edit' ? `Editing ${target.label}` : target.label}
         </span>
         {helper ? <span className={styles.helper}>{helper}</span> : null}

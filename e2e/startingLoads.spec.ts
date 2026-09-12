@@ -18,7 +18,7 @@ test.describe('where the first weight comes from', () => {
     await expect(page.getByTestId('workout-stats')).toBeVisible();
 
     const card = page.getByTestId('exercise-card').first();
-    await expect(card.getByTestId('target-line')).toContainText('Ramp set · 45 lb');
+    await expect(card.getByTestId('target-line')).toContainText('Ramp 1 of');
     const logger = page.getByTestId('set-logger');
     await expect(logger).toContainText('Warm-up 45 lb');
     await expect(page.getByTestId('logger-weight')).toContainText('45');
@@ -40,7 +40,7 @@ test.describe('where the first weight comes from', () => {
     await expect(page.getByTestId('recalibration-summary')).toContainText(
       'First target for Barbell Bench Press set from your max.',
     );
-    await expect(card.getByTestId('target-line')).toContainText('155 lb');
+    await expect(card.getByTestId('target-line')).toContainText('Set 1 of');
     await expect(logger).toContainText('Target 155 lb');
     await expect(page.getByTestId('logger-weight')).toContainText('155');
     await expect(card.getByTestId('know-max')).toHaveCount(0);

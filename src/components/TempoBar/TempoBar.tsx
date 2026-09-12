@@ -7,6 +7,8 @@ import styles from './TempoBar.module.css';
 interface TempoBarProps {
   phases: readonly TempoPhase[];
   totalSeconds: number;
+  /** The phase legend repeats the tempo chip on a card, so the card hides it. */
+  showLegend?: boolean;
 }
 
 /**
@@ -16,7 +18,7 @@ interface TempoBarProps {
  * carry the meaning, so nothing depends on colour, and everything stands
  * still when the viewer prefers reduced motion.
  */
-export function TempoBar({ phases, totalSeconds }: TempoBarProps) {
+export function TempoBar({ phases, totalSeconds, showLegend = true }: TempoBarProps) {
   const fillRef = useRef<HTMLSpanElement>(null);
   const legendRef = useRef<HTMLUListElement>(null);
   const reducedMotion = useReducedMotion();
@@ -79,7 +81,7 @@ export function TempoBar({ phases, totalSeconds }: TempoBarProps) {
           top
         </span>
       </span>
-      <ul ref={legendRef} className={styles.legend}>
+      <ul ref={legendRef} className={styles.legend} hidden={!showLegend}>
         {shown.map((phase) => (
           <li key={phase.key} className={styles.phase} data-phase={phase.key}>
             <span className={styles.phaseLabel}>{phase.label}</span>

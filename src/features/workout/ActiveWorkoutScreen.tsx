@@ -43,7 +43,7 @@ import {
 import styles from './ActiveWorkout.module.css';
 import { EntryPanels } from './EntryPanels';
 import { LoggedSets } from './LoggedSets';
-import { describeSet } from './setFormat';
+import { describeSetPosition } from './setFormat';
 import { RatingSheet } from './RatingSheet';
 import { MaxSheet } from './MaxSheet';
 import { previousPerformance } from './previousPerformance';
@@ -299,7 +299,7 @@ export function ActiveWorkoutScreen() {
               reps: editingSet.targetReps,
               rir: editingSet.targetRir,
               weight: editingSet.targetWeight,
-              label: describeSet(editingSet, entry),
+              label: describeSetPosition(editingSet, entry),
             }}
             initial={loggedValues(session, entry.id, editingSet.index)}
             mode="edit"
@@ -322,7 +322,7 @@ export function ActiveWorkoutScreen() {
                 reps: currentHere.set.targetReps,
                 rir: currentHere.set.targetRir,
                 weight: currentHere.set.targetWeight,
-                label: describeSet(currentHere.set, entry),
+                label: describeSetPosition(currentHere.set, entry),
               }}
               initial={initialFor(
                 session,

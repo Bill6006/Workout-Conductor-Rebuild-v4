@@ -16,7 +16,7 @@ interface LoggedSetsProps {
   compact?: boolean;
 }
 
-type RowState = 'done' | 'skipped' | 'current' | 'upcoming';
+type RowState = 'done' | 'skipped' | 'upcoming';
 
 function restLabel(seconds: number): string {
   if (seconds <= 0) return 'no rest';
@@ -38,20 +38,19 @@ function describeUpcoming(sets: readonly SetPrescription[]): string {
   return parts.join(' · ');
 }
 
-function aside(set: SetPrescription, units: string, current: boolean): string {
-  if (set.targetWeight !== null) {
-    return current
-      ? `${set.targetWeight} ${units}`
-      : `${set.targetWeight} ${units} · ${restLabel(set.restSeconds)}`;
-  }
-  return current ? 'log below' : restLabel(set.restSeconds);
+/** "2 skipped" or "45 lb × 5, 95 lb × 3" for the ramps already behind you. */
+function describeRamps(done: readonly CompletedSet[], units: 'lb' | 'kg'): string {
+  const label = `${done.length} ramp${done.length === 1 ? '' : 's'}`;
+  if (done.every((set) => set.skipped)) return `${label} · skipped`;
+  const values = done.slice(0, 3).map((set) => formatLogged(set, units));
+  return `${label} · ${values.join(', ')}${done.length > 3 ? ' …' : ''}`;
 }
 
 /**
- * Every set of one exercise as a row: done rows show their logged values and
- * open the inline editor on tap; the current row is marked and carries its
- * target load; sets still to come collapse into one line that expands on tap,
- * so the card stays short while nothing useful is hidden.
+ * The sets of one exercise, kept short. Ramps you have finished fold into one
+ * line that opens on tap; each finished working set is one line that opens the
+ * inline editor; everything still to come is one collapsed line. The set in
+ * front of you is not repeated here, because the logger below states it.
  */
 export function LoggedSets({
   entry,
@@ -64,72 +63,73 @@ export function LoggedSets({
   compact = false,
 }: LoggedSetsProps) {
   const [expanded, setExpanded] = useState(false);
+  const [rampsOpen, setRampsOpen] = useState(false);
   const rows = entry.sets.map((set) => {
     const done = logged.find((candidate) => candidate.setIndex === set.index);
-    const state: RowState = done
-      ? done.skipped
-        ? 'skipped'
-        : 'done'
-      : currentSetIndex === set.index
-        ? 'current'
-        : 'upcoming';
+    const state: RowState = done ? (done.skipped ? 'skipped' : 'done') : 'upcoming';
     return { set, done, state };
   });
   const upcoming = rows.filter((row) => row.state === 'upcoming').map((row) => row.set);
+  const settled = rows.filter((row) => row.state !== 'upcoming');
+  const finishedRamps = settled.filter((row) => row.set.kind === 'warmup');
+  const foldRamps = !rampsOpen && finishedRamps.length > 1;
+  const visible = foldRamps ? settled.filter((row) => row.set.kind !== 'warmup') : settled;
   const collapsed = !expanded && upcoming.length > 0;
-  const visible = collapsed ? rows.filter((row) => row.state !== 'upcoming') : rows;
-  const nextTarget = upcoming[0];
+  const nextTarget = upcoming.find((set) => set.index === currentSetIndex) ?? upcoming[0];
+  const undoneHere = (index: number) =>
+    undoable !== null && undoable.entryId === entry.id && undoable.setIndex === index;
+  const rampUndo = finishedRamps.some((row) => undoneHere(row.set.index));
 
   return (
     <ol className={`${styles.sets} ${compact ? styles.setsCompact : ''}`} aria-label="Sets">
-      {visible.map(({ set, done, state }) => {
-        const current = state === 'current';
-        const canUndo =
-          undoable !== null && undoable.entryId === entry.id && undoable.setIndex === set.index;
-        return (
-          <li key={set.index} className={styles.setRow} data-state={state} data-testid="set-row">
-            <span className={styles.setName}>
-              {describeSet(set, entry)}
-              {set.kind === 'warmup' ? <span className={styles.setTag}>warm-up</span> : null}
-              {set.kind === 'drop' ? <span className={styles.setTag}>drop</span> : null}
-            </span>
-            {done ? (
-              <button
-                type="button"
-                className={styles.setValue}
-                onClick={() => onEdit(set.index)}
-                aria-label={`Edit ${describeSet(set, entry)}: ${formatLogged(done, units)}`}
-                data-testid="logged-value"
-              >
-                <span className={styles.check} aria-hidden="true">
-                  ✓
-                </span>
-                {formatLogged(done, units)}
-              </button>
-            ) : (
-              <>
-                <span className={styles.setTarget}>
-                  {current ? 'now · ' : ''}
-                  {set.targetReps[0]}-{set.targetReps[1]} reps
-                  {set.kind === 'working'
-                    ? ` @ RIR ${set.targetRir}`
-                    : set.kind === 'warmup'
-                      ? ` · easy, RIR ${set.targetRir}`
-                      : ' · last clean rep'}
-                </span>
-                <span className={styles.setAside} data-testid="set-aside">
-                  {aside(set, units, current)}
-                </span>
-              </>
+      {foldRamps ? (
+        <li className={styles.setRow} data-state="summary" data-testid="set-row">
+          <button
+            type="button"
+            className={styles.setsToggle}
+            onClick={() => setRampsOpen(true)}
+            aria-expanded={false}
+            data-testid="ramps-summary"
+          >
+            ▸{' '}
+            {describeRamps(
+              finishedRamps.map((row) => row.done as CompletedSet),
+              units,
             )}
-            {canUndo ? (
-              <button type="button" className={styles.undo} onClick={onUndo} data-testid="undo-set">
-                Undo
-              </button>
-            ) : null}
-          </li>
-        );
-      })}
+          </button>
+          {rampUndo ? (
+            <button type="button" className={styles.undo} onClick={onUndo} data-testid="undo-set">
+              Undo
+            </button>
+          ) : null}
+        </li>
+      ) : null}
+      {visible.map(({ set, done, state }) => (
+        <li key={set.index} className={styles.setRow} data-state={state} data-testid="set-row">
+          <span className={styles.setName}>
+            {describeSet(set, entry)}
+            {set.kind === 'warmup' ? <span className={styles.setTag}>warm-up</span> : null}
+            {set.kind === 'drop' ? <span className={styles.setTag}>drop</span> : null}
+          </span>
+          <button
+            type="button"
+            className={styles.setValue}
+            onClick={() => onEdit(set.index)}
+            aria-label={`Edit ${describeSet(set, entry)}: ${formatLogged(done as CompletedSet, units)}`}
+            data-testid="logged-value"
+          >
+            <span className={styles.check} aria-hidden="true">
+              ✓
+            </span>
+            {formatLogged(done as CompletedSet, units)}
+          </button>
+          {undoneHere(set.index) ? (
+            <button type="button" className={styles.undo} onClick={onUndo} data-testid="undo-set">
+              Undo
+            </button>
+          ) : null}
+        </li>
+      ))}
       {collapsed ? (
         <li className={styles.setRow} data-state="summary" data-testid="set-row">
           <button
@@ -142,12 +142,41 @@ export function LoggedSets({
             ▸ {describeUpcoming(upcoming)}
           </button>
           {nextTarget ? (
-            <span className={styles.setAside}>
+            <span className={styles.setAside} data-testid="set-aside">
               {nextTarget.targetWeight !== null ? `${nextTarget.targetWeight} ${units}` : 'show'}
             </span>
           ) : null}
         </li>
       ) : null}
+      {expanded
+        ? upcoming.map((set) => (
+            <li
+              key={set.index}
+              className={styles.setRow}
+              data-state="upcoming"
+              data-testid="set-row"
+            >
+              <span className={styles.setName}>
+                {describeSet(set, entry)}
+                {set.kind === 'warmup' ? <span className={styles.setTag}>warm-up</span> : null}
+                {set.kind === 'drop' ? <span className={styles.setTag}>drop</span> : null}
+              </span>
+              <span className={styles.setTarget}>
+                {set.targetReps[0]}-{set.targetReps[1]} reps
+                {set.kind === 'working'
+                  ? ` @ RIR ${set.targetRir}`
+                  : set.kind === 'warmup'
+                    ? ` · easy, RIR ${set.targetRir}`
+                    : ' · last clean rep'}
+              </span>
+              <span className={styles.setAside} data-testid="set-aside">
+                {set.targetWeight !== null
+                  ? `${set.targetWeight} ${units} · ${restLabel(set.restSeconds)}`
+                  : restLabel(set.restSeconds)}
+              </span>
+            </li>
+          ))
+        : null}
       {expanded && upcoming.length > 0 ? (
         <li className={styles.setRow} data-state="summary">
           <button
