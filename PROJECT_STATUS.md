@@ -2,22 +2,22 @@
 
 _Last updated: 2026-09-12_
 
-| Item                   | Value                                                                                                                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                     |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                     |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                             |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                        |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                            |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, and 7 GREEN; 4 and 5 at their review gates. Maintenance 8, session polish (round three, the last of the owner's second list), at its review gate |
-| Phase gate             | Maintenance 8 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 7 GREEN (2026-09-12); 4 and 5 YELLOW (reviews still open)                                         |
-| Current branch         | `main`                                                                                                                                                                                                       |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                 |
-| Work in progress       | None. Maintenance 8 is at its review gate (`docs/reports/maintenance-8.md`) and completes the owner's second list; further work starts from a new request.                                                   |
-| Latest commit          | Maintenance 8 status, report, and live screenshots (this commit); app build under review is `33e217d`                                                                                                        |
-| Latest deployment      | `33e217d` deployed by Deploy Pages run 34697394699 (success); full browser suite passed against the live URL (150 passed + 14 skipped by design)                                                             |
-| Test totals            | Unit: 375 passed (76 files). Browser/mobile: 150 passed + 14 skipped by design locally and against the live URL                                                                                              |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                 |
+| Item                   | Value                                                                                                                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                   |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                   |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                           |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                      |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                          |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, and 7 GREEN; 4, 5, and 8 at their review gates. Maintenance 9, one database per person, at its review gate     |
+| Phase gate             | Maintenance 9 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 4, 5, and 8 YELLOW (reviews still open)                         |
+| Current branch         | `main`                                                                                                                                                                     |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                               |
+| Work in progress       | None. Maintenance 9 is at its review gate (`docs/reports/maintenance-9.md`). The owner's next step is creating a token for `life-record-p1` and handing over a setup link. |
+| Latest commit          | Maintenance 9 status, report, and live screenshots (this commit); app build under review is `c0b1bb8`                                                                      |
+| Latest deployment      | `c0b1bb8` deployed by Deploy Pages run 34710846449 (success); full browser suite passed against the live URL (156 passed + 14 skipped by design)                           |
+| Test totals            | Unit: 381 passed (78 files). Browser/mobile: 156 passed + 14 skipped by design locally and against the live URL                                                            |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                               |
 
 ## Phase checklist
 
@@ -138,6 +138,14 @@ _Last updated: 2026-09-12_
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 9: one database per person (YELLOW - awaiting review)
+
+- The cloud copy's database address sits beside the token, both on the device and neither in a backup nor the built files; the shipped default is unchanged, so an existing install is untouched until the field is edited.
+- Adopting a database this device has never used is checked first: it must answer, carry the `records` and `devices` tables, and not already hold rows from other devices, which needs a deliberate second tap. Offline, a new database is refused rather than saved on a promise.
+- Changing the address re-seeds: the cursor resets so the next sync pulls first, then every mirrored record is queued so the new database receives the whole history.
+- A personal setup link (`#/setup?db=...&token=...`) fills both values from the URL fragment, which never reaches a server, then scrubs itself from the address bar and lands on Settings.
+- Report: `docs/reports/maintenance-9.md`; design in `docs/cloud-copy.md`.
+
 ## Maintenance 8: session polish (YELLOW - awaiting review)
 
 - The tempo chip opens four labelled one-line rows (Tempo, Cue, Effort, Rest) with the research behind a closed "Why: the research" disclosure; each research line carries a bold two-word lead, the duplicate ramp-set line is gone, "X is as fast as you can" shows only when the tempo has an X, and the rest-style line only when the rest style is not Standard.
@@ -223,7 +231,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone: taps the tempo chip on a workout card and reads the
-four rows with the research folded; taps Location on Today, picks a place, and stays on the tab.
-Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`. This round completes the
-owner's second list.
+Owner opens the live link on an Android phone and checks Settings > Cloud copy shows the database
+address beside the token with their own install unchanged. Then, to bring one other person on:
+create a token for `life-record-p1` in the Turso dashboard and send that person a setup link.
+Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
