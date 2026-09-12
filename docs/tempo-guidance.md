@@ -114,3 +114,13 @@ is fitted to less time, rests shorten toward the floors before sets are trimmed 
 - Set rows and the logger say "warm-up" beside a ramp set's RIR and "last clean rep" for a drop
   set, so the working-set target and the warm-up target are never mistaken for each other.
 - The How-to panel's "Why this target" list ends with the effort and rest evidence for the set.
+
+## The skimmable detail (Maintenance 8)
+
+The tap on the tempo chip opens four labelled rows, each one line: Tempo (the notation and the
+phase cue, with "X is as fast as you can" only when the tempo has an X), Cue (the form cue),
+Effort (the RIR label and what it means for this set), and Rest (the length and why). The
+research sits behind one "Why: the research" disclosure, closed by default. Its lines come from
+`src/features/workout/evidence.ts`: each carries a two-word lead in bold, the duplicate ramp-set
+line (the tempo and the effort guidance each explained ramp sets) is dropped, and the rest-style
+line appears only when the profile's rest style is not Standard.

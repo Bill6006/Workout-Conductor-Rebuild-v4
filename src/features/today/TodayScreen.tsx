@@ -15,6 +15,7 @@ import { allEntries, type WorkoutBlock, type WorkoutEntry } from '../../engine/w
 import type { CoachAction } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
 import { GOAL_OPTIONS, STYLE_OPTIONS, labelFor } from '../profile/labels';
+import { LocationSheet } from './LocationSheet';
 import { ReadinessSheet } from './ReadinessSheet';
 import { WorkoutPreviewCard } from './WorkoutPreviewCard';
 import styles from './TodayScreen.module.css';
@@ -40,6 +41,7 @@ export function TodayScreen() {
   const today = useTodayWorkout();
   const [selected, setSelected] = useState<Selection | null>(null);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [choosingPlace, setChoosingPlace] = useState(false);
   const coach = useCoach();
   const history = useAppSelector((state) => state.history);
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
@@ -137,6 +139,7 @@ export function TodayScreen() {
         workout={workout}
         defaultEstimatedMinutes={defaultEstimatedMinutes}
         location={location}
+        onChangeLocation={() => setChoosingPlace(true)}
         onSelect={(entry, block) => setSelected({ entry, block })}
         onDurationChange={(choice) => void store.setDurationChoice(choice)}
         summary={session.lastSummary}
@@ -182,6 +185,8 @@ export function TodayScreen() {
           {readiness ? 'Update check-in' : 'Check in'}
         </button>
       </Card>
+
+      <LocationSheet open={choosingPlace} onClose={() => setChoosingPlace(false)} />
 
       <ReadinessSheet
         key={readiness ? 'set' : 'unset'}

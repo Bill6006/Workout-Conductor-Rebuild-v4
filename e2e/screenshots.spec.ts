@@ -97,6 +97,11 @@ test.describe('screenshots @screenshots', () => {
 
       await page.getByTestId('coach-card').scrollIntoViewIfNeeded();
       await capture(page, testInfo, 'today-coach-card');
+      await page.getByTestId('location-open').click();
+      await expect(page.getByRole('dialog', { name: 'Where are you training?' })).toBeVisible();
+      await capture(page, testInfo, 'today-location-sheet');
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toBeHidden();
       await page.getByTestId('readiness-open').click();
       await expect(page.getByRole('dialog', { name: 'Quick check-in' })).toBeVisible();
       await capture(page, testInfo, 'today-readiness-check-in');
@@ -229,6 +234,12 @@ test.describe('screenshots @screenshots', () => {
     await page.getByTestId('start-workout').click();
     await expect(page.getByTestId('workout-stats')).toBeVisible();
     await capture(page, testInfo, 'workout-active-start');
+    await page.getByTestId('exercise-card').first().getByTestId('tempo-line').click();
+    await expect(page.getByTestId('tempo-detail')).toBeVisible();
+    await page.getByTestId('tempo-detail').scrollIntoViewIfNeeded();
+    await capture(page, testInfo, 'workout-tempo-detail');
+    await page.getByTestId('exercise-card').first().getByTestId('tempo-line').click();
+    await expect(page.getByTestId('tempo-detail')).toHaveCount(0);
     await page.getByTestId('exercise-card').first().getByTestId('know-max').click();
     const maxSheet = page.getByRole('dialog', { name: /Your max for/ });
     await expect(maxSheet).toBeVisible();

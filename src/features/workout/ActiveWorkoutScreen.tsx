@@ -400,6 +400,7 @@ export function ActiveWorkoutScreen() {
           badge={prBadge(entry)}
           onShowDetail={() => setSelected({ entry, block })}
           onKnowMax={knowMaxFor(entry, block)}
+          restStyle={profile.restStyle}
         >
           {loggerFor(entry, block)}
         </ExerciseCard>
@@ -431,6 +432,7 @@ export function ActiveWorkoutScreen() {
             badge={prBadge(entry)}
             onShowDetail={() => setSelected({ entry, block })}
             onKnowMax={knowMaxFor(entry, block)}
+            restStyle={profile.restStyle}
           >
             {loggerFor(entry, block)}
           </ExerciseCard>

@@ -215,3 +215,61 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* The skimmable detail: four labelled rows, then the research behind a closed disclosure */
+.detailRows {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: 3.6rem minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.detailRow dt {
+  padding-top: 2px;
+  color: var(--color-text-subtle);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.detailRow dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.why {
+  margin-top: 8px;
+}
+
+.whySummary {
+  cursor: pointer;
+  color: var(--color-accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  list-style: none;
+}
+
+.whySummary::-webkit-details-marker {
+  display: none;
+}
+
+.whySummary::before {
+  content: '▸ ';
+}
+
+.why[open] .whySummary::before {
+  content: '▾ ';
+}
+
+.tempoEvidence strong {
+  color: var(--color-text);
+  font-weight: 700;
+}

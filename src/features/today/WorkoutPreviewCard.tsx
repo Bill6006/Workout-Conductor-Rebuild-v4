@@ -21,6 +21,8 @@ interface WorkoutPreviewCardProps {
   /** Complete Default session length, shown in the dropdown's Default option. */
   defaultEstimatedMinutes: number;
   location: LocationProfile | undefined;
+  /** Opens the place chooser; without it the control links to the Plan tab. */
+  onChangeLocation?: () => void;
   onSelect: (entry: WorkoutEntry, block: WorkoutBlock) => void;
   onDurationChange: (choice: DurationChoice) => void;
   /** The last recalibration's compact summary, until dismissed. */
@@ -117,6 +119,7 @@ export function WorkoutPreviewCard({
   workout,
   defaultEstimatedMinutes,
   location,
+  onChangeLocation,
   onSelect,
   onDurationChange,
   summary = null,
@@ -148,10 +151,22 @@ export function WorkoutPreviewCard({
           defaultMinutes={defaultEstimatedMinutes}
           onChange={onDurationChange}
         />
-        <a className={styles.meta} href={routeHref('plan')}>
-          <span className={styles.metaLabel}>Location</span>
-          <span className={styles.metaValue}>{location?.name ?? 'Not set'} ›</span>
-        </a>
+        {onChangeLocation ? (
+          <button
+            type="button"
+            className={`${styles.meta} ${styles.metaButton}`}
+            onClick={onChangeLocation}
+            data-testid="location-open"
+          >
+            <span className={styles.metaLabel}>Location</span>
+            <span className={styles.metaValue}>{location?.name ?? 'Not set'} ›</span>
+          </button>
+        ) : (
+          <a className={styles.meta} href={routeHref('plan')}>
+            <span className={styles.metaLabel}>Location</span>
+            <span className={styles.metaValue}>{location?.name ?? 'Not set'} ›</span>
+          </a>
+        )}
       </div>
 
       <p className={styles.estimate} data-testid="workout-estimate">

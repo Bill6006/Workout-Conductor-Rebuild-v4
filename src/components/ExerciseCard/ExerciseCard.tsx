@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react';
 import { requireExercise } from '../../catalog/exercises/catalog';
-import type { UnitSystem } from '../../core/validation/profile';
+import type { RestStyle, UnitSystem } from '../../core/validation/profile';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
 import { workingSets, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
 import type { PreviousPerformance } from '../../features/workout/previousPerformance';
 import { useCustomMedia } from '../../features/library/useCustomMedia';
 import { effortGuidance, restGuidance } from '../../features/workout/effort';
+import { evidenceLines } from '../../features/workout/evidence';
 import { tempoCue } from '../../features/workout/tempo';
 import { ExerciseThumb } from '../ExerciseDetail/ExerciseMedia';
 import { TempoBar } from '../TempoBar/TempoBar';
@@ -33,6 +34,8 @@ export interface ExerciseCardProps {
   onShowDetail?: () => void;
   /** The one-time max offer on a lift with no history; absent once a set is logged or it was declined. */
   onKnowMax?: () => void;
+  /** The profile's rest style; the rest-style research line shows only when it is not Standard. */
+  restStyle?: RestStyle;
 }
 
 function roleLabel(entry: WorkoutEntry): string {
@@ -73,6 +76,7 @@ export function ExerciseCard({
   badge = null,
   onShowDetail,
   onKnowMax,
+  restStyle,
 }: ExerciseCardProps) {
   const [tempoOpen, setTempoOpen] = useState(false);
   const exercise = requireExercise(entry.exerciseId);
@@ -88,6 +92,10 @@ export function ExerciseCard({
     entry.role,
   );
   const restNote = restGuidance(entry.role, rest);
+  const research = evidenceLines(
+    [...tempo.evidence, ...effort.evidence, ...restNote.evidence],
+    { restStyle },
+  );
 
   return (
     <section
@@ -176,22 +184,43 @@ export function ExerciseCard({
       </header>
       {tempoOpen ? (
         <div className={styles.tempoDetail} data-testid="tempo-detail">
-          <p className={styles.tempoDetailLine}>
-            <strong>{tempo.tempo}</strong> · lower, pause, lift, squeeze in seconds; X is as fast as
-            you can. {tempo.why}.
-          </p>
-          {tempo.cue ? <p className={styles.tempoDetailLine}>Cue: {tempo.cue}</p> : null}
-          <p className={styles.tempoDetailLine} data-testid="effort-line">
-            Effort {effort.label}: {effort.why}.
-          </p>
-          <p className={styles.tempoDetailLine} data-testid="rest-line">
-            {restNote.label}: {restNote.why}.
-          </p>
-          <ul className={styles.tempoEvidence} aria-label="Why this tempo, effort, and rest">
-            {[...tempo.evidence, ...effort.evidence, ...restNote.evidence].map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
+          <dl className={styles.detailRows}>
+            <div className={styles.detailRow}>
+              <dt>Tempo</dt>
+              <dd>
+                <strong>{tempo.tempo}</strong> · {tempo.why}
+                {tempo.tempo.includes('X') ? '; X is as fast as you can' : ''}
+              </dd>
+            </div>
+            {tempo.cue ? (
+              <div className={styles.detailRow}>
+                <dt>Cue</dt>
+                <dd>{tempo.cue}</dd>
+              </div>
+            ) : null}
+            <div className={styles.detailRow} data-testid="effort-line">
+              <dt>Effort</dt>
+              <dd>
+                <strong>{effort.label}</strong> · {effort.why}
+              </dd>
+            </div>
+            <div className={styles.detailRow} data-testid="rest-line">
+              <dt>Rest</dt>
+              <dd>
+                <strong>{restNote.label.replace(/^Rest /, '')}</strong> · {restNote.why}
+              </dd>
+            </div>
+          </dl>
+          <details className={styles.why} data-testid="tempo-why">
+            <summary className={styles.whySummary}>Why: the research</summary>
+            <ul className={styles.tempoEvidence} aria-label="Why this tempo, effort, and rest">
+              {research.map((line) => (
+                <li key={line.text}>
+                  <strong>{line.lead}.</strong> {line.text}
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       ) : null}
       {children}

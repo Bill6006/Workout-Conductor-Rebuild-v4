@@ -50,9 +50,17 @@ describe('ExerciseCard', () => {
     expect(chip).toHaveTextContent(/^Tempo\s*\d-\d-[\dX]-\d ▾$/);
     expect(screen.getByTestId('tempo-bar')).toBeInTheDocument();
     await user.click(chip);
-    expect(screen.getByTestId('tempo-detail')).toHaveTextContent(/Cue: /);
+    expect(screen.getByTestId('tempo-detail')).toHaveTextContent(/Cue/);
+    expect(screen.getAllByRole('term').map((term) => term.textContent)).toEqual([
+      'Tempo',
+      'Cue',
+      'Effort',
+      'Rest',
+    ]);
+    expect(screen.getByTestId('tempo-why')).not.toHaveAttribute('open');
     expect(
-      screen.getByRole('list', { name: 'Why this tempo, effort, and rest' }).children.length,
+      screen.getByRole('list', { name: 'Why this tempo, effort, and rest', hidden: true })
+        .children.length,
     ).toBeGreaterThan(1);
     expect(chip).toHaveAttribute('aria-expanded', 'true');
     await user.click(chip);
