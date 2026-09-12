@@ -99,6 +99,8 @@ test.describe('screenshots @screenshots', () => {
       await capture(page, testInfo, 'today-coach-card');
       await page.getByTestId('location-open').click();
       await expect(page.getByRole('dialog', { name: 'Where are you training?' })).toBeVisible();
+      // Let the sheet's fade-in finish so the capture is crisp.
+      await page.waitForTimeout(500);
       await capture(page, testInfo, 'today-location-sheet');
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toBeHidden();

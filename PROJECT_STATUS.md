@@ -2,22 +2,22 @@
 
 _Last updated: 2026-09-12_
 
-| Item                   | Value                                                                                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                    |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                    |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                            |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                       |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                           |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, and 7 GREEN; 4 and 5 at their review gates. Maintenance 8, session polish (round three of the owner's second list), in progress |
-| Phase gate             | Maintenance 7 GREEN from the owner on 2026-09-12. Maintenance 4 and 5 YELLOW (reviews still open). Maintenance 8 in progress, no gate yet                                                   |
-| Current branch         | `main`                                                                                                                                                                                      |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                |
-| Work in progress       | Maintenance 8: the skimmable tempo, effort, and rest detail, and the Location sheet on Today.                                                                                               |
-| Latest commit          | Maintenance 7 status and report (this commit); app build under review is `a37b927`                                                                                                          |
-| Latest deployment      | `a37b927` deployed by Deploy Pages run 34683348484 (success); full browser suite passed against the live URL (144 passed + 14 skipped by design)                                            |
-| Test totals            | Unit: 370 passed (74 files). Browser/mobile: 144 passed + 14 skipped by design locally and against the live URL                                                                             |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                |
+| Item                   | Value                                                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                     |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                     |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                             |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                        |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                            |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, and 7 GREEN; 4 and 5 at their review gates. Maintenance 8, session polish (round three, the last of the owner's second list), at its review gate |
+| Phase gate             | Maintenance 8 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 7 GREEN (2026-09-12); 4 and 5 YELLOW (reviews still open)                                         |
+| Current branch         | `main`                                                                                                                                                                                                       |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                 |
+| Work in progress       | None. Maintenance 8 is at its review gate (`docs/reports/maintenance-8.md`) and completes the owner's second list; further work starts from a new request.                                                   |
+| Latest commit          | Maintenance 8 status and report (this commit); app build under review is `f41807a`                                                                                                                           |
+| Latest deployment      | `f41807a` deployed by Deploy Pages run 34684571757 (success); full browser suite passed against the live URL (150 passed + 14 skipped by design)                                                             |
+| Test totals            | Unit: 372 passed (75 files). Browser/mobile: 150 passed + 14 skipped by design locally and against the live URL                                                                                              |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                 |
 
 ## Phase checklist
 
@@ -138,6 +138,12 @@ _Last updated: 2026-09-12_
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 8: session polish (YELLOW - awaiting review)
+
+- The tempo chip opens four labelled one-line rows (Tempo, Cue, Effort, Rest) with the research behind a closed "Why: the research" disclosure; each research line carries a bold two-word lead, the duplicate ramp-set line is gone, "X is as fast as you can" shows only when the tempo has an X, and the rest-style line only when the rest style is not Standard.
+- The Location control on Today opens a sheet of saved places with today's marked; one tap switches the place through the existing location recalibration with its banner, Settings shows the same choice, and a link leads to the Plan tab for editing equipment.
+- Report: `docs/reports/maintenance-8.md`; the detail is described in `docs/tempo-guidance.md`.
+
 ## Maintenance 7: the coach (GREEN)
 
 - Goals under one rule: the goal decides where the weekly volume goes, the programming style decides how each set is done. "Balanced development" (identical to "Build muscle" in every engine) is retired and reads as Build muscle on the way in; "More overall size" leads with legs, back, and chest; "Strength progress" carries a hint line pointing at Programming style.
@@ -215,6 +221,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Build Maintenance 8 (session polish) to its review gate: four labelled rows and a closed "Why"
-disclosure in the tempo detail, and a Location sheet on Today; then deploy, verify live, capture, and
-stop at YELLOW for the owner's Android review.
+Owner opens the live link on an Android phone: taps the tempo chip on a workout card and reads the
+four rows with the research folded; taps Location on Today, picks a place, and stays on the tab.
+Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`. This round completes the
+owner's second list.
