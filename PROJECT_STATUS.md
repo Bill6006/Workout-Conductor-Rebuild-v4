@@ -14,9 +14,9 @@ _Last updated: 2026-09-12_
 | Current branch         | `main`                                                                                                                                                                                                       |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                 |
 | Work in progress       | None. Maintenance 8 is at its review gate (`docs/reports/maintenance-8.md`) and completes the owner's second list; further work starts from a new request.                                                   |
-| Latest commit          | Maintenance 8 status and report (this commit); app build under review is `f41807a`                                                                                                                           |
-| Latest deployment      | `f41807a` deployed by Deploy Pages run 34684571757 (success); full browser suite passed against the live URL (150 passed + 14 skipped by design)                                                             |
-| Test totals            | Unit: 372 passed (75 files). Browser/mobile: 150 passed + 14 skipped by design locally and against the live URL                                                                                              |
+| Latest commit          | Maintenance 8 status, report, and live screenshots (this commit); app build under review is `33e217d`                                                                                                        |
+| Latest deployment      | `33e217d` deployed by Deploy Pages run 34697394699 (success); full browser suite passed against the live URL (150 passed + 14 skipped by design)                                                             |
+| Test totals            | Unit: 375 passed (76 files). Browser/mobile: 150 passed + 14 skipped by design locally and against the live URL                                                                                              |
 | Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                 |
 
 ## Phase checklist
@@ -142,6 +142,8 @@ _Last updated: 2026-09-12_
 
 - The tempo chip opens four labelled one-line rows (Tempo, Cue, Effort, Rest) with the research behind a closed "Why: the research" disclosure; each research line carries a bold two-word lead, the duplicate ramp-set line is gone, "X is as fast as you can" shows only when the tempo has an X, and the rest-style line only when the rest style is not Standard.
 - The Location control on Today opens a sheet of saved places with today's marked; one tap switches the place through the existing location recalibration with its banner, Settings shows the same choice, and a link leads to the Plan tab for editing equipment.
+- A lean active card, from the owner's first look: the logger alone names the set, the header's target line and the set list's "now" row are gone, finished ramps fold into one line that opens on tap, and the phase legend under the bar goes because the tempo chip carries it.
+- A set logged with zero reps records as a skip with no weight, and never feeds the engines or the next set's prefill.
 - Report: `docs/reports/maintenance-8.md`; the detail is described in `docs/tempo-guidance.md`.
 
 ## Maintenance 7: the coach (GREEN)
