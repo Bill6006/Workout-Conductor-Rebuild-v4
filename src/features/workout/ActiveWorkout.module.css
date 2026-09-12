@@ -116,10 +116,6 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.setRow[data-state='current'] {
-  color: var(--color-accent);
-}
-
 .setRow[data-state='upcoming'] {
   color: var(--color-text-subtle);
 }
@@ -515,10 +511,6 @@
   font-size: 0.76rem;
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-.setRow[data-state='current'] .setAside {
-  color: var(--color-text-muted);
 }
 
 .setRow[data-state='summary'] {

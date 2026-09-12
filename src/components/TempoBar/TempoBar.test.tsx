@@ -56,4 +56,26 @@ describe('TempoBar', () => {
     expect(bar).toHaveTextContent('bottom');
     expect(bar).toHaveTextContent('top');
   });
+
+  it('still animates the fill when the card hides the legend', () => {
+    const tempo = tempoCue('primary-strength', 'working', requireExercise('barbell-bench-press'));
+    const animations: Keyframe[][] = [];
+    const original = Element.prototype.animate;
+    Element.prototype.animate = function animate(keyframes: unknown) {
+      animations.push(keyframes as Keyframe[]);
+      return { cancel() {} } as unknown as Animation;
+    } as typeof Element.prototype.animate;
+    try {
+      render(
+        <TempoBar phases={tempo.phases} totalSeconds={tempo.totalSeconds} showLegend={false} />,
+      );
+      const bar = screen.getByTestId('tempo-bar');
+      expect(bar.querySelectorAll('[data-phase]')).toHaveLength(0);
+      // The legend is gone, but the fill is the point of the bar and must still run.
+      expect(animations).toHaveLength(1);
+      expect(animations[0]).toEqual(fillKeyframes(tempo.phases));
+    } finally {
+      Element.prototype.animate = original;
+    }
+  });
 });

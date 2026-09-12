@@ -1036,10 +1036,10 @@ export class AppStore {
       pausedAt: null,
       completed: { ...completed, currentEntryId: next?.entryId ?? null },
       rest,
-      drafts: {
-        ...session.drafts,
-        [entryId]: { weight: values.weight, reps, rir: values.rir },
-      },
+      // A skip carries no numbers, so it never becomes the next set's prefill.
+      drafts: skipped
+        ? session.drafts
+        : { ...session.drafts, [entryId]: { weight: values.weight, reps, rir: values.rir } },
     });
 
     if (!isEdit && set.kind === 'working' && !skipped) {

@@ -33,15 +33,16 @@ export function TempoBar({ phases, totalSeconds, showLegend = true }: TempoBarPr
 
   useEffect(() => {
     const fill = fillRef.current;
+    // The legend is optional: the fill must still run without it.
     const legend = legendRef.current;
-    if (!fill || !legend || reducedMotion || typeof fill.animate !== 'function') return undefined;
+    if (!fill || reducedMotion || typeof fill.animate !== 'function') return undefined;
     const keyframes = fillKeyframes(phases);
     if (keyframes.length === 0) return undefined;
     const duration = Math.max(1, totalSeconds) * 1000;
     const options: KeyframeAnimationOptions = { duration, iterations: Infinity, easing: 'linear' };
     const animations = [fill.animate(keyframes, options)];
     const windows = phaseWindows(phases);
-    for (const item of Array.from(legend.querySelectorAll<HTMLElement>('[data-phase]'))) {
+    for (const item of Array.from(legend?.querySelectorAll<HTMLElement>('[data-phase]') ?? [])) {
       const window = windows.find((candidate) => candidate.key === item.dataset.phase);
       if (!window) continue;
       animations.push(
