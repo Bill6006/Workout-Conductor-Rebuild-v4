@@ -175,37 +175,79 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
   const name = options.name ?? DB_NAME;
   const now = options.now ?? (() => new Date().toISOString());
 
-  let db: IDBDatabase;
-  try {
-    db = await openAt(factory, name, DB_VERSION);
-  } catch (error) {
-    if (!isVersionError(error)) throw toUnavailable(error);
-    // A database with this name already exists at a higher version: another app on this
-    // origin, or a newer build. Open it as it is and add any missing stores one version up.
-    // Existing stores are never removed.
+  /** Marks the connection dead so the next call reopens instead of failing. */
+  let stale = false;
+  /** Set by `close()`: a deliberate close is never undone by a reopen. */
+  let disposed = false;
+
+  async function connect(): Promise<IDBDatabase> {
+    let opened: IDBDatabase;
     try {
-      const existing = await openAt(factory, name);
-      const currentVersion = existing.version;
-      const missing = missingStores(existing);
-      existing.close();
-      db = await openAt(factory, name, missing ? currentVersion + 1 : currentVersion);
-    } catch (recoveryError) {
-      throw toUnavailable(recoveryError);
+      opened = await openAt(factory, name, DB_VERSION);
+    } catch (error) {
+      if (!isVersionError(error)) throw toUnavailable(error);
+      // A database with this name already exists at a higher version: another app on this
+      // origin, or a newer build. Open it as it is and add any missing stores one version up.
+      // Existing stores are never removed.
+      try {
+        const existing = await openAt(factory, name);
+        const currentVersion = existing.version;
+        const missing = missingStores(existing);
+        existing.close();
+        opened = await openAt(factory, name, missing ? currentVersion + 1 : currentVersion);
+      } catch (recoveryError) {
+        throw toUnavailable(recoveryError);
+      }
     }
-  }
-  // The same version number can exist with stores missing (created by another app at exactly
-  // our version). An open at an equal version never upgrades, so add the stores one version up.
-  if (missingStores(db)) {
-    const currentVersion = db.version;
-    db.close();
-    try {
-      db = await openAt(factory, name, currentVersion + 1);
-    } catch (recoveryError) {
-      throw toUnavailable(recoveryError);
+    // The same version number can exist with stores missing (created by another app at exactly
+    // our version). An open at an equal version never upgrades, so add the stores one version up.
+    if (missingStores(opened)) {
+      const currentVersion = opened.version;
+      opened.close();
+      try {
+        opened = await openAt(factory, name, currentVersion + 1);
+      } catch (recoveryError) {
+        throw toUnavailable(recoveryError);
+      }
     }
+    // Another connection wants to upgrade: step aside so it can, and remember that this
+    // handle is dead. Without the flag every later write, a finished workout included,
+    // would fail on a closed connection with no way back but a reload.
+    opened.onversionchange = () => {
+      stale = true;
+      opened.close();
+    };
+    return opened;
   }
 
-  db.onversionchange = () => db.close();
+  let db = await connect();
+
+  async function ensureOpen(): Promise<void> {
+    if (disposed) throw new StorageUnavailableError('The database was closed.');
+    if (!stale) return;
+    db = await connect();
+    stale = false;
+  }
+
+  /** A transaction on a connection that has gone away, as opposed to a real failure. */
+  function isConnectionGone(error: unknown): boolean {
+    const named = (error as { name?: string } | null)?.name;
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return named === 'InvalidStateError' || /clos(ing|ed)/i.test(message);
+  }
+
+  /** Runs the work, and once reopens and retries if the connection had gone away. */
+  async function withConnection<T>(work: () => Promise<T>): Promise<T> {
+    await ensureOpen();
+    try {
+      return await work();
+    } catch (error) {
+      if (disposed || !isConnectionGone(error)) throw error;
+      stale = true;
+      await ensureOpen();
+      return work();
+    }
+  }
 
   const outboxListeners = new Set<() => void>();
   const notifyOutbox = () => {
@@ -217,10 +259,12 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
     mode: IDBTransactionMode,
     operation: (objectStore: IDBObjectStore) => IDBRequest<T>,
   ): Promise<T> {
-    const transaction = db.transaction(store, mode);
-    const request = operation(transaction.objectStore(store));
-    const [result] = await Promise.all([requestToPromise(request), transactionDone(transaction)]);
-    return result;
+    return withConnection(async () => {
+      const transaction = db.transaction(store, mode);
+      const request = operation(transaction.objectStore(store));
+      const [result] = await Promise.all([requestToPromise(request), transactionDone(transaction)]);
+      return result;
+    });
   }
 
   /** One readwrite transaction across a synced store and the outbox, so they cannot disagree. */
@@ -228,9 +272,11 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
     store: SyncedStore,
     operation: (objectStore: IDBObjectStore, outbox: IDBObjectStore) => void,
   ): Promise<void> {
-    const transaction = db.transaction([store, 'outbox'], 'readwrite');
-    operation(transaction.objectStore(store), transaction.objectStore('outbox'));
-    await transactionDone(transaction);
+    await withConnection(async () => {
+      const transaction = db.transaction([store, 'outbox'], 'readwrite');
+      operation(transaction.objectStore(store), transaction.objectStore('outbox'));
+      await transactionDone(transaction);
+    });
     notifyOutbox();
   }
 
@@ -290,6 +336,9 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
       outboxListeners.add(listener);
       return () => outboxListeners.delete(listener);
     },
-    close: () => db.close(),
+    close: () => {
+      disposed = true;
+      db.close();
+    },
   };
 }
