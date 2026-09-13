@@ -21,8 +21,9 @@ the skimmable tempo detail and the Location sheet on Today.
   the same thing three times: a target line in the header, a "now" row in the set list, and the
   logger. Now the logger alone names the set, as "Set 2 of 3", and the header's target line is
   gone. The set list drops the "now" row, folds finished ramps into one line that opens on tap,
-  and keeps each finished working set as its own editable line. The phase legend under the tempo
-  bar goes, because the tempo chip already carries it. "Last time" and the role live behind How
+  and keeps each finished working set as its own editable line. The phase legend under the tempo bar was
+  removed here and put back on 2026-09-13 at the owner's request, once measurement showed it
+  fits in space the taller right-hand column already occupies, so the card does not grow. "Last time" and the role live behind How
   to, so the header keeps that line only when the "Know your max?" offer is on it. About half
   the height, with the eye landing on the logger.
 - **A zero-rep log is a skip.** Logging a set with zero reps recorded it as a real set of zero,

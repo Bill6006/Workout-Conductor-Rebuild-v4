@@ -18,31 +18,37 @@ async function seeded() {
 }
 
 describe('LibraryScreen', () => {
-  it('lists the whole catalog, then filters by text and muscle group', async () => {
-    const { store } = await seeded();
-    const user = userEvent.setup();
-    render(
-      <Providers store={store}>
-        <LibraryScreen />
-      </Providers>,
-    );
-    expect(screen.getByTestId('library-count')).toHaveTextContent(
-      `${EXERCISES.length} of ${EXERCISES.length} exercises`,
-    );
+  // Renders every exercise in the catalog, so it needs more than the default five seconds
+  // on a loaded machine. It is slow by nature, not flaky.
+  it(
+    'lists the whole catalog, then filters by text and muscle group',
+    { timeout: 20_000 },
+    async () => {
+      const { store } = await seeded();
+      const user = userEvent.setup();
+      render(
+        <Providers store={store}>
+          <LibraryScreen />
+        </Providers>,
+      );
+      expect(screen.getByTestId('library-count')).toHaveTextContent(
+        `${EXERCISES.length} of ${EXERCISES.length} exercises`,
+      );
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search exercises' }), 'curl');
-    const rows = screen.getAllByTestId('library-row');
-    expect(rows.length).toBeGreaterThanOrEqual(6);
-    expect(rows.every((row) => /curl/i.test(row.textContent ?? ''))).toBe(true);
+      await user.type(screen.getByRole('searchbox', { name: 'Search exercises' }), 'curl');
+      const rows = screen.getAllByTestId('library-row');
+      expect(rows.length).toBeGreaterThanOrEqual(6);
+      expect(rows.every((row) => /curl/i.test(row.textContent ?? ''))).toBe(true);
 
-    await user.clear(screen.getByRole('searchbox', { name: 'Search exercises' }));
-    await user.click(screen.getByRole('button', { name: 'Legs' }));
-    expect(
-      screen
-        .getAllByTestId('library-row')
-        .every((row) => /Quads|Glutes|Hamstrings|Calves/.test(row.textContent ?? '')),
-    ).toBe(true);
-  });
+      await user.clear(screen.getByRole('searchbox', { name: 'Search exercises' }));
+      await user.click(screen.getByRole('button', { name: 'Legs' }));
+      expect(
+        screen
+          .getAllByTestId('library-row')
+          .every((row) => /Quads|Glutes|Hamstrings|Calves/.test(row.textContent ?? '')),
+      ).toBe(true);
+    },
+  );
 
   it('opens an exercise with its demonstration, instructions, and ranked alternatives', async () => {
     const { store } = await seeded();

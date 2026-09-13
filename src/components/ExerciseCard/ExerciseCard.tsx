@@ -146,7 +146,7 @@ export function ExerciseCard({
             aria-expanded={tempoOpen}
             aria-label={`Tempo ${tempo.tempo}: ${tempoOpen ? 'hide' : 'show'} the reason and cue`}
           >
-            <TempoBar phases={tempo.phases} totalSeconds={tempo.totalSeconds} showLegend={false} />
+            <TempoBar phases={tempo.phases} totalSeconds={tempo.totalSeconds} />
           </button>
         </div>
         <div className={styles.headAside}>
