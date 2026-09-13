@@ -1,6 +1,6 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-12_
+_Last updated: 2026-09-13_
 
 | Item                   | Value                                                                                                                                                                      |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -14,8 +14,8 @@ _Last updated: 2026-09-12_
 | Current branch         | `main`                                                                                                                                                                     |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                               |
 | Work in progress       | None. Maintenance 9 is at its review gate (`docs/reports/maintenance-9.md`). The owner's next step is creating a token for `life-record-p1` and handing over a setup link. |
-| Latest commit          | Maintenance 9 status, report, and live screenshots (this commit); app build under review is `c0b1bb8`                                                                      |
-| Latest deployment      | `c0b1bb8` deployed by Deploy Pages run 34710846449 (success); full browser suite passed against the live URL (156 passed + 14 skipped by design)                           |
+| Latest commit          | Tempo phase legend restored and live screenshots (this commit); app build under review is `5efb22b`                                                                        |
+| Latest deployment      | `5efb22b` deployed by Deploy Pages run 34752446441 (success); full browser suite passed against the live URL (156 passed + 14 skipped by design)                           |
 | Test totals            | Unit: 381 passed (78 files). Browser/mobile: 156 passed + 14 skipped by design locally and against the live URL                                                            |
 | Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                               |
 
