@@ -75,7 +75,7 @@ const CONTENT_RULES = [
     id: 'jwt-token',
     scope: 'all',
     description:
-      'Database and bearer tokens (JWT-shaped) must never be committed or shipped; the cloud copy token lives only in IndexedDB on the device.',
+      "Database and bearer tokens (JWT-shaped) must never be committed or shipped; the cloud copy token lives only in the app's own storage on the device.",
     pattern: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   },
   {

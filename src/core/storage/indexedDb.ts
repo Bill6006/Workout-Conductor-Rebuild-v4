@@ -18,6 +18,14 @@
 export const DB_NAME = 'workout-conductor-v4';
 export const DB_VERSION = 5;
 
+/**
+ * Every write is flushed to disk before it counts. The browser's default lets a
+ * write sit acknowledged but unflushed, which is the one way a committed record
+ * can still be gone after the process is killed. A save here is small and rare
+ * enough that the cost is nothing next to a lost workout.
+ */
+const STRICT: IDBTransactionOptions = { durability: 'strict' };
+
 export const STORE_NAMES = [
   'profile',
   'locations',
@@ -260,7 +268,7 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
     operation: (objectStore: IDBObjectStore) => IDBRequest<T>,
   ): Promise<T> {
     return withConnection(async () => {
-      const transaction = db.transaction(store, mode);
+      const transaction = db.transaction(store, mode, mode === 'readwrite' ? STRICT : undefined);
       const request = operation(transaction.objectStore(store));
       const [result] = await Promise.all([requestToPromise(request), transactionDone(transaction)]);
       return result;
@@ -273,7 +281,7 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
     operation: (objectStore: IDBObjectStore, outbox: IDBObjectStore) => void,
   ): Promise<void> {
     await withConnection(async () => {
-      const transaction = db.transaction([store, 'outbox'], 'readwrite');
+      const transaction = db.transaction([store, 'outbox'], 'readwrite', STRICT);
       operation(transaction.objectStore(store), transaction.objectStore('outbox'));
       await transactionDone(transaction);
     });

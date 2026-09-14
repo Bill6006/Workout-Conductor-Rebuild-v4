@@ -4,7 +4,7 @@ Workout Conductor is local-first. These rules are binding for every commit and e
 and they are enforced automatically by `scripts/privacy-scan.mjs`, which runs before each deploy.
 The optional cloud copy (`docs/cloud-copy.md`) does not change them: it is off until the owner
 pastes a database token into Settings on a device, and that token lives only in the app's own
-storage on that device.
+storage on that device: two copies, in IndexedDB and in local storage, both on the device.
 
 ## What may be committed
 
@@ -21,15 +21,17 @@ storage on that device.
 - Real workout history, personal notes, backups, exports, or restore files.
 - Email addresses, phone numbers, or any other contact details.
 - Credentials, API keys, tokens, private keys. The cloud copy's database token is never in
-  source, the built bundle, tests, CI, or logs; it is pasted once into Settings and stored in
-  IndexedDB on that device only, and it is never part of a backup or an export.
+  source, the built bundle, tests, CI, or logs; it is pasted once into Settings and stored on
+  that device only, in IndexedDB and in a second copy in local storage, and it is never part of
+  a backup or an export. The token log and marks beside it hold dates and words, never the token.
 - Analytics, telemetry, advertising, or tracking endpoints of any kind.
 - Anything that identifies a real person other than the public GitHub account that owns the repo.
 
 ## Where real data lives
 
 - Workout history and durable data: IndexedDB in the user's browser.
-- Small settings and active-session metadata: localStorage in the user's browser.
+- Small settings, active-session metadata, and the second copy of the cloud token with its log:
+  localStorage in the user's browser.
 - Backups: exported by the user to a file they control. Never uploaded anywhere by the app.
 - Cloud copy (optional): with a token on the device, the profile, places, workouts, meta,
   custom exercises, notes and cues, and saved workouts are mirrored to the owner's own database

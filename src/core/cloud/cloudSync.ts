@@ -9,7 +9,6 @@ import {
 import {
   CLOUD_CONFIG_ID,
   CLOUD_STATE_ID,
-  CLOUD_TOKEN_ID,
   DEFAULT_CLOUD_URL,
   REQUIRED_TABLES,
   occupancyStatement,
@@ -30,7 +29,6 @@ import {
   type CloudInspection,
   type CloudState,
   type CloudStatement,
-  type CloudToken,
 } from './model';
 
 /**
@@ -38,7 +36,8 @@ import {
  * entries it sent, unchanged. Pull walks rows newer than the cursor and applies
  * each one through the wrapper's remote methods, so nothing it applies is ever
  * re-enqueued. The first pull on a device restores everything; later pulls
- * apply only where the remote is newer and never over a pending local change.
+ * apply only where the remote is newer and never over a pending local change,
+ * and a device's own rows come back only where the device has lost them.
  * Nothing here logs, and nothing here touches the network without a client,
  * which only exists once a token is on the device.
  */
@@ -59,21 +58,7 @@ export interface SyncOutcome {
   error: string | null;
 }
 
-export async function readCloudToken(db: Database): Promise<string | null> {
-  const record = await db.get<CloudToken>('cloud', CLOUD_TOKEN_ID);
-  return record && typeof record.value === 'string' && record.value.length > 0
-    ? record.value
-    : null;
-}
-
-export async function saveCloudToken(db: Database, value: string, now: string): Promise<void> {
-  const token: CloudToken = { id: CLOUD_TOKEN_ID, value, savedAt: now };
-  await db.put('cloud', token);
-}
-
-export async function clearCloudToken(db: Database): Promise<void> {
-  await db.delete('cloud', CLOUD_TOKEN_ID);
-}
+// The token itself lives in tokenVault.ts: two copies, verified writes, and a log.
 
 /** The database this device syncs with: the one saved here, else the shipped default. */
 export async function readCloudUrl(db: Database): Promise<string> {
@@ -151,6 +136,19 @@ export async function resetCloudState(db: Database): Promise<void> {
   await db.delete('cloud', CLOUD_STATE_ID);
 }
 
+/**
+ * Sends the next pull back to the beginning while remembering that this device
+ * has pulled before, so the walk restores what this device lost and keeps a
+ * pending local change or a newer local record, instead of treating the device
+ * as new. Used when a token is entered again and when a copy of it was healed.
+ */
+export async function restartPull(db: Database): Promise<void> {
+  const state = await readCloudState(db);
+  state.cursor = null;
+  state.cursorId = null;
+  await db.put('cloud', state);
+}
+
 export async function pendingCount(db: Database): Promise<number> {
   return db.count('outbox');
 }
@@ -202,21 +200,37 @@ export interface PullResult {
   cursorId: string | null;
 }
 
+export interface PullOptions {
+  /** Walk every row of this app again from the beginning, under the same rules as any later pull. */
+  fromStart?: boolean;
+}
+
 /**
- * Applies rows newer than the cursor. On the first pull every row wins and any
- * pending local entry for the same record is dropped, so a fresh install with a
- * token ends up with the cloud's data. Afterwards a pending local change wins,
- * then the newer of the two timestamps.
+ * Applies rows newer than the cursor, or every row when the cursor is empty or
+ * the caller asks for the whole walk.
+ *
+ * A device that has never pulled takes the cloud's copy over anything it has
+ * written itself and drops the pending entry, so a fresh install with a token
+ * ends up with the cloud's data rather than pushing its onboarding defaults
+ * over it. Every other walk keeps a pending local change and keeps the newer
+ * of the two records.
+ *
+ * Rows this device wrote itself are the same data it holds, so they are left
+ * alone while the record is still here, a change to it is waiting, or the row
+ * is this device's own tombstone. A record that has vanished from this device
+ * comes back from its own row: that is how a device recovers its own history.
  */
 export async function pullRemote(
   db: Database,
   client: CloudClient,
   context: SyncContext,
   state: CloudState,
+  options: PullOptions = {},
 ): Promise<PullResult> {
-  const initial = state.cursor === null;
-  let cursor = state.cursor;
-  let cursorId = state.cursorId;
+  const cloudWins = state.cursor === null && state.lastPullAt === null;
+  const fromStart = options.fromStart === true || state.cursor === null;
+  let cursor = fromStart ? null : state.cursor;
+  let cursorId = fromStart ? null : state.cursorId;
   let applied = 0;
   let removed = 0;
   for (let guard = 0; guard < 1000; guard += 1) {
@@ -227,19 +241,22 @@ export async function pullRemote(
     for (const row of rows) {
       cursor = row.synced_at;
       cursorId = row.id;
-      if (row.device_id === context.deviceId) continue;
       if (!isSyncedStore(row.store)) continue;
       const store = row.store;
       const key = outboxKey(store, row.id);
       const pending = await db.get<OutboxEntry>('outbox', key);
-      if (pending) {
-        if (!initial) continue;
-        await db.delete('outbox', key);
-      }
       const local = await db.get<Identified>(store, row.id);
-      if (!initial && local) {
-        const stamp = recordTimestamp(store, local as unknown as Record<string, unknown>);
-        if (stamp !== null && stamp > row.updated_at) continue;
+      if (row.device_id === context.deviceId) {
+        if (local || pending || row.deleted) continue;
+      } else {
+        if (pending) {
+          if (!cloudWins) continue;
+          await db.delete('outbox', key);
+        }
+        if (!cloudWins && local) {
+          const stamp = recordTimestamp(store, local as unknown as Record<string, unknown>);
+          if (stamp !== null && stamp > row.updated_at) continue;
+        }
       }
       if (row.deleted) {
         if (!local) continue;
@@ -288,13 +305,15 @@ function describeError(error: unknown): string {
 /**
  * One sync: register the device, push, then pull when asked. Offline or inside a
  * retry delay it does nothing. A failure records the error and a growing delay;
- * the outbox is untouched either way.
+ * the outbox is untouched either way. With `full` the pull walks every row of
+ * this app again from the beginning, which brings back anything this device has
+ * lost; "Sync now" uses it.
  */
 export async function syncOnce(
   db: Database,
   client: CloudClient,
   context: SyncContext,
-  options: { pull: boolean; force?: boolean },
+  options: { pull: boolean; force?: boolean; full?: boolean },
 ): Promise<SyncOutcome> {
   const idle: SyncOutcome = { ran: false, pushed: 0, applied: 0, removed: 0, error: null };
   if (!context.isOnline()) return { ...idle, reason: 'offline' };
@@ -307,19 +326,22 @@ export async function syncOnce(
     let applied = 0;
     let removed = 0;
     const pull = async () => {
-      const pulled = await pullRemote(db, client, context, state);
+      const pulled = await pullRemote(db, client, context, state, {
+        fromStart: options.full === true,
+      });
       applied = pulled.applied;
       removed = pulled.removed;
       state.cursor = pulled.cursor ?? state.cursor ?? '';
       state.cursorId = pulled.cursorId;
       state.lastPullAt = context.now();
     };
-    // A device that has never pulled restores first, so its onboarding defaults
-    // never overwrite the copy; every later sync pushes first.
-    const initial = state.cursor === null;
-    if (options.pull && initial) await pull();
+    // A device whose cursor is empty pulls first: a new device, so its onboarding
+    // defaults never overwrite the copy; a recovering one, so what it lost is back
+    // before its queue goes up. Every other sync pushes first.
+    const pullFirst = state.cursor === null;
+    if (options.pull && pullFirst) await pull();
     const pushed = await pushOutbox(db, client, context);
-    if (options.pull && !initial) await pull();
+    if (options.pull && !pullFirst) await pull();
     state.lastSyncAt = context.now();
     state.lastError = null;
     state.failures = 0;

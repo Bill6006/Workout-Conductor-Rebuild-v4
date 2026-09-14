@@ -143,7 +143,7 @@ describe('cloud sync engine', () => {
     db.close();
   });
 
-  it('later pulls skip own rows, keep a pending local change, keep a newer local record, and delete on tombstones', async () => {
+  it('later pulls keep a pending local change, keep a newer local record, delete on tombstones, and bring back an own row only where its record is gone', async () => {
     const db = await openTestDb();
     const cloud = createFakeCloud();
     // First sync sets the cursor; nothing remote yet.
@@ -153,6 +153,8 @@ describe('cloud sync engine', () => {
     await db.applyRemote('locations', { id: 'home', name: 'Home', updatedAt: LATER });
     await db.applyRemote('workouts', { id: 'w9', startedAt: EARLIER });
     await db.put('savedWorkouts', { id: 's1', name: 'Mine', createdAt: NOW });
+    // A record this device wrote and still holds: its own row changes nothing.
+    await db.applyRemote('savedWorkouts', { id: 's2', name: 'Still here', createdAt: EARLIER });
 
     cloud.seed({
       store: 'locations',
@@ -177,6 +179,15 @@ describe('cloud sync engine', () => {
     });
     cloud.seed({ store: 'workouts', id: 'w9', deleted: 1, updated_at: NOW, synced_at: NOW });
     cloud.seed({
+      store: 'savedWorkouts',
+      id: 's2',
+      body: JSON.stringify({ id: 's2', name: 'Own copy', createdAt: NOW }),
+      updated_at: NOW,
+      synced_at: NOW,
+      device_id: 'phone',
+    });
+    // This device's own row for a record it no longer holds: the one way it gets its history back.
+    cloud.seed({
       store: 'profile',
       id: 'current',
       body: JSON.stringify({ id: 'current', units: 'kg', updatedAt: NOW }),
@@ -194,12 +205,13 @@ describe('cloud sync engine', () => {
     });
 
     const pulled = await pullRemote(db, cloud.client, context(), await readCloudState(db));
-    expect(pulled).toMatchObject({ applied: 1, removed: 1 });
+    expect(pulled).toMatchObject({ applied: 2, removed: 1 });
     expect(await db.get('locations', 'gym')).toMatchObject({ name: 'Gym renamed' });
     expect(await db.get('locations', 'home')).toMatchObject({ name: 'Home' });
     expect(await db.get('savedWorkouts', 's1')).toMatchObject({ name: 'Mine' });
+    expect(await db.get('savedWorkouts', 's2')).toMatchObject({ name: 'Still here' });
     expect(await db.get('workouts', 'w9')).toBeUndefined();
-    expect(await db.get('profile', 'current')).toBeUndefined();
+    expect(await db.get('profile', 'current')).toMatchObject({ units: 'kg' });
     // The pending local save is still queued and untouched.
     expect((await db.get<OutboxEntry>('outbox', 'savedWorkouts|s1'))?.op).toBe('put');
     expect(await db.count('outbox')).toBe(1);

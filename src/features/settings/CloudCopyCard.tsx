@@ -61,7 +61,8 @@ export function CloudCopyCard() {
   };
 
   const sync = async () => {
-    const outcome = await store.syncNow({ pull: true, force: true });
+    // The button walks the whole history, so a record this device lost comes back.
+    const outcome = await store.syncNow({ pull: true, force: true, full: true });
     if (!outcome) return;
     if (outcome.error) {
       toast.show(outcome.error, 'error');
@@ -92,6 +93,12 @@ export function CloudCopyCard() {
           ? `Last sync ${formatDateTime(cloud.lastSyncAt)}.`
           : 'Waiting for the first sync.';
   const pending = `${cloud.pending} ${cloud.pending === 1 ? 'change' : 'changes'} waiting`;
+  // A loss of the token is said on the card, with when, rather than shown as "off".
+  const notice = cloud.notice
+    ? `${formatDateTime(cloud.notice.at)}${
+        cloud.notice.lastSeenAt ? `, last seen ${formatDateTime(cloud.notice.lastSeenAt)}` : ''
+      }: ${cloud.notice.detail}`
+    : null;
 
   return (
     <Card eyebrow="Cloud copy" title="Cloud copy">
@@ -104,11 +111,23 @@ export function CloudCopyCard() {
       <FactList
         items={[
           { label: 'Database', value: cloud.url },
-          { label: 'Token', value: cloud.configured ? 'Saved on this device' : 'Not set' },
+          {
+            label: 'Token',
+            value: cloud.configured
+              ? 'Saved on this device'
+              : cloud.notice?.kind === 'missing'
+                ? 'Missing'
+                : 'Not set',
+          },
           { label: 'Status', value: status },
           { label: 'Pending', value: pending },
         ]}
       />
+      {notice ? (
+        <p className={styles.warning} role="status" data-testid="cloud-notice">
+          {notice}
+        </p>
+      ) : null}
 
       {occupied ? (
         <div className={styles.body} data-testid="cloud-occupied" role="alert">

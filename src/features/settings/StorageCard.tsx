@@ -144,6 +144,22 @@ export function StorageCard() {
               : `Failed · ${check.error}`
             : 'Not run yet',
         },
+        ...(diagnostic.tokenLog.length > 0
+          ? [
+              {
+                label: 'Token log',
+                value: (
+                  <ul className={styles.plainList} data-testid="token-log">
+                    {diagnostic.tokenLog.slice(-5).map((event) => (
+                      <li key={`${event.at}-${event.kind}`}>
+                        {formatDateTime(event.at)} · {event.kind} · {event.detail}
+                      </li>
+                    ))}
+                  </ul>
+                ),
+              },
+            ]
+          : []),
       ]
     : [{ label: 'Storage', value: 'Looking…' }];
 

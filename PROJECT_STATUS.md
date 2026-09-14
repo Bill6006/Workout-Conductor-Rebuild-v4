@@ -1,23 +1,23 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-13_
+_Last updated: 2026-09-14_
 
-| Item                   | Value                                                                                                                                                                      |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                   |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                   |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                           |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                      |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                          |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, and 7 GREEN; 4, 5, and 8 at their review gates. Maintenance 9, one database per person, at its review gate     |
-| Phase gate             | Maintenance 9 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 4, 5, and 8 YELLOW (reviews still open)                         |
-| Current branch         | `main`                                                                                                                                                                     |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                               |
-| Work in progress       | None. Maintenance 9 is at its review gate (`docs/reports/maintenance-9.md`). The owner's next step is creating a token for `life-record-p1` and handing over a setup link. |
-| Latest commit          | Tempo phase legend restored and live screenshots (this commit); app build under review is `5efb22b`                                                                        |
-| Latest deployment      | `5efb22b` deployed by Deploy Pages run 34752446441 (success); full browser suite passed against the live URL (156 passed + 14 skipped by design)                           |
-| Test totals            | Unit: 381 passed (78 files). Browser/mobile: 156 passed + 14 skipped by design locally and against the live URL                                                            |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                               |
+| Item                   | Value                                                                                                                                                                                                                                                       |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                    |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                    |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                            |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                       |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                           |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, and 7 GREEN; 4, 5, 8, and 9 at their review gates. Maintenance 10, the token on the device and getting a device's history back, at its review gate                                              |
+| Phase gate             | Maintenance 10 **YELLOW** - built, deployed, and verified; awaiting the owner's Android review. Maintenance 4, 5, 8, and 9 YELLOW (reviews still open)                                                                                                      |
+| Current branch         | `main`                                                                                                                                                                                                                                                      |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                |
+| Work in progress       | None. Maintenance 10 is at its review gate (`docs/reports/maintenance-10.md`). On the phone: open the app once so it updates, then Progress shows the Sep 13 workout again on the first sync                                                                |
+| Latest commit          | Maintenance 10: the token on the device, and getting a device's history back (this commit)                                                                                                                                                                  |
+| Latest deployment      | `b6ca59e` is live; this commit deploys next and is verified against the live URL before the status is finalised                                                                                                                                             |
+| Test totals            | Unit: 393 passed (81 files). Browser/mobile: 155 passed + 16 skipped by design locally; the 8 local failures are this machine's download cancellations (7) and one load timeout that passes alone, all outside this change. CI runs the full suite on Linux |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                                |
 
 ## Phase checklist
 
@@ -137,6 +137,15 @@ _Last updated: 2026-09-13_
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 10: the token on the device, and getting a device's history back (YELLOW - awaiting review)
+
+- Found, from the code: the pull skipped every row this device wrote, so a device could never recover its own uploads; a token entered again for the same database did not restart the pull; the token had one copy, written once with the browser's default durability and never read back; a missing token showed as "off", the same as never having had one.
+- The token is kept in two verified copies, in IndexedDB and in local storage, each written again from the other when the app opens and before every sync, with a dated log naming the layer that lost it. Neither the log nor the marks hold the token; none of it enters a backup, an export, or the cloud copy.
+- A device gets its own rows back where the record is gone from it; entering a token again restarts the pull while the device remembers it has synced; Sync now walks everything; every write is flushed before it counts.
+- The Cloud copy card says when the token was written again from its other copy, or that it is missing from both and since when; the Storage card lists the token log.
+- Verified in the browser with the database stood in for at the network layer: the phone's exact loss, then the workout back and the cloud row untouched; a lost record back on Sync now; both copies gone said plainly and the history back on a paste, with no deletion reaching the cloud.
+- Report: `docs/reports/maintenance-10.md`; design in `docs/cloud-copy.md`.
 
 ## Maintenance 9: one database per person (YELLOW - awaiting review)
 

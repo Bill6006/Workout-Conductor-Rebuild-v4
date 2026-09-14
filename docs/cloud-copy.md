@@ -61,13 +61,24 @@ the last local write, on every scheduled pull, and on "Sync now".
 
 ## Pull
 
-`pullRemote` walks rows of this app newer than a cursor (`synced_at`, then `id`), 500 per page.
-Rows this device wrote are skipped. On a device's first pull the cursor is empty and every row
-wins, including over onboarding defaults the device just wrote, whose outbox entries are
-dropped; that is how a fresh install with a token restores everything. On later pulls a
-pending local change wins, then the newer of the two timestamps; tombstones delete locally.
-Pulls run when the app opens, every fifteen minutes, when the device comes back online, and on
-"Sync now". A first-time device pulls before it pushes; every later sync pushes first.
+`pullRemote` walks rows of this app newer than a cursor (`synced_at`, then `id`), 500 per page,
+or every row when the cursor is empty or the caller asks for the whole walk. On a device that
+has never pulled, every row wins, including over onboarding defaults the device just wrote,
+whose outbox entries are dropped; that is how a fresh install with a token restores everything.
+On every other walk a pending local change wins, then the newer of the two timestamps;
+tombstones delete locally.
+
+Rows this device wrote itself are the same data it holds, so they change nothing while the
+record is still here, a change to it is waiting, or the row is the device's own tombstone. A
+record that has vanished from the device comes back from its own row: that is how a device
+recovers its own history, and it is the case that failed before Maintenance 10.
+
+The automatic pull runs when the app opens, every fifteen minutes, and when the device comes
+back online, and is incremental. "Sync now" walks every row from the beginning under the same
+rules, so a record the device lost comes back with one tap. Entering a token again for the
+same database restarts the walk while the device remembers it has synced (`restartPull`), and
+so does a database copy of the token having to be written again from the phone's copy. A
+device whose cursor is empty pulls before it pushes; every other sync pushes first.
 
 ## Offline, failures, and retries
 
@@ -87,7 +98,28 @@ devices claim the same id.
 The card shows the database address, whether a token is saved on this device, one status line
 (last sync, last error, or offline), the pending count, "Sync now", "Change database", and
 "Remove token". Removing the token turns the copy off; the outbox is kept and pushes when a
-token returns.
+token returns. When the token was written again from its other copy, or is missing from both,
+the card says so with the date in one notice line, and the Token fact reads "Missing" rather
+than "Not set". The Storage card lists the token log.
+
+## The token on the device
+
+`src/core/cloud/tokenVault.ts` keeps the token in two independent places: the `cloud` store of
+IndexedDB and the app's local storage, a different storage engine in the same browser. A save
+writes the database copy through the verified-save helper and reads it back before it counts,
+then writes the local copy and reads that back; a local copy that would not stick is noted in
+the log rather than fatal. When the app opens and before every sync, `resolveToken` finds the
+token in either copy and writes the missing one again from the other. A database that lost the
+token gets the whole history pulled again, since it may have lost more. Both copies gone after
+a token was saved here is said once, with when it was last seen, not on every open. The first
+run of a build with the vault on a device that already had a token writes the second copy and
+walks the history once.
+
+Beside the copies sit a mark (when the token was saved and when it was last found) and a log of
+at most eight events: saved, restored, missing, removed, each dated and naming the layer. Neither
+ever holds the token. The `cloud` store is never mirrored, and the local keys are never read by
+the backup or the export. Every readwrite transaction in the wrapper asks for strict durability,
+so a write is flushed before it counts.
 
 ## One database per person
 

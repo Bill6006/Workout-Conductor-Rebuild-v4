@@ -11,20 +11,28 @@ import { resolveTargetMinutes } from '../../engine/duration/duration';
 import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
 import { weightStep } from '../../engine/plateMath/plateMath';
 import {
-  clearCloudToken,
   inspectCloud,
   pendingCount,
   readCloudState,
-  readCloudToken,
   readCloudUrl,
   resetCloudState,
-  saveCloudToken,
+  restartPull,
   saveCloudUrl,
   seedOutbox,
   syncOnce,
   type SyncOutcome,
 } from '../cloud/cloudSync';
 import { deviceLabel, ensureDeviceId } from '../cloud/deviceId';
+import {
+  TOKEN_LOG_KEY,
+  TOKEN_MARK_KEY,
+  TOKEN_MIRROR_KEY,
+  clearToken,
+  readTokenLog,
+  resolveToken,
+  saveToken,
+  type TokenEvent,
+} from '../cloud/tokenVault';
 import { createLibsqlCloudClient } from '../cloud/libsqlClient';
 import {
   DEFAULT_CLOUD_URL,
@@ -223,6 +231,11 @@ export interface CloudStatus {
   lastSyncAt: string | null;
   lastError: string | null;
   deviceId: string | null;
+  /**
+   * The latest thing that happened to the token when it was a loss: a copy
+   * written again from the other, or both copies gone. Null while all is well.
+   */
+  notice: TokenEvent | null;
 }
 
 /** Thrown when a database already holds another person's history; the card asks before it goes ahead. */
@@ -248,7 +261,12 @@ const CLOUD_OFF: CloudStatus = {
   lastSyncAt: null,
   lastError: null,
   deviceId: null,
+  notice: null,
 };
+
+function sameNotice(a: TokenEvent | null, b: TokenEvent | null): boolean {
+  return a === b || (a !== null && b !== null && a.at === b.at && a.kind === b.kind);
+}
 
 /** Pushes wait this long after the last write so a burst of saves goes as one batch. */
 const DRAIN_DELAY_MS = 1500;
@@ -315,6 +333,8 @@ export interface StorageDiagnostic {
   persisted: boolean | null;
   counts: Record<StoreName, number>;
   localKeys: { key: string; present: boolean }[];
+  /** What happened to the cloud token on this device, oldest first. Never the token. */
+  tokenLog: TokenEvent[];
 }
 
 export type SaveCheckResult =
@@ -547,8 +567,12 @@ export class AppStore {
         db.get<Identified>('meta', COACH_FOCUS_ID),
       ]);
       const deviceId = ensureDeviceId(this.storage);
-      const [cloudToken, cloudUrl, cloudState, pending] = await Promise.all([
-        readCloudToken(db),
+      // Finds the token in either of its copies and heals the other. A copy that
+      // could not be healed must not stop the app from opening.
+      const resolved = await resolveToken(db, this.storage, this.now()).catch(() => null);
+      // A database that lost the token may have lost more: the next sync walks everything.
+      if (resolved?.recover) await restartPull(db);
+      const [cloudUrl, cloudState, pending] = await Promise.all([
         readCloudUrl(db),
         readCloudState(db),
         pendingCount(db),
@@ -596,11 +620,12 @@ export class AppStore {
         cloud: {
           ...this.state.cloud,
           url: cloudUrl,
-          configured: cloudToken !== null,
+          configured: (resolved?.token ?? null) !== null,
           pending,
           lastSyncAt: cloudState.lastSyncAt,
           lastError: cloudState.lastError,
           deviceId,
+          notice: resolved?.notice ?? null,
         },
       });
       this.ensureSession();
@@ -1890,6 +1915,8 @@ export class AppStore {
     token: string;
     url?: string;
     acceptExisting?: boolean;
+    /** Where the token came from, for the token log; Settings unless said otherwise. */
+    via?: string;
   }): Promise<void> {
     const token = input.token.trim();
     if (token.length === 0) throw new Error('Paste the token first.');
@@ -1934,9 +1961,13 @@ export class AppStore {
       await resetCloudState(db);
       await seedOutbox(db);
     }
-    await saveCloudToken(db, token, this.now());
+    await saveToken(db, this.storage, token, this.now(), input.via ?? 'Pasted in Settings.');
+    // A token entered again for the database this device already uses means
+    // something was lost here, or an old token is being pasted on a new device.
+    // Either way the next sync walks the whole history back before it pushes.
+    if (!changed) await restartPull(db);
     this.setState({
-      cloud: { ...this.state.cloud, url, configured: true, lastError: null },
+      cloud: { ...this.state.cloud, url, configured: true, lastError: null, notice: null },
     });
     if (!this.startCloud()) await this.syncNow({ pull: true, force: true });
   }
@@ -1949,20 +1980,28 @@ export class AppStore {
   /** Removes the token; the cloud copy is off and nothing leaves the device. The outbox is kept. */
   async clearCloudToken(): Promise<void> {
     const db = await this.getDatabase();
-    await clearCloudToken(db);
+    await clearToken(db, this.storage, this.now());
     this.stopCloud();
     this.dropCloudClient();
     this.setState({
-      cloud: { ...this.state.cloud, configured: false, syncing: false, lastError: null },
+      cloud: {
+        ...this.state.cloud,
+        configured: false,
+        syncing: false,
+        lastError: null,
+        notice: null,
+      },
     });
   }
 
   /**
    * One sync now: push the outbox, then pull when asked. Concurrent calls queue
    * behind each other; without a token it returns null and touches no network.
+   * With `full` the pull walks the whole history again, so anything this device
+   * has lost comes back; the card's "Sync now" asks for that.
    */
   syncNow(
-    options: { pull: boolean; force?: boolean } = { pull: true },
+    options: { pull: boolean; force?: boolean; full?: boolean } = { pull: true },
   ): Promise<SyncOutcome | null> {
     const run = this.syncRun.then(() => this.runSync(options));
     this.syncRun = run.catch(() => null);
@@ -1970,15 +2009,24 @@ export class AppStore {
     return run;
   }
 
-  private async runSync(options: { pull: boolean; force?: boolean }): Promise<SyncOutcome | null> {
+  private async runSync(options: {
+    pull: boolean;
+    force?: boolean;
+    full?: boolean;
+  }): Promise<SyncOutcome | null> {
     const db = await this.getDatabase();
-    const token = await readCloudToken(db);
-    if (token === null) {
-      if (this.state.cloud.configured) {
-        this.setState({ cloud: { ...this.state.cloud, configured: false } });
+    const resolved = await resolveToken(db, this.storage, this.now());
+    if (resolved.token === null) {
+      // Not quietly off: the card says the token went missing, and when.
+      if (this.state.cloud.configured || !sameNotice(resolved.notice, this.state.cloud.notice)) {
+        this.setState({
+          cloud: { ...this.state.cloud, configured: false, notice: resolved.notice },
+        });
       }
       return null;
     }
+    if (resolved.recover) await restartPull(db);
+    const token = resolved.token;
     const client = await this.cloudClientFor(token, await readCloudUrl(db));
     this.setState({ cloud: { ...this.state.cloud, syncing: true } });
     let outcome: SyncOutcome;
@@ -2011,6 +2059,7 @@ export class AppStore {
         configured: true,
         syncing: false,
         pending,
+        notice: resolved.notice,
         lastSyncAt: cloudState.lastSyncAt,
         lastError: outcome.ran
           ? outcome.error
@@ -2193,11 +2242,19 @@ export class AppStore {
     } catch {
       // Estimates are advisory; the counts above are the facts that matter.
     }
-    const localKeys = [LOCAL_SETTINGS_KEY, ONBOARDING_DRAFT_KEY, SESSION_KEY].map((key) => ({
+    const localKeys = [
+      LOCAL_SETTINGS_KEY,
+      ONBOARDING_DRAFT_KEY,
+      SESSION_KEY,
+      TOKEN_MIRROR_KEY,
+      TOKEN_MARK_KEY,
+      TOKEN_LOG_KEY,
+    ].map((key) => ({
       key,
       present: this.storage.getItem(key) !== null,
     }));
-    return { usageBytes, quotaBytes, persisted, counts, localKeys };
+    const tokenLog = await readTokenLog(db, this.storage);
+    return { usageBytes, quotaBytes, persisted, counts, localKeys, tokenLog };
   }
 
   /** Asks the browser to protect this origin's data from eviction; null when unsupported. */
