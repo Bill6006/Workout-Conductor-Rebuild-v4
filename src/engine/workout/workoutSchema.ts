@@ -40,6 +40,7 @@ export const WorkoutEntrySchema = z.looseObject({
       viaFamily: z.boolean(),
       confidence: z.enum(['low', 'medium', 'high']),
       setsAdvice: z.union([z.literal(0), z.literal(1)]),
+      capped: z.looseObject({ at: z.number() }).optional(),
     })
     .optional(),
   manual: z

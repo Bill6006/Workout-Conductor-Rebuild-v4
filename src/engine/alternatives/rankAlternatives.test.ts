@@ -3,6 +3,7 @@ import { GYM_DEFAULT_EQUIPMENT, HOME_DEFAULT_EQUIPMENT } from '../../catalog/equ
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { createDefaultProfile } from '../../core/validation/profile';
 import type { ConflictContext } from '../conflicts/conflictEngine';
+import { startRatio } from '../progression/startingLoad';
 import { rankAlternatives } from './rankAlternatives';
 
 const NOW = '2026-09-02T12:00:00.000Z';
@@ -147,5 +148,33 @@ describe('rankAlternatives', () => {
     });
     expect(bare.candidates).toEqual([]);
     expect(bare.emptyReason).toContain('Bare room');
+  });
+});
+
+describe('rankAlternatives: held at the heaviest weight the place has', () => {
+  it('favours variations that stay heavy at the weights you have, and only those', () => {
+    const current = requireExercise('barbell-bench-press');
+    const currentRatio = startRatio(current);
+    if (currentRatio === null) throw new Error('expected a start ratio');
+    const plain = rankAlternatives({ current, context: context() });
+    const capped = rankAlternatives({
+      current,
+      context: context(),
+      signals: { capLimited: { currentRatio } },
+    });
+    let favoured = 0;
+    for (const candidate of capped.candidates) {
+      const before = plain.candidates.find((other) => other.exercise.id === candidate.exercise.id);
+      if (!before) continue;
+      const ratio = startRatio(candidate.exercise);
+      if (ratio !== null && ratio < currentRatio) {
+        favoured += 1;
+        expect(candidate.score).toBe(Math.min(100, before.score + 12));
+        expect(candidate.reasons).toContain('still heavy with the weights you have');
+      } else {
+        expect(candidate.score).toBe(before.score);
+      }
+    }
+    expect(favoured).toBeGreaterThan(0);
   });
 });

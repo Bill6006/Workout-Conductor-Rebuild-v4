@@ -38,3 +38,16 @@ describe('tempo cues', () => {
     expect(truncate('short')).toBe('short');
   });
 });
+
+describe('tempo at the heaviest weight the place has', () => {
+  it('slows the lowering and adds a pause on a working set, and leaves ramps alone', () => {
+    const capped = tempoCue('primary-hypertrophy', 'working', bench, { capped: true });
+    expect(capped.tempo).toBe('3-1-1-0');
+    expect(capped.why).toContain('heaviest weight here');
+    expect(tempoCue('primary-hypertrophy', 'working', bench).tempo).toBe('3-0-1-0');
+    expect(tempoCue('primary-hypertrophy', 'warmup', bench, { capped: true }).tempo).toBe(
+      '2-0-1-0',
+    );
+    expect(tempoCue('isolation', 'drop', fly, { capped: true }).why).toContain('drop set');
+  });
+});

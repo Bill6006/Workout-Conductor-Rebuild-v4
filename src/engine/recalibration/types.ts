@@ -4,6 +4,7 @@ import type { DeloadWindow } from '../planning/deload';
 import type { AutoregulationPlan } from './autoregulate';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import type { LocationProfile } from '../../core/validation/location';
+import type { SessionLoading } from '../loading/loading';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { DurationChoice, GeneratedWorkout, SetKind } from '../workout/types';
@@ -31,6 +32,8 @@ export interface Readiness {
 export type RecalibrationTrigger =
   | { type: 'duration'; choice: DurationChoice }
   | { type: 'location' }
+  /** The place's available weights changed, or a plate is missing today: loads re-fit, nothing else moves. */
+  | { type: 'loading' }
   | { type: 'equipment' }
   | { type: 'equipment-busy'; entryId: string }
   | { type: 'replace'; entryId: string; exerciseId: string }
@@ -120,6 +123,8 @@ export interface RecalibrationRequest {
   duration: DurationChoice;
   profile: UserProfile;
   location: LocationProfile | undefined;
+  /** Session-only loading exceptions, for example a plate missing today. */
+  loading?: SessionLoading;
   history: readonly WorkoutRecord[];
   constraints: SessionConstraints;
   reason: string;

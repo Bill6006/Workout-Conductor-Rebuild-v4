@@ -228,3 +228,27 @@ it" saves the week (the next available training day plus seven days) in the meta
 runs, every generated session carries one set fewer per exercise, one more rep in reserve, and
 loads ten percent lighter, and "Why this workout" says so. Cancel removes it. A planned week that
 has passed is dropped on load.
+
+## What the place can load (`src/engine/loading/loading.ts`, Maintenance 12)
+
+Each location records what it can load under three keys: a stack per machine exercise (the
+exercise id), one `dumbbells` record shared by every dumbbell and kettlebell exercise, and
+`plates` per side for the rack. Stacks and dumbbells are one or two ranges `{ from, to, step }`,
+expanded to the exact weights; the rack is a list of plates. `loadingFor(locationLoading,
+sessionLoading, exercise, units)` derives `available` (the list, or null for a bar), `step` (the
+real increment: the smallest gap on the stack or between dumbbells, or twice the smallest plate
+the rack has today), `cap` (the heaviest weight, or null), and `perSide` for plate math.
+`fitWeight` snaps a target down onto the list or onto the bar's grid, never below a floor;
+`nudge` moves the dial through real weights. A place with nothing recorded behaves as before.
+
+Progression fits every target through `applyProgression(..., loading)`. When the target would
+pass the cap, `capTarget` holds the load there and raises the rep range by two
+(`NextTarget.capped`, copied to `EntryProgression.capped`) with the reason in the evidence. The
+coach names it once (`source: 'capped'`), offering a harder variation while the reps have room or
+an extra set at the ceiling; `rankAlternatives` adds 12 points to candidates whose starting ratio
+is below the current one (`signals.capLimited`); `tempoCue(..., { capped: true })` slows the
+lowering and adds a pause. Manual weights are never re-fitted. A `loading` recalibration trigger
+re-fits every unlogged, non-manual entry when a record is saved during a workout, and
+`session.loading.missingPlates` is a session-only note that widens the bar's step without
+touching the place. The generator's `pickForSlot` now gives a preferred exercise that fits the
+slot the slot outright; the score orders the rest.

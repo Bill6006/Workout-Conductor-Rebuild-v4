@@ -37,6 +37,10 @@ export const CustomExerciseSchema = z.looseObject({
   strengthSuitability: z.number().int().min(0).max(3).default(1),
   hypertrophySuitability: z.number().int().min(0).max(3).default(2),
   dropSetSafe: z.boolean().default(true),
+  /** How the load is set: a bar with plates, a pair of dumbbells, a machine stack, bodyweight, or a band. */
+  load: z
+    .enum(['barbell', 'dumbbell-each', 'kettlebell', 'stack', 'bodyweight', 'band'])
+    .optional(),
   supersetFriendly: z.boolean().default(true),
   gripDemand: z.enum(DEMAND_LEVELS).default('low'),
   jointStress: z.partialRecord(z.enum(JOINTS), z.enum(STRESS_LEVELS)).default({}),
@@ -87,6 +91,38 @@ export const CustomMediaSchema = z.looseObject({
 
 export type CustomMedia = z.infer<typeof CustomMediaSchema>;
 
+const STACK_EQUIPMENT = new Set([
+  'cable-station',
+  'functional-trainer',
+  'lat-pulldown',
+  'seated-row',
+  'chest-press-machine',
+  'shoulder-press-machine',
+  'pec-deck',
+  'leg-press',
+  'hack-squat',
+  'leg-extension',
+  'leg-curl',
+  'preacher-curl-machine',
+]);
+const BAR_EQUIPMENT = new Set(['barbell', 'ez-bar', 'trap-bar', 'smith-machine', 'squat-rack']);
+const BAND_EQUIPMENT = new Set(['resistance-bands', 'suspension-trainer']);
+
+/** The load kind the chosen equipment implies, when the creator did not say. */
+export function loadFromEquipment(
+  equipment: readonly (readonly string[])[],
+): CatalogExercise['load'] {
+  const ids = new Set(equipment.flat());
+  if ([...ids].some((id) => STACK_EQUIPMENT.has(id))) return 'stack';
+  if ([...ids].some((id) => BAR_EQUIPMENT.has(id))) return 'barbell';
+  if (ids.has('kettlebells')) return 'kettlebell';
+  if (ids.has('dumbbells') || ids.has('adjustable-dumbbells')) return 'dumbbell-each';
+  if ([...ids].some((id) => BAND_EQUIPMENT.has(id))) return 'band';
+  if (ids.size === 0 || ids.has('pull-up-bar') || ids.has('dip-station') || ids.has('weight-vest'))
+    return 'bodyweight';
+  return 'dumbbell-each';
+}
+
 /** Presents a custom exercise to the engines exactly like a catalog exercise. */
 export function customToCatalogExercise(custom: CustomExercise): CatalogExercise {
   const compound = isCompoundPattern(custom.movementPattern);
@@ -135,7 +171,7 @@ export function customToCatalogExercise(custom: CustomExercise): CatalogExercise
     difficulty: 'intermediate',
     progressionFamily: custom.id,
     warmup: compound ? 'short' : 'none',
-    load: 'dumbbell-each',
+    load: custom.load ?? loadFromEquipment(custom.equipment),
     mediaId: custom.mediaId ?? custom.id,
     productionEnabled: false,
   };

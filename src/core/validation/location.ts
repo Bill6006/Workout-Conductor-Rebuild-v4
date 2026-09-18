@@ -4,6 +4,7 @@ import {
   HOME_DEFAULT_EQUIPMENT,
   normalizeEquipment,
 } from '../../catalog/equipment/equipment';
+import { LoadingSpecSchema } from '../../engine/loading/loading';
 
 /**
  * Location profiles own the equipment available at a place (Home, Gym, Travel,
@@ -21,6 +22,8 @@ export const LocationProfileSchema = z.looseObject({
   name: z.string().trim().min(1).max(40),
   kind: z.enum(LOCATION_KINDS),
   equipment: z.array(z.string().min(1)).max(100),
+  /** What this place can load: machine stacks by exercise id, plus the shared dumbbells and plates keys. */
+  loading: z.record(z.string(), LoadingSpecSchema).default({}),
   notes: z.string().max(300),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -44,6 +47,7 @@ export function createLocation(input: NewLocation, now: string): LocationProfile
     name: input.name.trim(),
     kind: input.kind,
     equipment: normalizeEquipment(input.equipment ?? []),
+    loading: {},
     notes: input.notes ?? '',
     createdAt: now,
     updatedAt: now,

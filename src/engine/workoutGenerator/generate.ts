@@ -353,7 +353,12 @@ function pickForSlot(
     );
   };
 
-  candidates.sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+  // A preferred exercise that fits the slot wins it outright; the score only orders the rest,
+  // and preferred ones among themselves.
+  const tier = (exercise: CatalogExercise) => (picker.preferredIds.has(exercise.id) ? 1 : 0);
+  candidates.sort(
+    (a, b) => tier(b) - tier(a) || score(b) - score(a) || a.name.localeCompare(b.name),
+  );
   return candidates[0];
 }
 
@@ -379,7 +384,10 @@ export function pickAccessoryFor(
     (picker.preferredIds.has(exercise.id) ? 15 : 0) -
     stressPenalty(exercise) * 2 -
     exercise.setupSeconds / 60;
-  candidates.sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+  const tier = (exercise: CatalogExercise) => (picker.preferredIds.has(exercise.id) ? 1 : 0);
+  candidates.sort(
+    (a, b) => tier(b) - tier(a) || score(b) - score(a) || a.name.localeCompare(b.name),
+  );
   return candidates[0];
 }
 

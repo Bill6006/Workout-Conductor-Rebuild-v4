@@ -3,11 +3,13 @@ import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { ExerciseDemo } from '../../components/ExerciseDetail/ExerciseMedia';
 import type { CustomInstruction } from '../../core/validation/customExercise';
 import type { UnitSystem } from '../../core/validation/profile';
+import type { Loading, LoadingSpec } from '../../engine/loading/loading';
 import { plateMath } from '../../engine/plateMath/plateMath';
 import type { WorkoutBlock, WorkoutEntry } from '../../engine/workout/types';
 import { useCustomMedia } from '../library/useCustomMedia';
 import styles from './ActiveWorkout.module.css';
 import { effortGuidance, restGuidance } from './effort';
+import { LoadingEditor } from './LoadingEditor';
 import type { PreviousPerformance } from './previousPerformance';
 
 export interface EntryPanelsProps {
@@ -21,6 +23,15 @@ export interface EntryPanelsProps {
   instruction: CustomInstruction | undefined;
   onSaveNotes: (notes: string, cues: string[]) => Promise<void>;
   onOptions: () => void;
+  /** What this place can load for the exercise today, and the record behind it. */
+  loading: Loading;
+  spec: LoadingSpec | null;
+  placeName: string;
+  missingPlates: readonly number[];
+  onSaveLoading: (spec: LoadingSpec | null) => Promise<void>;
+  onSetMissingPlates: (plates: number[]) => Promise<void>;
+  /** Asks the Plates panel to open; a new `at` opens it again. */
+  openRequest?: { panel: 'plates'; at: number } | null;
 }
 
 type Panel = 'howto' | 'notes' | 'plates' | null;
@@ -40,6 +51,13 @@ export function EntryPanels({
   instruction,
   onSaveNotes,
   onOptions,
+  loading,
+  spec,
+  placeName,
+  missingPlates,
+  onSaveLoading,
+  onSetMissingPlates,
+  openRequest = null,
 }: EntryPanelsProps) {
   const [open, setOpen] = useState<Panel>(null);
   const [notes, setNotes] = useState(instruction?.notes ?? '');
@@ -47,7 +65,16 @@ export function EntryPanels({
   const [saved, setSaved] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const customMedia = useCustomMedia(exercise.id);
   const plates =
-    currentWeight !== null && currentWeight > 0 ? plateMath(exercise, currentWeight, units) : null;
+    currentWeight !== null && currentWeight > 0
+      ? plateMath(exercise, currentWeight, units, loading.perSide ?? undefined)
+      : null;
+
+  // A new request opens its panel once. Comparing during render keeps setState out of an effect.
+  const [handledRequest, setHandledRequest] = useState(openRequest);
+  if (openRequest !== handledRequest) {
+    setHandledRequest(openRequest);
+    if (openRequest) setOpen(openRequest.panel);
+  }
 
   const toggle = (panel: Panel) => setOpen((current) => (current === panel ? null : panel));
 
@@ -224,27 +251,41 @@ export function EntryPanels({
         </div>
       ) : null}
 
-      {open === 'plates' && plates ? (
+      {open === 'plates' ? (
         <div className={styles.panelBody} role="tabpanel" data-testid="plate-math">
-          <p className={styles.plateLine}>{plates.line}</p>
-          {plates.kind === 'bar' && plates.perSide.length > 0 ? (
-            <div className={styles.plateRow} aria-label="Plates per side">
-              {plates.perSide.map((plate, index) => (
-                <span key={`${plate}-${index}`} className={styles.plate} data-size={plate}>
-                  {plate}
-                </span>
-              ))}
-            </div>
+          {plates ? (
+            <>
+              <p className={styles.plateLine}>{plates.line}</p>
+              {plates.kind === 'bar' && plates.perSide.length > 0 ? (
+                <div className={styles.plateRow} aria-label="Plates per side">
+                  {plates.perSide.map((plate, index) => (
+                    <span key={`${plate}-${index}`} className={styles.plate} data-size={plate}>
+                      {plate}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <p className={styles.panelNote}>
+                {plates.kind === 'bar'
+                  ? `Bar ${plates.barWeight} ${units}; the plates at ${placeName}. Same on both sides.`
+                  : plates.kind === 'each-hand'
+                    ? 'Dumbbell and kettlebell loads are per hand.'
+                    : block.kind === 'superset'
+                      ? 'Set the pin before the round starts.'
+                      : 'No plates to load.'}
+              </p>
+            </>
           ) : null}
-          <p className={styles.panelNote}>
-            {plates.kind === 'bar'
-              ? `Bar ${plates.barWeight} ${units}; standard plates. Same on both sides.`
-              : plates.kind === 'each-hand'
-                ? 'Dumbbell and kettlebell loads are per hand.'
-                : block.kind === 'superset'
-                  ? 'Set the pin before the round starts.'
-                  : 'No plates to load.'}
-          </p>
+          <LoadingEditor
+            exercise={exercise}
+            units={units}
+            loading={loading}
+            spec={spec}
+            placeName={placeName}
+            missingPlates={missingPlates}
+            onSave={onSaveLoading}
+            onSetMissingPlates={onSetMissingPlates}
+          />
         </div>
       ) : null}
     </div>

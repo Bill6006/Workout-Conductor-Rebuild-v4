@@ -10,7 +10,12 @@ import type { MovementPatternId } from '../../catalog/movementPatterns/movementP
 import { resolveTargetMinutes } from '../../engine/duration/duration';
 import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
 import { dropSetWeight, pendingDropSet, withDropWeight } from '../../engine/recalibration/dropSet';
-import { weightStep } from '../../engine/plateMath/plateMath';
+import {
+  LoadingSpecSchema,
+  fitWeight,
+  loadingFor,
+  type LoadingSpec,
+} from '../../engine/loading/loading';
 import {
   inspectCloud,
   pendingCount,
@@ -384,6 +389,8 @@ export interface NewCustomExercise {
   secondaryMuscles?: MuscleId[];
   movementPattern: MovementPatternId;
   equipment: string[][];
+  /** How it loads; left out, the equipment decides. */
+  load?: CustomExercise['load'];
   notes?: string;
 }
 
@@ -790,6 +797,7 @@ export class AppStore {
       duration: trigger.type === 'duration' ? trigger.choice : session.duration,
       profile,
       location: this.currentLocation(),
+      loading: session.loading,
       history,
       constraints: session.constraints,
       maxes: this.state.strengthMaxes,
@@ -1130,7 +1138,9 @@ export class AppStore {
         const plan = autoregulate({
           set: outcomeFor(set, { reps, rir: values.rir, weight: values.weight }),
           earlier,
-          step: exercise ? weightStep(exercise, units) : 5,
+          step: exercise
+            ? loadingFor(this.currentLocation()?.loading, session.loading, exercise, units).step
+            : 5,
           remaining,
           setNumber: earlier.length + 1,
           units,
@@ -1172,8 +1182,12 @@ export class AppStore {
     const last = lifted[lifted.length - 1];
     if (!last || last.weight === null || last.weight <= 0) return;
     const exercise = getExercise(entry.exerciseId);
-    const step = exercise ? weightStep(exercise, this.state.profile?.units ?? 'lb') : 5;
-    const weight = dropSetWeight(last.weight, step);
+    const units = this.state.profile?.units ?? 'lb';
+    const loading = exercise
+      ? loadingFor(this.currentLocation()?.loading, session.loading, exercise, units)
+      : null;
+    const dropped = dropSetWeight(last.weight, loading?.step ?? 5);
+    const weight = loading ? fitWeight(dropped, loading) : dropped;
     if (drop.targetWeight === weight) return;
     this.setSession({
       ...session,
@@ -1502,6 +1516,7 @@ export class AppStore {
       secondaryMuscles: input.secondaryMuscles ?? [],
       movementPattern: input.movementPattern,
       equipment: input.equipment.length > 0 ? input.equipment : [[]],
+      load: input.load,
       notes: input.notes ?? '',
       createdAt: now,
       updatedAt: now,
@@ -1581,6 +1596,35 @@ export class AppStore {
     if (trigger && this.state.session.status !== 'completed') await this.recalibrate(trigger);
     else this.syncSessionKey();
     return receipt;
+  }
+
+  /**
+   * Records what a place can load for one exercise, or its dumbbells or plates,
+   * and re-fits the session's loads to it. Nothing else in the session moves.
+   */
+  async saveLoading(locationId: string, key: string, spec: LoadingSpec | null): Promise<void> {
+    const location = this.state.locations.find((candidate) => candidate.id === locationId);
+    if (!location) throw new Error('That place is no longer saved.');
+    const loading = { ...location.loading };
+    if (spec) loading[key] = LoadingSpecSchema.parse(spec);
+    else delete loading[key];
+    await this.saveLocation({ ...location, loading });
+    const session = this.state.session;
+    if (
+      session &&
+      session.status !== 'completed' &&
+      this.state.profile?.currentLocationId === locationId
+    ) {
+      await this.recalibrate({ type: 'loading' });
+    }
+  }
+
+  /** Plates that are not around today; the session re-fits its loads and its plate lines. */
+  async setMissingPlates(plates: readonly number[]): Promise<void> {
+    const session = this.requireSession();
+    const missingPlates = [...new Set(plates)].sort((a, b) => b - a);
+    this.setSession({ ...session, loading: { ...session.loading, missingPlates } });
+    if (session.status !== 'completed') await this.recalibrate({ type: 'loading' });
   }
 
   async saveLocation(location: LocationProfile): Promise<SaveReceipt> {

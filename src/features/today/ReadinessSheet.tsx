@@ -16,13 +16,15 @@ interface ReadinessSheetProps {
 }
 
 type Scale = '1' | '2' | '3' | '4' | '5';
-const SCALE: { value: Scale; label: string }[] = [
-  { value: '1', label: '1' },
-  { value: '2', label: '2' },
-  { value: '3', label: '3' },
-  { value: '4', label: '4' },
-  { value: '5', label: '5' },
-];
+/** Each dimension in words; the value underneath is still 1 to 5, so the engines are unchanged. */
+const WORDS: Record<'energy' | 'soreness' | 'sleep' | 'motivation', readonly string[]> = {
+  energy: ['Drained', 'Low', 'Okay', 'Good', 'Full'],
+  soreness: ['None', 'Slight', 'Some', 'Sore', 'Wrecked'],
+  sleep: ['Poor', 'Short', 'Okay', 'Good', 'Great'],
+  motivation: ['None', 'Low', 'Okay', 'Keen', 'Fired up'],
+};
+const scaleOptions = (words: readonly string[]): { value: Scale; label: string }[] =>
+  words.map((label, index) => ({ value: String(index + 1) as Scale, label }));
 const JOINT_OPTIONS = JOINTS.map((joint) => ({
   value: joint,
   label: joint.replace('-', ' ').replace(/^\w/, (letter) => letter.toUpperCase()),
@@ -41,12 +43,21 @@ export function ReadinessSheet({ open, initial, onClose, onSubmit }: ReadinessSh
   const [joints, setJoints] = useState<Joint[]>(initial?.jointDiscomfort ?? []);
   const [timePressure, setTimePressure] = useState(initial?.timePressure ?? false);
 
-  const scale = (label: string, hint: string, value: Scale, onChange: (value: Scale) => void) => (
+  const scale = (
+    label: string,
+    words: readonly string[],
+    value: Scale,
+    onChange: (value: Scale) => void,
+  ) => (
     <div>
-      <p className={formStyles.label}>
-        {label} <span style={{ color: 'var(--color-text-subtle)', fontWeight: 500 }}>{hint}</span>
-      </p>
-      <ChoiceGroup label={label} value={value} options={SCALE} onChange={onChange} compact />
+      <p className={formStyles.label}>{label}</p>
+      <ChoiceGroup
+        label={label}
+        value={value}
+        options={scaleOptions(words)}
+        onChange={onChange}
+        compact
+      />
     </div>
   );
 
@@ -74,10 +85,10 @@ export function ReadinessSheet({ open, initial, onClose, onSubmit }: ReadinessSh
         </Button>
       }
     >
-      {scale('Energy', '1 flat · 5 charged', energy, setEnergy)}
-      {scale('Soreness', '1 none · 5 wrecked', soreness, setSoreness)}
-      {scale('Sleep', '1 poor · 5 great', sleep, setSleep)}
-      {scale('Motivation', '1 low · 5 high', motivation, setMotivation)}
+      {scale('Energy', WORDS.energy, energy, setEnergy)}
+      {scale('Soreness', WORDS.soreness, soreness, setSoreness)}
+      {scale('Sleep', WORDS.sleep, sleep, setSleep)}
+      {scale('Motivation', WORDS.motivation, motivation, setMotivation)}
       <p className={formStyles.label}>Joint discomfort</p>
       <ChipSelect
         label="Joint discomfort"

@@ -77,7 +77,12 @@ function build(
   };
 }
 
-export function tempoCue(role: TrainingRole, kind: SetKind, exercise: CatalogExercise): TempoCue {
+export function tempoCue(
+  role: TrainingRole,
+  kind: SetKind,
+  exercise: CatalogExercise,
+  options: { capped?: boolean } = {},
+): TempoCue {
   const cue = exercise.instructions.execution[0]
     ? truncate(exercise.instructions.execution[0])
     : null;
@@ -99,6 +104,15 @@ export function tempoCue(role: TrainingRole, kind: SetKind, exercise: CatalogExe
       [lower(2), hold(0), lift(1), squeeze(0)],
       'drop set: keep every rep clean while the load comes down',
       [TEMPO_EVIDENCE.duration, TEMPO_EVIDENCE.eccentric],
+      cue,
+    );
+  }
+  if (options.capped) {
+    // The heaviest weight the place has: a slower lowering and a pause make it heavier per rep.
+    return build(
+      [lower(3), hold(1), lift(1), squeeze(0)],
+      'at the heaviest weight here: lower for 3, pause 1, make every rep count',
+      [TEMPO_EVIDENCE.eccentric, TEMPO_EVIDENCE.pause, TEMPO_EVIDENCE.duration],
       cue,
     );
   }

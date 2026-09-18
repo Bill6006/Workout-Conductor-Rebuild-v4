@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SessionLoading } from '../../engine/loading/loading';
 import type { PersonalRecord } from '../../engine/scoring/personalRecords';
 import { PersonalRecordSchema } from '../validation/workoutRecord';
 import { getExercise } from '../../catalog/exercises/catalog';
@@ -112,6 +113,8 @@ export interface WorkoutSession {
   rest: RestState | null;
   /** Per-exercise entry values the logger remembers between sets. */
   drafts: Record<string, SetDraft>;
+  /** Session-only loading exceptions: plates that are not around today. */
+  loading: SessionLoading;
   rating: SessionRating | null;
   completion: CompletionSummary | null;
   lastSummary: ChangeSummary | null;
@@ -263,6 +266,9 @@ const SessionSchema = z.looseObject({
   pausedAt: z.iso.datetime().nullable().default(null),
   rest: RestSchema.nullable().default(null),
   drafts: z.record(z.string(), DraftSchema).default({}),
+  loading: z
+    .object({ missingPlates: z.array(z.number().positive()).default([]) })
+    .default({ missingPlates: [] }),
   rating: SessionRatingSchema.nullable().default(null),
   completion: CompletionSchema.nullable().default(null),
   lastSummary: SummarySchema.nullable(),
@@ -314,6 +320,7 @@ export function createSession(
     pausedAt: null,
     rest: null,
     drafts: {},
+    loading: { missingPlates: [] },
     rating: null,
     completion: null,
     lastSummary: null,

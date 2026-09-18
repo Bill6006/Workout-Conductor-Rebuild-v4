@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { loadFromEquipment } from '../../core/validation/customExercise';
 import { EQUIPMENT } from '../../catalog/equipment/equipment';
 import { MUSCLE_IDS, muscleName, type MuscleId } from '../../catalog/muscles/muscles';
 import {
@@ -25,6 +26,26 @@ interface CustomExerciseSheetProps {
  * equipment, and an optional photo or short video kept as user media. The
  * new exercise resolves everywhere a catalog exercise does.
  */
+type LoadChoice =
+  'auto' | 'stack' | 'barbell' | 'dumbbell-each' | 'kettlebell' | 'bodyweight' | 'band';
+
+function loadName(load: string): string {
+  switch (load) {
+    case 'stack':
+      return 'machine stack';
+    case 'barbell':
+      return 'bar with plates';
+    case 'kettlebell':
+      return 'kettlebell';
+    case 'bodyweight':
+      return 'bodyweight';
+    case 'band':
+      return 'band';
+    default:
+      return 'dumbbells';
+  }
+}
+
 export function CustomExerciseSheet({ open, onClose }: CustomExerciseSheetProps) {
   const store = useAppStore();
   const toast = useToast();
@@ -32,6 +53,7 @@ export function CustomExerciseSheet({ open, onClose }: CustomExerciseSheetProps)
   const [primary, setPrimary] = useState<MuscleId>('chest');
   const [pattern, setPattern] = useState<MovementPatternId>('horizontal-push');
   const [equipment, setEquipment] = useState<string[]>([]);
+  const [load, setLoad] = useState<LoadChoice>('auto');
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -57,6 +79,7 @@ export function CustomExerciseSheet({ open, onClose }: CustomExerciseSheetProps)
         primaryMuscles: [primary],
         movementPattern: pattern,
         equipment: [equipment],
+        ...(load === 'auto' ? {} : { load }),
       });
       if (file) {
         await store.addCustomMedia(created.id, {
@@ -154,6 +177,26 @@ export function CustomExerciseSheet({ open, onClose }: CustomExerciseSheetProps)
           );
         })}
       </div>
+      <label className={formStyles.label} htmlFor="custom-load">
+        How it loads
+      </label>
+      <select
+        id="custom-load"
+        className={formStyles.input}
+        value={load}
+        onChange={(event) => setLoad(event.target.value as LoadChoice)}
+        data-testid="custom-load"
+      >
+        <option value="auto">
+          Decide from the equipment ({loadName(loadFromEquipment([equipment]))})
+        </option>
+        <option value="stack">Machine stack (pin)</option>
+        <option value="barbell">Bar with plates</option>
+        <option value="dumbbell-each">Dumbbells, one in each hand</option>
+        <option value="kettlebell">Kettlebell</option>
+        <option value="bodyweight">Bodyweight</option>
+        <option value="band">Band</option>
+      </select>
       <label className={formStyles.label} htmlFor="custom-media">
         Your photo or short video (optional, up to 3 MB, stays on this device)
       </label>

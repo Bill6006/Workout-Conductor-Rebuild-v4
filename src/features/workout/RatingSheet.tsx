@@ -20,6 +20,9 @@ const EFFORTS: { id: SessionRating['effort']; label: string }[] = [
 ];
 
 /** The quick session rating asked when a workout is saved; every answer is optional. */
+/** Energy after the session, in words; each maps to 1 to 5 underneath, so the engines see numbers. */
+const ENERGY_WORDS = ['Drained', 'Low', 'Okay', 'Good', 'Full'] as const;
+
 export function RatingSheet({ open, endedEarly, onClose, onSave, onDiscard }: RatingSheetProps) {
   const [effort, setEffort] = useState<SessionRating['effort']>('right');
   const [pain, setPain] = useState(false);
@@ -85,19 +88,29 @@ export function RatingSheet({ open, endedEarly, onClose, onSave, onDiscard }: Ra
       >
         {pain ? 'Pain reported ✓' : 'No pain'}
       </button>
-      <label className={styles.panelLabel} htmlFor="energy-after">
-        Energy after: {energy} of 5
-      </label>
-      <input
-        id="energy-after"
-        className={styles.range}
-        type="range"
-        min={1}
-        max={5}
-        step={1}
-        value={energy}
-        onChange={(event) => setEnergy(Number(event.target.value))}
-      />
+      <p className={styles.panelLabel} id="energy-after-label">
+        Energy after
+      </p>
+      <div
+        className={styles.ratingGroup}
+        role="radiogroup"
+        aria-labelledby="energy-after-label"
+        data-testid="energy-after"
+      >
+        {ENERGY_WORDS.map((word, index) => (
+          <button
+            key={word}
+            type="button"
+            role="radio"
+            aria-checked={energy === index + 1}
+            className={styles.ratingChip}
+            onClick={() => setEnergy(index + 1)}
+            data-value={index + 1}
+          >
+            {word}
+          </button>
+        ))}
+      </div>
       <label className={styles.panelLabel} htmlFor="rating-note">
         Note (optional)
       </label>

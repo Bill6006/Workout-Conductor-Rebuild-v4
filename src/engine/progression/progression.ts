@@ -14,6 +14,7 @@ import {
   startRatio,
 } from './startingLoad';
 import { weightStep } from '../plateMath/plateMath';
+import { fitWeight, type Loading } from '../loading/loading';
 import type { EntryProgression, ProgressionMode, SetPrescription } from '../workout/types';
 import { restCategory, type Prescription } from './roles';
 
@@ -65,6 +66,8 @@ export interface NextTarget {
   evidence: string[];
   /** 1 when an extra set is worth offering (never applied automatically). */
   setsAdvice: 0 | 1;
+  /** Set when the target was held at the heaviest weight available and the reps pushed instead. */
+  capped?: { at: number };
 }
 
 export function estimateOneRepMax(weight: number, reps: number): number {
@@ -529,11 +532,16 @@ export function applyProgression(
   manual: { weight?: boolean; reps?: boolean } = {},
   /** The empty bar for bar lifts: no ramp, drop, or working load goes under it. */
   floor: number | null = null,
+  /** What the place can load: every weight written lands on something that exists there. */
+  loading: Loading | null = null,
 ): SetPrescription[] {
   const warmups = sets.filter((set) => set.kind === 'warmup');
   const ramps = rampWeights(target.weight, warmups.length, step);
-  const clamp = (weight: number | null) =>
-    weight === null || floor === null ? weight : Math.max(weight, floor);
+  const clamp = (weight: number | null) => {
+    if (weight === null) return weight;
+    const floored = floor === null ? weight : Math.max(weight, floor);
+    return loading ? fitWeight(floored, loading, floor) : floored;
+  };
   let rampIndex = 0;
   return sets.map((set) => {
     if (set.kind === 'warmup') {
@@ -567,5 +575,30 @@ export function summarizeProgression(target: NextTarget): EntryProgression {
     viaFamily: target.viaFamily,
     confidence: target.confidence,
     setsAdvice: target.setsAdvice,
+    capped: target.capped,
+  };
+}
+
+/**
+ * Holds a target at the heaviest weight the place has and pushes the reps
+ * instead, saying so. The next levers, a harder variation and an extra set,
+ * are the coach's to offer, never applied here.
+ */
+export function capTarget(target: NextTarget, loading: Loading | null, units: string): NextTarget {
+  if (!loading || loading.cap === null || target.weight === null) return target;
+  if (target.weight <= loading.cap + 1e-6) return target;
+  const [low, high] = target.reps;
+  const shift = Math.min(2, Math.max(0, 20 - high));
+  return {
+    ...target,
+    weight: loading.cap,
+    reps: [low + shift, high + shift],
+    capped: { at: loading.cap },
+    evidence: [
+      ...target.evidence,
+      `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
+        shift === 0 ? ', and they are already at the top' : ''
+      }.`,
+    ],
   };
 }

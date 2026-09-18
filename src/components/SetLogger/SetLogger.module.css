@@ -186,3 +186,34 @@
     display: none;
   }
 }
+
+.hintButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The target asks for more than the dial shows: gold, and a few pulses to catch the eye. */
+.hint[data-pulse='true'] {
+  color: var(--color-gold);
+  font-weight: 700;
+  animation: hint-pulse 1.4s ease-in-out 4;
+}
+
+@keyframes hint-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint[data-pulse='true'] {
+    animation: none;
+  }
+}

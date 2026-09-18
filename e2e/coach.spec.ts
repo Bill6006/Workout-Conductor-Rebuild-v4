@@ -76,15 +76,15 @@ test.describe('adaptive coach', () => {
     await expect(sheet).toBeVisible();
     await sheet
       .getByRole('radiogroup', { name: 'Energy' })
-      .getByRole('radio', { name: '1' })
+      .getByRole('radio', { name: 'Drained' })
       .click();
     await sheet
       .getByRole('radiogroup', { name: 'Sleep' })
-      .getByRole('radio', { name: '1' })
+      .getByRole('radio', { name: 'Poor' })
       .click();
     await sheet
       .getByRole('radiogroup', { name: 'Soreness' })
-      .getByRole('radio', { name: '5' })
+      .getByRole('radio', { name: 'Wrecked' })
       .click();
     await sheet.getByTestId('readiness-apply').click();
 

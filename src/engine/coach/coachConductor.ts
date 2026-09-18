@@ -486,6 +486,36 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
         exerciseId: entry.exerciseId,
       });
     }
+    // Held at the heaviest weight the place has: the reps are already climbing; the next
+    // levers are a harder variation, then an extra set. Each ends in a tap.
+    if (!offered && progression.capped && !started(input, entry)) {
+      offered = true;
+      const top = workingSets(entry).find((set) => set.kind === 'working')?.targetReps[1] ?? 0;
+      const repsAtCeiling = top >= 20;
+      signals.push({
+        domain: 'progression',
+        headline: `${exercise.name}: at the heaviest weight here (${progression.capped.at} ${units})`,
+        why: [
+          repsAtCeiling
+            ? 'The reps are already at the top of the range.'
+            : `The reps go up instead, to ${top} this session.`,
+          repsAtCeiling
+            ? 'One more working set adds volume the weight cannot.'
+            : 'A harder variation keeps the same weight heavy.',
+        ],
+        action: repsAtCeiling
+          ? {
+              kind: 'recalibrate',
+              trigger: { type: 'sets', entryId: entry.id, workingDelta: 1 },
+              label: 'Add a set',
+            }
+          : { kind: 'alternatives', entryId: entry.id, label: 'A harder variation' },
+        confidence: progression.confidence,
+        severity: 1,
+        source: 'capped',
+        exerciseId: entry.exerciseId,
+      });
+    }
   }
   return signals;
 }

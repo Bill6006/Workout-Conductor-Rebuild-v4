@@ -35,6 +35,8 @@ export interface EntryProgression {
   confidence: 'low' | 'medium' | 'high';
   /** 1 when an extra set is worth offering; never applied automatically. */
   setsAdvice: 0 | 1;
+  /** Set when the load is held at the heaviest weight the place has and the reps pushed instead. */
+  capped?: { at: number };
 }
 
 /** Values the user set by hand this session; the engines never override them. */

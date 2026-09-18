@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { nudge, snapDown } from '../../engine/loading/loading';
 import type { SetKind } from '../../engine/workout/types';
 import styles from './SetLogger.module.css';
 
@@ -42,6 +43,10 @@ interface SetLoggerProps {
   helper?: string | null;
   /** Replaces the line under the weight, for example "Bodyweight" on a bodyweight move. */
   weightHint?: string;
+  /** The weights this place can load, ascending; the nudges move through them. Null: any step. */
+  available?: readonly number[] | null;
+  /** Makes the line under the weight tappable, for the way into Plates. */
+  onWeightHintTap?: () => void;
 }
 
 type Field = 'weight' | 'reps' | 'rir';
@@ -73,11 +78,15 @@ export function SetLogger({
   disabled = false,
   helper = null,
   weightHint,
+  available = null,
+  onWeightHintTap,
 }: SetLoggerProps) {
   const [values, setValues] = useState<SetLoggerValues>(initial);
   const [typing, setTyping] = useState<Field | null>(null);
   const [typed, setTyped] = useState('');
   const [cooling, setCooling] = useState(false);
+  /** Once the weight has been turned or typed, the target's nudge stops asking. */
+  const [touchedWeight, setTouchedWeight] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -91,7 +100,8 @@ export function SetLogger({
 
   const nudgeWeight = (direction: 1 | -1) => {
     const base = values.weight ?? target.weight ?? 0;
-    update({ ...values, weight: roundWeight(base + direction * weightStep) });
+    setTouchedWeight(true);
+    update({ ...values, weight: roundWeight(nudge(base, direction, available, weightStep)) });
   };
   const nudgeReps = (direction: 1 | -1) =>
     update({ ...values, reps: clampReps(values.reps + direction) });
@@ -99,6 +109,7 @@ export function SetLogger({
     update({ ...values, rir: clampRir((values.rir ?? target.rir) + direction) });
 
   const beginTyping = (field: Field) => {
+    if (field === 'weight') setTouchedWeight(true);
     const current =
       field === 'weight' ? values.weight : field === 'reps' ? values.reps : values.rir;
     setTyped(current === null ? '' : String(current));
@@ -156,13 +167,29 @@ export function SetLogger({
   // The line under the weight always says what to load for this set.
   const weightLabel =
     target.kind === 'warmup' ? 'Warm-up' : target.kind === 'drop' ? 'Drop' : 'Target';
+  // A target this place cannot make names the nearest weight it can.
+  const nearest =
+    target.weight !== null &&
+    available !== null &&
+    available.length > 0 &&
+    !available.some((weight) => Math.abs(weight - (target.weight ?? 0)) < 1e-6)
+      ? snapDown(target.weight, available)
+      : null;
   const weightHintText =
     weightHint ??
     (target.weight === null
       ? target.kind === 'warmup'
         ? 'Warm-up · light'
         : 'Enter a weight'
-      : `${weightLabel} ${target.weight} ${units}`);
+      : `${weightLabel} ${target.weight} ${units}${nearest !== null ? ` · nearest ${nearest}` : ''}`);
+  // The target is asking for more than the untouched dial shows: say so until the dial moves.
+  const wantsMore =
+    mode === 'log' &&
+    !touchedWeight &&
+    target.kind === 'working' &&
+    target.weight !== null &&
+    values.weight !== null &&
+    values.weight < target.weight - 1e-6;
   const repsHint =
     target.kind === 'drop'
       ? `Drop set · aim ${low}-${high}`
@@ -178,6 +205,7 @@ export function SetLogger({
     onDown: () => void,
     hint: string,
     tone: 'normal' | 'warn' = 'normal',
+    extra: { pulse?: boolean; onTap?: () => void } = {},
   ) => (
     <div className={styles.dial} data-field={field} data-tone={tone}>
       <button
@@ -228,7 +256,25 @@ export function SetLogger({
       >
         <span aria-hidden="true">▼</span>
       </button>
-      <span className={styles.hint}>{hint}</span>
+      {extra.onTap ? (
+        <button
+          type="button"
+          className={`${styles.hint} ${styles.hintButton}`}
+          onClick={extra.onTap}
+          data-pulse={extra.pulse ? 'true' : undefined}
+          data-testid={`${field}-hint`}
+        >
+          {hint}
+        </button>
+      ) : (
+        <span
+          className={styles.hint}
+          data-pulse={extra.pulse ? 'true' : undefined}
+          data-testid={`${field}-hint`}
+        >
+          {hint}
+        </span>
+      )}
     </div>
   );
 
@@ -255,6 +301,8 @@ export function SetLogger({
           () => nudgeWeight(1),
           () => nudgeWeight(-1),
           weightHintText,
+          'normal',
+          { pulse: wantsMore, onTap: onWeightHintTap },
         )}
         {dial(
           'reps',

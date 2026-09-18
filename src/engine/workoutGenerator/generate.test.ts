@@ -164,6 +164,16 @@ describe('generateWorkout: 15 / 30 / 45 / Default', () => {
 });
 
 describe('generateWorkout: profile and history', () => {
+  it('a preferred exercise that fits a slot takes it outright, not just a few points', () => {
+    const strength = { goals: { primary: 'strength', secondary: 'none' } } as const;
+    expect(names(generate(strength))).not.toContain('Hack Squat');
+    const workout = generate({
+      ...strength,
+      exercisePreferences: { preferred: ['Hack Squat'], disliked: [] },
+    });
+    expect(names(workout)).toContain('Hack Squat');
+  });
+
   it('chooses a full-body strength session for a strength goal', () => {
     const workout = generate({ goals: { primary: 'strength', secondary: 'none' } });
     expect(workout.title).toBe('Full body');

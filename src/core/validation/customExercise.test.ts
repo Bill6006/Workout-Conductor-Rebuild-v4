@@ -6,6 +6,7 @@ import {
   CustomInstructionSchema,
   CustomMediaSchema,
   customToCatalogExercise,
+  loadFromEquipment,
 } from './customExercise';
 
 const NOW = '2026-09-02T12:00:00.000Z';
@@ -75,5 +76,23 @@ describe('custom content schemas', () => {
       CustomMediaSchema.safeParse({ ...media, dataUrl: 'https://example.invalid/x.png' }).success,
     ).toBe(false);
     expect(CustomMediaSchema.safeParse({ ...media, source: 'scraped' }).success).toBe(false);
+  });
+});
+
+describe('how a custom exercise loads', () => {
+  it('reads the load kind off the equipment when the creator did not say', () => {
+    expect(loadFromEquipment([['leg-press']])).toBe('stack');
+    expect(loadFromEquipment([['barbell'], ['squat-rack']])).toBe('barbell');
+    expect(loadFromEquipment([['kettlebells']])).toBe('kettlebell');
+    expect(loadFromEquipment([['dumbbells']])).toBe('dumbbell-each');
+    expect(loadFromEquipment([['resistance-bands']])).toBe('band');
+    expect(loadFromEquipment([['pull-up-bar']])).toBe('bodyweight');
+    expect(loadFromEquipment([])).toBe('bodyweight');
+  });
+
+  it('keeps the creator’s own answer over what the equipment implies', () => {
+    const said = CustomExerciseSchema.parse({ ...minimal, load: 'stack' });
+    expect(customToCatalogExercise(said).load).toBe('stack');
+    expect(customToCatalogExercise(CustomExerciseSchema.parse(minimal)).load).toBe('barbell');
   });
 });

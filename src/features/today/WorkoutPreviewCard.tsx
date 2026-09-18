@@ -159,7 +159,9 @@ export function WorkoutPreviewCard({
             data-testid="location-open"
           >
             <span className={styles.metaLabel}>Location</span>
-            <span className={styles.metaValue}>{location?.name ?? 'Not set'} ›</span>
+            <span className={styles.metaValue}>
+              {location?.name ?? 'Not set'} <span className={styles.metaChevron}>›</span>
+            </span>
           </button>
         ) : (
           <a className={styles.meta} href={routeHref('plan')}>

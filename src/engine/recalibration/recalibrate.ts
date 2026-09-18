@@ -12,8 +12,10 @@ import {
 } from '../conflicts/conflictEngine';
 import { preferredIdsOf } from '../conflicts/context';
 import { estimateWorkout, resolveTargetMinutes, type SetDonePredicate } from '../duration/duration';
+import { fitWeight, loadingFor, nudge, type Loading } from '../loading/loading';
 import { weightStep } from '../plateMath/plateMath';
 import {
+  capTarget,
   applyProgression,
   recommendNextTarget,
   summarizeProgression,
@@ -364,6 +366,11 @@ function relabel(block: WorkoutBlock): void {
   else block.label = `Circuit ×${block.rounds}: ${names.join(' / ')}`;
 }
 
+/** What this exercise can be loaded to at the request's place today. */
+function loadingOf(request: RecalibrationRequest, exercise: CatalogExercise): Loading {
+  return loadingFor(request.location?.loading, request.loading, exercise, request.profile.units);
+}
+
 function dropSetAt(index: number): SetPrescription {
   return {
     index,
@@ -398,14 +405,17 @@ function applySubstitution(
       now: request.timestamp,
       maxes: request.maxes,
     });
+    const loading = loadingOf(request, exercise);
+    const fitted = capTarget(target, loading, request.profile.units);
     entry.sets = applyProgression(
       buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
-      target,
-      weightStep(exercise, request.profile.units),
+      fitted,
+      loading.step,
       {},
       barWeightFor(exercise, request.profile.units),
+      loading,
     );
-    entry.progression = summarizeProgression(target);
+    entry.progression = summarizeProgression(fitted);
     entry.warmupSets = warmupSets;
     if (entry.dropSet) {
       if (exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
@@ -788,17 +798,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const plan = trigger.plan;
       if (plan?.kind === 'weight' && remaining.length > 0) {
         const lifted = requireExercise(entry.exerciseId);
-        const stepSize = weightStep(lifted, request.profile.units);
+        const loading = loadingOf(request, lifted);
+        const stepSize = loading.step;
         const floor = barWeightFor(lifted, request.profile.units) ?? 0;
         for (const set of remaining) {
-          // The weight actually lifted is the ground truth; the plan moves from it.
+          // The weight actually lifted is the ground truth; the plan moves from it, one real
+          // step at a time where the place has a fixed set of weights.
           const current = trigger.actualWeight ?? set.targetWeight ?? null;
           if (current !== null) {
-            set.targetWeight = Math.max(
-              stepSize,
-              floor,
-              Math.round((current + plan.delta) / stepSize) * stepSize,
-            );
+            const moved =
+              loading.available !== null
+                ? nudge(current, plan.delta > 0 ? 1 : -1, loading.available, stepSize)
+                : Math.round((current + plan.delta) / stepSize) * stepSize;
+            set.targetWeight = Math.max(stepSize, floor, moved);
           }
         }
         return { ...base, workout, headline: `${name}: ${plan.reason}` };
@@ -902,6 +914,54 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       };
     }
 
+    case 'loading': {
+      // The place's weights changed, or a plate is missing today: every unlogged, untouched
+      // entry takes loads that exist here. Nothing is swapped, added, or removed.
+      const workout = cloneWorkout(request.workout);
+      let updated = 0;
+      for (const entry of allEntries(workout.blocks)) {
+        const logged = request.completed.sets.some(
+          (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
+        );
+        if (logged || entry.manual?.weight) continue;
+        const exercise = requireExercise(entry.exerciseId);
+        const prescription = prescribe(exercise, entry.role, request.profile);
+        const working =
+          entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
+        const target = recommendNextTarget({
+          exercise,
+          role: entry.role,
+          prescription,
+          history: request.history,
+          profile: request.profile,
+          now: request.timestamp,
+          maxes: request.maxes,
+        });
+        const loading = loadingOf(request, exercise);
+        const fitted = capTarget(target, loading, request.profile.units);
+        entry.sets = applyProgression(
+          buildSets(
+            { ...prescription, sets: working, restSeconds: entry.restSeconds },
+            entry.warmupSets,
+          ),
+          fitted,
+          loading.step,
+          entry.manual ?? {},
+          barWeightFor(exercise, request.profile.units),
+          loading,
+        );
+        if (entry.dropSet && exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
+        entry.progression = summarizeProgression(fitted);
+        updated += 1;
+      }
+      const place = request.location?.name ?? 'this place';
+      return {
+        ...base,
+        workout,
+        headline: updated > 0 ? `Loads matched to what ${place} has.` : 'No loads to change.',
+      };
+    }
+
     case 'max': {
       // The lifter entered a max: every unlogged, untouched entry of that lift starts from it.
       const workout = cloneWorkout(request.workout);
@@ -925,18 +985,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           now: request.timestamp,
           maxes: request.maxes,
         });
+        const loading = loadingOf(request, exercise);
+        const fitted = capTarget(target, loading, request.profile.units);
         entry.sets = applyProgression(
           buildSets(
             { ...prescription, sets: working, restSeconds: entry.restSeconds },
             entry.warmupSets,
           ),
-          target,
-          weightStep(exercise, request.profile.units),
+          fitted,
+          loading.step,
           {},
           barWeightFor(exercise, request.profile.units),
+          loading,
         );
         if (entry.dropSet && exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
-        entry.progression = summarizeProgression(target);
+        entry.progression = summarizeProgression(fitted);
         updated += 1;
       }
       return {
@@ -1229,7 +1292,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           kind: 'drop',
           targetReps: [8, 12],
           targetRir: 0,
-          targetWeight: last !== undefined && !workingLeft ? dropSetWeight(last, step) : null,
+          targetWeight:
+            last !== undefined && !workingLeft
+              ? fitWeight(dropSetWeight(last, step), loadingOf(request, exercise))
+              : null,
           restSeconds: 0,
         });
         entry.dropSet = true;

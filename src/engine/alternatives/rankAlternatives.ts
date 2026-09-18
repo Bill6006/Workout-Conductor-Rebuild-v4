@@ -1,6 +1,7 @@
 import { allExercises, exerciseEquipmentLabel } from '../../catalog/exercises/catalog';
 import type { CatalogExercise, Joint, StressLevel } from '../../catalog/exercises/exerciseSchema';
 import type { MuscleId } from '../../catalog/muscles/muscles';
+import { startRatio } from '../progression/startingLoad';
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
 import {
@@ -30,6 +31,8 @@ export interface RankingSignals {
   sessionPainJoints?: ReadonlySet<Joint>;
   /** The coach route for the current lift is at its variation step. */
   routeWantsVariation?: boolean;
+  /** The current lift is held at the heaviest weight the place has; a variation that is heavier per pound scores. */
+  capLimited?: { currentRatio: number };
 }
 
 export interface AlternativeRequest {
@@ -187,6 +190,13 @@ export function rankAlternatives(request: AlternativeRequest): AlternativeResult
       contributions.push([10, 'keeps progression history']);
     if (request.signals?.preferredIds?.has(candidate.id))
       contributions.push([10, 'one of your preferred exercises']);
+    const cap = request.signals?.capLimited;
+    if (cap) {
+      const ratio = startRatio(candidate);
+      if (ratio !== null && ratio < cap.currentRatio - 1e-6) {
+        contributions.push([12, 'still heavy with the weights you have']);
+      }
+    }
     const last = request.signals?.lastPerformance?.get(candidate.id);
     if (last) {
       contributions.push([last.daysAgo <= 30 ? 9 : 5, last.line]);

@@ -85,7 +85,9 @@ export function ExerciseCard({
   const doneWorking = logged.filter((set) => set.kind === 'working' && !set.skipped).length;
   const target = position?.set ?? working[0] ?? entry.sets[0];
   const rest = block.kind === 'straight' ? entry.restSeconds : block.restBetweenRoundsSeconds;
-  const tempo = tempoCue(entry.role, target?.kind ?? 'working', exercise);
+  const tempo = tempoCue(entry.role, target?.kind ?? 'working', exercise, {
+    capped: Boolean(entry.progression?.capped),
+  });
   const effort = effortGuidance(
     target?.kind ?? 'working',
     target?.targetRir ?? entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,

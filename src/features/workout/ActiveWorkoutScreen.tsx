@@ -29,8 +29,9 @@ import type { CoachAction } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
 import { ReadinessSheet } from '../today/ReadinessSheet';
 import { estimateWorkout } from '../../engine/duration/duration';
-import { plateMath, weightStep } from '../../engine/plateMath/plateMath';
+import { plateMath } from '../../engine/plateMath/plateMath';
 import { dropSetWeight } from '../../engine/recalibration/dropSet';
+import { fitWeight, loadingFor, loadingKeyFor, specFor } from '../../engine/loading/loading';
 import { maxPromptHidden } from '../../engine/progression/maxes';
 import { startRatio } from '../../engine/progression/startingLoad';
 import { contextFor } from '../../engine/recalibration/recalibrate';
@@ -146,6 +147,7 @@ export function ActiveWorkoutScreen() {
   );
   const instructions = useAppSelector((state) => state.customInstructions);
   const locations = useAppSelector((state) => state.locations);
+  const currentLocation = locations.find((place) => place.id === profile?.currentLocationId);
   const calibrating = useAppSelector((state) => state.calibration.status !== 'idle');
   const [editing, setEditing] = useState<Editing | null>(null);
   const [selected, setSelected] = useState<Selection | null>(null);
@@ -162,6 +164,8 @@ export function ActiveWorkoutScreen() {
   const [viewingBlockId, setViewingBlockId] = useState<string | null>(null);
   /** Why the last save did not go through, in plain words; the session stays until it does. */
   const [saveProblem, setSaveProblem] = useState<string | null>(null);
+  /** A tap on the target line asks the Plates panel of that exercise to open. */
+  const [platesRequest, setPlatesRequest] = useState<{ entryId: string; at: number } | null>(null);
   const active = session?.status === 'active';
   const now = useTicker(1000, active);
 
@@ -197,6 +201,13 @@ export function ActiveWorkoutScreen() {
       ? { entryId: lastLogged.entryId, setIndex: lastLogged.setIndex }
       : null;
   const paused = session.status === 'paused';
+
+  // A lift held at the heaviest weight here ranks variations that stay heavy with what you have.
+  const capLimitedFor = (entry: WorkoutEntry, exercise: ReturnType<typeof requireExercise>) => {
+    if (!entry.progression?.capped) return undefined;
+    const ratio = startRatio(exercise);
+    return ratio === null ? undefined : { currentRatio: ratio };
+  };
 
   // Skip today has nothing to do once every set is logged; the button says so instead of failing.
   const skipReasonFor = (entry: WorkoutEntry) =>
@@ -308,7 +319,9 @@ export function ActiveWorkoutScreen() {
 
   const loggerFor = (entry: WorkoutEntry, block: WorkoutBlock) => {
     const exercise = requireExercise(entry.exerciseId);
-    const step = weightStep(exercise, units);
+    // What this place can load for the exercise today: the dial's step, its list, its plates.
+    const loading = loadingFor(currentLocation?.loading, session.loading, exercise, units);
+    const step = loading.step;
     const previous = previousPerformance(history, entry.exerciseId);
     const logged = session.completed.sets.filter((set) => set.entryId === entry.id);
     const editingHere = editing && editing.entryId === entry.id ? editing : null;
@@ -320,9 +333,14 @@ export function ActiveWorkoutScreen() {
     // One rule for the dial and the plate line: the dial's own starting value, or the weight
     // the dial has been turned to, or, with no set in front of you, the last working weight
     // logged here. A warm-up's draft never reaches a working set.
-    const dial = currentHere
+    const dialRaw = currentHere
       ? initialFor(session, entry, currentHere.set, previous?.weight ?? null, step, workingLogged)
       : null;
+    // A weight derived here rather than written by the engine lands on what the place can load.
+    const dial =
+      dialRaw && dialRaw.weight !== null && currentHere?.set.targetWeight === null
+        ? { ...dialRaw, weight: fitWeight(dialRaw.weight, loading) }
+        : dialRaw;
     const lastWorkingWeight =
       [...logged]
         .filter((set) => set.kind === 'working' && !set.skipped && set.weight !== null)
@@ -335,7 +353,7 @@ export function ActiveWorkoutScreen() {
         : (liveWeights[entry.id] ?? dial?.weight ?? lastWorkingWeight);
     const helper =
       draftWeight !== null && draftWeight !== undefined && draftWeight > 0
-        ? plateMath(exercise, draftWeight, units).line
+        ? plateMath(exercise, draftWeight, units, loading.perSide ?? undefined).line
         : null;
 
     return (
@@ -395,6 +413,8 @@ export function ActiveWorkoutScreen() {
                   workingLogged,
                 )
               }
+              available={loading.available}
+              onWeightHintTap={() => setPlatesRequest({ entryId: entry.id, at: Date.now() })}
               mode="log"
               weightStep={step}
               onCommit={(values) => commitLog(entry, currentHere.set, values)}
@@ -439,6 +459,19 @@ export function ActiveWorkoutScreen() {
           units={units}
           currentWeight={draftWeight}
           previous={previous}
+          loading={loading}
+          spec={specFor(currentLocation?.loading, exercise)}
+          placeName={currentLocation?.name ?? 'this place'}
+          missingPlates={session.loading.missingPlates}
+          onSaveLoading={(spec) =>
+            currentLocation
+              ? store.saveLoading(currentLocation.id, loadingKeyFor(exercise), spec)
+              : Promise.reject(new Error('Pick a place on Today first.'))
+          }
+          onSetMissingPlates={(plates) => store.setMissingPlates(plates)}
+          openRequest={
+            platesRequest?.entryId === entry.id ? { panel: 'plates', at: platesRequest.at } : null
+          }
           instruction={instructions.find((item) => item.exerciseId === entry.exerciseId)}
           onSaveNotes={(notes, cues) => store.saveExerciseNotes(entry.exerciseId, { notes, cues })}
           onOptions={() => setSelected({ entry, block })}
@@ -525,14 +558,17 @@ export function ActiveWorkoutScreen() {
             sets: selected.entry.sets.length,
             restSeconds: selected.entry.restSeconds,
           },
-          signals: buildRankingSignals({
-            profile,
-            history,
-            now: new Date().toISOString(),
-            sessionPainJoints: session.constraints.painJoints,
-            coachRoutes,
-            currentExerciseId: selectedExercise.id,
-          }),
+          signals: {
+            ...buildRankingSignals({
+              profile,
+              history,
+              now: new Date().toISOString(),
+              sessionPainJoints: session.constraints.painJoints,
+              coachRoutes,
+              currentExerciseId: selectedExercise.id,
+            }),
+            capLimited: capLimitedFor(selected.entry, selectedExercise),
+          },
           limit: 6,
         })
       : null;

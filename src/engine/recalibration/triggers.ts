@@ -20,6 +20,11 @@ const VALUE = 'Protecting your highest-value sets';
 const REMAINING = 'Updating the remaining workout';
 
 export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
+  loading: {
+    label: 'Available weights',
+    scope: 'partial',
+    evaluating: ['Matching loads to what this place has', REMAINING],
+  },
   duration: {
     label: 'Workout length',
     scope: 'full',
@@ -219,6 +224,8 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
       return `Moving ${name} ${trigger.direction}`;
     case 'split-superset':
       return 'Splitting the superset into straight sets';
+    case 'loading':
+      return 'Matching loads to what this place has';
     case 'drop-set':
       return trigger.on ? `Adding a drop set to ${name}` : `Removing the drop set from ${name}`;
     case 'rest-adjust':
