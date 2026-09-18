@@ -482,6 +482,12 @@ export class AppStore {
   private readonly makeCloudClient: (token: string, url: string) => Promise<CloudClient>;
   private readonly isOnline: () => boolean;
   private cloudClient: { token: string; url: string; client: CloudClient } | null = null;
+  /**
+   * Bumped whenever the token is saved or removed. A sync that started before the change must
+   * not write its result over it: a removal that raced an attempt in flight used to be flipped
+   * back to "on" when the attempt finished.
+   */
+  private cloudEpoch = 0;
   private syncRun: Promise<SyncOutcome | null> = Promise.resolve(null);
   private cloudTimer: number | null = null;
   private drainTimer: number | null = null;
@@ -2035,6 +2041,7 @@ export class AppStore {
   }): Promise<void> {
     const token = input.token.trim();
     if (token.length === 0) throw new Error('Paste the token first.');
+    this.cloudEpoch += 1;
     const db = await this.getDatabase();
     const current = await readCloudUrl(db);
     const url = (input.url ?? current).trim();
@@ -2094,6 +2101,7 @@ export class AppStore {
 
   /** Removes the token; the cloud copy is off and nothing leaves the device. The outbox is kept. */
   async clearCloudToken(): Promise<void> {
+    this.cloudEpoch += 1;
     const db = await this.getDatabase();
     await clearToken(db, this.storage, this.now());
     this.stopCloud();
@@ -2129,8 +2137,10 @@ export class AppStore {
     force?: boolean;
     full?: boolean;
   }): Promise<SyncOutcome | null> {
+    const epoch = this.cloudEpoch;
     const db = await this.getDatabase();
     const resolved = await resolveToken(db, this.storage, this.now());
+    if (epoch !== this.cloudEpoch) return null;
     if (resolved.token === null) {
       // Not quietly off: the card says the token went missing, and when.
       if (this.state.cloud.configured || !sameNotice(resolved.notice, this.state.cloud.notice)) {
@@ -2168,6 +2178,8 @@ export class AppStore {
     }
     const cloudState = await readCloudState(db);
     const pending = await pendingCount(db);
+    // The token was saved or removed while this attempt was in flight: its result is stale.
+    if (epoch !== this.cloudEpoch) return outcome;
     this.setState({
       cloud: {
         ...this.state.cloud,

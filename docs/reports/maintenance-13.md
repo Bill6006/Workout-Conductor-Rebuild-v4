@@ -102,6 +102,12 @@ Two things from the phone, both older than this round, fixed under the same gate
   keep their height, and Show fewer folds the ramps back as well. The same state that took
   seven rows now takes four.
 
+- **Found by the live run: removing the token could be undone by a sync still in flight.** A
+  sync reads the token when it starts and wrote "on" when it finished, even if the token had
+  been removed in between, so the card could flip back to on with no token behind it. Saving or
+  removing the token now bumps an epoch, and an attempt that started before the change drops its
+  result. A held sync in the unit suite proves it: the test fails without the guard.
+
 ## How to check on the phone
 
 1. Start a workout with no max entered: the bench begins at Set 1, no ramp at 45.
