@@ -106,6 +106,15 @@ test.describe('alerts', () => {
     );
     await today.getByTestId('coach-action').click();
     await expect(page.getByRole('heading', { level: 1, name: 'Workout' })).toBeVisible();
-    await expect(page.getByRole('dialog', { name: 'End the workout early?' })).toBeVisible();
+    const opened = page.getByRole('dialog', { name: 'End the workout early?' });
+    await expect(opened).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(opened).toBeHidden();
+
+    // Not now puts the card away for this workout, and another hour does not bring it back.
+    await page.getByTestId('coach-card').getByTestId('coach-dismiss').click();
+    await expect(page.getByTestId('coach-headline')).not.toContainText('has been open');
+    await page.clock.fastForward('01:00:00');
+    await expect(page.getByTestId('coach-headline')).not.toContainText('has been open');
   });
 });

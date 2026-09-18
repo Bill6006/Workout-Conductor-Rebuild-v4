@@ -36,5 +36,14 @@ describe('an offer taken is remembered for the session', () => {
 
     const saved = readSession(handle.storage);
     expect(saved?.coachAccepted).toEqual([acceptKey(offer)]);
+
+    // Not now on the open-workout card lasts for this session; every other card keeps the longer memory.
+    await store.dismissCoachSignal({ source: 'unfinished workout' });
+    expect(store.getSnapshot().session?.coachAccepted).toContain('unfinished workout');
+    expect(store.getSnapshot().coachDeclines.declines).toEqual({});
+    await store.dismissCoachSignal({ source: 'extra set', exerciseId: 'cable-fly' });
+    expect(Object.keys(store.getSnapshot().coachDeclines.declines)).toEqual([
+      'extra set|cable-fly',
+    ]);
   });
 });

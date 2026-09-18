@@ -49,6 +49,11 @@ describe('a workout left open', () => {
     expect(conductCoach(input(4))?.signal.source).toBe('unfinished workout');
   });
 
+  it('stays away for this workout after Not now, and only this workout', () => {
+    expect(unfinished({ ...input(4), accepted: ['unfinished workout'] })).toBeUndefined();
+    expect(unfinished({ ...input(4), accepted: [] })).toBeDefined();
+  });
+
   it('says a day, then days', () => {
     expect(unfinished(input(30))?.headline).toBe('This workout has been open for a day');
     expect(unfinished(input(50))?.headline).toBe('This workout has been open for 2 days');

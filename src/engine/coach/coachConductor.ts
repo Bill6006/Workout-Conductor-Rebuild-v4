@@ -290,8 +290,13 @@ function safetySignals(input: CoachInput): CoachSignal[] {
  * so its sets are not in the history and tomorrow's plan does not know them.
  * The card says how long it has been open and offers the way to save it.
  */
+/** The source of the card that names a workout left open; Not now on it lasts for that workout only. */
+export const UNFINISHED_SOURCE = 'unfinished workout';
+
 function unfinishedSignals(input: CoachInput): CoachSignal[] {
   if (input.status !== 'active' && input.status !== 'paused') return [];
+  // Not now on this card is about this workout, not the next one left open.
+  if (input.accepted?.includes(UNFINISHED_SOURCE)) return [];
   const stamps = [
     input.completed.startedAt,
     ...input.completed.sets.map((set) => set.completedAt),
@@ -322,7 +327,7 @@ function unfinishedSignals(input: CoachInput): CoachSignal[] {
       action: { kind: 'finish', label: 'End and save it' },
       confidence: 'high',
       severity: 3,
-      source: 'unfinished workout',
+      source: UNFINISHED_SOURCE,
     },
   ];
 }

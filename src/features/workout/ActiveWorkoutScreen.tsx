@@ -707,7 +707,7 @@ export function ActiveWorkoutScreen() {
           fatigue={coach.fatigue}
           policy={coach.policy}
           onAction={onCoachAction}
-          onDismiss={(signal) => void store.declineCoachSignal(signal)}
+          onDismiss={(signal) => void store.dismissCoachSignal(signal)}
         />
       ) : null}
 

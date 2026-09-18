@@ -74,6 +74,7 @@ import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import { normalizeName } from '../backup/legacyImport';
 import {
   COACH_DECLINES_ID,
+  UNFINISHED_SOURCE,
   acceptKey,
   emptyDeclines,
   recordDecline,
@@ -2305,6 +2306,21 @@ export class AppStore {
       await deleteVerified(db, 'meta', COACH_FOCUS_ID);
     }
     this.setState({ coachFocus: null });
+  }
+
+  /**
+   * Not now. Most offers stay away for a while; the note about a workout left open is about
+   * this workout only, so it stays away for this session and says so again for the next one.
+   */
+  async dismissCoachSignal(signal: Pick<CoachSignal, 'source' | 'exerciseId'>): Promise<void> {
+    if (signal.source !== UNFINISHED_SOURCE) {
+      await this.declineCoachSignal(signal);
+      return;
+    }
+    const session = this.state.session;
+    if (session && !session.coachAccepted.includes(UNFINISHED_SOURCE)) {
+      this.setSession({ ...session, coachAccepted: [...session.coachAccepted, UNFINISHED_SOURCE] });
+    }
   }
 
   /** Remembers a declined offer so the coach stops repeating it for a while. */

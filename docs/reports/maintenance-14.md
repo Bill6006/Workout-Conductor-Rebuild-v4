@@ -32,6 +32,9 @@ unfinished for too long.
   the app is opened after three hours the one gold card says how long the workout has been open
   and that nothing is lost, and its one action opens the end-of-workout sheet, from Today or
   from the workout. It outranks everything but safety.
+- **Not now means this workout.** Putting that card away hides it for the workout in front of
+  you, however long it stays open, and the next workout left open is named again. Every other
+  card keeps the longer memory a declined offer has.
 - **Permission is asked for once, from the switch.** Notifications are off until the Settings
   switch is turned on, which is the only thing that asks the browser. If the browser refuses,
   the switch stays off and one line says why.
