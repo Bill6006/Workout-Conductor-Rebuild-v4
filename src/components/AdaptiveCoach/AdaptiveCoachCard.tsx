@@ -8,7 +8,8 @@ interface AdaptiveCoachCardProps {
   card: CoachCard | null;
   fatigue: FatigueSignal;
   policy: CoachingPolicy;
-  onAction: (action: CoachAction) => void;
+  /** The action tapped, with the signal it belonged to so the offer can be marked as taken. */
+  onAction: (action: CoachAction, signal: CoachSignal) => void;
   /** Not now: the offer is remembered and not repeated for a while. */
   onDismiss?: (signal: CoachSignal) => void;
 }
@@ -63,13 +64,13 @@ export function AdaptiveCoachCard({
   }
 
   const act = () => {
-    if (!action) return;
+    if (!action || !signal) return;
     if (action.kind === 'recalibrate' && action.major && !confirming) {
       setConfirming(true);
       return;
     }
     setConfirming(false);
-    onAction(action);
+    onAction(action, signal);
   };
 
   return (

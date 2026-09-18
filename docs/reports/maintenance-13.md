@@ -77,6 +77,31 @@ never done while lifts he has done said plenty about his strength.
   with a max the ramps arrive under the target; the next press gets at most one; every other
   pressing lift's first target names the bench it came from.
 
+## Follow-up from the owner's first look (2026-09-18)
+
+Two things from the phone, both older than this round, fixed under the same gate.
+
+- **An offer the lifter took kept coming back.** The coach said triceps was under its weekly
+  target and offered "Add a set to Dumbbell Bench Press". The evidence behind that offer is two
+  weeks of history, which a tap does not change, and nothing recorded that the offer had been
+  taken. So the same button returned after every recalibration, each tap added another set, and
+  the main lift reached fifteen. Now the session remembers every offer taken
+  (`session.coachAccepted`, keyed by where the offer came from and what it said) and the coach
+  does not make it twice; a route step keeps its own record as before. An exercise whose sets
+  were already changed today is never offered another set by any signal. And whatever asks, one
+  exercise stops at eight working sets (`MAX_WORKING_SETS`), with the reason in the summary.
+- **The extra set went to the wrong place.** The offer took the first exercise that trains the
+  muscle, which was the heavy press that opens the session: the costliest place to add a set and
+  the least direct for triceps. It now goes on direct work for the muscle, an exercise that
+  leads with it before one that only includes it, isolation before compound, and never on the
+  strength lifts at the top. With nothing direct today it offers two sets of an accessory when
+  there is room, or the next session leading with the muscle.
+- **The set list took half the screen when opened.** Every set still to come had its own
+  two-line row. A run of identical sets is now one row ("Sets 2-4"), the warm-up tags are gone
+  because the name already says Ramp, rows that only inform are slimmer while rows you can tap
+  keep their height, and Show fewer folds the ramps back as well. The same state that took
+  seven rows now takes four.
+
 ## How to check on the phone
 
 1. Start a workout with no max entered: the bench begins at Set 1, no ramp at 45.

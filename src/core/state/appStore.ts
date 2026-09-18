@@ -74,6 +74,7 @@ import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import { normalizeName } from '../backup/legacyImport';
 import {
   COACH_DECLINES_ID,
+  acceptKey,
   emptyDeclines,
   recordDecline,
   type CoachAction,
@@ -2297,6 +2298,15 @@ export class AppStore {
     const db = await this.getDatabase();
     await putVerified(db, 'meta', next, { now: this.now });
     this.setState({ coachDeclines: next });
+  }
+
+  /** Remembers an offer the lifter took, so the coach does not make it twice in one session. */
+  acceptCoachSignal(signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'headline'>): void {
+    const session = this.state.session;
+    if (!session) return;
+    const key = acceptKey(signal);
+    if (session.coachAccepted.includes(key)) return;
+    this.setSession({ ...session, coachAccepted: [...session.coachAccepted, key] });
   }
 
   /** Records that the lifter took a coach route step; the step itself is applied elsewhere. */

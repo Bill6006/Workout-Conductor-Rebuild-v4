@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPrescription, WorkoutEntry } from '../../engine/workout/types';
 import styles from './ActiveWorkout.module.css';
-import { describeSet, formatLogged } from './setFormat';
+import { describeSet, describeSetRange, formatLogged } from './setFormat';
 
 interface LoggedSetsProps {
   entry: WorkoutEntry;
@@ -38,6 +38,36 @@ function describeUpcoming(sets: readonly SetPrescription[]): string {
   return parts.join(' · ');
 }
 
+interface UpcomingGroup {
+  first: SetPrescription;
+  last: SetPrescription;
+  count: number;
+}
+
+/** Sets still to come, with a run of identical ones folded into one row. */
+function groupUpcoming(sets: readonly SetPrescription[]): UpcomingGroup[] {
+  const groups: UpcomingGroup[] = [];
+  for (const set of sets) {
+    const open = groups[groups.length - 1];
+    const same =
+      open !== undefined &&
+      open.last.kind === set.kind &&
+      set.kind !== 'drop' &&
+      open.last.targetReps[0] === set.targetReps[0] &&
+      open.last.targetReps[1] === set.targetReps[1] &&
+      open.last.targetRir === set.targetRir &&
+      open.last.targetWeight === set.targetWeight &&
+      open.last.restSeconds === set.restSeconds;
+    if (open && same) {
+      open.last = set;
+      open.count += 1;
+    } else {
+      groups.push({ first: set, last: set, count: 1 });
+    }
+  }
+  return groups;
+}
+
 /** "2 skipped" or "45 lb × 5, 95 lb × 3" for the ramps already behind you. */
 function describeRamps(done: readonly CompletedSet[], units: 'lb' | 'kg'): string {
   const label = `${done.length} ramp${done.length === 1 ? '' : 's'}`;
@@ -49,8 +79,10 @@ function describeRamps(done: readonly CompletedSet[], units: 'lb' | 'kg'): strin
 /**
  * The sets of one exercise, kept short. Ramps you have finished fold into one
  * line that opens on tap; each finished working set is one line that opens the
- * inline editor; everything still to come is one collapsed line. The set in
- * front of you is not repeated here, because the logger below states it.
+ * inline editor; everything still to come is one collapsed line. Opened, the
+ * list stays short too: a run of identical sets is one row ("Sets 2-4"), and
+ * Show fewer folds the ramps back as well. The set in front of you is not
+ * repeated here, because the logger below states it.
  */
 export function LoggedSets({
   entry,
@@ -106,11 +138,7 @@ export function LoggedSets({
       ) : null}
       {visible.map(({ set, done, state }) => (
         <li key={set.index} className={styles.setRow} data-state={state} data-testid="set-row">
-          <span className={styles.setName}>
-            {describeSet(set, entry)}
-            {set.kind === 'warmup' ? <span className={styles.setTag}>warm-up</span> : null}
-            {set.kind === 'drop' ? <span className={styles.setTag}>drop</span> : null}
-          </span>
+          <span className={styles.setName}>{describeSet(set, entry)}</span>
           <button
             type="button"
             className={styles.setValue}
@@ -149,18 +177,15 @@ export function LoggedSets({
         </li>
       ) : null}
       {expanded
-        ? upcoming.map((set) => (
+        ? groupUpcoming(upcoming).map(({ first: set, last, count }) => (
             <li
               key={set.index}
               className={styles.setRow}
               data-state="upcoming"
+              data-count={count}
               data-testid="set-row"
             >
-              <span className={styles.setName}>
-                {describeSet(set, entry)}
-                {set.kind === 'warmup' ? <span className={styles.setTag}>warm-up</span> : null}
-                {set.kind === 'drop' ? <span className={styles.setTag}>drop</span> : null}
-              </span>
+              <span className={styles.setName}>{describeSetRange(set, last, entry)}</span>
               <span className={styles.setTarget}>
                 {set.targetReps[0]}-{set.targetReps[1]} reps
                 {set.kind === 'working'
@@ -177,12 +202,15 @@ export function LoggedSets({
             </li>
           ))
         : null}
-      {expanded && upcoming.length > 0 ? (
+      {(expanded && upcoming.length > 0) || (rampsOpen && finishedRamps.length > 1) ? (
         <li className={styles.setRow} data-state="summary">
           <button
             type="button"
             className={styles.setsToggle}
-            onClick={() => setExpanded(false)}
+            onClick={() => {
+              setExpanded(false);
+              setRampsOpen(false);
+            }}
             aria-expanded={true}
             data-testid="sets-collapse"
           >

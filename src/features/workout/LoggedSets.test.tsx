@@ -60,7 +60,12 @@ describe('LoggedSets', () => {
     expect(screen.getByTestId('set-aside')).toHaveTextContent(`${entry.sets[0]!.targetWeight} lb`);
 
     await user.click(screen.getByTestId('sets-summary'));
-    expect(screen.getAllByTestId('set-row')).toHaveLength(entry.sets.length);
+    // Opened, the list stays short: each ramp has its own load, the identical working sets are one row.
+    const rampCount = entry.sets.filter((set) => set.kind === 'warmup').length;
+    expect(screen.getAllByTestId('set-row')).toHaveLength(rampCount + 1);
+    const merged = screen.getAllByTestId('set-row').at(-1)!;
+    expect(merged).toHaveTextContent(`Sets 1–${working.length}`);
+    expect(merged).toHaveAttribute('data-count', String(working.length));
     expect(screen.getAllByTestId('set-aside').at(-1)).toHaveTextContent(/rest/);
     await user.click(screen.getByTestId('sets-collapse'));
     expect(screen.getAllByTestId('set-row')).toHaveLength(1);

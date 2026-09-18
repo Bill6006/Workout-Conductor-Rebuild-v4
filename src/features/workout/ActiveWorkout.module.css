@@ -110,10 +110,16 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 8px;
-  min-height: 40px;
-  padding: 4px 0;
+  gap: 0 8px;
+  min-height: 36px;
+  padding: 1px 0;
   border-bottom: 1px solid var(--color-border);
+}
+
+/* Rows that only inform stay slim; rows you can tap keep their height. */
+.setRow[data-state='upcoming'] {
+  min-height: 30px;
+  padding: 3px 0;
 }
 
 .setRow[data-state='upcoming'] {
@@ -184,9 +190,9 @@
 
 /* A rem basis grows with text size: the value wraps under the name once it cannot fit beside it. */
 .setTarget {
-  flex: 1 1 9rem;
+  flex: 1 1 7rem;
   min-width: 0;
-  font-size: 0.86rem;
+  font-size: 0.84rem;
 }
 
 .undo {

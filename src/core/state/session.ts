@@ -115,6 +115,8 @@ export interface WorkoutSession {
   drafts: Record<string, SetDraft>;
   /** Session-only loading exceptions: plates that are not around today. */
   loading: SessionLoading;
+  /** Coach offers already taken this session: the coach does not make them twice. */
+  coachAccepted: string[];
   rating: SessionRating | null;
   completion: CompletionSummary | null;
   lastSummary: ChangeSummary | null;
@@ -266,6 +268,7 @@ const SessionSchema = z.looseObject({
   pausedAt: z.iso.datetime().nullable().default(null),
   rest: RestSchema.nullable().default(null),
   drafts: z.record(z.string(), DraftSchema).default({}),
+  coachAccepted: z.array(z.string()).default([]),
   loading: z
     .object({ missingPlates: z.array(z.number().positive()).default([]) })
     .default({ missingPlates: [] }),
@@ -321,6 +324,7 @@ export function createSession(
     rest: null,
     drafts: {},
     loading: { missingPlates: [] },
+    coachAccepted: [],
     rating: null,
     completion: null,
     lastSummary: null,

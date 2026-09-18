@@ -125,6 +125,20 @@ export function recordDecline(
   };
 }
 
+/** What identifies an offer once it has been taken: where it came from, and what it said. */
+export function acceptKey(signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'headline'>): string {
+  return `${declineKey(signal)}|${signal.headline}`;
+}
+
+/**
+ * An offer the lifter already took this session. The evidence behind many
+ * offers is the last weeks of history, which a tap does not change, so without
+ * this the same button comes straight back and a second tap stacks the change.
+ */
+export function isAccepted(accepted: readonly string[] | undefined, signal: CoachSignal): boolean {
+  return accepted !== undefined && accepted.includes(acceptKey(signal));
+}
+
 export function isDeclined(
   declines: CoachDeclines | undefined,
   signal: CoachSignal,
@@ -158,6 +172,8 @@ export interface CoachInput {
   lastExportAt: string | null;
   /** The cloud copy is on and holds everything logged, so a backup reminder would be noise. */
   cloudCurrent?: boolean;
+  /** Offers already taken this session (see `acceptKey`): they are not made twice. */
+  accepted?: readonly string[];
   workoutCount: number;
   /** Defaults derive from the profile and history; tests and the store pass them in. */
   policy?: CoachingPolicy;
@@ -390,21 +406,37 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
         label: 'Rest 30 s longer',
       };
     case 'adjust-volume': {
-      const target = insight.muscle
-        ? allEntries(input.workout.blocks).find(
-            (candidate) =>
-              !started(input, candidate) &&
-              requireExercise(candidate.exerciseId).primaryMuscles.includes(
-                insight.muscle as never,
-              ),
-          )
-        : undefined;
-      if (!target) return null;
-      return {
-        kind: 'recalibrate',
-        trigger: { type: 'sets', entryId: target.id, workingDelta: 1 },
-        label: `Add a set to ${requireExercise(target.exerciseId).name}`,
+      const muscle = insight.muscle;
+      if (!muscle) return null;
+      // The extra set goes on direct work for the muscle. The heavy compounds that open the
+      // session are the costliest place to add one and the least direct, so they never take
+      // it; neither does an exercise whose sets were already changed today.
+      const candidates = allEntries(input.workout.blocks).filter((candidate) => {
+        if (started(input, candidate) || candidate.manual?.sets) return false;
+        if (candidate.role === 'primary-strength' || candidate.role === 'secondary-strength')
+          return false;
+        return requireExercise(candidate.exerciseId).primaryMuscles.includes(muscle);
+      });
+      const rank = (candidate: WorkoutEntry) => {
+        const exercise = requireExercise(candidate.exerciseId);
+        return (exercise.primaryMuscles[0] === muscle ? 0 : 2) + (exercise.compound ? 1 : 0);
       };
+      const target = [...candidates].sort((a, b) => rank(a) - rank(b))[0];
+      if (target) {
+        return {
+          kind: 'recalibrate',
+          trigger: { type: 'sets', entryId: target.id, workingDelta: 1 },
+          label: `Add a set to ${requireExercise(target.exerciseId).name}`,
+        };
+      }
+      // Nothing direct today: two sets of an accessory when there is room, else the next session.
+      return (
+        accessoryActionFor(input, muscle) ?? {
+          kind: 'focus',
+          muscle,
+          label: `Lead the next session with ${muscleName(muscle).toLowerCase()}`,
+        }
+      );
     }
     case 'open-alternatives':
       if (!entry || !untouched) return null;
@@ -413,6 +445,38 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
     default:
       return null;
   }
+}
+
+/** Two sets of the best accessory for a muscle, when today still has room for them. */
+function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction | null {
+  const entries = allEntries(input.workout.blocks);
+  const keys = doneKeys(input.completed);
+  const remaining = estimateWorkout(input.workout.blocks, 0, requireExercise, (id, index) =>
+    keys.has(`${id}:${index}`),
+  ).totalMinutes;
+  if (input.workout.duration.targetMinutes - remaining < ROOM_MINUTES) return null;
+  const accessory = pickAccessoryFor(
+    muscle,
+    entries.map((entry) => requireExercise(entry.exerciseId)),
+    accessoryPicker({
+      profile: input.profile,
+      location: input.location,
+      constraints: {
+        excludeExerciseIds: input.constraints.avoidExerciseIds,
+        unavailableEquipment: input.constraints.busyEquipment,
+        painJoints: input.constraints.painJoints,
+      },
+      history: input.history,
+      now: input.now,
+      focus: input.focus ?? null,
+    }),
+  );
+  if (!accessory) return null;
+  return {
+    kind: 'recalibrate',
+    trigger: { type: 'add-exercise', exerciseId: accessory.id, muscle, sets: 2 },
+    label: `Add 2 sets of ${accessory.name}`,
+  };
 }
 
 function strategySignals(input: CoachInput): CoachSignal[] {
@@ -469,7 +533,7 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       });
     }
     // An extra set on offer ends in a tap.
-    if (!offered && progression.setsAdvice === 1 && !started(input, entry)) {
+    if (!offered && progression.setsAdvice === 1 && !started(input, entry) && !entry.manual?.sets) {
       offered = true;
       signals.push({
         domain: 'progression',
@@ -495,7 +559,8 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
     if (!offered && progression.capped && !started(input, entry)) {
       offered = true;
       const top = workingSets(entry).find((set) => set.kind === 'working')?.targetReps[1] ?? 0;
-      const repsAtCeiling = top >= 20;
+      // An exercise whose sets were already changed today is not offered another one.
+      const repsAtCeiling = top >= 20 && !entry.manual?.sets;
       signals.push({
         domain: 'progression',
         headline: `${exercise.name}: at the heaviest weight here (${progression.capped.at} ${units})`,
@@ -912,7 +977,8 @@ const CONFIDENCE_RANK = { high: 3, medium: 2, low: 1 } as const;
 export function conductCoach(input: CoachInput): CoachCard | null {
   const policy = input.policy ?? coachingPolicy(input.profile.experience);
   const all = gatherSignals(input).filter(
-    (signal) => !isDeclined(input.declines, signal, input.now),
+    (signal) =>
+      !isDeclined(input.declines, signal, input.now) && !isAccepted(input.accepted, signal),
   );
   const signals = policy.hideObvious ? all.filter((signal) => !signal.obvious) : all;
   if (signals.length === 0) return null;

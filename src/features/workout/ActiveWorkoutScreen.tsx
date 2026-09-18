@@ -25,7 +25,7 @@ import type { SessionRating } from '../../core/validation/workoutRecord';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
 import { buildRankingSignals } from '../../engine/alternatives/signals';
 import { liveSetRecords } from '../../engine/scoring/personalRecords';
-import type { CoachAction } from '../../engine/coach/coachConductor';
+import type { CoachAction, CoachSignal } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
 import { ReadinessSheet } from '../today/ReadinessSheet';
 import { estimateWorkout } from '../../engine/duration/duration';
@@ -262,11 +262,15 @@ export function ActiveWorkoutScreen() {
     return () => setMaxFor({ entry, block });
   };
 
-  const onCoachAction = (action: CoachAction) => {
+  const onCoachAction = (action: CoachAction, signal: CoachSignal) => {
     void store.noteCoachAction(action);
     switch (action.kind) {
       case 'recalibrate':
-        void store.recalibrate(action.trigger);
+        // Once the change lands the offer is marked as taken, so the same button never comes back.
+        void store.recalibrate(action.trigger).then((result) => {
+          // A route step keeps its own record (it reads as applied); everything else is marked here.
+          if (result?.ok && !action.route) store.acceptCoachSignal(signal);
+        });
         break;
       case 'rest':
         store.adjustRest(action.deltaSeconds);
@@ -286,7 +290,9 @@ export function ActiveWorkoutScreen() {
         window.location.hash = '#/settings';
         break;
       case 'focus':
-        void store.setCoachFocus(action.muscle);
+        void store.setCoachFocus(action.muscle).then(() => {
+          if (!action.route) store.acceptCoachSignal(signal);
+        });
         break;
     }
   };

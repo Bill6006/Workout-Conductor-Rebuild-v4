@@ -40,6 +40,45 @@ test.describe('session polish', () => {
     await expect(items.filter({ hasText: 'Rest style.' })).toHaveCount(0);
   });
 
+  test('the set list stays short when opened: finished ramps on one line, identical sets in one row', async ({
+    page,
+  }, testInfo) => {
+    await ensureProfile(page);
+    await page.getByTestId('start-workout').click();
+    const card = page.getByTestId('exercise-card').first();
+    // A max gives the lift two ramps; log them and the first working set.
+    await card.getByTestId('know-max').click();
+    const sheet = page.getByRole('dialog', { name: /Your max for/ });
+    await sheet.getByTestId('max-weight').fill('185');
+    await sheet.getByTestId('max-reps').fill('5');
+    await sheet.getByTestId('max-save').click();
+    await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
+    for (let logged = 0; logged < 3; logged += 1) {
+      await page.getByTestId('log-set').click();
+      const skipRest = page.getByTestId('skip-rest');
+      if (await skipRest.isVisible()) await skipRest.click();
+    }
+    await expect(card.getByTestId('target-line')).toContainText('Set 2 of');
+    await card.getByTestId('sets-summary').click();
+    const rows = card.getByTestId('set-row');
+    // One line for the two ramps, one for the set done, one for the three still to come.
+    await expect(rows).toHaveCount(3);
+    await expect(card.getByTestId('ramps-summary')).toContainText('2 ramps');
+    const upcoming = card.locator('[data-testid="set-row"][data-state="upcoming"]');
+    await expect(upcoming).toHaveCount(1);
+    await expect(upcoming).toContainText('Sets 2–4');
+    await expect(upcoming).toHaveAttribute('data-count', '3');
+    if (process.env.SCREENSHOT_DIR && testInfo.project.name === 'android-412') {
+      await card.getByTestId('sets-collapse').scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: `${process.env.SCREENSHOT_DIR}/android-412-workout-set-list-compact.png`,
+      });
+    }
+    await card.getByTestId('sets-collapse').click();
+    await expect(rows).toHaveCount(3);
+    await expect(upcoming).toHaveCount(0);
+  });
+
   test('Location on Today opens a sheet, switches the place, and stays on the tab', async ({
     page,
   }) => {

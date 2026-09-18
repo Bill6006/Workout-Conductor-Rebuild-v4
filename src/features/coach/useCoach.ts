@@ -51,6 +51,7 @@ export function useCoach(): CoachContext | null {
       fatigue,
       strategy,
       lastExportAt,
+      accepted: session.coachAccepted,
       cloudCurrent:
         cloud.configured &&
         cloud.pending === 0 &&

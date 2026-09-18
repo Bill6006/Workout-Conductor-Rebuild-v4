@@ -105,6 +105,8 @@ const PARTIAL_TRIGGERS = new Set<TriggerType>([
   'end-by',
 ]);
 const LONG_INTERRUPTION_SECONDS = 20 * 60;
+/** One exercise never carries more working sets than this in a session, however the sets are added. */
+export const MAX_WORKING_SETS = 8;
 const MIN_REMAINING_MINUTES = 5;
 const FAR_FROM_TARGET_REPS = 3;
 const TECHNIQUE_LABEL = { supersets: 'Supersets', dropSets: 'Drop sets', circuits: 'Circuits' };
@@ -1262,6 +1264,14 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const { isDone } = classify(request);
       const exercise = requireExercise(entry.exerciseId);
       if (trigger.workingDelta > 0) {
+        const workingNow = entry.sets.filter((set) => set.kind === 'working').length;
+        if (workingNow >= MAX_WORKING_SETS) {
+          return {
+            ...base,
+            workout,
+            headline: `${exercise.name} stays at ${workingNow} working sets: past that another set adds fatigue, not growth.`,
+          };
+        }
         const last = [...entry.sets].reverse().find((set) => set.kind === 'working');
         const prescription = prescribe(exercise, entry.role, request.profile);
         const added: SetPrescription = {

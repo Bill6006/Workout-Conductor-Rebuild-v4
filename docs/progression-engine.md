@@ -285,3 +285,15 @@ For a lift never done, `estimateFromOtherLifts` (`crossEstimate.ts`) scales each
 estimated max (history within 180 days, or an entered max) through the reference ratios of
 `startingLoad.ts`, weighting lifts on the same muscles most and recent ones more; it comes before
 the bodyweight estimate and needs no bodyweight.
+
+## Offers taken, and where an extra set goes (Maintenance 13 follow-up)
+
+Many offers rest on weeks of history that a tap does not change, so the session remembers each
+offer taken: `session.coachAccepted` holds `acceptKey(signal)` (source, exercise, headline) and
+`conductCoach` drops any signal whose key is there (`isAccepted`). The screens record it once the
+recalibration succeeds; an action that belongs to a route is left to the route's own record.
+Offers that add a set skip any entry with `manual.sets`, so they never stack. The
+`adjust-volume` recommendation picks direct work: not started, sets untouched, never a strength
+role, an exercise that leads with the muscle before one that includes it, isolation before
+compound; with nothing direct it offers an accessory (`accessoryActionFor`) or a focus for the
+next session. The `sets` trigger refuses to go past `MAX_WORKING_SETS` (8) and says why.
