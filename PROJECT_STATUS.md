@@ -1,23 +1,23 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-14_
+_Last updated: 2026-09-18_
 
-| Item                   | Value                                                                                                                                                                                                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                        |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                        |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                           |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                               |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, and 7 GREEN; 4, 5, 8, and 9 at their review gates. Maintenance 10, the token on the device and getting a device's history back, at its review gate                                                  |
-| Phase gate             | Maintenance 10 **YELLOW** - built, deployed, and verified against the live URL; awaiting the owner's Android review. Maintenance 4, 5, 8, and 9 YELLOW (reviews still open)                                                                                     |
-| Current branch         | `main`                                                                                                                                                                                                                                                          |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                    |
-| Work in progress       | None. Maintenance 10 is at its review gate (`docs/reports/maintenance-10.md`). On the phone: open the app once so it updates, then Progress shows the Sep 13 workout again on the first sync                                                                    |
-| Latest commit          | Status and live screenshots for build `25908c0` (this commit); app build under review is `25908c0`                                                                                                                                                              |
-| Latest deployment      | `25908c0` deployed by Deploy Pages run 34902221178 (success); browser suite against the live URL: 156 passed + 16 skipped by design; the 7 failures on each run are this machine's download cancellations, unchanged from before this round and green in CI     |
-| Test totals            | Unit: 393 passed (81 files). Browser/mobile: 155 passed + 16 skipped by design locally and 156 passed + 16 skipped against the live URL; the 7 failures on each run are this machine's download cancellations, unchanged from before this round and green in CI |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                                    |
+| Item                   | Value                                                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                              |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                              |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                      |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                 |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                     |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, and 7 GREEN; 4, 5, 8, 9, and 10 at their review gates. Maintenance 11, the logger's defects (round A), at its review gate |
+| Phase gate             | Maintenance 11 **YELLOW** - built, deployed, and verified against the live URL; awaiting the owner's Android review. Maintenance 4, 5, 8, 9, and 10 YELLOW (reviews still open)       |
+| Current branch         | `main`                                                                                                                                                                                |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                          |
+| Work in progress       | None. Maintenance 11 is at its review gate (`docs/reports/maintenance-11.md`). Round B (the loading engine and the logger's guidance) follows on the owner's go                       |
+| Latest commit          | Status and live screenshots for build `cc3d466` (this commit); app build under review is `cc3d466`                                                                                    |
+| Latest deployment      | `cc3d466` deployed by Deploy Pages run 35337848900 (success); browser suite against the live URL: 171 passed + 14 skipped by design                                                   |
+| Test totals            | Unit: 403 passed (84 files). Browser/mobile: 171 passed + 14 skipped by design locally and 171 passed + 14 skipped by design against the live URL                                     |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                          |
 
 ## Phase checklist
 
@@ -138,6 +138,12 @@ _Last updated: 2026-09-14_
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 11: the logger's defects, round A (YELLOW - awaiting review)
+
+- Found, from the owner's screenshots and the code: the plate line took any draft ahead of the target while the dial did not, so a working set was described with its warm-up's plates; any logged set blocked Skip today because skipping removed the exercise and the guard on logged work refused; a drop set's load was fixed at accept time from the plan and rounded upward, above the weight lifted; a zero-rep skip was a hidden gesture; a failed save spoke in the browser's words; and updates were withheld during a workout, so a broken save could not receive its fix.
+- One rule for the dial and the plate line; warm-ups and drop sets leave no draft. Skipping keeps every logged set and records the rest as skipped, with the guard untouched and Skip today greyed with its reason once every set is logged. A drop set takes a fifth off the last working set actually lifted, rounded down to the step. The button reads Skip set at zero reps. Any Whole workout row opens its exercise for editing. A failed save is explained on the screen with Try again. The update offer stays during a workout and says the session carries on.
+- Report: `docs/reports/maintenance-11.md`.
+
 ## Maintenance 10: the token on the device, and getting a device's history back (YELLOW - awaiting review)
 
 - Found, from the code: the pull skipped every row this device wrote, so a device could never recover its own uploads; a token entered again for the same database did not restart the pull; the token had one copy, written once with the browser's default durability and never read back; a missing token showed as "off", the same as never having had one.
@@ -222,6 +228,8 @@ _Last updated: 2026-09-14_
 - Automatic backups include your demonstrations inline, so three of them cost about three times the size of your media.
 
 ## Mobile screenshots
+
+Maintenance 11, captured by Playwright from the deployed build `cc3d466` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-11](docs/screenshots/maintenance-11)): [Skip set at zero reps](docs/screenshots/maintenance-11/android-412-workout-skip-set-label.png) · [Skipped the rest, logged set kept](docs/screenshots/maintenance-11/android-412-workout-skip-rest.png) · [A finished exercise opened from Whole workout](docs/screenshots/maintenance-11/android-412-workout-viewing.png) · [Skip today greyed with its reason](docs/screenshots/maintenance-11/android-412-workout-skip-greyed.png).
 
 Maintenance 10, captured by Playwright from the deployed build `25908c0` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ with the database stood in for at the network layer (see [docs/screenshots/maintenance-10](docs/screenshots/maintenance-10)): [Token written again from the phone's copy](docs/screenshots/maintenance-10/android-412-settings-cloud-token-restored.png) · [Both copies gone](docs/screenshots/maintenance-10/android-412-settings-cloud-token-missing.png) · [Token log on the Storage card](docs/screenshots/maintenance-10/android-412-settings-storage-token-log.png).
 
