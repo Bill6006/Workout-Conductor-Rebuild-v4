@@ -2,22 +2,22 @@
 
 _Last updated: 2026-09-18_
 
-| Item                   | Value                                                                                                                                                                                                                                        |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                     |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                     |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                             |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                        |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                            |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, and 13 GREEN; 4, 5, 8, 9, 10, and 11 at their review gates. Maintenance 14, round D (the rest timer's notification and sounds, the unfinished-workout nudge), in progress |
-| Phase gate             | Maintenance 13 **GREEN** from the owner on 2026-09-18, given with the last two fixes. Maintenance 14 in progress. Maintenance 4, 5, 8, 9, 10, and 11 YELLOW (reviews still open)                                                             |
-| Current branch         | `main`                                                                                                                                                                                                                                       |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                 |
-| Work in progress       | Maintenance 14, round D: a notification and sounds when the rest timer ends, and a nudge when a workout has been left unfinished too long                                                                                                    |
-| Latest commit          | Status and live screenshots for build `65753ef` (this commit); app build is `65753ef`                                                                                                                                                        |
-| Latest deployment      | `65753ef` deployed by Deploy Pages run 35396249787 (success); browser suite against the live URL: 195 passed + 14 skipped by design                                                                                                          |
-| Test totals            | Unit: 471 passed (105 files). Browser/mobile: 195 passed + 14 skipped by design locally and 195 passed + 14 skipped by design against the live URL                                                                                           |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                 |
+| Item                   | Value                                                                                                                                                                                                                                           |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                        |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                        |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                           |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                               |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, and 13 GREEN; 4, 5, 8, 9, 10, and 11 at their review gates. Maintenance 14, alerts (round D), at its review gate                                                             |
+| Phase gate             | Maintenance 14 **YELLOW** - built, deployed, and verified against the live URL; awaiting the owner's Android review. Maintenance 4, 5, 8, 9, 10, and 11 YELLOW (reviews still open)                                                             |
+| Current branch         | `main`                                                                                                                                                                                                                                          |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                    |
+| Work in progress       | None. Maintenance 14 is at its review gate (`docs/reports/maintenance-14.md`). Round E (more research-based programming styles, with the app recommending the one that fits) follows on the owner's go                                          |
+| Latest commit          | Status and live screenshots for build `1b0096d` (this commit); app build under review is `1b0096d`                                                                                                                                              |
+| Latest deployment      | `1b0096d` deployed by Deploy Pages run 35401395776 (success); browser suite against the live URL: 204 passed + 14 skipped by design                                                                                                             |
+| Test totals            | Unit: 490 passed (110 files). Browser/mobile: 198 passed + 14 skipped by design, plus four timeouts on the small-phone project in a slowed run that pass on rerun (10 of 10) locally and 204 passed + 14 skipped by design against the live URL |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                    |
 
 ## Phase checklist
 
@@ -138,6 +138,12 @@ _Last updated: 2026-09-18_
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
+## Maintenance 14: alerts, round D (YELLOW - awaiting review)
+
+- Found: the rest timer ended in silence, a workout left open stays open for days with nothing said, and there is no server, so a notification cannot be scheduled for a moment when the app is asleep. The owner was told that limit when the item was agreed.
+- The rest counts itself in: three ticks and a longer tone, laid onto the audio clock a few seconds ahead and cancelled on any change, from any tab, unlocked by the tap that logs a set, on by default with a switch in Settings. A notification when the rest ends and a nudge after half an hour without a logged set, both only while the app is in the background, with permission asked for once from the Settings switch. Whatever the phone does with those, the coach names a workout still open after three hours and its one action opens the end-of-workout sheet from Today or from the workout. One honest line in Settings says what a locked phone can and cannot do. No server, no push service, no new network call; the two switches stay on the device.
+- Report: `docs/reports/maintenance-14.md`.
+
 ## Maintenance 13: session context, round C (GREEN)
 
 - GREEN from the owner on 2026-09-18 (issue #14), given together with the last two fixes below.
@@ -243,6 +249,8 @@ _Last updated: 2026-09-18_
 - Automatic backups include your demonstrations inline, so three of them cost about three times the size of your media.
 
 ## Mobile screenshots
+
+Maintenance 14, captured by Playwright from the deployed build `1b0096d` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-14](docs/screenshots/maintenance-14)): [The Alerts card in Settings](docs/screenshots/maintenance-14/android-412-settings-alerts.png) · [The coach naming a workout left open](docs/screenshots/maintenance-14/android-412-workout-left-open.png).
 
 Maintenance 13, captured by Playwright from the deployed builds `2159826` and `65753ef` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-13](docs/screenshots/maintenance-13)): [Ramps under the target after a max](docs/screenshots/maintenance-13/android-412-workout-ramps-under-target.png) · [A first target from the bench](docs/screenshots/maintenance-13/android-412-workout-cross-estimate.png) · [The set list, opened and still short](docs/screenshots/maintenance-13/android-412-workout-set-list-compact.png) · [Plates: a plate missing today](docs/screenshots/maintenance-13/android-412-workout-plates-not-today.png) · [Plates: Edit rack](docs/screenshots/maintenance-13/android-412-workout-plates-edit-rack.png) · [The Target line at its own size](docs/screenshots/maintenance-13/android-412-workout-target-glow.png).
 
