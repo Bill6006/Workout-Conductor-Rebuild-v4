@@ -66,6 +66,11 @@ test.describe('what the place can load', () => {
     await editor.getByTestId('missing-2.5').click();
     await settle(page);
     await expect(editor.getByTestId('missing-2.5')).toHaveAttribute('aria-pressed', 'true');
+    // One row, plain meaning: the plate reads as off, and one line says what that does.
+    await expect(editor.getByTestId('missing-2.5')).toHaveAttribute('data-state', 'off');
+    await expect(editor.getByTestId('loading-note')).toHaveText(
+      'No 2.5 today: the bar moves by 10 lb. Back next workout.',
+    );
     // Without the 2.5s the bar moves by 10, and the plate line never asks for the missing plate.
     await expect(card.getByRole('button', { name: 'Increase weight by 10 lb' })).toBeVisible();
     const dial = firstNumber(await card.getByTestId('logger-weight').textContent());
@@ -79,6 +84,25 @@ test.describe('what the place can load', () => {
     await editor.getByTestId('missing-2.5').click();
     await settle(page);
     await expect(card.getByRole('button', { name: 'Increase weight by 5 lb' })).toBeVisible();
+    await expect(editor.getByTestId('loading-note')).toHaveText('The bar moves by 5 lb.');
+
+    // Once per place: Edit rack says which plates the gym never has, and All plates undoes it.
+    await expect(editor).toHaveAttribute('data-mode', 'today');
+    await editor.getByTestId('rack-edit').click();
+    await expect(editor).toHaveAttribute('data-mode', 'rack');
+    await expect(editor).toContainText('Plates at Gym');
+    await editor.getByTestId('plate-35').click();
+    await settle(page);
+    await expect(editor.getByTestId('plate-35')).toHaveAttribute('data-state', 'off');
+    await capture(page, testInfo, 'workout-plates-edit-rack', editor);
+    await editor.getByTestId('rack-edit').click();
+    await expect(editor.getByTestId('missing-35')).toHaveCount(0);
+    await expect(editor.getByTestId('missing-45')).toBeVisible();
+    await editor.getByTestId('rack-edit').click();
+    await editor.getByTestId('rack-all').click();
+    await settle(page);
+    await editor.getByTestId('rack-edit').click();
+    await expect(editor.getByTestId('missing-35')).toBeVisible();
   });
 
   test('the target line glows while the dial sits under it, and opens Plates on a tap', async ({
@@ -100,6 +124,21 @@ test.describe('what the place can load', () => {
     const dial = firstNumber(await card.getByTestId('logger-weight').textContent());
     expect(dial).toBeLessThan(target);
     await expect(hint).toHaveAttribute('data-pulse', 'true');
+    // The target line is the same size as the other two and never cut off.
+    const sizes = await card.evaluate((element) => {
+      const size = (id: string) => {
+        const node = element.querySelector(`[data-testid="${id}"]`);
+        return node ? getComputedStyle(node).fontSize : null;
+      };
+      const weight = element.querySelector('[data-testid="weight-hint"]');
+      return {
+        weight: size('weight-hint'),
+        reps: size('reps-hint'),
+        cut: weight ? weight.scrollWidth > weight.clientWidth + 1 : true,
+      };
+    });
+    expect(sizes.weight).toBe(sizes.reps);
+    expect(sizes.cut).toBe(false);
     await capture(page, testInfo, 'workout-target-glow', hint);
 
     await hint.click();

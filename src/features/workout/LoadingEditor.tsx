@@ -74,6 +74,8 @@ export function LoadingEditor({
   const kind: 'stack' | 'dumbbells' | 'plates' =
     key === PLATES_KEY ? 'plates' : key === DUMBBELLS_KEY ? 'dumbbells' : 'stack';
   const [editing, setEditing] = useState(false);
+  /** The rack of plates is edited rarely; a plate missing today is the everyday case. */
+  const [editingRack, setEditingRack] = useState(false);
   const [rows, setRows] = useState<Row[]>(() => rowsFrom(spec, kind === 'plates' ? 'stack' : kind));
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -91,14 +93,19 @@ export function LoadingEditor({
   };
 
   if (kind === 'plates') {
-    const rack = spec?.kind === 'plates' ? spec.perSide : PLATE_INVENTORY[units];
+    const inventory = PLATE_INVENTORY[units];
+    const rack = spec?.kind === 'plates' ? spec.perSide : inventory;
     const onRack = new Set(rack);
     const missing = new Set(missingPlates);
     const togglePlate = (plate: number) => {
-      const next = PLATE_INVENTORY[units].filter((size) =>
+      const next = inventory.filter((size) =>
         size === plate ? !onRack.has(size) : onRack.has(size),
       );
-      void run(() => onSave(next.length > 0 ? { kind: 'plates', perSide: next } : null));
+      // The last plate stays; the full set needs no record of its own.
+      if (next.length === 0) return;
+      void run(() =>
+        onSave(next.length < inventory.length ? { kind: 'plates', perSide: next } : null),
+      );
     };
     const toggleMissing = (plate: number) => {
       const next = missing.has(plate)
@@ -106,43 +113,77 @@ export function LoadingEditor({
         : [...missingPlates, plate];
       void run(() => onSetMissingPlates(next));
     };
+    const gone = rack.filter((plate) => missing.has(plate));
+    const note = editingRack
+      ? `Tap a plate ${placeName} does not have.`
+      : gone.length > 0
+        ? `No ${gone.join(' or ')} today: the bar moves by ${loading.step} ${units}. Back next workout.`
+        : `The bar moves by ${loading.step} ${units}.`;
+    // One row, two plain meanings. Every day: tap the plate you cannot find, for this workout
+    // only. Once per place: Edit rack, and tap what the place never has.
     return (
-      <div data-testid="loading-editor" data-kind="plates">
-        <p className={styles.panelLabel}>Plates at {placeName}, per side</p>
-        <div className={styles.chips} role="group" aria-label={`Plates at ${placeName}`}>
-          {PLATE_INVENTORY[units].map((plate) => (
-            <button
-              key={plate}
-              type="button"
-              className={styles.chip}
-              aria-pressed={onRack.has(plate)}
-              onClick={() => togglePlate(plate)}
-              disabled={busy}
-              data-testid={`plate-${plate}`}
-            >
-              {plate}
-            </button>
-          ))}
+      <div
+        data-testid="loading-editor"
+        data-kind="plates"
+        data-mode={editingRack ? 'rack' : 'today'}
+      >
+        <div className={styles.panelHead}>
+          <p className={styles.panelLabel}>
+            {editingRack ? `Plates at ${placeName}` : 'Missing a plate today? Tap it'}
+          </p>
+          <button
+            type="button"
+            className={styles.textButton}
+            onClick={() => setEditingRack((current) => !current)}
+            data-testid="rack-edit"
+          >
+            {editingRack ? 'Done' : 'Edit rack'}
+          </button>
         </div>
-        <p className={styles.panelLabel}>Not today</p>
-        <div className={styles.chips} role="group" aria-label="Plates missing today">
-          {rack.map((plate) => (
+        <div
+          className={styles.chips}
+          role="group"
+          aria-label={editingRack ? `Plates at ${placeName}` : 'Plates missing today'}
+        >
+          {(editingRack ? inventory : rack).map((plate) => {
+            const off = editingRack ? !onRack.has(plate) : missing.has(plate);
+            const state = editingRack
+              ? off
+                ? `not at ${placeName}`
+                : `at ${placeName}`
+              : off
+                ? 'missing today'
+                : 'on the rack';
+            return (
+              <button
+                key={plate}
+                type="button"
+                className={styles.plateChip}
+                data-state={off ? 'off' : 'on'}
+                aria-pressed={editingRack ? !off : off}
+                aria-label={`${plate} ${units}, ${state}`}
+                onClick={() => (editingRack ? togglePlate(plate) : toggleMissing(plate))}
+                disabled={busy}
+                data-testid={editingRack ? `plate-${plate}` : `missing-${plate}`}
+              >
+                {plate}
+              </button>
+            );
+          })}
+          {editingRack && rack.length < inventory.length ? (
             <button
-              key={plate}
               type="button"
-              className={styles.chip}
-              aria-pressed={missing.has(plate)}
-              onClick={() => toggleMissing(plate)}
+              className={styles.textButton}
+              onClick={() => void run(() => onSave(null))}
               disabled={busy}
-              data-testid={`missing-${plate}`}
+              data-testid="rack-all"
             >
-              {plate}
+              All plates
             </button>
-          ))}
+          ) : null}
         </div>
-        <p className={styles.panelNote}>
-          Targets land on what the rack can make: with the smallest plate {loading.step / 2}, the
-          bar moves by {loading.step} {units}. Not today lasts this session only.
+        <p className={styles.panelNote} data-testid="loading-note">
+          {note}
         </p>
         {problem ? <p className={styles.panelNote}>{problem}</p> : null}
       </div>

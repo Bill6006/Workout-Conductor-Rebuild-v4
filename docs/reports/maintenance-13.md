@@ -108,6 +108,19 @@ Two things from the phone, both older than this round, fixed under the same gate
   removing the token now bumps an epoch, and an attempt that started before the change drops its
   result. A held sync in the unit suite proves it: the test fails without the guard.
 
+- **The Target line was oversized and cut off ("Target 14...").** Making that line tappable in
+  Maintenance 12 gave it a `font: inherit` rule that came after the hint's own size and reset it,
+  so it rendered at the dial's size and ran out of room. It keeps the hint's size now, matches
+  the other two lines, and wraps rather than cutting. The browser suite compares the computed
+  sizes and checks the line is never clipped.
+- **The Plates panel had two look-alike rows with opposite meanings.** "Plates at Gym" (lit means
+  the gym has it) sat above "Not today" (lit means it is missing), and the owner removed most of
+  his gym's plates while trying to mark one missing. It is one row now with a plain meaning:
+  "Missing a plate today? Tap it" strikes the plate through for this workout, and one line says
+  what that does to the bar's step. The place's own rack sits behind Edit rack, where a tap
+  means the place never has that plate, with All plates to put everything back. Fewer lines
+  than before, no instructions to read.
+
 ## How to check on the phone
 
 1. Start a workout with no max entered: the bench begins at Set 1, no ramp at 45.
