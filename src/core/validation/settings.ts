@@ -14,6 +14,10 @@ export const LocalSettingsSchema = z.looseObject({
   lastImportAt: z.iso.datetime().nullable(),
   /** This device's id for the cloud copy; generated once, never exported or restored. */
   deviceId: z.string().min(1).nullable().default(null),
+  /** Ticks and a tone as a rest ends. On this device only. */
+  restSounds: z.boolean().default(true),
+  /** Notifications while the app is in the background; off until the switch is turned on. */
+  notifications: z.boolean().default(false),
 });
 
 export type LocalSettings = z.infer<typeof LocalSettingsSchema>;
@@ -24,4 +28,6 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   lastExportAt: null,
   lastImportAt: null,
   deviceId: null,
+  restSounds: true,
+  notifications: false,
 };

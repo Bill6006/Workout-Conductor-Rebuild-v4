@@ -138,3 +138,11 @@ build verification, and the Playwright suite (three device projects plus a seria
 `.github/workflows/pages.yml` reuses that workflow on every push to `main` and deploys `dist/`
 to the permanent Pages URL only when every step passed. `E2E_BASE_URL=<url> npx playwright test`
 runs the same suite against a deployed build.
+
+## Alerts (`src/core/alerts/`, Maintenance 14)
+
+`cues.ts` plans the rest's last seconds; `restSounds.ts` lays them onto the Web Audio clock
+through a `ToneOutput` seam (a recorder in tests); `notify.ts` shows notifications through the
+service worker, whose click handler is `public/sw-notify.js` (loaded by workbox `importScripts`);
+`useWorkoutAlerts` is mounted once in `App` so everything works from any tab. There is no server:
+a notification needs the app alive in the background.

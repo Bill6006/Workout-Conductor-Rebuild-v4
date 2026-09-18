@@ -21,7 +21,8 @@ function format(seconds: number): string {
  * Rest timer driven by an absolute end time, so it keeps counting across
  * screen changes and backgrounding and freezes exactly while the workout is
  * paused. Completion is a visible state change plus one short vibration where
- * the device allows it; there is no sound.
+ * the device allows it; the sounds and the background notification are the
+ * app-wide alerts' job (`core/alerts/useWorkoutAlerts`), so they work from any tab.
  */
 export function RestTimer({ rest, paused, onAdjust, onSkip }: RestTimerProps) {
   const now = useTicker(500, !paused);

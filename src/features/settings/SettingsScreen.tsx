@@ -11,6 +11,7 @@ import { ScheduleEditor } from '../profile/editors/ScheduleEditor';
 import { StyleEditor } from '../profile/editors/StyleEditor';
 import { UnitsEditor } from '../profile/editors/UnitsEditor';
 import { useProfileEditor } from '../profile/useProfileEditor';
+import { AlertsCard } from './AlertsCard';
 import { BackupCard } from './BackupCard';
 import { CloudCopyCard } from './CloudCopyCard';
 import { DiagnosticsCard } from './DiagnosticsCard';
@@ -89,6 +90,7 @@ export function SettingsScreen() {
         </Card>
       )}
 
+      <AlertsCard />
       <CloudCopyCard />
       <BackupCard />
       <SnapshotsCard />

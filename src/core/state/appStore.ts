@@ -209,6 +209,8 @@ export interface AppState {
   history: WorkoutHistoryRecord[];
   /** Today's workout session: the generated workout plus session-only state. */
   session: WorkoutSession | null;
+  /** Today asked for the end-of-workout sheet; the workout screen opens it and clears this. */
+  finishRequested: boolean;
   calibration: CalibrationState;
   customExercises: CustomExercise[];
   /** Per-exercise notes and cue memory. */
@@ -513,6 +515,7 @@ export class AppStore {
       history: [],
       savedWorkouts: [],
       session: null,
+      finishRequested: false,
       calibration: IDLE_CALIBRATION,
       customExercises: [],
       customInstructions: [],
@@ -2310,6 +2313,15 @@ export class AppStore {
     const db = await this.getDatabase();
     await putVerified(db, 'meta', next, { now: this.now });
     this.setState({ coachDeclines: next });
+  }
+
+  /** Asks the workout screen to open its end-of-workout sheet the next time it shows. */
+  requestFinish(): void {
+    this.setState({ finishRequested: true });
+  }
+
+  clearFinishRequest(): void {
+    if (this.state.finishRequested) this.setState({ finishRequested: false });
   }
 
   /** Remembers an offer the lifter took, so the coach does not make it twice in one session. */

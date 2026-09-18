@@ -33,6 +33,9 @@ storage on that device: two copies, in IndexedDB and in local storage, both on t
 - Small settings, active-session metadata, and the second copy of the cloud token with its log:
   localStorage in the user's browser.
 - Backups: exported by the user to a file they control. Never uploaded anywhere by the app.
+- Sounds and notifications (Maintenance 14): made by the app on the device, with no server and
+  no push service behind them. The two switches live in the device's local settings, outside
+  backups and the cloud copy.
 - Cloud copy (optional): with a token on the device, the profile, places, workouts, meta,
   custom exercises, notes and cues, and saved workouts are mirrored to the owner's own database
   at the constant URL shown in Settings, and pulled back onto any device that pastes the same

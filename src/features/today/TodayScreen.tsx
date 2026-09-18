@@ -133,6 +133,11 @@ export function TodayScreen() {
       case 'backup':
         window.location.hash = routeHref('settings');
         break;
+      case 'finish':
+        // The sheet lives on the workout screen: go there and have it open.
+        store.requestFinish();
+        window.location.hash = routeHref('workout');
+        break;
       case 'focus':
         void store.setCoachFocus(action.muscle).then(() => {
           if (!action.route) store.acceptCoachSignal(signal);

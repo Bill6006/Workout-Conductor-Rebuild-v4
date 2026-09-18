@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { AppShell } from '../components/AppShell/AppShell';
 import { CalibrationOverlay } from '../components/CalibrationOverlay/CalibrationOverlay';
 import { Card } from '../components/Card/Card';
+import { useWorkoutAlerts } from '../core/alerts/useWorkoutAlerts';
 import { useAppState } from '../core/state/useAppStore';
 import { type RouteId } from './navigation';
 import { UpdatePrompt } from './pwa/UpdatePrompt';
@@ -13,6 +14,7 @@ export function App() {
   const routeId = useHashRoute();
   const state = useAppState();
   useSetupLink();
+  useWorkoutAlerts();
 
   // First run (or a storage error with nothing saved) goes straight to setup.
   const needsOnboarding = state.status === 'ready' && state.profile === null;

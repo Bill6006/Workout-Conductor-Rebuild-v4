@@ -86,6 +86,8 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: false,
         skipWaiting: false,
+        // A tap on a notification brings the app forward (public/sw-notify.js).
+        importScripts: ['sw-notify.js'],
       },
       devOptions: {
         enabled: false,

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
+import { restSounds } from '../../core/alerts/restSounds';
 import { Button } from '../../components/Button/Button';
 import { Card } from '../../components/Card/Card';
 import { DurationSelector } from '../../components/DurationSelector/DurationSelector';
@@ -149,10 +150,18 @@ export function ActiveWorkoutScreen() {
   const locations = useAppSelector((state) => state.locations);
   const currentLocation = locations.find((place) => place.id === profile?.currentLocationId);
   const calibrating = useAppSelector((state) => state.calibration.status !== 'idle');
+  const soundsOn = useAppSelector((state) => state.localSettings.restSounds);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [selected, setSelected] = useState<Selection | null>(null);
-  const [finishing, setFinishing] = useState<'idle' | 'rating' | 'discard'>('idle');
-  const [endedEarly, setEndedEarly] = useState(false);
+  // Today can ask for the end-of-workout sheet; it opens here and the request is cleared.
+  const [finishing, setFinishing] = useState<'idle' | 'rating' | 'discard'>(() =>
+    store.getSnapshot().finishRequested ? 'rating' : 'idle',
+  );
+  useEffect(() => {
+    store.clearFinishRequest();
+  }, [store]);
+  // A workout ended from the coach's card is ended early, exactly like the End workout early link.
+  const [endedEarly, setEndedEarly] = useState(() => store.getSnapshot().finishRequested);
   const [checkingIn, setCheckingIn] = useState(false);
   const [maxFor, setMaxFor] = useState<Selection | null>(null);
   const coach = useCoach();
@@ -289,6 +298,10 @@ export function ActiveWorkoutScreen() {
       case 'backup':
         window.location.hash = '#/settings';
         break;
+      case 'finish':
+        setEndedEarly(true);
+        setFinishing('rating');
+        break;
       case 'focus':
         void store.setCoachFocus(action.muscle).then(() => {
           if (!action.route) store.acceptCoachSignal(signal);
@@ -298,6 +311,8 @@ export function ActiveWorkoutScreen() {
   };
 
   const commitLog = (entry: WorkoutEntry, set: SetPrescription, values: SetLoggerValues) => {
+    // The tap that starts a rest is what lets the browser play the rest's sounds.
+    if (soundsOn) restSounds.unlock();
     // The dial's live value belongs to the set just logged; the next set starts from its own rule.
     setLiveWeights((current) => withoutKey(current, entry.id));
     void store.logSet(entry.id, set.index, values).catch((error: unknown) => {

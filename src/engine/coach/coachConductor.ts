@@ -1,6 +1,7 @@
 import { requireExercise } from '../../catalog/exercises/catalog';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
+import { UNFINISHED_STALE_HOURS } from '../../core/alerts/cues';
 import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
@@ -76,7 +77,9 @@ type CoachActionBase =
   | { kind: 'alternatives'; entryId: string; label: string }
   | { kind: 'backup'; label: string }
   /** The next session leads with this muscle (a coach focus). */
-  | { kind: 'focus'; muscle: MuscleId; label: string };
+  | { kind: 'focus'; muscle: MuscleId; label: string }
+  /** Opens the end-of-workout sheet, where the day is saved as it stands. */
+  | { kind: 'finish'; label: string };
 
 export type CoachAction = CoachActionBase & { route?: RouteRef };
 
@@ -280,6 +283,48 @@ function safetySignals(input: CoachInput): CoachSignal[] {
     }
   }
   return signals;
+}
+
+/**
+ * A workout started hours ago and never finished stays open until it is ended,
+ * so its sets are not in the history and tomorrow's plan does not know them.
+ * The card says how long it has been open and offers the way to save it.
+ */
+function unfinishedSignals(input: CoachInput): CoachSignal[] {
+  if (input.status !== 'active' && input.status !== 'paused') return [];
+  const stamps = [
+    input.completed.startedAt,
+    ...input.completed.sets.map((set) => set.completedAt),
+  ].filter((stamp): stamp is string => typeof stamp === 'string');
+  if (stamps.length === 0) return [];
+  const last = stamps.reduce((latest, stamp) => (stamp > latest ? stamp : latest));
+  const hours = (Date.parse(input.now) - Date.parse(last)) / 3_600_000;
+  if (!(hours >= UNFINISHED_STALE_HOURS)) return [];
+  const entries = allEntries(input.workout.blocks);
+  const touched = new Set(
+    input.completed.sets.filter((set) => !set.skipped).map((set) => set.entryId),
+  );
+  const logged = entries.filter((entry) => touched.has(entry.id)).length;
+  const open =
+    hours >= 48
+      ? `${Math.floor(hours / 24)} days`
+      : hours >= 24
+        ? 'a day'
+        : `${Math.floor(hours)} hours`;
+  return [
+    {
+      domain: 'save',
+      headline: `This workout has been open for ${open}`,
+      why: [
+        `${logged} of ${entries.length} exercises have logged sets, and nothing is lost.`,
+        'End it to save the day as it stands, or carry on where you left off.',
+      ],
+      action: { kind: 'finish', label: 'End and save it' },
+      confidence: 'high',
+      severity: 3,
+      source: 'unfinished workout',
+    },
+  ];
 }
 
 function saveSignals(input: CoachInput): CoachSignal[] {
@@ -960,6 +1005,7 @@ export function gatherSignals(input: CoachInput): CoachSignal[] {
   const policy = input.policy ?? coachingPolicy(input.profile.experience);
   return [
     ...safetySignals(input),
+    ...unfinishedSignals(input),
     ...saveSignals(input),
     ...recoverySignals(input),
     ...plateauSignals(input, policy),
