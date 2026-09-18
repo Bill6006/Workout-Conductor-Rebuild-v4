@@ -29,6 +29,7 @@ export function useCoach(): CoachContext | null {
   const coachDeclines = useAppSelector((state) => state.coachDeclines);
   const coachFocus = useAppSelector((state) => state.coachFocus);
   const locations = useAppSelector((state) => state.locations);
+  const cloud = useAppSelector((state) => state.cloud);
   const nowEpoch = useNow();
 
   return useMemo(() => {
@@ -50,6 +51,11 @@ export function useCoach(): CoachContext | null {
       fatigue,
       strategy,
       lastExportAt,
+      cloudCurrent:
+        cloud.configured &&
+        cloud.pending === 0 &&
+        cloud.lastSyncAt !== null &&
+        cloud.lastError === null,
       workoutCount,
       policy,
       routes: coachRoutes,
@@ -69,6 +75,7 @@ export function useCoach(): CoachContext | null {
     coachDeclines,
     coachFocus,
     locations,
+    cloud,
     nowEpoch,
   ]);
 }

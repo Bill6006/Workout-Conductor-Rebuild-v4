@@ -13,6 +13,14 @@ test.describe('session polish', () => {
     await page.getByTestId('start-workout').click();
     await expect(page.getByTestId('workout-stats')).toBeVisible();
     const card = page.getByTestId('exercise-card').first();
+    // The empty bar earns no ramp; a max gives the lift its ramps, so the ramp tempo shows first.
+    await card.getByTestId('know-max').click();
+    const sheet = page.getByRole('dialog', { name: /Your max for/ });
+    await sheet.getByTestId('max-weight').fill('185');
+    await sheet.getByTestId('max-reps').fill('5');
+    await sheet.getByTestId('max-save').click();
+    await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
+    await expect(card.getByTestId('target-line')).toContainText('Ramp 1 of');
     await card.getByTestId('tempo-line').click();
     const detail = card.getByTestId('tempo-detail');
     await expect(detail).toBeVisible();

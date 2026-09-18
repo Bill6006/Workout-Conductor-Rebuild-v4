@@ -18,7 +18,7 @@ import type {
 
 const NOW = '2026-09-03T14:00:00.000Z';
 const [home, gym] = createDefaultLocations({ gymAccess: true }, NOW);
-const baseProfile = createDefaultProfile(NOW);
+const baseProfile: UserProfile = { ...createDefaultProfile(NOW), bodyweight: 185 };
 
 function build(
   profile: UserProfile = baseProfile,
@@ -404,8 +404,15 @@ describe('recalibration: techniques and effort', () => {
     const before = build();
     const result = run({ type: 'target-weight', entryId: 'e1', weight: 185 }, { workout: before });
     expect(working(result.workout, 'e1').every((set) => set.targetWeight === 185)).toBe(true);
-    // The ramp keeps its own load: a first-time bar lift ramps at the empty bar.
-    expect(entry(result.workout, 'e1').sets[0]?.targetWeight).toBe(45);
+    // The ramps follow the weight you set: under it, and never under the bar.
+    const rampLoads = entry(result.workout, 'e1')
+      .sets.filter((set) => set.kind === 'warmup')
+      .map((set) => set.targetWeight ?? 0);
+    expect(rampLoads.length).toBeGreaterThan(0);
+    for (const load of rampLoads) {
+      expect(load).toBeGreaterThanOrEqual(45);
+      expect(load).toBeLessThan(185);
+    }
     expect(result.summary.headline).toBe('Target 185 lb for Barbell Bench Press.');
   });
 
@@ -521,8 +528,23 @@ describe('recalibration: time and interruptions', () => {
     );
     expect(long.workout.warmup.generalMinutes).toBe(1.5);
     expect(long.summary.headline).toMatch(/^Back after 25 min/);
-    expect(long.summary.details).toContain('One light ramp set before you continue.');
-    expect(entry(long.workout, 'e1')).toEqual(entry(before, 'e1'));
+    expect(long.summary.details).toContain(
+      'One light ramp set on Barbell Bench Press before you continue; the rest of the session starts fresher too.',
+    );
+    // The entry in front gains one light ramp before its next working set; its logged sets stay.
+    const resumed = entry(long.workout, 'e1');
+    const original = entry(before, 'e1');
+    expect(resumed.sets).toHaveLength(original.sets.length + 1);
+    expect(resumed.warmupSets).toBe(original.warmupSets + 1);
+    const added = resumed.sets.find((set) => !original.sets.some((old) => old.index === set.index));
+    expect(added?.kind).toBe('warmup');
+    const nextWorking = working(long.workout, 'e1').find(
+      (set) => !completed.sets.some((done) => done.setIndex === set.index),
+    );
+    expect(added?.targetWeight ?? 0).toBeLessThan(nextWorking?.targetWeight ?? 0);
+    expect(resumed.sets.indexOf(added as (typeof resumed.sets)[number])).toBeLessThan(
+      resumed.sets.indexOf(nextWorking as (typeof resumed.sets)[number]),
+    );
 
     const short = run(
       { type: 'resume', awaySeconds: 5 * 60 },

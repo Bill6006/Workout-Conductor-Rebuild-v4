@@ -156,6 +156,8 @@ export interface CoachInput {
   fatigue: FatigueSignal;
   strategy: readonly StrategyInsight[];
   lastExportAt: string | null;
+  /** The cloud copy is on and holds everything logged, so a backup reminder would be noise. */
+  cloudCurrent?: boolean;
   workoutCount: number;
   /** Defaults derive from the profile and history; tests and the store pass them in. */
   policy?: CoachingPolicy;
@@ -266,6 +268,8 @@ function safetySignals(input: CoachInput): CoachSignal[] {
 
 function saveSignals(input: CoachInput): CoachSignal[] {
   if (input.workoutCount < 3) return [];
+  // Everything logged is already in the cloud copy: nothing to remind about.
+  if (input.cloudCurrent) return [];
   const age = input.lastExportAt
     ? (Date.parse(input.now) - Date.parse(input.lastExportAt)) / DAY_MS
     : null;

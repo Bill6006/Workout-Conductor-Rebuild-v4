@@ -19,7 +19,7 @@ async function seeded(): Promise<TestStoreHandle> {
   const handle = createTestStore({ minOverlayMs: 0 });
   await handle.store.hydrate();
   await handle.store.completeOnboarding(
-    createDefaultProfile(TEST_NOW),
+    { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
     createDefaultLocations({ gymAccess: true }, TEST_NOW),
   );
   handle.store.startWorkout();

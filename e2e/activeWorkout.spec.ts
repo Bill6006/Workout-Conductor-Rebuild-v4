@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ensureProfile, expectNoHorizontalOverflow } from './helpers';
+import { ensureProfile, expectNoHorizontalOverflow, skipWarmupIfShown } from './helpers';
 
 /**
  * Phase 5 flows: start the workout, log sets with one tap, rest timer, inline
@@ -36,8 +36,7 @@ test.describe('active workout', () => {
   }) => {
     await startWorkout(page);
     const card = page.getByTestId('exercise-card').first();
-    await expect(card.getByTestId('target-line')).toContainText('Ramp 1 of');
-    await page.getByTestId('skip-warmup').click();
+    // The empty bar is the working weight here, so no ramp set sits in front of it.
     await expect(card.getByTestId('target-line')).toContainText('Set 1 of');
 
     await page.getByTestId('log-set').click();
@@ -115,7 +114,7 @@ test.describe('active workout', () => {
 
   test('notes, plate math, and the active session survive a reload', async ({ page }) => {
     await startWorkout(page);
-    await page.getByTestId('skip-warmup').click();
+    await skipWarmupIfShown(page);
     await page.getByTestId('logger-weight').click();
     await page.getByRole('spinbutton', { name: 'Weight' }).fill('185');
     await page.keyboard.press('Enter');
@@ -139,7 +138,7 @@ test.describe('active workout', () => {
     await page.setViewportSize({ width: 275, height: 600 });
     await startWorkout(page);
     await expectNoHorizontalOverflow(page);
-    await page.getByTestId('skip-warmup').click();
+    await skipWarmupIfShown(page);
     await expect(page.getByTestId('log-set')).toBeVisible();
     await page.getByTestId('log-set').click();
     await expect(page.locator('[data-testid="set-row"][data-state="done"]')).toHaveCount(1);
@@ -176,7 +175,7 @@ test.describe('in-session autoregulation', () => {
     await ensureProfile(page);
     await page.getByTestId('start-workout').click();
     await expect(page.getByTestId('workout-stats')).toBeVisible();
-    await page.getByTestId('skip-warmup').click();
+    await skipWarmupIfShown(page);
     await page.getByTestId('logger-weight').click();
     await page.getByRole('spinbutton', { name: 'Weight' }).fill('185');
     await page.keyboard.press('Enter');

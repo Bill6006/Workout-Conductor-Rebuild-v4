@@ -32,7 +32,7 @@ async function seeded(
   await handle.store.hydrate();
   if (!handle.store.getSnapshot().profile) {
     await handle.store.completeOnboarding(
-      createDefaultProfile(TEST_NOW),
+      { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
       createDefaultLocations({ gymAccess: true }, TEST_NOW),
     );
   }

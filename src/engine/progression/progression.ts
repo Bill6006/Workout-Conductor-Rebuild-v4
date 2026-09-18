@@ -14,6 +14,8 @@ import {
   startRatio,
 } from './startingLoad';
 import { weightStep } from '../plateMath/plateMath';
+import { estimateFromOtherLifts } from './crossEstimate';
+import { fatigueSteps, precedingWorkInRecord } from '../recovery/sessionContext';
 import { fitWeight, snapDown, type Loading } from '../loading/loading';
 import type { EntryProgression, ProgressionMode, SetPrescription } from '../workout/types';
 import { restCategory, type Prescription } from './roles';
@@ -37,6 +39,8 @@ export interface PerformanceSet {
 
 export interface PerformancePoint {
   date: string;
+  /** The saved workout the point was read from. */
+  recordId: string;
   exerciseId: string;
   viaFamily: boolean;
   sets: PerformanceSet[];
@@ -70,6 +74,8 @@ export interface NextTarget {
   capped?: { at: number };
   /** The weight the target moved from: the last one lifted, when there is one. */
   from?: number | null;
+  /** The logged session the target was read from, and whether that day met its reps and reserve. */
+  reference?: { recordId: string; exerciseId: string; clean: boolean };
 }
 
 export function estimateOneRepMax(weight: number, reps: number): number {
@@ -109,6 +115,7 @@ function toPoint(
   const rirs = sets.map((set) => set.rir).filter((r): r is number => r !== null);
   return {
     date: record.completedAt ?? record.startedAt,
+    recordId: record.id,
     exerciseId,
     viaFamily,
     sets: sets.map(({ reps, weight, rir, targetReps, targetRir }) => ({
@@ -191,6 +198,8 @@ export interface NextTargetInput {
   now?: string;
   /** Maxes the lifter entered by hand; they set the first target of a lift without its own history. */
   maxes?: StrengthMaxes | null;
+  /** Session context: overlap-weighted working sets that come before this exercise today. */
+  session?: { precedingSets: number };
 }
 
 const DAY_MS = 86_400_000;
@@ -213,7 +222,46 @@ export function loadFromEstimate(
 /** Modes that follow the lifter's own habit of lifting above or below the suggestion. */
 const BIASABLE: ReadonlySet<ProgressionMode> = new Set(['weight', 'reps', 'maintain', 'double']);
 
+const FATIGUE_MODES: ReadonlySet<ProgressionMode> = new Set([
+  'weight',
+  'double',
+  'reps',
+  'maintain',
+]);
+
+/**
+ * Session context: the overlapping work before this exercise today against
+ * the same measure on the day its target came from, and the load moved by the
+ * difference. A target read from a logged set already carries that day's
+ * fatigue, so the usual order changes nothing and nothing drifts.
+ */
+function withSessionFatigue(target: NextTarget, input: NextTargetInput): NextTarget {
+  const session = input.session;
+  const reference = target.reference;
+  if (!session || !reference || target.weight === null || !FATIGUE_MODES.has(target.mode)) {
+    return target;
+  }
+  const record = input.history.find((candidate) => candidate.id === reference.recordId);
+  if (!record) return target;
+  const before = precedingWorkInRecord(record, reference.exerciseId, getExercise);
+  if (before === null) return target;
+  const { steps, line } = fatigueSteps(session.precedingSets, before, reference.clean);
+  if (steps === 0 || line === null) return target;
+  return floorTarget(
+    {
+      ...target,
+      weight: roundToStep(target.weight + steps * target.increment, target.increment),
+      evidence: [...target.evidence, line],
+    },
+    input,
+  );
+}
+
 export function recommendNextTarget(input: NextTargetInput): NextTarget {
+  return withSessionFatigue(recommendBiasedTarget(input), input);
+}
+
+function recommendBiasedTarget(input: NextTargetInput): NextTarget {
   const target = floorTarget(recommendBaseTarget(input), input);
   if (target.weight === null || !BIASABLE.has(target.mode)) return target;
   const bias = overrideBias(input.history, input.exercise.id, target.increment);
@@ -276,6 +324,29 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     };
   }
   if (!last) {
+    // Lifts with history say how strong the lifter is against the reference table.
+    const cross = estimateFromOtherLifts(
+      exercise,
+      history,
+      input.now ?? new Date().toISOString(),
+      units,
+      input.maxes ?? null,
+    );
+    if (cross) {
+      return {
+        ...base,
+        mode: 'start',
+        weight: loadFromEstimate(
+          cross.e1rm,
+          prescription.reps[1],
+          prescription.rir,
+          START_FRACTION,
+          step,
+        ),
+        confidence: cross.confidence,
+        evidence: [cross.evidence],
+      };
+    }
     const estimate = estimateStartingMax(exercise, profile);
     if (estimate) {
       return {
@@ -360,6 +431,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     mode,
     weight: nextWeight,
     from: weight,
+    reference: { recordId: last.recordId, exerciseId: last.exerciseId, clean: clean(last) },
     confidence,
     evidence: [...evidence, line, ...(extra.evidence ?? [])],
   });
@@ -517,10 +589,31 @@ export function rampWeights(
   working: number | null,
   count: number,
   step: number,
+  /** The empty bar for bar lifts: no ramp goes under it. */
+  floor: number | null = null,
 ): (number | null)[] {
   if (working === null || count <= 0) return Array.from({ length: Math.max(0, count) }, () => null);
   const fractions = count === 1 ? [0.6] : count === 2 ? [0.5, 0.75] : [0.4, 0.6, 0.8];
-  return fractions.slice(0, count).map((fraction) => roundToStep(working * fraction, step));
+  const start = floor ?? step;
+  // A ramp never sits at the working weight: at least a step under it, never under the bar,
+  // and each one heavier than the last.
+  const top = Math.max(start, working - step);
+  const weights = fractions
+    .slice(0, count)
+    .map((fraction) => roundToStep(working * fraction, step));
+  const last = count - 1;
+  weights[last] = Math.min(top, weights[last] as number);
+  for (let index = last - 1; index >= 0; index -= 1) {
+    weights[index] = Math.min(weights[index] as number, (weights[index + 1] as number) - step);
+  }
+  weights[0] = Math.max(start, weights[0] as number);
+  for (let index = 1; index <= last; index += 1) {
+    weights[index] = Math.min(
+      top,
+      Math.max(weights[index] as number, (weights[index - 1] as number) + step),
+    );
+  }
+  return weights;
 }
 
 /**
@@ -539,7 +632,7 @@ export function applyProgression(
   loading: Loading | null = null,
 ): SetPrescription[] {
   const warmups = sets.filter((set) => set.kind === 'warmup');
-  const ramps = rampWeights(target.weight, warmups.length, step);
+  const ramps = rampWeights(target.weight, warmups.length, step, floor);
   const clamp = (weight: number | null) => {
     if (weight === null) return weight;
     const floored = floor === null ? weight : Math.max(weight, floor);

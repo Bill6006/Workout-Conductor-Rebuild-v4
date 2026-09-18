@@ -15,16 +15,26 @@ import { estimateWorkout, resolveTargetMinutes, type SetDonePredicate } from '..
 import { fitWeight, loadingFor, nudge, type Loading } from '../loading/loading';
 import { weightStep } from '../plateMath/plateMath';
 import {
-  capTarget,
   applyProgression,
+  capTarget,
+  rampWeights,
   recommendNextTarget,
   summarizeProgression,
 } from '../progression/progression';
-import { buildSets, prescribe, rampSetsFor } from '../progression/roles';
+import {
+  buildSets,
+  prescribe,
+  rampRoom,
+  rampSetsFor,
+  type RampContext,
+} from '../progression/roles';
 import { barWeightFor } from '../progression/startingLoad';
+import { precedingWorkToday } from '../recovery/sessionContext';
 import {
   generateWorkout,
+  rampContextFor,
   sessionConflictContext,
+  sessionWork,
   type GenerationConstraints,
   type KeptEntry,
   type PrescriptionAdjustment,
@@ -331,6 +341,7 @@ function rebuild(
     generalWarmupMinutesOverride: started ? (options.resume ? 1.5 : 0) : undefined,
     hardCap,
     isSetDone: classified.isDone,
+    completedSets: request.completed.sets,
     adjust: options.adjust,
     readiness: constraints.readiness,
     deload: constraints.deload,
@@ -371,6 +382,65 @@ function loadingOf(request: RecalibrationRequest, exercise: CatalogExercise): Lo
   return loadingFor(request.location?.loading, request.loading, exercise, request.profile.units);
 }
 
+/**
+ * Session context for one entry: what the entries before it have done today
+ * (all of them, for an entry not yet in the workout), and the ramp it deserves.
+ */
+function sessionContextFor(
+  request: RecalibrationRequest,
+  workout: GeneratedWorkout,
+  entryId: string | null,
+  exercise: CatalogExercise,
+): { precedingSets: number; afterBreak: boolean; ramp: RampContext } {
+  const before: WorkoutEntry[] = [];
+  for (const entry of allEntries(workout.blocks)) {
+    if (entry.id === entryId) break;
+    before.push(entry);
+  }
+  const earlier = sessionWork(before, request.completed.sets, requireExercise);
+  const preceding = precedingWorkToday(exercise, earlier, request.timestamp);
+  return {
+    precedingSets: preceding.sets,
+    afterBreak: preceding.afterBreak,
+    ramp: rampContextFor(exercise, earlier, preceding.afterBreak),
+  };
+}
+
+/**
+ * After a long break the entry in front of the lifter gets one light ramp
+ * set back before its remaining working sets, at three fifths of the load.
+ * Nothing changes when its sets are all logged or a ramp is already waiting.
+ */
+function rampBack(workout: GeneratedWorkout, request: RecalibrationRequest): string | null {
+  if (!request.currentEntryId) return null;
+  const { isDone } = classify(request);
+  const found = allEntries(workout.blocks).find((entry) => entry.id === request.currentEntryId);
+  if (!found) return null;
+  const nextIndex = found.sets.findIndex(
+    (set) => set.kind !== 'drop' && !isDone(found.id, set.index),
+  );
+  if (nextIndex < 0) return null;
+  const next = found.sets[nextIndex] as SetPrescription;
+  if (next.kind === 'warmup') return null;
+  const exercise = requireExercise(found.exerciseId);
+  const loading = loadingOf(request, exercise);
+  const floor = barWeightFor(exercise, request.profile.units);
+  const room = rampRoom({ weight: next.targetWeight, step: loading.step, floor });
+  if (room < 1) return null;
+  const [weight] = rampWeights(next.targetWeight, 1, loading.step, floor);
+  found.sets.splice(nextIndex, 0, {
+    index: nextSetIndex(found),
+    kind: 'warmup',
+    targetReps: [Math.max(3, next.targetReps[0]), Math.max(5, next.targetReps[1])],
+    targetRir: 5,
+    targetWeight: weight === undefined ? null : fitWeight(weight ?? 0, loading, floor),
+    restSeconds: 45,
+  });
+  found.warmupSets += 1;
+  if (!workout.warmup.rampEntryIds.includes(found.id)) workout.warmup.rampEntryIds.push(found.id);
+  return exercise.name;
+}
+
 function dropSetAt(index: number): SetPrescription {
   return {
     index,
@@ -395,7 +465,7 @@ function applySubstitution(
   if (!logged) {
     const prescription = prescribe(exercise, entry.role, request.profile);
     const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
-    const warmupSets = rampSetsFor(exercise, entry.role, request.workout.duration.targetMinutes);
+    const context = sessionContextFor(request, request.workout, entry.id, exercise);
     const target = recommendNextTarget({
       exercise,
       role: entry.role,
@@ -404,9 +474,21 @@ function applySubstitution(
       profile: request.profile,
       now: request.timestamp,
       maxes: request.maxes,
+      session: { precedingSets: context.precedingSets },
     });
     const loading = loadingOf(request, exercise);
     const fitted = capTarget(target, loading, request.profile.units);
+    const warmupSets = rampSetsFor(
+      exercise,
+      entry.role,
+      request.workout.duration.targetMinutes,
+      context.ramp,
+      {
+        weight: fitted.weight,
+        step: loading.step,
+        floor: barWeightFor(exercise, request.profile.units),
+      },
+    );
     entry.sets = applyProgression(
       buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
       fitted,
@@ -875,6 +957,9 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         profile: request.profile,
         now: request.timestamp,
         maxes: request.maxes,
+        session: {
+          precedingSets: sessionContextFor(request, workout, null, exercise).precedingSets,
+        },
       });
       const numbers = allEntries(workout.blocks)
         .map((entry) => Number(entry.id.replace(/^e/, '')))
@@ -928,6 +1013,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         const prescription = prescribe(exercise, entry.role, request.profile);
         const working =
           entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
+        const context = sessionContextFor(request, workout, entry.id, exercise);
         const target = recommendNextTarget({
           exercise,
           role: entry.role,
@@ -936,14 +1022,23 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           profile: request.profile,
           now: request.timestamp,
           maxes: request.maxes,
+          session: { precedingSets: context.precedingSets },
         });
         const loading = loadingOf(request, exercise);
         const fitted = capTarget(target, loading, request.profile.units);
+        const rampLogged = request.completed.sets.some(
+          (set) => set.entryId === entry.id && set.kind === 'warmup',
+        );
+        const warmupSets = rampLogged
+          ? entry.warmupSets
+          : rampSetsFor(exercise, entry.role, workout.duration.targetMinutes, context.ramp, {
+              weight: fitted.weight,
+              step: loading.step,
+              floor: barWeightFor(exercise, request.profile.units),
+            });
+        entry.warmupSets = warmupSets;
         entry.sets = applyProgression(
-          buildSets(
-            { ...prescription, sets: working, restSeconds: entry.restSeconds },
-            entry.warmupSets,
-          ),
+          buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
           fitted,
           loading.step,
           entry.manual ?? {},
@@ -963,19 +1058,24 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
     }
 
     case 'max': {
-      // The lifter entered a max: every unlogged, untouched entry of that lift starts from it.
+      // The lifter entered a max: every unlogged, untouched entry of that lift starts from it,
+      // and so does every other lift never logged, through the cross-exercise estimate.
       const workout = cloneWorkout(request.workout);
-      const exercise = requireExercise(trigger.exerciseId);
+      const named = requireExercise(trigger.exerciseId);
       let updated = 0;
+      let others = 0;
       for (const entry of allEntries(workout.blocks)) {
-        if (entry.exerciseId !== trigger.exerciseId) continue;
+        const own = entry.exerciseId === trigger.exerciseId;
+        if (!own && entry.progression?.mode !== 'start') continue;
         const logged = request.completed.sets.some(
           (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
         );
         if (logged || entry.manual?.weight) continue;
+        const exercise = requireExercise(entry.exerciseId);
         const prescription = prescribe(exercise, entry.role, request.profile);
         const working =
           entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
+        const context = sessionContextFor(request, workout, entry.id, exercise);
         const target = recommendNextTarget({
           exercise,
           role: entry.role,
@@ -984,14 +1084,23 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           profile: request.profile,
           now: request.timestamp,
           maxes: request.maxes,
+          session: { precedingSets: context.precedingSets },
         });
         const loading = loadingOf(request, exercise);
         const fitted = capTarget(target, loading, request.profile.units);
+        const rampLogged = request.completed.sets.some(
+          (set) => set.entryId === entry.id && set.kind === 'warmup',
+        );
+        const warmupSets = rampLogged
+          ? entry.warmupSets
+          : rampSetsFor(exercise, entry.role, workout.duration.targetMinutes, context.ramp, {
+              weight: fitted.weight,
+              step: loading.step,
+              floor: barWeightFor(exercise, request.profile.units),
+            });
+        entry.warmupSets = warmupSets;
         entry.sets = applyProgression(
-          buildSets(
-            { ...prescription, sets: working, restSeconds: entry.restSeconds },
-            entry.warmupSets,
-          ),
+          buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
           fitted,
           loading.step,
           {},
@@ -1000,15 +1109,22 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         );
         if (entry.dropSet && exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
         entry.progression = summarizeProgression(fitted);
-        updated += 1;
+        if (own) updated += 1;
+        else others += 1;
       }
       return {
         ...base,
         workout,
         headline:
           updated > 0
-            ? `First target for ${exercise.name} set from your max.`
-            : `${exercise.name} already has logged sets; the next session starts from your max.`,
+            ? `First target for ${named.name} set from your max.`
+            : `${named.name} already has logged sets; the next session starts from your max.`,
+        notes:
+          others > 0
+            ? [
+                `${others} other lift${others === 1 ? '' : 's'} never logged take${others === 1 ? 's' : ''} a first target from it too.`,
+              ]
+            : [],
       };
     }
 
@@ -1020,6 +1136,26 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       for (const set of entry.sets) {
         if (set.kind !== 'warmup' && !isDone(entry.id, set.index))
           set.targetWeight = trigger.weight;
+      }
+      // The ramps still to come follow the weight you set: under it, never under the bar, and
+      // gone when nothing lighter than the bar exists.
+      if (trigger.weight !== null) {
+        const exercise = requireExercise(entry.exerciseId);
+        const loading = loadingOf(request, exercise);
+        const floor = barWeightFor(exercise, request.profile.units);
+        const pending = entry.sets.filter(
+          (set) => set.kind === 'warmup' && !isDone(entry.id, set.index),
+        );
+        const room = rampRoom({ weight: trigger.weight, step: loading.step, floor });
+        const dropped = pending.splice(0, Math.max(0, pending.length - room));
+        entry.sets = entry.sets.filter((set) => !dropped.includes(set));
+        entry.warmupSets = Math.max(0, entry.warmupSets - dropped.length);
+        const loads = rampWeights(trigger.weight, pending.length, loading.step, floor);
+        pending.forEach((set, index) => {
+          const load = loads[index];
+          set.targetWeight =
+            load === null || load === undefined ? null : fitWeight(load, loading, floor);
+        });
       }
       entry.manual = { ...entry.manual, weight: true };
       return {
@@ -1072,11 +1208,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         constraints,
         resume: true,
       });
+      const ramped = rampBack(workout, request);
       return {
         ...base,
         workout,
         prefix: `Back after ${away} min`,
-        notes: ['One light ramp set before you continue.'],
+        notes: [
+          ramped
+            ? `One light ramp set on ${ramped} before you continue; the rest of the session starts fresher too.`
+            : 'The rest of the session starts fresher: ramps are back where they are needed.',
+        ],
       };
     }
 

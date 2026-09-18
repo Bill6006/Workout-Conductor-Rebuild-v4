@@ -9,7 +9,13 @@ import {
 import { allExercises, exercisesByPattern, requireExercise } from '../../catalog/exercises/catalog';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
-import { MUSCLE_IDS, muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
+import {
+  MUSCLE_IDS,
+  muscleGroupOf,
+  muscleName,
+  muscleVerb,
+  type MuscleId,
+} from '../../catalog/muscles/muscles';
 import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
@@ -35,6 +41,7 @@ import {
   rampSetsFor,
   restCategory,
   type Prescription,
+  type RampContext,
 } from '../progression/roles';
 import { loadingFor } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
@@ -48,6 +55,7 @@ import {
 import { barWeightFor } from '../progression/startingLoad';
 import type { Readiness } from '../recalibration/types';
 import { interpretFatigue } from '../recovery/fatigue';
+import { precedingWorkToday, type EarlierWork } from '../recovery/sessionContext';
 import {
   computeExposure,
   computeMusclePriorities,
@@ -95,6 +103,71 @@ export interface PrescriptionAdjustment {
   loadScale?: number;
 }
 
+/** A logged set as the session context needs it: whose, what kind, when, and whether it was skipped. */
+export interface CompletedSetStamp {
+  entryId: string;
+  kind: 'warmup' | 'working' | 'drop';
+  completedAt: string;
+  skipped?: boolean;
+}
+
+/**
+ * What the entries before an exercise have done today, for the session
+ * context: planned working sets, the times of the ones logged, the ones
+ * skipped, and the heaviest working weight.
+ */
+export function sessionWork(
+  entries: readonly WorkoutEntry[],
+  completedSets: readonly CompletedSetStamp[],
+  exerciseOf: (id: string) => CatalogExercise,
+): (EarlierWork & { weight: number | null })[] {
+  return entries.map((entry) => {
+    const done = completedSets.filter((set) => set.entryId === entry.id && set.kind !== 'warmup');
+    const working = workingSets(entry);
+    return {
+      exercise: exerciseOf(entry.exerciseId),
+      planned: working.length,
+      doneAt: done
+        .filter((set) => !set.skipped)
+        .map((set) => set.completedAt)
+        .sort(),
+      skipped: done.filter((set) => set.skipped).length,
+      weight: working.reduce<number | null>(
+        (best, set) => (set.targetWeight === null ? best : Math.max(best ?? 0, set.targetWeight)),
+        null,
+      ),
+    };
+  });
+}
+
+/** The ramp context for an exercise from the work before it today. */
+export function rampContextFor(
+  exercise: CatalogExercise,
+  earlier: readonly (EarlierWork & { weight: number | null })[],
+  afterBreak: boolean,
+): RampContext {
+  const samePattern = earlier.filter(
+    (item) => item.exercise.movementPattern === exercise.movementPattern,
+  );
+  const groups = new Set(exercise.primaryMuscles.map(muscleGroupOf));
+  const sameMuscles = earlier.some((item) =>
+    item.exercise.primaryMuscles.some((muscle) => groups.has(muscleGroupOf(muscle))),
+  );
+  return {
+    samePattern:
+      samePattern.length === 0
+        ? null
+        : {
+            weight: samePattern.reduce<number | null>(
+              (best, item) => (item.weight === null ? best : Math.max(best ?? 0, item.weight)),
+              null,
+            ),
+          },
+    sameMuscles,
+    afterBreak,
+  };
+}
+
 export interface GenerationConstraints {
   keep?: readonly KeptEntry[];
   /** Blocks of the previous workout, so pairings between kept entries survive. */
@@ -109,6 +182,8 @@ export interface GenerationConstraints {
   /** Exact-end mode: no tolerance, and locked entries may lose remaining sets. */
   hardCap?: boolean;
   isSetDone?: SetDonePredicate;
+  /** Sets logged so far, with their times: what came before each exercise today, and when. */
+  completedSets?: readonly CompletedSetStamp[];
   adjust?: PrescriptionAdjustment;
   /** Today's check-in, so fatigue can hold loads. */
   readiness?: Readiness | null;
@@ -526,6 +601,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     constraints.targetMinutesOverride ?? resolveTargetMinutes(duration, defaultMinutes);
   const hardCap = constraints.hardCap ?? false;
   const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
+  const completedSets = constraints.completedSets ?? [];
   const compromises: string[] = [];
   const picker: Picker = { context, preferredIds, exposure, loads, focus };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
@@ -574,7 +650,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       slotSpec.role,
       adjust,
     );
-    const warmupSets = rampSetsFor(pick, slotSpec.role, targetMinutes);
+    // What comes before this exercise today, planned or done, and whether a long break sits
+    // between: the target and the ramps both read it.
+    const earlier = sessionWork(entries, completedSets, exerciseOf);
+    const preceding = precedingWorkToday(pick, earlier, now);
     const baseTarget = recommendNextTarget({
       exercise: pick,
       role: slotSpec.role,
@@ -584,6 +663,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       fatigueLevel: fatigue.level,
       now,
       maxes,
+      session: { precedingSets: preceding.sets },
     });
     const floor = barWeightFor(pick, profile.units);
     // What this place can load: the target lands on a weight that exists here, or holds at
@@ -593,6 +673,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       floorTarget(scaleForDeload(baseTarget, adjust, loading.step), floor),
       loading,
       profile.units,
+    );
+    const warmupSets = rampSetsFor(
+      pick,
+      slotSpec.role,
+      targetMinutes,
+      rampContextFor(pick, earlier, preceding.afterBreak),
+      { weight: target.weight, step: loading.step, floor },
     );
     const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
     entries.push({

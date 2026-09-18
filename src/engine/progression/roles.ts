@@ -117,17 +117,83 @@ export function buildSets(prescription: Prescription, warmupSets: number): SetPr
 }
 
 /** Warm-up ramp sets for the exercise's ramp type and the session length. */
+/** What the session has already done before an exercise, as far as its ramps care. */
+export interface RampContext {
+  /** Earlier work today on the same movement pattern, with the heaviest working weight among it. */
+  samePattern: { weight: number | null } | null;
+  /** An earlier exercise today shares a primary muscle group. */
+  sameMuscles: boolean;
+  /** A long break separates the earlier work from now, so the joints are cold again. */
+  afterBreak: boolean;
+}
+
+/** The load the ramps lead up to, and the grid they can sit on. */
+export interface RampLoad {
+  weight: number | null;
+  step: number;
+  /** The empty bar for bar lifts: no ramp goes under it. */
+  floor: number | null;
+}
+
+/** A later exercise on a pattern already trained today earns one light set only when this much heavier. */
+export const MARKEDLY_HEAVIER = 1.25;
+
+/**
+ * Distinct loads on the grid under the working weight: how many ramps could
+ * differ from it. The empty bar as the working weight leaves none.
+ */
+export function rampRoom(load: RampLoad): number {
+  if (load.weight === null) return Number.POSITIVE_INFINITY;
+  const start = load.floor ?? load.step;
+  return Math.max(0, Math.floor((load.weight - load.step - start) / load.step + 1e-9) + 1);
+}
+
+/**
+ * Ramp sets for an exercise, decided from the session so far rather than the
+ * exercise alone. A warm-up does two jobs: raising tissue temperature, which
+ * the first exercise already did, and rehearsing the movement at the load,
+ * which is about the nervous system and the joint angle. Only the second
+ * survives into later exercises. So the first heavy compound keeps its full
+ * ramp; a later exercise on the same pattern gets none unless it is markedly
+ * heavier; a later exercise on the same muscles at a new angle gets one light
+ * set; the first exercise to load a cold joint gets a full ramp again; and a
+ * long break puts the full ramp back. A ramp never sits at the working weight.
+ */
 export function rampSetsFor(
   exercise: CatalogExercise,
   role: TrainingRole,
   targetMinutes: number,
+  context: RampContext | null = null,
+  load: RampLoad | null = null,
 ): number {
   if (exercise.warmup === 'none') return 0;
   if (role !== 'primary-strength' && role !== 'secondary-strength' && exercise.warmup !== 'full')
     return 0;
-  if (targetMinutes <= 15) return exercise.warmup === 'full' ? 1 : 0;
-  if (targetMinutes <= 30) return 1;
-  return exercise.warmup === 'full' ? 2 : 1;
+  let count =
+    targetMinutes <= 15
+      ? exercise.warmup === 'full'
+        ? 1
+        : 0
+      : targetMinutes <= 30
+        ? 1
+        : exercise.warmup === 'full'
+          ? 2
+          : 1;
+  if (count === 0) return 0;
+  if (context && !context.afterBreak) {
+    if (context.samePattern) {
+      const heavier =
+        load !== null &&
+        load.weight !== null &&
+        context.samePattern.weight !== null &&
+        load.weight >= context.samePattern.weight * MARKEDLY_HEAVIER;
+      count = heavier ? 1 : 0;
+    } else if (context.sameMuscles) {
+      count = Math.min(count, 1);
+    }
+  }
+  if (load && load.weight !== null) count = Math.min(count, rampRoom(load));
+  return count;
 }
 
 export const ROLE_RANK: Record<TrainingRole, number> = {

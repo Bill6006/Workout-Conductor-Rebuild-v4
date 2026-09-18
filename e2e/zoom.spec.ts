@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ensureProfile, expectNoHorizontalOverflow } from './helpers';
+import { ensureProfile, expectNoHorizontalOverflow, skipWarmupIfShown } from './helpers';
 
 const WIDTHS = [360, 375, 412, 430];
 const LEVELS = [1, 1.15, 1.3, 1.5];
@@ -44,7 +44,7 @@ async function expectWorkoutFits(page: Page): Promise<void> {
   await page.getByTestId('start-workout').click();
   await expect(page.getByTestId('workout-stats')).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await page.getByTestId('skip-warmup').click();
+  await skipWarmupIfShown(page);
   await expect(page.getByTestId('logger-weight')).toBeVisible();
   await expect(page.getByTestId('log-set')).toBeVisible();
   await expectNoHorizontalOverflow(page);

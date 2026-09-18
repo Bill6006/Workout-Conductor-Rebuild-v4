@@ -15,7 +15,7 @@ import type { WorkoutBlock } from './types';
 const NOW = '2026-09-03T14:00:00.000Z';
 const [, gym] = createDefaultLocations({ gymAccess: true }, NOW);
 const workout = generateWorkout({
-  profile: createDefaultProfile(NOW),
+  profile: { ...createDefaultProfile(NOW), bodyweight: 185 },
   location: gym,
   history: [],
   now: NOW,

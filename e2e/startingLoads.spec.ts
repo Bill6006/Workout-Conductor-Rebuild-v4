@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ensureProfile } from './helpers';
+import { ensureProfile, skipWarmupIfShown } from './helpers';
 
 /**
  * Maintenance 5: where the first weight comes from. A first-time bar lift
@@ -18,12 +18,10 @@ test.describe('where the first weight comes from', () => {
     await expect(page.getByTestId('workout-stats')).toBeVisible();
 
     const card = page.getByTestId('exercise-card').first();
-    await expect(card.getByTestId('target-line')).toContainText('Ramp 1 of');
-    const logger = page.getByTestId('set-logger');
-    await expect(logger).toContainText('Warm-up 45 lb');
-    await expect(page.getByTestId('logger-weight')).toContainText('45');
-    await page.getByTestId('skip-warmup').click();
+    // The empty bar is the working weight, so no ramp set sits at it.
     await expect(card.getByTestId('target-line')).toContainText('Set 1 of');
+    const logger = page.getByTestId('set-logger');
+    await expect(page.getByTestId('logger-weight')).toContainText('45');
     await expect(logger).toContainText('Target 45 lb');
     await expect(logger).not.toContainText('Step 5');
 
@@ -40,6 +38,14 @@ test.describe('where the first weight comes from', () => {
     await expect(page.getByTestId('recalibration-summary')).toContainText(
       'First target for Barbell Bench Press set from your max.',
     );
+    // With a real target the ramps arrive, each under the working weight.
+    await expect(card.getByTestId('target-line')).toContainText('Ramp 1 of');
+    const rampWeight = Number(
+      /\d+/.exec((await page.getByTestId('logger-weight').textContent()) ?? '')?.[0],
+    );
+    expect(rampWeight).toBeGreaterThanOrEqual(45);
+    expect(rampWeight).toBeLessThan(155);
+    await skipWarmupIfShown(page);
     await expect(card.getByTestId('target-line')).toContainText('Set 1 of');
     await expect(logger).toContainText('Target 155 lb');
     await expect(page.getByTestId('logger-weight')).toContainText('155');

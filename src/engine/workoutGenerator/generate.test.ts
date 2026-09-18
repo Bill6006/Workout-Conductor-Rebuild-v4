@@ -49,7 +49,8 @@ describe('generateWorkout: default session', () => {
   });
 
   it('uses hybrid prescriptions: strength reps and long rests first, hypertrophy after', () => {
-    const workout = generate();
+    // A lifter with a bodyweight, so the main lift sits above the empty bar and earns its ramps.
+    const workout = generate({ bodyweight: 185 });
     const [anchor, second] = allEntries(workout.blocks);
     const anchorSet = workingSets(anchor!)[0]!;
     expect(anchorSet.targetReps).toEqual([4, 6]);

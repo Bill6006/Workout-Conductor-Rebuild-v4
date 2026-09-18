@@ -51,3 +51,9 @@ export const TABS = [
   { id: 'plan', label: 'Plan' },
   { id: 'settings', label: 'Settings' },
 ] as const;
+
+/** Skips the ramp sets when the exercise has any; a lift at the empty bar starts on its working set. */
+export async function skipWarmupIfShown(page: Page): Promise<void> {
+  const skipWarmup = page.getByTestId('skip-warmup');
+  if (await skipWarmup.isVisible()) await skipWarmup.click();
+}

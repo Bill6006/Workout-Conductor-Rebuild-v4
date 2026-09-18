@@ -258,3 +258,30 @@ its slot. The generator fits the first preview through the same `capTarget` and
 when a target snapped onto the place's list would land on or under `from`, `capTarget` holds the
 load and raises the reps by two, naming the next real weight, instead of rounding the increase
 away in silence.
+
+## Session context (`src/engine/recovery/sessionContext.ts`, Maintenance 13)
+
+Whatever is trained later in a session performs worse, but a target read from a logged set
+already carries that day's fatigue, so the rule is never "later means lighter". Before each
+exercise, `precedingWorkToday` measures the overlapping work that comes before it: working sets
+logged, sets still planned, weighted by `overlapWeight` (a shared primary muscle 1, the same
+group 0.5), skipped sets nothing, and anything before a long break (`LONG_BREAK_MINUTES`, 20)
+half. `precedingWorkInRecord` takes the same measure on the day the target came from
+(`NextTarget.reference`, the record id kept on every `PerformancePoint`). `fatigueSteps` turns
+the difference into load steps: +3 sets is a step down, +6 two, -3 a step up only when the
+reference day was clean. `recommendNextTarget` applies it when `session.precedingSets` is given;
+the generator and every recalibration site pass it (`GenerationConstraints.completedSets`
+carries the logged sets and their times). The `resume` trigger also adds one light ramp before
+the next working set of the entry in front (`rampBack`).
+
+Ramps (`rampSetsFor` in `roles.ts`) read a `RampContext`: the first heavy compound of a cold
+pattern keeps its full ramp; a later exercise on the same pattern gets none unless markedly
+heavier (`MARKEDLY_HEAVIER`, 1.25x); the same muscles at a new angle one; a long break puts the
+full ramp back. `rampRoom` counts the grid loads under the working weight, so the empty bar
+earns no ramp, and `rampWeights` keeps every ramp at least a step under the working weight,
+never under the bar, and rising. A target weight set by hand recomputes its pending ramps.
+
+For a lift never done, `estimateFromOtherLifts` (`crossEstimate.ts`) scales each known lift's
+estimated max (history within 180 days, or an entered max) through the reference ratios of
+`startingLoad.ts`, weighting lifts on the same muscles most and recent ones more; it comes before
+the bodyweight estimate and needs no bodyweight.

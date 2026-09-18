@@ -1,7 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { TABS, ensureProfile } from './helpers';
+import { TABS, ensureProfile, skipWarmupIfShown } from './helpers';
 
 /**
  * Real screenshots of the working application, used as phase evidence.
@@ -270,7 +270,7 @@ test.describe('screenshots @screenshots', () => {
     await expect(page.getByRole('dialog').getByTestId('exercise-demo')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
-    await page.getByTestId('skip-warmup').click();
+    await skipWarmupIfShown(page);
     await page.getByTestId('logger-weight').click();
     await page.getByRole('spinbutton', { name: 'Weight' }).fill('185');
     await page.keyboard.press('Enter');

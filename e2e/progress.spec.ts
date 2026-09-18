@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ensureProfile, expectNoHorizontalOverflow } from './helpers';
+import { ensureProfile, expectNoHorizontalOverflow, skipWarmupIfShown } from './helpers';
 
 /**
  * Phase 7 flows: history and explained scores on Progress, the week plan,
@@ -10,7 +10,7 @@ import { ensureProfile, expectNoHorizontalOverflow } from './helpers';
 async function completeOneSet(page: Page, weight: string) {
   await page.getByTestId('start-workout').click();
   await expect(page.getByTestId('workout-stats')).toBeVisible();
-  await page.getByTestId('skip-warmup').click();
+  await skipWarmupIfShown(page);
   await page.getByTestId('logger-weight').click();
   await page.getByRole('spinbutton', { name: 'Weight' }).fill(weight);
   await page.keyboard.press('Enter');

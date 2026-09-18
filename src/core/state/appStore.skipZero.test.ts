@@ -8,7 +8,7 @@ async function started() {
   const handle = createTestStore();
   await handle.store.hydrate();
   await handle.store.completeOnboarding(
-    createDefaultProfile(TEST_NOW),
+    { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
     createDefaultLocations({ gymAccess: true }, TEST_NOW),
   );
   handle.store.startWorkout();

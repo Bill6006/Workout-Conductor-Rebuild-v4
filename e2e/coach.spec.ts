@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ensureProfile, expectNoHorizontalOverflow } from './helpers';
+import { ensureProfile, expectNoHorizontalOverflow, skipWarmupIfShown } from './helpers';
 
 /**
  * Phase 6 flows: the one gold Adaptive Coach card, the readiness check-in that
@@ -104,7 +104,7 @@ test.describe('adaptive coach', () => {
     await page.getByRole('tab', { name: 'How to' }).first().click();
     const evidence = page.getByTestId('progression-evidence').first();
     await expect(evidence).toContainText('First time logged');
-    await page.getByTestId('skip-warmup').click();
+    await skipWarmupIfShown(page);
     await page.getByTestId('logger-weight').click();
     await page.getByRole('spinbutton', { name: 'Weight' }).fill('185');
     await page.keyboard.press('Enter');

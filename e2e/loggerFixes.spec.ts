@@ -54,6 +54,13 @@ test.describe('logger fixes', () => {
   }, testInfo) => {
     await startWorkout(page);
     const card = page.getByTestId('exercise-card').first();
+    // The empty bar earns no ramp, so give the lift a max first: the ramps arrive under it.
+    await card.getByTestId('know-max').click();
+    const sheet = page.getByRole('dialog', { name: /Your max for/ });
+    await sheet.getByTestId('max-weight').fill('185');
+    await sheet.getByTestId('max-reps').fill('5');
+    await sheet.getByTestId('max-save').click();
+    await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
     await expect(card.getByTestId('target-line')).toContainText('Ramp 1 of');
     // Turn the ramp up well past its offer before logging it. Before this round that weight
     // became the plate line of the working set while the dial showed the target.

@@ -9,7 +9,7 @@ import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import { LoggedSets } from './LoggedSets';
 
 const NOW = '2026-09-03T14:00:00.000Z';
-const profile = createDefaultProfile(NOW);
+const profile = { ...createDefaultProfile(NOW), bodyweight: 185 };
 const [, gym] = createDefaultLocations({ gymAccess: true }, NOW);
 const workout = generateWorkout({
   profile,
@@ -56,8 +56,8 @@ describe('LoggedSets', () => {
     expect(screen.getByTestId('sets-summary')).toHaveTextContent(
       `${entry.sets.length} more sets · ${working[0]!.targetReps[0]}-${working[0]!.targetReps[1]} reps @ RIR ${working[0]!.targetRir}`,
     );
-    // A first-time bar lift starts at the empty bar, so the next set already carries a load.
-    expect(screen.getByTestId('set-aside')).toHaveTextContent('45 lb');
+    // The next set already carries a load: the first ramp, under the working weight.
+    expect(screen.getByTestId('set-aside')).toHaveTextContent(`${entry.sets[0]!.targetWeight} lb`);
 
     await user.click(screen.getByTestId('sets-summary'));
     expect(screen.getAllByTestId('set-row')).toHaveLength(entry.sets.length);
