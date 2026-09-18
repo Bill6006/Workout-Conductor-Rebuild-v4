@@ -14,7 +14,7 @@ import {
   startRatio,
 } from './startingLoad';
 import { weightStep } from '../plateMath/plateMath';
-import { fitWeight, type Loading } from '../loading/loading';
+import { fitWeight, snapDown, type Loading } from '../loading/loading';
 import type { EntryProgression, ProgressionMode, SetPrescription } from '../workout/types';
 import { restCategory, type Prescription } from './roles';
 
@@ -68,6 +68,8 @@ export interface NextTarget {
   setsAdvice: 0 | 1;
   /** Set when the target was held at the heaviest weight available and the reps pushed instead. */
   capped?: { at: number };
+  /** The weight the target moved from: the last one lifted, when there is one. */
+  from?: number | null;
 }
 
 export function estimateOneRepMax(weight: number, reps: number): number {
@@ -357,6 +359,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     ...extra,
     mode,
     weight: nextWeight,
+    from: weight,
     confidence,
     evidence: [...evidence, line, ...(extra.evidence ?? [])],
   });
@@ -585,20 +588,38 @@ export function summarizeProgression(target: NextTarget): EntryProgression {
  * are the coach's to offer, never applied here.
  */
 export function capTarget(target: NextTarget, loading: Loading | null, units: string): NextTarget {
-  if (!loading || loading.cap === null || target.weight === null) return target;
-  if (target.weight <= loading.cap + 1e-6) return target;
+  if (!loading || target.weight === null) return target;
   const [low, high] = target.reps;
   const shift = Math.min(2, Math.max(0, 20 - high));
-  return {
+  const holdAndPushReps = (weight: number, line: string, capped?: { at: number }): NextTarget => ({
     ...target,
-    weight: loading.cap,
+    ...(capped ? { capped } : {}),
+    weight,
     reps: [low + shift, high + shift],
-    capped: { at: loading.cap },
-    evidence: [
-      ...target.evidence,
+    evidence: [...target.evidence, line],
+  });
+  if (loading.cap !== null && target.weight > loading.cap + 1e-6) {
+    return holdAndPushReps(
+      loading.cap,
       `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
         shift === 0 ? ', and they are already at the top' : ''
       }.`,
-    ],
-  };
+      { at: loading.cap },
+    );
+  }
+  // A step the place cannot make: snapped onto the weights here, the target would land on or
+  // under the weight it moved from. The load holds there and the reps go up until the next
+  // real weight is earned, rather than the increase being rounded away in silence.
+  const from = target.from ?? null;
+  if (loading.available !== null && from !== null && target.weight > from + 1e-6) {
+    const fitted = snapDown(target.weight, loading.available);
+    const next = loading.available.find((weight) => weight > from + 1e-6);
+    if (fitted <= from + 1e-6 && next !== undefined) {
+      return holdAndPushReps(
+        fitted,
+        `The next weight here after ${from} ${units} is ${next}: the reps go up first, and the load follows once they are earned.`,
+      );
+    }
+  }
+  return target;
 }

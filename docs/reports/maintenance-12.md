@@ -61,8 +61,15 @@ dumbbells.
   not touched, four pulses then still, in the theme's gold. It stops as soon as the dial moves.
   Reduced-motion settings turn the pulse off. The line is also the quiet way into Plates: a tap
   opens the panel where the place's weights are recorded.
-- **Preferred exercises win their slot.** A preferred exercise that fits a slot takes it
-  outright; the score only orders the rest, and preferred ones among themselves.
+- **Preferred exercises win their slot, your own machines included.** A preferred exercise that
+  fits a slot takes it outright; the score only orders the rest, and preferred ones among
+  themselves. Custom exercises now take part in every lookup the engines use, by pattern, by
+  muscle, and by name, so a machine added through the creator and marked Preferred is picked
+  for its slot before the session is built.
+- **A step the place cannot make is never rounded away in silence.** When the next target,
+  snapped onto the weights a place has, would land back on the weight it moved from, the load
+  holds there and the reps go up by two, with the next real weight named in the reason. The
+  generator fits the first preview to the place exactly as recalibration does.
 - **A custom exercise says how it loads.** The creator has a How it loads choice: from the
   equipment, a machine stack, a bar with plates, dumbbells, a kettlebell, bodyweight, or a band.
   Left on automatic, the equipment decides.
@@ -76,7 +83,9 @@ dumbbells.
 
 ## Verification
 
-- Unit: range expansion, snapping, nudging, the bar's step from the smallest plate, fitting with
+- Unit: custom exercises in the pattern, muscle, and name lookups and a preferred custom machine
+  taking its slot; the generator fitting and capping the first preview; a swallowed step holding
+  the load and pushing the reps while a reachable step passes; range expansion, snapping, nudging, the bar's step from the smallest plate, fitting with
   and without a floor; a recorded set of dumbbells snapping and capping every dumbbell target in
   a live session with reps pushed and the place's record queued for the cloud copy; a missing
   plate putting every bar target on the rack's grid for the session only; forgetting a record

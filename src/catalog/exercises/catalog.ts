@@ -73,9 +73,16 @@ export function requireExercise(id: string): CatalogExercise {
   return exercise;
 }
 
-/** Resolves a user-entered name (or alias) to a catalog exercise. */
+/** Resolves a user-entered name (or alias) to a catalog or custom exercise. */
 export function findExerciseByName(name: string): CatalogExercise | undefined {
-  return BY_NAME.get(normalizeExerciseName(name));
+  const wanted = normalizeExerciseName(name);
+  const known = BY_NAME.get(wanted);
+  if (known) return known;
+  for (const exercise of CUSTOM_REGISTRY.values()) {
+    if (normalizeExerciseName(exercise.name) === wanted) return exercise;
+    if (exercise.aliases.some((alias) => normalizeExerciseName(alias) === wanted)) return exercise;
+  }
+  return undefined;
 }
 
 /** Resolves a list of names to catalog ids, ignoring names the catalog does not know. */
@@ -88,12 +95,13 @@ export function resolveExerciseIds(names: readonly string[]): Set<string> {
   return ids;
 }
 
+/** Catalog and custom exercises with this movement pattern: what the generator picks from. */
 export function exercisesByPattern(pattern: MovementPatternId): CatalogExercise[] {
-  return EXERCISES.filter((exercise) => exercise.movementPattern === pattern);
+  return allExercises().filter((exercise) => exercise.movementPattern === pattern);
 }
 
 export function exercisesByMuscle(muscle: MuscleId): CatalogExercise[] {
-  return EXERCISES.filter((exercise) => exercise.primaryMuscles.includes(muscle));
+  return allExercises().filter((exercise) => exercise.primaryMuscles.includes(muscle));
 }
 
 export function primaryMuscleGroups(exercise: CatalogExercise): MuscleGroup[] {

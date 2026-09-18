@@ -251,4 +251,10 @@ lowering and adds a pause. Manual weights are never re-fitted. A `loading` recal
 re-fits every unlogged, non-manual entry when a record is saved during a workout, and
 `session.loading.missingPlates` is a session-only note that widens the bar's step without
 touching the place. The generator's `pickForSlot` now gives a preferred exercise that fits the
-slot the slot outright; the score orders the rest.
+slot the slot outright; the score orders the rest. Custom exercises take part in `exercisesByPattern`,
+`exercisesByMuscle`, and `findExerciseByName`, so a custom machine marked Preferred is picked for
+its slot. The generator fits the first preview through the same `capTarget` and
+`applyProgression(..., loading)` path. `NextTarget.from` records the weight a target moved from;
+when a target snapped onto the place's list would land on or under `from`, `capTarget` holds the
+load and raises the reps by two, naming the next real weight, instead of rounding the increase
+away in silence.

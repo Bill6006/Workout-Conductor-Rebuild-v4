@@ -36,10 +36,11 @@ import {
   restCategory,
   type Prescription,
 } from '../progression/roles';
-import { weightStep } from '../plateMath/plateMath';
+import { loadingFor } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
 import {
   applyProgression,
+  capTarget,
   recommendNextTarget,
   summarizeProgression,
   type NextTarget,
@@ -585,9 +586,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       maxes,
     });
     const floor = barWeightFor(pick, profile.units);
-    const target = floorTarget(
-      scaleForDeload(baseTarget, adjust, weightStep(pick, profile.units)),
-      floor,
+    // What this place can load: the target lands on a weight that exists here, or holds at
+    // the heaviest one with the reps pushed instead.
+    const loading = loadingFor(location?.loading, undefined, pick, profile.units);
+    const target = capTarget(
+      floorTarget(scaleForDeload(baseTarget, adjust, loading.step), floor),
+      loading,
+      profile.units,
     );
     const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
     entries.push({
@@ -597,9 +602,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       sets: applyProgression(
         buildSets(prescription, warmupSets),
         target,
-        weightStep(pick, profile.units),
+        loading.step,
         {},
         floor,
+        loading,
       ),
       progression: summarizeProgression(target),
       restSeconds: prescription.restSeconds,
