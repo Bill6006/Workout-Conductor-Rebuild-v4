@@ -26,6 +26,8 @@ export interface SessionActions {
   onBusy: () => void;
   onUncomfortable: () => void;
   onSkip: () => void;
+  /** When set, Skip today is greyed out and this says why. */
+  skipDisabledReason?: string | null;
   onPain: (joint: Joint) => void;
   onUseAlternative: (exerciseId: string) => void;
 }
@@ -227,10 +229,21 @@ export function ExerciseDetailSheet({
             >
               Uncomfortable
             </button>
-            <button type="button" className={styles.actionButton} onClick={sessionActions.onSkip}>
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={sessionActions.onSkip}
+              disabled={Boolean(sessionActions.skipDisabledReason)}
+              data-testid="skip-today"
+            >
               Skip today
             </button>
           </div>
+          {sessionActions.skipDisabledReason ? (
+            <p className={styles.text} data-testid="skip-reason">
+              {sessionActions.skipDisabledReason}
+            </p>
+          ) : null}
           <div className={styles.painRow}>
             <select
               aria-label="Which joint hurts?"

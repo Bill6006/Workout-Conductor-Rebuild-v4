@@ -9,9 +9,11 @@ const OFFLINE_READY_DISMISS_MS = 4000;
  * Safe service-worker update surface.
  *
  * A new version never takes over silently: the waiting worker is only
- * activated when the user taps Reload. While a workout is active or paused
- * the Reload button is withheld, so a deploy can never interrupt a session;
- * the offer returns once the workout is finished or discarded.
+ * activated when the user taps Reload. During a workout the offer stays and
+ * says the session is kept on this device and carries on after the reload,
+ * because it is: the session lives in local storage and the rest timer keeps
+ * an absolute end time. Holding the offer back would leave a broken save with
+ * no way to receive its own fix.
  */
 export function UpdatePrompt() {
   const sessionStatus = useAppSelector((state) => state.session?.status ?? null);
@@ -41,31 +43,28 @@ export function UpdatePrompt() {
   return (
     <div className={styles.toast} role="status" aria-live="polite" data-testid="update-prompt">
       {needRefresh ? (
-        inWorkout ? (
+        <>
           <div className={styles.text}>
-            <strong>New version ready</strong>
-            <span>It will be offered after this workout. Nothing on this device is lost.</span>
+            <strong>New version available</strong>
+            <span>
+              {inWorkout
+                ? 'Your workout is kept on this device and carries on after the reload.'
+                : 'Reload when you are ready. Nothing on this device is lost.'}
+            </span>
           </div>
-        ) : (
-          <>
-            <div className={styles.text}>
-              <strong>New version available</strong>
-              <span>Reload when you are ready. Nothing on this device is lost.</span>
-            </div>
-            <div className={styles.actions}>
-              <button type="button" onClick={() => setNeedRefresh(false)}>
-                Later
-              </button>
-              <button
-                type="button"
-                className={styles.primary}
-                onClick={() => void updateServiceWorker(true)}
-              >
-                Reload
-              </button>
-            </div>
-          </>
-        )
+          <div className={styles.actions}>
+            <button type="button" onClick={() => setNeedRefresh(false)}>
+              Later
+            </button>
+            <button
+              type="button"
+              className={styles.primary}
+              onClick={() => void updateServiceWorker(true)}
+            >
+              Reload
+            </button>
+          </div>
+        </>
       ) : (
         <div className={styles.text}>
           <strong>Ready to work offline</strong>

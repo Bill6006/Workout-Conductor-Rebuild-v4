@@ -39,8 +39,9 @@ storage on that device: two copies, in IndexedDB and in local storage, both on t
   token. Never the owner's demonstrations, never automatic backups. Without a token nothing
   leaves the device and no network request is made.
 
-Deployments must never wipe IndexedDB, and service-worker updates never force a refresh during an
-active workout.
+Deployments must never wipe IndexedDB, and service-worker updates never force a refresh: a new
+version is only ever applied by a tap, and during a workout the offer says the session is kept on
+this device and carries on after the reload, which it does.
 
 ## Automated enforcement
 

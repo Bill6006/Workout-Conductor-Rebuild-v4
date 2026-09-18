@@ -16,6 +16,7 @@ import { SetLogger, type SetLoggerValues } from '../../components/SetLogger/SetL
 import { Sheet } from '../../components/Sheet/Sheet';
 import { SupersetGroup } from '../../components/SupersetGroup/SupersetGroup';
 import { useToast } from '../../components/Toast/useToast';
+import { explainSaveFailure } from '../../core/storage/explainSaveFailure';
 import { doneKeys, elapsedSeconds, type WorkoutSession } from '../../core/state/session';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { useTicker } from '../../core/time/useTicker';
@@ -29,6 +30,7 @@ import { useCoach } from '../coach/useCoach';
 import { ReadinessSheet } from '../today/ReadinessSheet';
 import { estimateWorkout } from '../../engine/duration/duration';
 import { plateMath, weightStep } from '../../engine/plateMath/plateMath';
+import { dropSetWeight } from '../../engine/recalibration/dropSet';
 import { maxPromptHidden } from '../../engine/progression/maxes';
 import { startRatio } from '../../engine/progression/startingLoad';
 import { contextFor } from '../../engine/recalibration/recalibrate';
@@ -65,6 +67,12 @@ function formatClock(seconds: number): string {
   return `${minutes}:${rest.toString().padStart(2, '0')}`;
 }
 
+function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
 function roundTo(value: number, step: number): number {
   return Math.max(0, Math.round(value / step) * step);
 }
@@ -90,9 +98,13 @@ function initialFor(
       return { weight: set.targetWeight, reps: set.targetReps[1], rir };
     }
     const base = draft?.weight ?? previousWeight;
-    const fraction = set.kind === 'warmup' ? 0.6 : 0.8;
     return {
-      weight: base === null || base === undefined ? null : roundTo(base * fraction, step),
+      weight:
+        base === null || base === undefined
+          ? null
+          : set.kind === 'warmup'
+            ? roundTo(base * 0.6, step)
+            : dropSetWeight(base, step),
       reps: set.targetReps[1],
       rir,
     };
@@ -146,6 +158,10 @@ export function ActiveWorkoutScreen() {
   const strengthMaxes = useAppSelector((state) => state.strengthMaxes);
   /** Weight currently shown in a logger, so Plate Math follows it before the set is logged. */
   const [liveWeights, setLiveWeights] = useState<Record<string, number | null>>({});
+  /** A block opened from the Whole workout list, to edit its sets; null shows the current one. */
+  const [viewingBlockId, setViewingBlockId] = useState<string | null>(null);
+  /** Why the last save did not go through, in plain words; the session stays until it does. */
+  const [saveProblem, setSaveProblem] = useState<string | null>(null);
   const active = session?.status === 'active';
   const now = useTicker(1000, active);
 
@@ -168,6 +184,10 @@ export function ActiveWorkoutScreen() {
   const currentBlock = position
     ? workout.blocks.find((block) => block.id === position.blockId)
     : undefined;
+  const viewingBlock =
+    viewingBlockId !== null && viewingBlockId !== currentBlock?.id
+      ? (workout.blocks.find((block) => block.id === viewingBlockId) ?? null)
+      : null;
   const nextBlock = currentBlock
     ? workout.blocks[workout.blocks.indexOf(currentBlock) + 1]
     : undefined;
@@ -178,8 +198,31 @@ export function ActiveWorkoutScreen() {
       : null;
   const paused = session.status === 'paused';
 
+  // Skip today has nothing to do once every set is logged; the button says so instead of failing.
+  const skipReasonFor = (entry: WorkoutEntry) =>
+    entry.sets.every((set) => isDone(entry.id, set.index))
+      ? 'Every set is logged. Edit a set from its row instead.'
+      : null;
+
   const act = (trigger: RecalibrationTrigger) => {
     setSelected(null);
+    if (trigger.type === 'skip') {
+      // With logged sets the store trims the exercise instead of asking the engine to remove it.
+      void store.skipExercise(trigger.entryId).then(
+        (result) => {
+          if (result.kind === 'trimmed') {
+            toast.show(
+              `Skipped the rest of ${result.name}: ${result.skippedSets} ${result.skippedSets === 1 ? 'set' : 'sets'} marked skipped. Tap a set to change it.`,
+              'success',
+            );
+          }
+        },
+        (error: unknown) => {
+          toast.show(error instanceof Error ? error.message : 'Could not skip', 'error');
+        },
+      );
+      return;
+    }
     void store.recalibrate(trigger);
   };
 
@@ -238,6 +281,8 @@ export function ActiveWorkoutScreen() {
   };
 
   const commitLog = (entry: WorkoutEntry, set: SetPrescription, values: SetLoggerValues) => {
+    // The dial's live value belongs to the set just logged; the next set starts from its own rule.
+    setLiveWeights((current) => withoutKey(current, entry.id));
     void store.logSet(entry.id, set.index, values).catch((error: unknown) => {
       toast.show(error instanceof Error ? error.message : 'Could not log the set', 'error');
     });
@@ -252,10 +297,12 @@ export function ActiveWorkoutScreen() {
 
   const finish = async (rating: SessionRating | null) => {
     setFinishing('idle');
+    setSaveProblem(null);
     try {
       await store.finishWorkout(rating, { endedEarly });
     } catch (error) {
-      toast.show(error instanceof Error ? error.message : 'Could not save the workout', 'error');
+      // Said on the screen in plain words, and it stays there until the next attempt.
+      setSaveProblem(explainSaveFailure(error));
     }
   };
 
@@ -269,14 +316,27 @@ export function ActiveWorkoutScreen() {
       ? entry.sets.find((set) => set.index === editingHere.setIndex)
       : undefined;
     const currentHere = position && position.entryId === entry.id ? position : null;
+    const workingLogged = logged.some((set) => set.kind === 'working' && !set.skipped);
+    // One rule for the dial and the plate line: the dial's own starting value, or the weight
+    // the dial has been turned to, or, with no set in front of you, the last working weight
+    // logged here. A warm-up's draft never reaches a working set.
+    const dial = currentHere
+      ? initialFor(session, entry, currentHere.set, previous?.weight ?? null, step, workingLogged)
+      : null;
+    const lastWorkingWeight =
+      [...logged]
+        .filter((set) => set.kind === 'working' && !set.skipped && set.weight !== null)
+        .sort((a, b) => a.setIndex - b.setIndex)
+        .map((set) => set.weight)
+        .pop() ?? null;
     const draftWeight =
-      liveWeights[entry.id] ??
-      session.drafts[entry.id]?.weight ??
-      currentHere?.set.targetWeight ??
-      previous?.weight ??
-      null;
+      editingHere && editingSet
+        ? loggedValues(session, entry.id, editingSet.index).weight
+        : (liveWeights[entry.id] ?? dial?.weight ?? lastWorkingWeight);
     const helper =
-      draftWeight !== null && draftWeight > 0 ? plateMath(exercise, draftWeight, units).line : null;
+      draftWeight !== null && draftWeight !== undefined && draftWeight > 0
+        ? plateMath(exercise, draftWeight, units).line
+        : null;
 
     return (
       <>
@@ -324,14 +384,17 @@ export function ActiveWorkoutScreen() {
                 weight: currentHere.set.targetWeight,
                 label: describeSetPosition(currentHere.set, entry),
               }}
-              initial={initialFor(
-                session,
-                entry,
-                currentHere.set,
-                previous?.weight ?? null,
-                step,
-                logged.some((set) => set.kind === 'working' && !set.skipped),
-              )}
+              initial={
+                dial ??
+                initialFor(
+                  session,
+                  entry,
+                  currentHere.set,
+                  previous?.weight ?? null,
+                  step,
+                  workingLogged,
+                )
+              }
               mode="log"
               weightStep={step}
               onCommit={(values) => commitLog(entry, currentHere.set, values)}
@@ -600,8 +663,54 @@ export function ActiveWorkoutScreen() {
         />
       ) : null}
 
+      {saveProblem ? (
+        <div className={styles.summary} role="alert" data-testid="save-problem">
+          <p className={styles.summaryText}>{saveProblem}</p>
+          <div className={styles.summaryActions}>
+            <button
+              type="button"
+              className={styles.smallButton}
+              onClick={() => {
+                setSaveProblem(null);
+                setFinishing('rating');
+              }}
+              data-testid="save-retry"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              className={styles.smallButton}
+              onClick={() => setSaveProblem(null)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {viewingBlock ? (
+        <>
+          <p className={styles.panelNote} data-testid="viewing-note">
+            Viewing {viewingBlock.label}.{' '}
+            <button
+              type="button"
+              className={styles.linkButton}
+              onClick={() => setViewingBlockId(null)}
+              data-testid="back-to-current"
+            >
+              Back to the current set
+            </button>
+          </p>
+          {renderBlock(viewingBlock)}
+        </>
+      ) : null}
+
       {currentBlock ? (
-        renderBlock(currentBlock)
+        viewingBlock ? null : (
+          renderBlock(currentBlock)
+        )
       ) : (
         <Card tone="accent" eyebrow="All sets done" title="Workout complete">
           <p className={styles.panelNote}>
@@ -654,7 +763,8 @@ export function ActiveWorkoutScreen() {
                 <button
                   type="button"
                   className={styles.listButton}
-                  onClick={() => setSelected({ entry: block.entries[0] as WorkoutEntry, block })}
+                  aria-pressed={viewingBlockId === block.id}
+                  onClick={() => setViewingBlockId(current ? null : block.id)}
                 >
                   <span className={styles.listLabel}>{block.label}</span>
                   <span className={styles.listMeta}>
@@ -685,6 +795,7 @@ export function ActiveWorkoutScreen() {
                 onBusy: () => act({ type: 'equipment-busy', entryId: selected.entry.id }),
                 onUncomfortable: () => act({ type: 'uncomfortable', entryId: selected.entry.id }),
                 onSkip: () => act({ type: 'skip', entryId: selected.entry.id }),
+                skipDisabledReason: skipReasonFor(selected.entry),
                 onPain: (joint) => act({ type: 'pain', entryId: selected.entry.id, joint }),
                 onUseAlternative: (exerciseId) =>
                   act({ type: 'replace', entryId: selected.entry.id, exerciseId }),

@@ -84,7 +84,8 @@ describe('active workout in the store', () => {
     expect(current.rest?.seconds).toBe(45);
     expect(current.rest?.endsAt).toBe(new Date(Date.parse(TEST_NOW) + 45_000).toISOString());
     expect(current.rest?.nextLabel).toMatch(/^Next: Barbell Bench Press · warm-up set 2 of 2/);
-    expect(current.drafts.e1).toEqual({ weight: 95, reps: 8, rir: 5 });
+    // A warm-up never becomes the next set's prefill; only a working set does.
+    expect(current.drafts.e1).toBeUndefined();
 
     const superset = current.workout.blocks.find(
       (block) => block.kind === 'superset',

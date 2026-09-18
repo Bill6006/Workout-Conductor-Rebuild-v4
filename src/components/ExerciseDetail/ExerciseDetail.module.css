@@ -253,6 +253,11 @@
   background: var(--color-accent-soft);
 }
 
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .painRow {
   display: flex;
   align-items: center;

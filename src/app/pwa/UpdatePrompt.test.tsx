@@ -68,19 +68,22 @@ describe('UpdatePrompt', () => {
     expect(updateServiceWorker).toHaveBeenCalledWith(true);
   });
 
-  it('withholds Reload during an active workout and says the offer comes after it', async () => {
+  it('keeps the Reload offer during a workout and says the session carries on after it', async () => {
     state.needRefresh = true;
     const { store } = await seeded();
     await store.startWorkout();
+    const user = userEvent.setup();
     render(
       <Providers store={store}>
         <UpdatePrompt />
       </Providers>,
     );
-    expect(screen.getByTestId('update-prompt')).toHaveTextContent('New version ready');
-    expect(screen.getByTestId('update-prompt')).toHaveTextContent('after this workout');
-    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+    expect(screen.getByTestId('update-prompt')).toHaveTextContent('New version available');
+    expect(screen.getByTestId('update-prompt')).toHaveTextContent('carries on after the reload');
+    // Still never silent: nothing happens until the tap.
     expect(updateServiceWorker).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Reload' }));
+    expect(updateServiceWorker).toHaveBeenCalledWith(true);
   });
 
   it('announces the offline-ready shell briefly', async () => {

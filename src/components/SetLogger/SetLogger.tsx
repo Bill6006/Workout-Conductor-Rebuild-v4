@@ -138,6 +138,21 @@ export function SetLogger({
 
   const [low, high] = target.reps;
   const inRange = values.reps >= low && values.reps <= high;
+  // Zero reps is a skip, and the button says so before the tap rather than after it.
+  const shownReps = typing === 'reps' ? typedValues().reps : values.reps;
+  const skipping = shownReps === 0;
+  const buttonLabel =
+    mode === 'edit'
+      ? skipping
+        ? 'Save as skipped'
+        : 'Save set'
+      : skipping
+        ? target.kind === 'warmup'
+          ? 'Skip warm-up set'
+          : 'Skip set'
+        : target.kind === 'warmup'
+          ? 'Log warm-up set'
+          : 'Log set';
   // The line under the weight always says what to load for this set.
   const weightLabel =
     target.kind === 'warmup' ? 'Warm-up' : target.kind === 'drop' ? 'Drop' : 'Target';
@@ -286,8 +301,9 @@ export function SetLogger({
           onClick={commit}
           disabled={disabled || cooling}
           data-testid="log-set"
+          data-intent={skipping ? 'skip' : 'log'}
         >
-          {mode === 'edit' ? 'Save set' : target.kind === 'warmup' ? 'Log warm-up set' : 'Log set'}
+          {buttonLabel}
         </button>
       </div>
     </section>

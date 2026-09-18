@@ -118,7 +118,9 @@ Default length is the profile's typical workout length.
 ### PWA
 
 `vite-plugin-pwa` in `prompt` mode precaches the app shell. A waiting service worker is only
-activated when the user taps Reload. Later phases hold the prompt during an active workout.
+activated when the user taps Reload. During a workout the offer stays and says the session is
+kept on this device and carries on after the reload, which it does: the session lives in local
+storage and the rest timer keeps an absolute end time.
 
 ## Planned structure (from the execution plan)
 

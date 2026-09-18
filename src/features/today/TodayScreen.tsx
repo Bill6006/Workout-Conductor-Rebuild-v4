@@ -97,6 +97,11 @@ export function TodayScreen() {
   // Every session-only action closes the sheet and runs through the one Recalibration Engine.
   const act = (trigger: RecalibrationTrigger) => {
     setSelected(null);
+    if (trigger.type === 'skip') {
+      // With logged sets the store trims the exercise instead of asking the engine to remove it.
+      void store.skipExercise(trigger.entryId).catch(() => undefined);
+      return;
+    }
     void store.recalibrate(trigger);
   };
 

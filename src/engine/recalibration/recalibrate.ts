@@ -1,3 +1,4 @@
+import { dropSetWeight } from './dropSet';
 import { EQUIPMENT } from '../../catalog/equipment/equipment';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
@@ -734,6 +735,12 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
 
     case 'skip': {
       const workout = cloneWorkout(request.workout);
+      if (request.completed.sets.some((done) => done.entryId === trigger.entryId)) {
+        const { entry } = findEntry(workout, trigger.entryId);
+        throw new Error(
+          `${requireExercise(entry.exerciseId).name} has logged sets, so it stays; skip the rest of it from its set list instead.`,
+        );
+      }
       const before = workout.duration.estimatedMinutes;
       const removed = removeEntry(workout, trigger.entryId);
       constraints.avoidExerciseIds = [
@@ -1205,16 +1212,24 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         if (!exercise.dropSetSafe) throw new Error(`${exercise.name} is not safe for a drop set.`);
         if (existing)
           return { ...base, workout, headline: `${exercise.name} already has a drop set.` };
-        const lastWorking = [...entry.sets].reverse().find((set) => set.kind === 'working');
+        // The load comes from a working set actually lifted, never from the plan. Until the
+        // last working set is logged the drop set carries none, and the store fills it in then.
+        const lifted = request.completed.sets
+          .filter((done) => done.entryId === entry.id && done.kind === 'working' && !done.skipped)
+          .sort((a, b) => a.setIndex - b.setIndex)
+          .map((done) => done.weight)
+          .filter((weight): weight is number => typeof weight === 'number' && weight > 0);
+        const workingLeft = entry.sets.some(
+          (set) => set.kind === 'working' && !isDone(entry.id, set.index),
+        );
+        const last = lifted[lifted.length - 1];
         const step = weightStep(exercise, request.profile.units);
-        const load = lastWorking?.targetWeight ?? null;
         entry.sets.push({
           index: nextSetIndex(entry),
           kind: 'drop',
           targetReps: [8, 12],
           targetRir: 0,
-          targetWeight:
-            load === null ? null : Math.max(step, Math.round((load * 0.8) / step) * step),
+          targetWeight: last !== undefined && !workingLeft ? dropSetWeight(last, step) : null,
           restSeconds: 0,
         });
         entry.dropSet = true;

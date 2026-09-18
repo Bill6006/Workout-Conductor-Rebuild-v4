@@ -9,6 +9,7 @@ import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import { resolveTargetMinutes } from '../../engine/duration/duration';
 import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
+import { dropSetWeight, pendingDropSet, withDropWeight } from '../../engine/recalibration/dropSet';
 import { weightStep } from '../../engine/plateMath/plateMath';
 import {
   inspectCloud,
@@ -1088,10 +1089,12 @@ export class AppStore {
       pausedAt: null,
       completed: { ...completed, currentEntryId: next?.entryId ?? null },
       rest,
-      // A skip carries no numbers, so it never becomes the next set's prefill.
-      drafts: skipped
-        ? session.drafts
-        : { ...session.drafts, [entryId]: { weight: values.weight, reps, rir: values.rir } },
+      // A skip carries no numbers, and a warm-up or drop set carries the wrong ones, so only
+      // a working set becomes the next set's prefill.
+      drafts:
+        skipped || set.kind !== 'working'
+          ? session.drafts
+          : { ...session.drafts, [entryId]: { weight: values.weight, reps, rir: values.rir } },
     });
 
     if (!isEdit && set.kind === 'working' && !skipped) {
@@ -1144,6 +1147,73 @@ export class AppStore {
         }
       }
     }
+    if (set.kind === 'working' && !skipped) this.settleDropSet(entryId);
+  }
+
+  /**
+   * Once the last working set of an exercise is logged, its drop set takes a
+   * load from the weight actually lifted. Until then the drop set carries no
+   * load of its own, so it can never come out heavier than the sets before it.
+   */
+  private settleDropSet(entryId: string): void {
+    const session = this.requireSession();
+    const entry = allEntries(session.workout.blocks).find((candidate) => candidate.id === entryId);
+    if (!entry) return;
+    const isDone = this.isDoneFor(session);
+    const drop = pendingDropSet(entry, isDone);
+    if (!drop) return;
+    const workingLeft = entry.sets.some(
+      (candidate) => candidate.kind === 'working' && !isDone(entry.id, candidate.index),
+    );
+    if (workingLeft) return;
+    const lifted = session.completed.sets
+      .filter((done) => done.entryId === entryId && done.kind === 'working' && !done.skipped)
+      .sort((a, b) => a.setIndex - b.setIndex);
+    const last = lifted[lifted.length - 1];
+    if (!last || last.weight === null || last.weight <= 0) return;
+    const exercise = getExercise(entry.exerciseId);
+    const step = exercise ? weightStep(exercise, this.state.profile?.units ?? 'lb') : 5;
+    const weight = dropSetWeight(last.weight, step);
+    if (drop.targetWeight === weight) return;
+    this.setSession({
+      ...session,
+      workout: {
+        ...session.workout,
+        blocks: withDropWeight(session.workout.blocks, entryId, weight),
+      },
+    });
+  }
+
+  /**
+   * Skips what is left of an exercise. With nothing logged the engine removes
+   * it and rebalances the session. With something logged the logged sets stay,
+   * the rest are recorded as skipped so the record shows the exercise was cut
+   * short, and nothing is removed, so no logged work is ever at risk.
+   */
+  async skipExercise(
+    entryId: string,
+  ): Promise<{ kind: 'removed' | 'trimmed'; skippedSets: number; name: string }> {
+    const session = this.requireSession();
+    const entry = allEntries(session.workout.blocks).find((candidate) => candidate.id === entryId);
+    if (!entry) throw new Error('That exercise is no longer in the workout.');
+    const name = requireExercise(entry.exerciseId).name;
+    const logged = session.completed.sets.some((done) => done.entryId === entryId);
+    if (!logged) {
+      await this.recalibrate({ type: 'skip', entryId });
+      return { kind: 'removed', skippedSets: 0, name };
+    }
+    const isDone = this.isDoneFor(session);
+    const remaining = entry.sets.filter((set) => !isDone(entry.id, set.index));
+    if (remaining.length === 0) {
+      throw new Error(`Every set of ${name} is already logged. Edit a set from its row instead.`);
+    }
+    this.markSkipped(
+      session,
+      entryId,
+      entry.exerciseId,
+      remaining.map((set) => ({ index: set.index, kind: set.kind })),
+    );
+    return { kind: 'trimmed', skippedSets: remaining.length, name };
   }
 
   private markSkipped(
