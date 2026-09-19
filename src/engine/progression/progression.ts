@@ -257,8 +257,64 @@ function withSessionFatigue(target: NextTarget, input: NextTargetInput): NextTar
   );
 }
 
+/** A typed max outweighs the log only when it says at least this much more. */
+export const ENTERED_MAX_MARGIN = 1.025;
+/** How far one session moves toward an entered max. */
+export const ENTERED_MAX_STEPS = 2;
+/**
+ * The share of what an entered max implies that a lift with logged history is asked for. A first
+ * target on a lift never done stays more careful (`ENTERED_FRACTION`); here the movement is known
+ * and the step limit is the safety.
+ */
+export const ENTERED_WITH_HISTORY_FRACTION = 0.95;
+
+/**
+ * A max entered on a lift that already has logged sets. The log is the better
+ * evidence, so the max only counts while it is newer than the last logged
+ * session and says more than those sets do; then the target moves toward what
+ * the max implies, two steps at most, and the next logged session takes over
+ * again. A lift without its own history takes its first target from the max
+ * in `recommendBaseTarget`, as before.
+ */
+function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget {
+  const maxes = input.maxes ?? null;
+  if (!maxes || target.weight === null || !FATIGUE_MODES.has(target.mode)) return target;
+  const entry = maxes.maxes[input.exercise.id];
+  if (!entry) return target;
+  const last = performanceHistory(input.history, input.exercise, 1)[0];
+  if (!last || last.viaFamily || last.e1rm === null) return target;
+  if (!(Date.parse(entry.enteredAt) > Date.parse(last.date))) return target;
+  const units = input.profile.units;
+  const entered = enteredMaxFor(maxes, input.exercise.id, units);
+  if (entered === null || entered < last.e1rm * ENTERED_MAX_MARGIN) return target;
+  const step = target.increment;
+  const implied = loadFromEstimate(
+    entered,
+    input.prescription.reps[1],
+    input.prescription.rir,
+    ENTERED_WITH_HISTORY_FRACTION,
+    step,
+  );
+  const lifted = Math.min(implied, roundToStep(target.weight + ENTERED_MAX_STEPS * step, step));
+  if (!(lifted > target.weight)) return target;
+  const steps = Math.round((lifted - target.weight) / step);
+  return floorTarget(
+    {
+      ...target,
+      weight: lifted,
+      evidence: [
+        ...target.evidence,
+        `Your max of ${Math.round(entered)} ${units}, entered after your last session, says more than your logged sets: up ${
+          steps === 1 ? 'a step' : `${steps} steps`
+        } toward it. Your next logged session takes over.`,
+      ],
+    },
+    input,
+  );
+}
+
 export function recommendNextTarget(input: NextTargetInput): NextTarget {
-  return withSessionFatigue(recommendBiasedTarget(input), input);
+  return withSessionFatigue(withEnteredMax(recommendBiasedTarget(input), input), input);
 }
 
 function recommendBiasedTarget(input: NextTargetInput): NextTarget {

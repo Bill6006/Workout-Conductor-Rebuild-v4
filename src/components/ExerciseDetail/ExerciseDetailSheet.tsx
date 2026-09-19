@@ -47,6 +47,14 @@ export interface EditActions {
   onSplit: () => void;
 }
 
+/** The lifter's own max for this lift: what is saved, and the way to enter or update it. */
+export interface MaxAction {
+  /** "216 lb, entered Sep 18" or that none is saved. */
+  line: string;
+  label: string;
+  onOpen: () => void;
+}
+
 interface ExerciseDetailSheetProps {
   exercise: CatalogExercise | null;
   onClose: () => void;
@@ -55,6 +63,7 @@ interface ExerciseDetailSheetProps {
   preference?: PreferenceControls;
   sessionActions?: SessionActions;
   editActions?: EditActions;
+  maxAction?: MaxAction;
 }
 
 const ROLE_LABELS: Record<CatalogExercise['defaultRole'], string> = {
@@ -89,6 +98,7 @@ export function ExerciseDetailSheet({
   preference,
   sessionActions,
   editActions,
+  maxAction,
 }: ExerciseDetailSheetProps) {
   const [painJoint, setPainJoint] = useState<Joint>('shoulder');
   const [repLow, setRepLow] = useState('');
@@ -262,6 +272,25 @@ export function ExerciseDetailSheet({
               onClick={() => sessionActions.onPain(painJoint)}
             >
               Hurts, protect it
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {maxAction ? (
+        <section className={styles.section} aria-label="Your max">
+          <h3 className={styles.sectionTitle}>Your max</h3>
+          <p className={styles.text} data-testid="max-line">
+            {maxAction.line}
+          </p>
+          <div className={styles.actionGrid}>
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={maxAction.onOpen}
+              data-testid="edit-max"
+            >
+              {maxAction.label}
             </button>
           </div>
         </section>

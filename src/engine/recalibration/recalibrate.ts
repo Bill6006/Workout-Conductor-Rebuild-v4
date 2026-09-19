@@ -1064,8 +1064,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       // and so does every other lift never logged, through the cross-exercise estimate.
       const workout = cloneWorkout(request.workout);
       const named = requireExercise(trigger.exerciseId);
+      const weightOf = (entry: WorkoutEntry) =>
+        entry.sets.find((set) => set.kind === 'working')?.targetWeight ?? null;
+      const before = new Map(
+        allEntries(request.workout.blocks).map((entry) => [entry.id, weightOf(entry)]),
+      );
       let updated = 0;
       let others = 0;
+      let raised = 0;
+      let hasHistory = false;
       for (const entry of allEntries(workout.blocks)) {
         const own = entry.exerciseId === trigger.exerciseId;
         if (!own && entry.progression?.mode !== 'start') continue;
@@ -1111,16 +1118,27 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         );
         if (entry.dropSet && exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
         entry.progression = summarizeProgression(fitted);
-        if (own) updated += 1;
-        else others += 1;
+        if (own) {
+          updated += 1;
+          if (fitted.mode !== 'start') hasHistory = true;
+          const was = before.get(entry.id) ?? null;
+          const now = weightOf(entry);
+          if (was !== null && now !== null && now > was) raised += 1;
+        } else {
+          others += 1;
+        }
       }
       return {
         ...base,
         workout,
         headline:
-          updated > 0
-            ? `First target for ${named.name} set from your max.`
-            : `${named.name} already has logged sets; the next session starts from your max.`,
+          updated === 0
+            ? `${named.name} already has logged sets today; your max counts from the next session.`
+            : !hasHistory
+              ? `First target for ${named.name} set from your max.`
+              : raised > 0
+                ? `${named.name}: the target moved toward your max.`
+                : `Max saved. Your logged sets already put ${named.name} at this target.`,
         notes:
           others > 0
             ? [

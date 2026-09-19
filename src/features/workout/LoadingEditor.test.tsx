@@ -22,18 +22,30 @@ describe('recording what a place can load', () => {
         onSetMissingPlates={vi.fn(() => Promise.resolve())}
       />,
     );
-    expect(screen.getByTestId('loading-summary')).toHaveTextContent('Not recorded yet');
+    expect(screen.getByTestId('loading-summary')).toHaveTextContent(
+      'Not set yet, so targets move by 10 lb with no upper limit.',
+    );
+    expect(screen.getByTestId('loading-edit')).toHaveTextContent('Set this machine');
     await user.click(screen.getByTestId('loading-edit'));
-    await user.clear(screen.getByLabelText('Range 1 from'));
-    await user.type(screen.getByLabelText('Range 1 from'), '10');
-    await user.clear(screen.getByLabelText('Range 1 to'));
-    await user.type(screen.getByLabelText('Range 1 to'), '100');
-    await user.clear(screen.getByLabelText('Range 1 step'));
-    await user.type(screen.getByLabelText('Range 1 step'), '10');
-    await user.click(screen.getByRole('button', { name: 'Then a second range' }));
-    await user.type(screen.getByLabelText('Range 2 from'), '120');
-    await user.type(screen.getByLabelText('Range 2 to'), '280');
-    await user.type(screen.getByLabelText('Range 2 step'), '20');
+    // Each box sits under its own word, and the result is read back as it is typed.
+    const row = screen.getByTestId('loading-row-0');
+    expect(row).toHaveTextContent('Lightest (lb)');
+    expect(row).toHaveTextContent('Heaviest (lb)');
+    expect(row).toHaveTextContent('Jump (lb)');
+    await user.clear(screen.getByLabelText('Lightest'));
+    await user.type(screen.getByLabelText('Lightest'), '10');
+    await user.clear(screen.getByLabelText('Heaviest'));
+    await user.type(screen.getByLabelText('Heaviest'), '100');
+    await user.clear(screen.getByLabelText('Jump'));
+    await user.type(screen.getByLabelText('Jump'), '10');
+    expect(screen.getByTestId('loading-readback')).toHaveTextContent('10 to 100 lb in 10 lb jumps');
+    await user.click(screen.getByRole('button', { name: 'The jump changes higher up' }));
+    await user.type(screen.getByLabelText('Lightest, range 2'), '120');
+    await user.type(screen.getByLabelText('Heaviest, range 2'), '280');
+    await user.type(screen.getByLabelText('Jump, range 2'), '20');
+    expect(screen.getByTestId('loading-readback')).toHaveTextContent(
+      '10 to 100 lb in 10 lb jumps, then 120 to 280 lb in 20 lb jumps',
+    );
     await user.click(screen.getByTestId('loading-save'));
     expect(onSave).toHaveBeenCalledWith({
       kind: 'stack',
@@ -61,8 +73,9 @@ describe('recording what a place can load', () => {
       />,
     );
     await user.click(screen.getByTestId('loading-edit'));
-    await user.clear(screen.getByLabelText('Range 1 to'));
-    await user.type(screen.getByLabelText('Range 1 to'), '5');
+    await user.clear(screen.getByLabelText('Heaviest'));
+    await user.type(screen.getByLabelText('Heaviest'), '5');
+    expect(screen.getByTestId('loading-readback')).toHaveTextContent('Fill in all three');
     await user.click(screen.getByTestId('loading-save'));
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent(/at or above it/);

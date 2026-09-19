@@ -85,7 +85,7 @@ describe('entered maxes in the store', () => {
     await handle.store.recordStrengthMax(BENCH, { kind: 'max', e1rm: 250 });
     const session = handle.store.getSnapshot().session!;
     expect(session.lastSummary?.headline).toBe(
-      'Barbell Bench Press already has logged sets; the next session starts from your max.',
+      'Barbell Bench Press already has logged sets today; your max counts from the next session.',
     );
     const bench = benchOf(handle);
     // The remaining sets still follow the logged set, not the entered max.

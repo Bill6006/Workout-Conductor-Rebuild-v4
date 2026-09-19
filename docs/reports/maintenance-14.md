@@ -59,6 +59,29 @@ unfinished for too long.
   moved four hours ahead the coach names the open workout, its action opens the end-of-workout
   sheet, and from Today the same tap lands on the workout with the sheet open.
 
+## Follow-up from the owner's phone (2026-09-18)
+
+Two things he ran into while this round was at its gate, built on his go.
+
+- **A max could only be entered once, on a lift never logged.** The Know your max? link is a
+  one-time offer: it shows on a lift with no history, before a working set is logged, and never
+  again. He could not find it on a lift he had already trained, and had no way to update a max.
+  Options now has Your max on every lift that takes a load: what is saved and when, and a button
+  that opens the same sheet, with both ways in (a recent set, or a max he knows) and nothing to
+  snooze. On a lift with logged sets the log stays the better evidence, so a max counts only
+  while it is newer than the last logged session and says more than those sets do; then the
+  target moves toward what the max implies, two steps at most, and the next logged session
+  takes over again. The summary says which of those happened.
+- **The weights editor showed three unlabeled boxes.** He read them as random numbers. Each box
+  now sits under its own word, Lightest, Heaviest, and Jump, with the unit, and one line reads
+  the result back as it is typed: "5 to 55 lb in 5 lb jumps". The button that opens it says what
+  it sets (Set my dumbbells, Set this machine), the unset state says targets have no upper
+  limit, and the second range is offered as "The jump changes higher up".
+- **Found while testing it: the Plates tab was missing on a lift with no weight showing**, such
+  as an exercise opened from the Whole workout list, so its weights could not be set from
+  there. The tab now shows on any lift that takes a load, and an exercise being looked at shows
+  its planned working weight.
+
 ## How to check on the phone
 
 1. Settings, Alerts: turn Notifications on and allow them when the browser asks.

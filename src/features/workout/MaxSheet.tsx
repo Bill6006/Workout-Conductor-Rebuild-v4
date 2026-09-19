@@ -2,11 +2,14 @@ import { useState } from 'react';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { Button } from '../../components/Button/Button';
 import { Sheet } from '../../components/Sheet/Sheet';
-import { useAppStore } from '../../core/state/useAppStore';
+import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import type { UnitSystem } from '../../core/validation/profile';
 import { weightStep } from '../../engine/plateMath/plateMath';
 import { maxFromSet, type MaxInput } from '../../engine/progression/maxes';
-import { loadFromEstimate } from '../../engine/progression/progression';
+import {
+  ENTERED_WITH_HISTORY_FRACTION,
+  loadFromEstimate,
+} from '../../engine/progression/progression';
 import { ENTERED_FRACTION, floorToBar, loadClass } from '../../engine/progression/startingLoad';
 import type { WorkoutEntry } from '../../engine/workout/types';
 import styles from './MaxSheet.module.css';
@@ -18,6 +21,11 @@ interface MaxSheetProps {
   open: boolean;
   onClose: () => void;
   onSaved?: () => void;
+  /**
+   * True for the one-time offer on a lift with no history, which can be snoozed. False when the
+   * lifter opened it from Options to enter or update a max on any lift.
+   */
+  offer?: boolean;
 }
 
 function parse(raw: string): number | null {
@@ -32,8 +40,17 @@ function parse(raw: string): number | null {
  * it would set before saving. "Not now" brings the link back in a week;
  * "Don't ask for this lift" keeps it away for good.
  */
-export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: MaxSheetProps) {
+export function MaxSheet({
+  exercise,
+  entry,
+  units,
+  open,
+  onClose,
+  onSaved,
+  offer = true,
+}: MaxSheetProps) {
   const store = useAppStore();
+  const saved = useAppSelector((state) => state.strengthMaxes.maxes[exercise.id] ?? null);
   const [mode, setMode] = useState<'set' | 'max'>('set');
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
@@ -64,7 +81,10 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
             e1rm,
             working.targetReps[1],
             working.targetRir,
-            ENTERED_FRACTION,
+            // A lift with logged history is asked for a little more of what the max implies.
+            !offer && entry.progression && entry.progression.mode !== 'start'
+              ? ENTERED_WITH_HISTORY_FRACTION
+              : ENTERED_FRACTION,
             weightStep(exercise, units),
           ),
           exercise,
@@ -102,9 +122,19 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
       onClose={onClose}
       footer={
         <div className={styles.actions}>
-          <Button variant="secondary" onClick={() => void snooze(false)} data-testid="max-not-now">
-            Not now
-          </Button>
+          {offer ? (
+            <Button
+              variant="secondary"
+              onClick={() => void snooze(false)}
+              data-testid="max-not-now"
+            >
+              Not now
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={onClose} data-testid="max-cancel">
+              Cancel
+            </Button>
+          )}
           <Button
             onClick={() => void save()}
             disabled={input === null || busy}
@@ -116,10 +146,16 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
       }
     >
       <p className={styles.note}>
-        No max attempt needed. Enter a recent set you did, weight and reps, and the app estimates
-        your one-rep max from it and sets today's first target under that estimate. Used once: after
-        your first logged set, the targets follow what you actually lift.
+        {offer
+          ? 'No max attempt needed. Enter a recent set you did, weight and reps, and the app estimates your one-rep max from it and sets today’s first target under that estimate. Used once: after your first logged set, the targets follow what you actually lift.'
+          : 'No max attempt needed: a recent best set works. A max that is newer than your last session and says more than your logged sets moves the target toward it, two steps at most. Your next logged session takes over again.'}
       </p>
+      {!offer && saved ? (
+        <p className={styles.note} data-testid="max-saved">
+          Saved now: {Math.round(saved.e1rm)} {saved.units}
+          {perHand}, entered {new Date(saved.enteredAt).toLocaleDateString()}.
+        </p>
+      ) : null}
       <div className={styles.segmented} role="radiogroup" aria-label="What you know">
         <button
           type="button"
@@ -192,7 +228,7 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
       )}
       <p className={styles.preview} data-testid="max-preview" aria-live="polite">
         {e1rm !== null && working && firstTarget !== null
-          ? `${mode === 'set' ? `Estimated max about ${Math.round(e1rm)} ${units}${perHand} from that set` : `Max ${Math.round(e1rm)} ${units}${perHand}`}. First target: ${firstTarget} ${units} × ${working.targetReps[0]}-${working.targetReps[1]} reps at RIR ${working.targetRir}.`
+          ? `${mode === 'set' ? `Estimated max about ${Math.round(e1rm)} ${units}${perHand} from that set` : `Max ${Math.round(e1rm)} ${units}${perHand}`}. ${offer ? 'First target' : 'On its own it puts the target at'}: ${firstTarget} ${units} × ${working.targetReps[0]}-${working.targetReps[1]} reps at RIR ${working.targetRir}.`
           : mode === 'set'
             ? 'Type a set you did, for example 135 for 8, and the first target appears here.'
             : 'Type your max and the first target appears here.'}
@@ -202,14 +238,16 @@ export function MaxSheet({ exercise, entry, units, open, onClose, onSaved }: Max
           {error}
         </p>
       ) : null}
-      <button
-        type="button"
-        className={styles.never}
-        onClick={() => void snooze(true)}
-        data-testid="max-never"
-      >
-        Don't ask for this lift
-      </button>
+      {offer ? (
+        <button
+          type="button"
+          className={styles.never}
+          onClick={() => void snooze(true)}
+          data-testid="max-never"
+        >
+          Don't ask for this lift
+        </button>
+      ) : null}
     </Sheet>
   );
 }

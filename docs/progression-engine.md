@@ -297,3 +297,15 @@ Offers that add a set skip any entry with `manual.sets`, so they never stack. Th
 role, an exercise that leads with the muscle before one that includes it, isolation before
 compound; with nothing direct it offers an accessory (`accessoryActionFor`) or a focus for the
 next session. The `sets` trigger refuses to go past `MAX_WORKING_SETS` (8) and says why.
+
+## A max on a lift with history (`withEnteredMax`, Maintenance 14 follow-up)
+
+An entered max sets the first target of a lift without its own history, as before. On a lift
+with logged sets the log is the better evidence, so `withEnteredMax` lets a max count only while
+`enteredAt` is later than the last logged session and the max is at least `ENTERED_MAX_MARGIN`
+(2.5 percent) above the log's estimate. Then the target moves toward what the max implies at
+`ENTERED_WITH_HISTORY_FRACTION` (0.95, a little less careful than a first target because the
+movement is known), by `ENTERED_MAX_STEPS` (two) at most, with the reason in the evidence. The
+next logged session is newer than the max, so the log takes over again without anything being
+cleared. The pipeline is `withSessionFatigue(withEnteredMax(recommendBiasedTarget(...)))`. The
+max can be entered or updated from the exercise's Options at any time.

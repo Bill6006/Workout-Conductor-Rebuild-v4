@@ -191,11 +191,19 @@ export function LoadingEditor({
   }
 
   const title =
-    kind === 'stack' ? `This machine's stack at ${placeName}` : `Dumbbells at ${placeName}`;
+    kind === 'stack' ? `This machine's weights at ${placeName}` : `Dumbbells at ${placeName}`;
   const hint =
     kind === 'stack'
-      ? 'The totals on the stack, as one or two ranges with a step.'
-      : 'The weight of one dumbbell, as one or two ranges with a step.';
+      ? 'The lightest setting on the stack, the heaviest, and the jump between pins.'
+      : 'One dumbbell: the lightest you have, the heaviest, and the jump between sizes.';
+  const parsed = parseRows(rows);
+  // What the boxes add up to, read back in words as they are typed.
+  const readBack =
+    parsed === null
+      ? null
+      : parsed
+          .map((range) => `${range.from} to ${range.to} ${units} in ${range.step} ${units} jumps`)
+          .join(', then ');
 
   if (!editing) {
     return (
@@ -203,8 +211,8 @@ export function LoadingEditor({
         <p className={styles.panelLabel}>{title}</p>
         <p className={styles.panelNote} data-testid="loading-summary">
           {spec && spec.kind !== 'plates'
-            ? `${describeSpec(spec, units)}. Targets land on these; the heaviest is ${loading.cap} ${units}.`
-            : `Not recorded yet, so targets move by ${loading.step} ${units}. ${hint}`}
+            ? `${describeSpec(spec, units)}. Targets land on these and stop at ${loading.cap} ${units}.`
+            : `Not set yet, so targets move by ${loading.step} ${units} with no upper limit.`}
         </p>
         <div className={styles.panelActions}>
           <button
@@ -213,7 +221,7 @@ export function LoadingEditor({
             onClick={() => setEditing(true)}
             data-testid="loading-edit"
           >
-            {spec ? 'Change' : 'Record it'}
+            {spec ? 'Change' : kind === 'stack' ? 'Set this machine' : 'Set my dumbbells'}
           </button>
         </div>
       </div>
@@ -230,36 +238,33 @@ export function LoadingEditor({
       <p className={styles.panelLabel}>{title}</p>
       <p className={styles.panelNote}>{hint}</p>
       {rows.map((row, index) => (
-        <div className={formStyles.inputRow} key={index} data-testid={`loading-row-${index}`}>
-          <input
-            className={formStyles.input}
-            type="number"
-            inputMode="decimal"
-            aria-label={`Range ${index + 1} from`}
-            placeholder="from"
-            value={row.from}
-            onChange={(event) => update(index, 'from', event.target.value)}
-          />
-          <input
-            className={formStyles.input}
-            type="number"
-            inputMode="decimal"
-            aria-label={`Range ${index + 1} to`}
-            placeholder="to"
-            value={row.to}
-            onChange={(event) => update(index, 'to', event.target.value)}
-          />
-          <input
-            className={formStyles.input}
-            type="number"
-            inputMode="decimal"
-            aria-label={`Range ${index + 1} step`}
-            placeholder="step"
-            value={row.step}
-            onChange={(event) => update(index, 'step', event.target.value)}
-          />
+        <div className={styles.rangeRow} key={index} data-testid={`loading-row-${index}`}>
+          {(
+            [
+              ['from', 'Lightest'],
+              ['to', 'Heaviest'],
+              ['step', 'Jump'],
+            ] as const
+          ).map(([field, label]) => (
+            <label className={styles.rangeField} key={field}>
+              <span className={styles.rangeLabel}>
+                {label} ({units})
+              </span>
+              <input
+                className={formStyles.input}
+                type="number"
+                inputMode="decimal"
+                aria-label={`${label}${rows.length > 1 ? `, range ${index + 1}` : ''}`}
+                value={row[field]}
+                onChange={(event) => update(index, field, event.target.value)}
+              />
+            </label>
+          ))}
         </div>
       ))}
+      <p className={styles.panelNote} data-testid="loading-readback">
+        {readBack ?? 'Fill in all three: lightest, heaviest, and the jump.'}
+      </p>
       <div className={styles.panelActions}>
         {rows.length < 2 ? (
           <button
@@ -267,7 +272,7 @@ export function LoadingEditor({
             className={styles.smallButton}
             onClick={() => setRows((current) => [...current, { from: '', to: '', step: '' }])}
           >
-            Then a second range
+            The jump changes higher up
           </button>
         ) : null}
         <button

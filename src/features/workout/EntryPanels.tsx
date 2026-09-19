@@ -69,6 +69,9 @@ export function EntryPanels({
       ? plateMath(exercise, currentWeight, units, loading.perSide ?? undefined)
       : null;
 
+  // The place's weights can be set on any lift that takes a load, with or without a weight showing.
+  const canLoad = exercise.load !== 'bodyweight' && exercise.load !== 'band';
+
   // A new request opens its panel once. Comparing during render keeps setState out of an effect.
   const [handledRequest, setHandledRequest] = useState(openRequest);
   if (openRequest !== handledRequest) {
@@ -117,7 +120,7 @@ export function EntryPanels({
           >
             Notes{instruction && (instruction.notes || instruction.cues.length > 0) ? ' •' : ''}
           </button>
-          {plates ? (
+          {plates || canLoad ? (
             <button
               type="button"
               role="tab"

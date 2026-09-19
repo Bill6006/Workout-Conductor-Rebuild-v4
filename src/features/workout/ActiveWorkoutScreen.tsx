@@ -164,6 +164,8 @@ export function ActiveWorkoutScreen() {
   const [endedEarly, setEndedEarly] = useState(() => store.getSnapshot().finishRequested);
   const [checkingIn, setCheckingIn] = useState(false);
   const [maxFor, setMaxFor] = useState<Selection | null>(null);
+  // The one-time offer can be snoozed; the same sheet opened from Options cannot.
+  const [maxOffer, setMaxOffer] = useState(true);
   const coach = useCoach();
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
   const strengthMaxes = useAppSelector((state) => state.strengthMaxes);
@@ -268,7 +270,10 @@ export function ActiveWorkoutScreen() {
     if (maxPromptHidden(strengthMaxes, entry.exerciseId, new Date().toISOString())) {
       return undefined;
     }
-    return () => setMaxFor({ entry, block });
+    return () => {
+      setMaxOffer(true);
+      setMaxFor({ entry, block });
+    };
   };
 
   const onCoachAction = (action: CoachAction, signal: CoachSignal) => {
@@ -371,7 +376,12 @@ export function ActiveWorkoutScreen() {
     const draftWeight =
       editingHere && editingSet
         ? loggedValues(session, entry.id, editingSet.index).weight
-        : (liveWeights[entry.id] ?? dial?.weight ?? lastWorkingWeight);
+        : (liveWeights[entry.id] ??
+          dial?.weight ??
+          lastWorkingWeight ??
+          // An exercise being looked at, not worked: its planned working weight.
+          entry.sets.find((set) => set.kind === 'working')?.targetWeight ??
+          null);
     const helper =
       draftWeight !== null && draftWeight !== undefined && draftWeight > 0
         ? plateMath(exercise, draftWeight, units, loading.perSide ?? undefined).line
@@ -860,6 +870,26 @@ export function ActiveWorkoutScreen() {
             : undefined
         }
         editActions={editActions}
+        maxAction={
+          selected && selectedExercise && startRatio(selectedExercise) !== null
+            ? {
+                line: (() => {
+                  const saved = strengthMaxes.maxes[selectedExercise.id];
+                  return saved
+                    ? `${Math.round(saved.e1rm)} ${saved.units}, entered ${new Date(saved.enteredAt).toLocaleDateString()}.`
+                    : 'None entered. The target comes from your logged sets.';
+                })(),
+                label: strengthMaxes.maxes[selectedExercise.id]
+                  ? 'Update your max'
+                  : 'Enter your max',
+                onOpen: () => {
+                  setMaxOffer(false);
+                  setMaxFor(selected);
+                  setSelected(null);
+                },
+              }
+            : undefined
+        }
       />
 
       {maxFor ? (
@@ -869,6 +899,7 @@ export function ActiveWorkoutScreen() {
           entry={maxFor.entry}
           units={units}
           open
+          offer={maxOffer}
           onClose={() => setMaxFor(null)}
         />
       ) : null}

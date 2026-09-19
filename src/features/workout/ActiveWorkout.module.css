@@ -422,6 +422,26 @@
   font-weight: 700;
 }
 
+/* The weights editor: three boxes, each under its own word. */
+.rangeRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rangeField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rangeLabel {
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
 /* The plates row: a plate is either there (lit) or not (struck through), nothing in between. */
 .panelHead {
   display: flex;
