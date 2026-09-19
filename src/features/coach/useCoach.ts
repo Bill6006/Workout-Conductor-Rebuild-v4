@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { elapsedSeconds } from '../../core/state/session';
 import { useAppSelector } from '../../core/state/useAppStore';
 import { useNow } from '../../core/time/clock';
 import { conductCoach, type CoachCard } from '../../engine/coach/coachConductor';
@@ -52,6 +53,7 @@ export function useCoach(): CoachContext | null {
       strategy,
       lastExportAt,
       accepted: session.coachAccepted,
+      elapsedSeconds: nowEpoch ? elapsedSeconds(session, nowEpoch) : 0,
       cloudCurrent:
         cloud.configured &&
         cloud.pending === 0 &&

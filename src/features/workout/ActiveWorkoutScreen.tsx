@@ -29,7 +29,7 @@ import { liveSetRecords } from '../../engine/scoring/personalRecords';
 import type { CoachAction, CoachSignal } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
 import { ReadinessSheet } from '../today/ReadinessSheet';
-import { estimateWorkout } from '../../engine/duration/duration';
+import { remainingMinutes } from '../../engine/duration/duration';
 import { plateMath } from '../../engine/plateMath/plateMath';
 import { dropSetWeight } from '../../engine/recalibration/dropSet';
 import { fitWeight, loadingFor, loadingKeyFor, specFor } from '../../engine/loading/loading';
@@ -193,8 +193,21 @@ export function ActiveWorkoutScreen() {
   const position = currentPosition(workout, isDone);
   const progress = workoutProgress(workout, isDone);
   const elapsed = elapsedSeconds(session, now);
-  const remainingMinutes = Math.round(
-    estimateWorkout(workout.blocks, 0, requireExercise, isDone).totalMinutes,
+  // Time left adds up with the clock: the general warm-up is still ahead until the first set is
+  // logged, and a rest in progress counts for what is left of it.
+  const restSecondsLeft = session.rest
+    ? (session.rest.pausedRemaining ?? (Date.parse(session.rest.endsAt) - now) / 1000)
+    : 0;
+  const minutesLeft = Math.round(
+    remainingMinutes({
+      blocks: workout.blocks,
+      exerciseOf: requireExercise,
+      isDone,
+      generalWarmupMinutes: workout.warmup.generalMinutes,
+      anythingLogged: session.completed.sets.length > 0,
+      elapsedSeconds: elapsed,
+      restSecondsLeft,
+    }),
   );
   const currentBlock = position
     ? workout.blocks.find((block) => block.id === position.blockId)
@@ -648,7 +661,9 @@ export function ActiveWorkoutScreen() {
           </div>
           <div className={styles.stat}>
             <span className={styles.statLabel}>Left</span>
-            <span className={styles.statValue}>~{remainingMinutes} min</span>
+            <span className={styles.statValue} data-testid="time-left">
+              ~{minutesLeft} min
+            </span>
           </div>
           <div className={styles.stat}>
             <span className={styles.statLabel}>Sets</span>

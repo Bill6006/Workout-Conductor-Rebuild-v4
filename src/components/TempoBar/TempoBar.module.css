@@ -45,9 +45,22 @@
   right: 6px;
 }
 
+/* The bar, and whatever the caller puts at its end, on one row. */
+.trackRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trackRow > .track {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .legend {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 2px 10px;
   margin: 0;
   padding: 0;
   list-style: none;

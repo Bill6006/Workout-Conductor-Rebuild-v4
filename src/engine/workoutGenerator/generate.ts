@@ -635,6 +635,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     (entry) => exerciseOf(entry.exerciseId),
   );
   const entries: WorkoutEntry[] = [];
+  const plannedSets = new Map<string, number>();
   template.slots.forEach((slotSpec, index) => {
     const kept = keptBySlot.get(index);
     if (kept) {
@@ -649,11 +650,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       return;
     }
     chosenExercises.push(pick);
-    const prescription = adjustPrescription(
-      prescribeFor(pick, slotSpec.role, profile, history),
-      slotSpec.role,
-      adjust,
-    );
+    const basePrescription = prescribeFor(pick, slotSpec.role, profile, history);
+    const prescription = adjustPrescription(basePrescription, slotSpec.role, adjust);
+    // Asked to make it harder, the time fit may take back an added set, never one the plan had.
+    if ((adjust?.sets ?? 0) > 0) plannedSets.set(`e${index + 1}`, basePrescription.sets);
     // What comes before this exercise today, planned or done, and whether a long break sits
     // between: the target and the ramps both read it.
     const earlier = sessionWork(entries, completedSets, exerciseOf);
@@ -752,8 +752,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     Math.min(...block.entries.map((entry) => entryValue(entry, weightOf, preferredIds))) +
     (block.kind === 'straight' ? 0 : pairedBonus);
 
-  const dropBlock = (block: WorkoutBlock, why: string) => {
+  // Blocks the time fit had to leave out, in the order they went; the fill-back pass reads them.
+  const leftOutForTime: WorkoutBlock[] = [];
+  const dropBlock = (block: WorkoutBlock, why: string, forTime = false) => {
     blocks = blocks.filter((candidate) => candidate.id !== block.id);
+    if (forTime) leftOutForTime.push(block);
     fittingSteps.push(`Left out ${block.label} ${why}.`);
   };
 
@@ -883,7 +886,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     // Locked and logged entries keep their sets unless the user asked for an exact end.
     if (!hardCap && (keptIds.has(entry.id) || entry.locked || entry.pinned)) return false;
     const floor = entry.id === anchorId ? (hardCap ? 2 : 3) : hardCap ? 1 : 2;
-    return remainingWorking(entry).length > floor;
+    const planned = hardCap ? 0 : (plannedSets.get(entry.id) ?? 0);
+    return remainingWorking(entry).length > Math.max(floor, planned);
   };
   const trimSets = (): boolean => {
     const ordered = allEntries(blocks)
@@ -917,10 +921,34 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     if (trimSets()) continue;
     const lowest = lowestValueBlock();
     if (lowest && (hardCap || allEntries(blocks).length > 2)) {
-      dropBlock(lowest, `so the session fits ${targetMinutes} min`);
+      dropBlock(lowest, `so the session fits ${targetMinutes} min`, true);
       continue;
     }
     break;
+  }
+
+  // 4b. Use the minutes a dropped block left behind. Blocks go whole, so the last one out can
+  // leave a gap far bigger than the overrun it cured; one move from it, on its own at the sets
+  // already trimmed, often fits where the pair did not. Best of what went out first.
+  if (estimate().totalMinutes <= limit) {
+    const candidates = [...leftOutForTime]
+      .reverse()
+      .flatMap((block) => block.entries)
+      .sort(
+        (a, b) => entryValue(b, weightOf, preferredIds) - entryValue(a, weightOf, preferredIds),
+      );
+    for (const entry of candidates) {
+      if (blocks.length >= cap) break;
+      const block = straightBlock(entry, exerciseOf);
+      blocks.push(block);
+      if (estimate().totalMinutes > limit) {
+        blocks = blocks.filter((candidate) => candidate !== block);
+        continue;
+      }
+      fittingSteps.push(
+        `Kept ${exerciseOf(entry.exerciseId).name} on its own: the minutes left fit it.`,
+      );
+    }
   }
 
   // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken

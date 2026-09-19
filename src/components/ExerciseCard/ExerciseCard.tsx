@@ -147,8 +147,22 @@ export function ExerciseCard({
             onClick={() => setTempoOpen((open) => !open)}
             aria-expanded={tempoOpen}
             aria-label={`Tempo ${tempo.tempo}: ${tempoOpen ? 'hide' : 'show'} the reason and cue`}
+            data-testid="tempo-toggle"
           >
-            <TempoBar phases={tempo.phases} totalSeconds={tempo.totalSeconds} />
+            <TempoBar
+              phases={tempo.phases}
+              totalSeconds={tempo.totalSeconds}
+              trackEnd={
+                // The notation sits at the end of the bar it abbreviates; bar, phases, and chip are
+                // one tap target, so the demonstration has the right-hand column to itself.
+                <span className={styles.tempoChip} data-testid="tempo-line">
+                  <span className={styles.visuallyHidden}>Tempo </span>
+                  <span className={styles.tempoChipValue}>
+                    {tempo.tempo} {tempoOpen ? '▴' : '▾'}
+                  </span>
+                </span>
+              }
+            />
           </button>
         </div>
         <div className={styles.headAside}>
@@ -162,18 +176,6 @@ export function ExerciseCard({
           >
             <ExerciseThumb exercise={exercise} size="large" customMedia={customMedia} />
             <span className={styles.thumbLabel}>How to</span>
-          </button>
-          <button
-            type="button"
-            className={styles.tempoChip}
-            onClick={() => setTempoOpen((open) => !open)}
-            aria-expanded={tempoOpen}
-            data-testid="tempo-line"
-          >
-            <span className={styles.tempoChipLabel}>Tempo</span>
-            <span className={styles.tempoChipValue}>
-              {tempo.tempo} {tempoOpen ? '▴' : '▾'}
-            </span>
           </button>
         </div>
       </header>

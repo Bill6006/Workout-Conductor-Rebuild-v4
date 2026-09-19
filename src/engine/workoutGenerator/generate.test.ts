@@ -140,10 +140,23 @@ describe('generateWorkout: 15 / 30 / 45 / Default', () => {
     expect(fifteen!.warmup.generalMinutes).toBeLessThan(full!.warmup.generalMinutes);
   });
 
-  it('keeps a superset in the 15-minute version when supersets are enabled', () => {
+  it('fills a 15-minute version with the main lift and the best move that honestly fits', () => {
     const workout = generate({}, 15);
+    // A pair of isolation moves after the main lift runs past 15 minutes once every rest the
+    // timer shows is counted, so the pair goes and its best member stays on its own.
+    expect(workout.blocks.map((block) => block.kind)).toEqual(['straight', 'straight']);
+    expect(workout.blocks[0]?.entries[0]?.role).toBe('primary-strength');
+    expect(workout.explanation.fittingSteps.join(' ')).toMatch(
+      /Kept .+ on its own: the minutes left fit it\./,
+    );
+    expect(workout.duration.estimatedMinutes).toBeGreaterThanOrEqual(12);
+    expect(workout.duration.estimatedMinutes).toBeLessThanOrEqual(16);
+  });
+
+  it('keeps its supersets once there is room for them', () => {
+    const workout = generate({}, 30);
     expect(workout.blocks.some((block) => block.kind === 'superset')).toBe(true);
-    expect(allEntries(workout.blocks).length).toBeLessThanOrEqual(4);
+    expect(workout.duration.estimatedMinutes).toBeLessThanOrEqual(31);
   });
 
   it('reports when even the leanest plan runs over', () => {

@@ -51,3 +51,24 @@ describe('tempo at the heaviest weight the place has', () => {
     expect(tempoCue('isolation', 'drop', fly, { capped: true }).why).toContain('drop set');
   });
 });
+
+describe('the length estimate runs at the pace the tempo bar shows', () => {
+  it('times a rep exactly as long as the coached tempo takes, for every kind of set', async () => {
+    const { REP_SECONDS } = await import('../../engine/duration/duration');
+    const bench = requireExercise('barbell-bench-press');
+    expect(tempoCue('primary-strength', 'working', bench).totalSeconds).toBe(REP_SECONDS.strength);
+    expect(tempoCue('secondary-strength', 'working', bench).totalSeconds).toBe(
+      REP_SECONDS.strength,
+    );
+    expect(tempoCue('primary-hypertrophy', 'working', bench).totalSeconds).toBe(
+      REP_SECONDS.hypertrophy,
+    );
+    expect(tempoCue('isolation', 'working', bench).totalSeconds).toBe(REP_SECONDS.isolation);
+    expect(tempoCue('finisher', 'working', bench).totalSeconds).toBe(REP_SECONDS.isolation);
+    expect(tempoCue('primary-strength', 'warmup', bench).totalSeconds).toBe(REP_SECONDS.warmup);
+    expect(tempoCue('isolation', 'drop', bench).totalSeconds).toBe(REP_SECONDS.drop);
+    expect(tempoCue('primary-hypertrophy', 'working', bench, { capped: true }).totalSeconds).toBe(
+      REP_SECONDS.capped,
+    );
+  });
+});

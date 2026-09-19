@@ -5,7 +5,7 @@ import { UNFINISHED_STALE_HOURS } from '../../core/alerts/cues';
 import type { LocationProfile } from '../../core/validation/location';
 import type { ProgramStyle, UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
-import { estimateWorkout } from '../duration/duration';
+import { remainingMinutes } from '../duration/duration';
 import { weightStep } from '../plateMath/plateMath';
 import type {
   CompletedWork,
@@ -181,6 +181,8 @@ export interface CoachInput {
   cloudCurrent?: boolean;
   /** Offers already taken this session (see `acceptKey`): they are not made twice. */
   accepted?: readonly string[];
+  /** The workout clock, so the room left today is what the clock has not already used. */
+  elapsedSeconds?: number;
   workoutCount: number;
   /** Defaults derive from the profile and history; tests and the store pass them in. */
   policy?: CoachingPolicy;
@@ -501,14 +503,30 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
   }
 }
 
+/**
+ * Minutes of today's length not yet spoken for: the length, less what the clock has used, less
+ * everything still to do (the general warm-up included until the first set is logged). Counting
+ * only the work still to do made the room grow as the workout went on.
+ */
+function spareMinutes(input: CoachInput): number {
+  const keys = doneKeys(input.completed);
+  const elapsed = input.elapsedSeconds ?? 0;
+  const left = remainingMinutes({
+    blocks: input.workout.blocks,
+    exerciseOf: requireExercise,
+    isDone: (id, index) => keys.has(`${id}:${index}`),
+    generalWarmupMinutes: input.workout.warmup.generalMinutes,
+    anythingLogged: input.completed.sets.length > 0,
+    elapsedSeconds: elapsed,
+    restSecondsLeft: 0,
+  });
+  return input.workout.duration.targetMinutes - elapsed / 60 - left;
+}
+
 /** Two sets of the best accessory for a muscle, when today still has room for them. */
 function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction | null {
   const entries = allEntries(input.workout.blocks);
-  const keys = doneKeys(input.completed);
-  const remaining = estimateWorkout(input.workout.blocks, 0, requireExercise, (id, index) =>
-    keys.has(`${id}:${index}`),
-  ).totalMinutes;
-  if (input.workout.duration.targetMinutes - remaining < ROOM_MINUTES) return null;
+  if (spareMinutes(input) < ROOM_MINUTES) return null;
   const accessory = pickAccessoryFor(
     muscle,
     entries.map((entry) => requireExercise(entry.exerciseId)),
@@ -722,11 +740,7 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
   if (input.focus === gap.muscle) return [];
 
   const name = muscleName(gap.muscle);
-  const keys = doneKeys(input.completed);
-  const remaining = estimateWorkout(input.workout.blocks, 0, requireExercise, (id, index) =>
-    keys.has(`${id}:${index}`),
-  ).totalMinutes;
-  const spare = input.workout.duration.targetMinutes - remaining;
+  const spare = spareMinutes(input);
   const why = [
     `${gap.weeklySetsDone} of ${gap.weeklyTarget} weekly sets so far and nothing for it today.`,
   ];
@@ -795,20 +809,12 @@ function tipSignals(input: CoachInput): CoachSignal[] {
     input.status !== 'completed' &&
     allowsFailure(resolveStyle(input.profile))
   ) {
-    const keys = doneKeys(input.completed);
-    const isDone = (id: string, index: number) => keys.has(`${id}:${index}`);
     const volume = computeWeeklyVolume(input.history, input.now);
     const exposure = computeExposure(input.history, input.now);
     const priorities = computeMusclePriorities(input.profile, volume, exposure);
     const deficit = new Map(priorities.map((priority) => [priority.muscle, priority]));
     const alreadyPlanned = allEntries(input.workout.blocks).some((entry) => entry.dropSet);
-    const remaining = estimateWorkout(
-      input.workout.blocks,
-      0,
-      requireExercise,
-      isDone,
-    ).totalMinutes;
-    const spare = input.workout.duration.targetMinutes - remaining;
+    const spare = spareMinutes(input);
     const candidate = !alreadyPlanned
       ? remainingEntries(input).find((entry) => {
           const exercise = requireExercise(entry.exerciseId);

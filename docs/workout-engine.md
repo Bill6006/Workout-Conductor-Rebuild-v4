@@ -27,6 +27,7 @@ The Default session is built first from the template. For any target the engine 
 2. pairs isolation moves into two-move superset blocks (at most two pairs) when supersets are on and the conflict engine allows the pair;
 3. caps the number of list rows (15 min: 3, 30 min: 5, 45 min: 6, Default: 8), dropping the lowest-value row first; paired rows are worth more than their weakest member because they save time, and the main lift is never dropped;
 4. while the estimate exceeds the target by more than a minute: shortens rests toward the floors (strength 120 s, hypertrophy 60 s, isolation 45 s), trims one set from the lowest-value exercise (main lift keeps at least three working sets), then drops the lowest-value row;
+   then, when a dropped row left minutes unused, keeps its best move on its own at the sets already trimmed if that fits (rows go whole, so the last one out can leave a gap far bigger than the overrun it cured); asked to make the session harder, the fit may take back an added set but never one the plan already had;
 5. adds one drop set on the last drop-set-safe isolation move when drop sets are on and either the session is shorter than Default or that muscle is under half its weekly target, unless it would break the time target.
 
 Every step is recorded in `explanation.fittingSteps` and shown under "Why this workout". When
@@ -35,10 +36,28 @@ may run a few minutes over (the End-by-exact-time mode arrives with recalibratio
 
 ## Time estimation
 
-`estimateWorkout` adds the general warm-up, each block's work (45 s strength sets, 40 s
-hypertrophy, 35 s isolation, 25 s ramp sets, 20 s drop sets), the programmed rests (none after
-the last set of a block), and setup plus transition time from the catalog. Supersets pay one rest
-per round and a 15 s switch; circuits pay one rest per round and 12 s per switch.
+The estimate is the timeline the workout screen itself runs, so a plan that says 45 minutes takes
+45 minutes when its own guidance is followed (Maintenance 16). `estimateSeconds` walks the same set
+order (`blockSequence`) and applies the same rest rule (`restBetween` in `workout/sequence.ts`)
+as the rest timer, which makes the two impossible to disagree; a test checks, for generated
+sessions at every length and at every point through them, that the estimate's rest equals the sum
+of the rests the timer would show.
+
+- **A set** is timed at the middle of its rep range and the tempo the app coaches for its job
+  (`REP_SECONDS`: 4 s a rep for strength and hypertrophy, 5 s for isolation and for a lift held at
+  the heaviest weight a place has, 3 s for ramp and drop sets), plus getting into position
+  (`SET_OVERHEAD_SECONDS`). A test holds these to `features/workout/tempo.ts`, the pace the tempo
+  bar runs at. Longer sets take longer: a Light weights session is honestly longer per set.
+- **Rest** is every rest the timer will show: the set's own rest after every set, including after
+  the last set of an exercise (the timer runs it while the lifter walks to the next one), none
+  before or after a drop set, a 15 s (superset) or 12 s (circuit) switch inside a paired round,
+  the round rest after it, and nothing after the final set of the day.
+- **Set-up** comes from the catalog and counts only where it outlasts the rest that led to it.
+- **The general warm-up** is added on top (`generalWarmupMinutes`).
+
+`remainingMinutes` is the workout screen's Left: the remaining timeline, plus the general warm-up
+less the clock until the first set is logged, plus what is left of a rest in progress. So the
+length on the dropdown is the clock plus Left.
 
 ## Data model notes
 

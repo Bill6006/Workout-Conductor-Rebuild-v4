@@ -48,9 +48,13 @@ describe('ExerciseCard', () => {
     expect(screen.queryByText(/Barbell \+ plates/)).not.toBeInTheDocument();
     expect(screen.queryByTestId('tempo-detail')).not.toBeInTheDocument();
 
+    // The notation sits at the end of the phase labels, inside the bar's own button: one tap target.
     const chip = screen.getByTestId('tempo-line');
+    const toggle = screen.getByTestId('tempo-toggle');
     expect(chip).toHaveTextContent(/^Tempo\s*\d-\d-[\dX]-\d ▾$/);
-    expect(screen.getByTestId('tempo-bar')).toBeInTheDocument();
+    expect(toggle).toContainElement(chip);
+    expect(toggle).toContainElement(screen.getByTestId('tempo-bar'));
+    expect(screen.getByTestId('card-thumb').parentElement?.children).toHaveLength(1);
     await user.click(chip);
     expect(screen.getByTestId('tempo-detail')).toHaveTextContent(/Cue/);
     expect(screen.getAllByRole('term').map((term) => term.textContent)).toEqual([
@@ -64,7 +68,7 @@ describe('ExerciseCard', () => {
       screen.getByRole('list', { name: 'Why this tempo, effort, and rest', hidden: true }).children
         .length,
     ).toBeGreaterThan(1);
-    expect(chip).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     await user.click(chip);
     expect(screen.queryByTestId('tempo-detail')).not.toBeInTheDocument();
 

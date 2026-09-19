@@ -484,9 +484,21 @@ describe('recalibration: techniques and effort', () => {
     const before = build();
     const harder = run({ type: 'intensity', direction: 'harder' }, { workout: before });
     expect(harder.constraints.intensity).toBe(1);
-    expect(working(harder.workout, 'e4').length).toBe(working(before, 'e4').length + 1);
+    // Harder inside the length that was chosen: sets are added where the time honestly allows,
+    // none is taken away, and every set loses a rep of reserve.
+    const ids = allEntries(before.blocks).map((item) => item.id);
+    const gained = ids.filter(
+      (id) => working(harder.workout, id).length === working(before, id).length + 1,
+    );
+    expect(gained.length).toBeGreaterThanOrEqual(ids.length - 2);
+    for (const id of ids) {
+      expect(working(harder.workout, id).length).toBeGreaterThanOrEqual(working(before, id).length);
+    }
     expect(working(harder.workout, 'e4')[0]?.targetRir).toBe(
       (working(before, 'e4')[0]?.targetRir ?? 1) - 1,
+    );
+    expect(harder.workout.duration.estimatedMinutes).toBeLessThanOrEqual(
+      harder.workout.duration.targetMinutes + 1,
     );
     expect(harder.summary.headline).toMatch(/^Rest of the workout made harder: /);
     const easier = run(

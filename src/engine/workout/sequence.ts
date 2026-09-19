@@ -112,19 +112,40 @@ export function nextPosition(workout: GeneratedWorkout, current: SetPosition): S
  * no rest); the round rest after a paired round; the set's own rest otherwise.
  */
 export function restAfter(workout: GeneratedWorkout, current: SetPosition): number {
-  const next = nextPosition(workout, current);
+  const block = workout.blocks.find((candidate) => candidate.id === current.blockId);
+  return restBetween(current, nextPosition(workout, current), block);
+}
+
+/** True when `next` is the other member of the same paired round: a switch, not a rest. */
+export function isPairedSwitch(
+  current: SetPosition,
+  next: SetPosition | null,
+  block: Pick<WorkoutBlock, 'id' | 'kind'> | undefined,
+): boolean {
+  return (
+    block !== undefined &&
+    block.kind !== 'straight' &&
+    current.kind === 'working' &&
+    next !== null &&
+    next.blockId === block.id &&
+    next.round === current.round &&
+    next.kind === 'working'
+  );
+}
+
+/**
+ * The rest rule itself, on positions: the rest timer and the length estimate
+ * both call it, so the time the plan promises is the time its timers add up to.
+ */
+export function restBetween(
+  current: SetPosition,
+  next: SetPosition | null,
+  block: Pick<WorkoutBlock, 'id' | 'kind' | 'restBetweenRoundsSeconds'> | undefined,
+): number {
   if (current.kind === 'drop') return 0;
   if (next && next.entryId === current.entryId && next.kind === 'drop') return 0;
-  const block = workout.blocks.find((candidate) => candidate.id === current.blockId);
   if (block && block.kind !== 'straight' && current.kind === 'working') {
-    if (
-      next &&
-      next.blockId === block.id &&
-      next.round === current.round &&
-      next.kind === 'working'
-    )
-      return 0;
-    return block.restBetweenRoundsSeconds;
+    return isPairedSwitch(current, next, block) ? 0 : block.restBetweenRoundsSeconds;
   }
   return current.set.restSeconds;
 }

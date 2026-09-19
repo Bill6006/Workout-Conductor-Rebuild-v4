@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { TempoPhase } from '../../features/workout/tempo';
 import { useReducedMotion } from '../ExerciseDetail/useReducedMotion';
 import { fillKeyframes, phaseWindows } from './tempoKeyframes';
@@ -9,6 +9,8 @@ interface TempoBarProps {
   totalSeconds: number;
   /** The phase legend repeats the tempo chip on a card, so the card hides it. */
   showLegend?: boolean;
+  /** Sits at the end of the bar, on its row: the card puts the tempo notation there. */
+  trackEnd?: ReactNode;
 }
 
 /**
@@ -18,7 +20,7 @@ interface TempoBarProps {
  * carry the meaning, so nothing depends on colour, and everything stands
  * still when the viewer prefers reduced motion.
  */
-export function TempoBar({ phases, totalSeconds, showLegend = true }: TempoBarProps) {
+export function TempoBar({ phases, totalSeconds, showLegend = true, trackEnd }: TempoBarProps) {
   const fillRef = useRef<HTMLSpanElement>(null);
   const legendRef = useRef<HTMLUListElement>(null);
   const reducedMotion = useReducedMotion();
@@ -73,14 +75,17 @@ export function TempoBar({ phases, totalSeconds, showLegend = true }: TempoBarPr
       aria-label={`One rep: ${description}`}
       data-testid="tempo-bar"
     >
-      <span className={styles.track}>
-        <span ref={fillRef} className={styles.fill} data-testid="tempo-fill" />
-        <span className={styles.edge} data-edge="bottom" aria-hidden="true">
-          bottom
+      <span className={styles.trackRow}>
+        <span className={styles.track}>
+          <span ref={fillRef} className={styles.fill} data-testid="tempo-fill" />
+          <span className={styles.edge} data-edge="bottom" aria-hidden="true">
+            bottom
+          </span>
+          <span className={styles.edge} data-edge="top" aria-hidden="true">
+            top
+          </span>
         </span>
-        <span className={styles.edge} data-edge="top" aria-hidden="true">
-          top
-        </span>
+        {trackEnd}
       </span>
       {showLegend ? (
         <ul ref={legendRef} className={styles.legend}>

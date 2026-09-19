@@ -102,6 +102,43 @@ describe('coverage that acts or stays quiet', () => {
     expect(signal!.why[1]).toMatch(/min of room today: two sets of .+ close most of the gap\./);
   });
 
+  it('measures the room against the clock: minutes already used are not room', () => {
+    // Ten spare minutes on paper. Before the workout starts they are there to offer...
+    const base = withRoom(input(halfWeek), 10);
+    const [fresh] = coverage(gatherSignals(base));
+    expect(fresh?.why[1]).toMatch(/^About 10 min of room today/);
+    // ...and a workout running eight minutes behind its plan has used most of them. Logged
+    // sets alone must never make the room grow.
+    const first = allEntries(base.workout.blocks)[0]!;
+    const active: CoachInput = {
+      ...base,
+      status: 'active',
+      completed: {
+        ...emptyCompleted(),
+        startedAt: NOW,
+        sets: first.sets.map((set) => ({
+          entryId: first.id,
+          exerciseId: first.exerciseId,
+          setIndex: set.index,
+          kind: set.kind,
+          reps: 5,
+          weight: 185,
+          rir: 2,
+          skipped: false,
+          completedAt: NOW,
+        })),
+      },
+    };
+    const withoutClock = coverage(gatherSignals(active))[0];
+    const onPace = coverage(gatherSignals({ ...active, elapsedSeconds: 14 * 60 }))[0];
+    const behind = coverage(gatherSignals({ ...active, elapsedSeconds: 30 * 60 }))[0];
+    expect(onPace?.action?.kind).toBe('recalibrate');
+    expect(behind?.action).toMatchObject({ kind: 'focus' });
+    const room = (signal: CoachSignal | undefined) =>
+      Number(/^About (\d+) min of room/.exec(signal?.why[1] ?? '')?.[1]);
+    expect(room(onPace)).toBeLessThan(room(withoutClock));
+  });
+
   it('sets a focus for the next session when today has no room', () => {
     const [signal] = coverage(gatherSignals(withRoom(input(halfWeek), -5)));
     expect(signal?.action).toMatchObject({ kind: 'focus' });
