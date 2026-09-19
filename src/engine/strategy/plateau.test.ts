@@ -184,3 +184,61 @@ describe('coach routes', () => {
     expect(describeRoute(done.routes.routes[BENCH]!)).toMatch(/4 add a set \(tried\)$/);
   });
 });
+
+describe('a lift that rotates its rep ranges', () => {
+  const heavy = (daysAgo: number, weight = 185) =>
+    record(daysAgo, BENCH, [
+      [5, weight, 2],
+      [5, weight, 2],
+    ]);
+  const moderate = (daysAgo: number) =>
+    record(
+      daysAgo,
+      BENCH,
+      [
+        [8, 155, 2],
+        [8, 155, 2],
+      ],
+      [6, 10],
+      2,
+    );
+  const light = (daysAgo: number) =>
+    record(
+      daysAgo,
+      BENCH,
+      [
+        [12, 130, 1],
+        [12, 130, 1],
+      ],
+      [10, 15],
+      1,
+    );
+
+  it('is not called stalled because a lighter day reads a lower estimated max', () => {
+    // Two flat heavy days with a moderate and a light day between them. Read across ranges the
+    // newest four show no better estimate than the oldest; within the heavy range there are
+    // only two sessions, which is not yet evidence of anything.
+    const history = [heavy(22), moderate(15), light(8), heavy(1)];
+    expect(detectStalls(history, profile, intermediate)).toEqual([]);
+  });
+
+  it('is called stalled once one range has stood still for the full window', () => {
+    const history = [
+      heavy(64),
+      moderate(57),
+      light(50),
+      heavy(43),
+      moderate(36),
+      light(29),
+      heavy(22),
+      moderate(15),
+      light(8),
+      heavy(1),
+    ];
+    const [stall] = detectStalls(history, profile, intermediate);
+    expect(stall).toMatchObject({ exerciseId: BENCH, kind: 'stalled-at-effort', exposures: 4 });
+    // And a heavy range that is moving clears it, whatever the other days read.
+    const moving = [...history.slice(0, -1), heavy(1, 195)];
+    expect(detectStalls(moving, profile, intermediate)).toEqual([]);
+  });
+});

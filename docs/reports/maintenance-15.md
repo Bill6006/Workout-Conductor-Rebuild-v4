@@ -58,6 +58,11 @@ with the goals choosing automatically.
   the lift has never been run at starts from 95% of what the latest estimated max implies, and
   the evidence line says so. A break is measured from the lift's last session at any range. A
   lift that stays at one range behaves exactly as before.
+- **A stall is read within one rep range too.** The stall detector compared estimated maxes
+  across ranges, and an estimate read from fives differs by a few percent from one read from
+  fifteens. A lift that rotates its ranges is now judged on the sessions run at the newest one,
+  so a light day neither fakes a stall nor hides one. Found by reading my own new style against
+  the existing coach, not by a test; two tests pin it now.
 - **Stored so an older copy of the app still works.** The choice rides in a new optional field
   and the original field always keeps the nearest original style. Both new fields read a value
   from a newer copy of the app as unset instead of failing the profile.

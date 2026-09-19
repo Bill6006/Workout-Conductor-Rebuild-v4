@@ -2,7 +2,11 @@ import { getExercise } from '../../catalog/exercises/catalog';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { CoachingPolicy } from '../coach/experience';
-import { performanceHistory, type PerformancePoint } from '../progression/progression';
+import {
+  performanceHistory,
+  sameZoneAsLatest,
+  type PerformancePoint,
+} from '../progression/progression';
 
 /**
  * Stall detection by exposure, and the coach route that follows.
@@ -97,6 +101,9 @@ function shortDate(iso: string): string {
     : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+/** Enough sessions to hold a full stall window of one rep range out of a three-range rotation. */
+const ZONED_EXPOSURES = 12;
+
 export function exactExposures(
   history: readonly WorkoutRecord[],
   exerciseId: string,
@@ -186,7 +193,9 @@ export function detectStalls(
   );
   const stalls: StallDiagnosis[] = [];
   for (const exerciseId of ids) {
-    const points = exactExposures(history, exerciseId);
+    // A stall is read within one rep range: a lift that rotates its ranges is judged on the
+    // sessions run at the newest one, so a light day neither fakes a stall nor hides one.
+    const points = sameZoneAsLatest(exactExposures(history, exerciseId, ZONED_EXPOSURES));
     const stall = diagnose(exerciseId, points, policy, profile.units);
     if (stall) stalls.push(stall);
   }

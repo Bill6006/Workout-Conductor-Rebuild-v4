@@ -336,6 +336,10 @@ max can be entered or updated from the exercise's Options at any time.
   none, or with one older than `ZONE_REFERENCE_DAYS` (42) behind newer sessions at other ranges,
   the load is `ZONE_FRACTION` (95%) of what the latest estimated max implies, in `estimate`
   mode. A break is measured from the latest session at any range.
+- **A stall is read within one rep range** (`sameZoneAsLatest`, used by `detectStalls`). An
+  estimated max read from fives and one read from fifteens differ by a few percent for the same
+  lifter, so a lift that rotates its ranges is judged on the sessions run at the newest one: a
+  light day neither fakes a stall nor hides one. A lift at one range is judged exactly as before.
 - **Storage.** `programStyle` and `goals.bodyweight` are optional and read an unknown value as
   unset. `trainingStyle` always keeps the nearest original style (`legacyStyleFor`,
   `alignLegacyStyle` in the store), so a copy of the app from before this round still reads a

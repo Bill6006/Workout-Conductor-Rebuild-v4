@@ -356,6 +356,22 @@ function zoneTop(point: PerformancePoint): number | null {
   return target ? target[1] : null;
 }
 
+/**
+ * The sessions run at about the same rep range as the newest one. An estimated
+ * max read from fives and one read from fifteens differ by a few percent for
+ * the same lifter, so anything that compares them session to session (a stall)
+ * has to compare like with like.
+ */
+export function sameZoneAsLatest(points: readonly PerformancePoint[]): PerformancePoint[] {
+  const latest = points[0];
+  const top = latest ? zoneTop(latest) : null;
+  if (top === null) return [...points];
+  return points.filter((point) => {
+    const other = zoneTop(point);
+    return other === null || Math.abs(other - top) <= SAME_ZONE_REPS;
+  });
+}
+
 function sameZone(point: PerformancePoint, reps: [number, number]): boolean {
   const top = zoneTop(point);
   return top === null || Math.abs(top - reps[1]) <= SAME_ZONE_REPS;
