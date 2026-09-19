@@ -46,7 +46,10 @@ That is what lets a backup written by a newer app version pass through an older 
   `schedule.weeklyFrequency` (1-7), `schedule.typicalDurationMinutes` (15-180, becomes Default
   time), `schedule.availableDays`, `currentLocationId`, `exercisePreferences.preferred` /
   `.disliked` (exercise names, resolved by alias once the catalog exists),
-  `limitations.painAreas` / `.shoulder` / `.avoidBarbellSquats` / `.notes`, `trainingStyle`,
+  `limitations.painAreas` / `.shoulder` / `.avoidBarbellSquats` / `.notes`, `trainingStyle`
+  (one of the three original styles, always readable by an older copy of the app), optional
+  `programStyle` (the choice, Auto and the four newer styles included; Maintenance 15), optional
+  `goals.bodyweight` (lose | hold | gain; the Losing fat switch),
   `techniques.supersets` / `.dropSets` / `.circuits`, `restStyle`, `units`, optional `bodyweight`,
   `createdAt`, `updatedAt`.
 - `LocationProfile`: `id`, `name`, `kind` (home | gym | travel | custom), `equipment` (catalog ids

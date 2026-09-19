@@ -309,3 +309,35 @@ movement is known), by `ENTERED_MAX_STEPS` (two) at most, with the reason in the
 next logged session is newer than the max, so the log takes over again without anything being
 cleared. The pipeline is `withSessionFatigue(withEnteredMax(recommendBiasedTarget(...)))`. The
 max can be entered or updated from the exercise's Options at any time.
+
+## Programming styles and the rep-range rule (`src/engine/planning/styles.ts`, `styleAdvice.ts`, Maintenance 15)
+
+- **Seven styles.** `prescribe(exercise, role, profile, context?)` shapes every role from the
+  style: Hybrid, Hypertrophy focus, and Strength focus exactly as before; Undulating rotates the
+  lifts that carry a session (primary and secondary strength, primary hypertrophy) through
+  heavy, moderate, and light zones, one zone per logged session of that lift
+  (`zoneForCount`, `loggedSessionsOf`); Lean-down is Hybrid with nothing taken to failure;
+  Light weights puts every loaded lift at `lightRange` (top of its usual range up, never past
+  25); Foundation keeps a new lifter on moderate loads, fewer sets, and reps in reserve.
+  `prescribeFor` adds the style and the zone from the profile and the log; the generator, the
+  recalibration engine, and the completion summary all call it.
+- **Auto.** `adviseStyle(profile)` reads experience, `goals.bodyweight`, and the two goals in a
+  fixed order and returns the style, the reason in a sentence, and the sources. `resolveStyle`
+  is the pick, or what Auto comes to. It never reads the log, so the plan does not move with a
+  good or bad week.
+- **The coach's two style offers** (`styleSignals`, preview only): a profile without
+  `programStyle` is told once where its goals point, with one action that sets Auto; two or
+  more lifts stalled at the prescribed effort under Hybrid or Strength focus bring "Rotate the
+  rep ranges", with the research and its limits in the two lines every experience level sees.
+  `allowsFailure` keeps Lean-down and Foundation free of drop sets, planned or offered, and
+  Lean-down free of the extra-set offer.
+- **A weight belongs to the rep range it was lifted at** (`recommendBaseTarget`). Sessions
+  whose target range tops sit within `SAME_ZONE_REPS` (2) of today's are the reference; with
+  none, or with one older than `ZONE_REFERENCE_DAYS` (42) behind newer sessions at other ranges,
+  the load is `ZONE_FRACTION` (95%) of what the latest estimated max implies, in `estimate`
+  mode. A break is measured from the latest session at any range.
+- **Storage.** `programStyle` and `goals.bodyweight` are optional and read an unknown value as
+  unset. `trainingStyle` always keeps the nearest original style (`legacyStyleFor`,
+  `alignLegacyStyle` in the store), so a copy of the app from before this round still reads a
+  synced profile.
+- The research, study by study: `docs/research/programming-styles.md`.

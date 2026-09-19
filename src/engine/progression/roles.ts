@@ -1,5 +1,7 @@
 import type { CatalogExercise, TrainingRole } from '../../catalog/exercises/exerciseSchema';
-import type { UserProfile } from '../../core/validation/profile';
+import type { StyleId, UserProfile } from '../../core/validation/profile';
+import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { resolveStyle } from '../planning/styleAdvice';
 import type { SetPrescription } from '../workout/types';
 
 /**
@@ -7,6 +9,8 @@ import type { SetPrescription } from '../workout/types';
  * concrete prescription: sets, rep range, RIR, and rest. Strength roles use
  * lower reps, longer rests, and fewer high-quality sets; hypertrophy roles use
  * moderate reps, controlled RIR, and shorter rests. No tempo unless needed.
+ * The programming style (the lifter's pick, or what Auto comes to) shapes each
+ * role; `docs/research/programming-styles.md` has the research behind each one.
  */
 
 export interface Prescription {
@@ -36,53 +40,167 @@ export function restCategory(role: TrainingRole): 'strength' | 'hypertrophy' | '
   return 'hypertrophy';
 }
 
+/** The rep zones an undulating lift rotates through. */
+export type RepZone = 'heavy' | 'moderate' | 'light';
+
+/** The style a prescription is written under, and for an undulating lift the zone it is on. */
+export interface StyleContext {
+  style: StyleId;
+  zone?: RepZone;
+}
+
+/** The lifts that carry a session: the ones an undulating style rotates. */
+export function undulates(role: TrainingRole): boolean {
+  return (
+    role === 'primary-strength' || role === 'secondary-strength' || role === 'primary-hypertrophy'
+  );
+}
+
+/** A lift with a strength range has three zones; one without it has no heavy day. */
+export function zonesFor(exercise: Pick<CatalogExercise, 'repRanges'>): RepZone[] {
+  return exercise.repRanges.strength ? ['heavy', 'moderate', 'light'] : ['moderate', 'light'];
+}
+
+/** The zone a lift is on after this many logged sessions of it: each session moves it one on. */
+export function zoneForCount(
+  exercise: Pick<CatalogExercise, 'repRanges'>,
+  sessions: number,
+): RepZone {
+  const zones = zonesFor(exercise);
+  return zones[((Math.trunc(sessions) % zones.length) + zones.length) % zones.length] as RepZone;
+}
+
+/** The light end of a lift: from the top of its usual range up, never past 25. */
+export function lightRange(exercise: Pick<CatalogExercise, 'repRanges'>): [number, number] {
+  const low = Math.min(exercise.repRanges.hypertrophy[1], 20);
+  return [low, Math.min(low + 5, 25)];
+}
+
+export function zoneReps(
+  exercise: Pick<CatalogExercise, 'repRanges'>,
+  zone: RepZone,
+): [number, number] {
+  if (zone === 'light') return lightRange(exercise);
+  if (zone === 'heavy') return exercise.repRanges.strength ?? exercise.repRanges.hypertrophy;
+  return exercise.repRanges.hypertrophy;
+}
+
+const ZONE_REST_FACTOR: Record<RepZone, number> = { heavy: 1, moderate: 0.9, light: 0.8 };
+
+/** Logged sessions of a lift: what moves an undulating lift to its next zone. */
+export function loggedSessionsOf(exerciseId: string, history: readonly WorkoutRecord[]): number {
+  return history.filter((record) =>
+    record.entries.some(
+      (entry) =>
+        entry.exerciseId === exerciseId &&
+        entry.sets.some((set) => set.kind === 'working' && set.completed),
+    ),
+  ).length;
+}
+
+export function styleContextFor(
+  exercise: CatalogExercise,
+  role: TrainingRole,
+  profile: UserProfile,
+  history: readonly WorkoutRecord[],
+): StyleContext {
+  const style = resolveStyle(profile);
+  if (style !== 'undulating' || !undulates(role)) return { style };
+  return { style, zone: zoneForCount(exercise, loggedSessionsOf(exercise.id, history)) };
+}
+
+/** `prescribe` with the style read from the profile and, for an undulating lift, the zone from the log. */
+export function prescribeFor(
+  exercise: CatalogExercise,
+  role: TrainingRole,
+  profile: UserProfile,
+  history: readonly WorkoutRecord[],
+): Prescription {
+  return prescribe(exercise, role, profile, styleContextFor(exercise, role, profile, history));
+}
+
 export function prescribe(
   exercise: CatalogExercise,
   role: TrainingRole,
   profile: UserProfile,
+  context?: StyleContext,
 ): Prescription {
-  const style = profile.trainingStyle;
+  const style = context?.style ?? resolveStyle(profile);
   const factor = REST_STYLE_FACTOR[profile.restStyle];
   const strengthReps = exercise.repRanges.strength ?? exercise.repRanges.hypertrophy;
   const hypertrophyReps = exercise.repRanges.hypertrophy;
+  // Light weights puts every lift at the light end; Foundation keeps a new lifter off the heavy
+  // range and well short of failure; Lean-down takes nothing to failure.
+  const light = style === 'high-rep';
+  const foundation = style === 'foundation';
+  const moreVolume = style === 'hypertrophy-focus' || light;
+  const heavyReps = light ? lightRange(exercise) : foundation ? hypertrophyReps : strengthReps;
+  const volumeReps = light ? lightRange(exercise) : hypertrophyReps;
+  const volumeRir = foundation ? 2 : 1;
 
   let base: Prescription;
   switch (role) {
     case 'primary-strength':
       base = {
-        sets: style === 'hypertrophy-focus' ? 3 : 4,
-        reps: strengthReps,
-        rir: 2,
-        restSeconds: 150,
+        sets: moreVolume || foundation ? 3 : 4,
+        reps: heavyReps,
+        rir: light ? 1 : foundation ? 3 : 2,
+        restSeconds: light || foundation ? 120 : 150,
       };
       break;
     case 'secondary-strength':
-      base = { sets: 3, reps: strengthReps, rir: 2, restSeconds: 135 };
+      base = {
+        sets: 3,
+        reps: heavyReps,
+        rir: light ? 1 : foundation ? 3 : 2,
+        restSeconds: light || foundation ? 105 : 135,
+      };
       break;
     case 'primary-hypertrophy':
       base = {
-        sets: style === 'hypertrophy-focus' ? 4 : 3,
-        reps: style === 'strength-focus' ? strengthReps : hypertrophyReps,
-        rir: 1,
-        restSeconds: 120,
+        sets: moreVolume ? 4 : 3,
+        reps: style === 'strength-focus' ? strengthReps : volumeReps,
+        rir: volumeRir,
+        restSeconds: light || foundation ? 90 : 120,
       };
       break;
     case 'secondary-hypertrophy':
-      base = { sets: 3, reps: hypertrophyReps, rir: 1, restSeconds: 90 };
+      base = {
+        sets: foundation ? 2 : 3,
+        reps: volumeReps,
+        rir: volumeRir,
+        restSeconds: light ? 75 : 90,
+      };
       break;
     case 'specialization':
-      base = { sets: 4, reps: hypertrophyReps, rir: 1, restSeconds: 75 };
+      base = { sets: foundation ? 3 : 4, reps: volumeReps, rir: volumeRir, restSeconds: 75 };
       break;
     case 'finisher':
-      base = { sets: 2, reps: hypertrophyReps, rir: 0, restSeconds: 45 };
+      base = {
+        sets: 2,
+        reps: volumeReps,
+        rir: foundation ? 2 : style === 'lean-down' ? 1 : 0,
+        restSeconds: 45,
+      };
       break;
     case 'corrective':
     case 'warm-up':
       base = { sets: 2, reps: hypertrophyReps, rir: 3, restSeconds: 45 };
       break;
     case 'isolation':
-      base = { sets: 3, reps: hypertrophyReps, rir: 1, restSeconds: 60 };
+      base = { sets: foundation ? 2 : 3, reps: volumeReps, rir: volumeRir, restSeconds: 60 };
       break;
+  }
+
+  // An undulating lift takes its reps, reserve, and rest from the zone it is on today.
+  if (style === 'undulating' && undulates(role)) {
+    const zone = context?.zone ?? 'moderate';
+    base = {
+      ...base,
+      reps: zoneReps(exercise, zone),
+      rir: zone === 'heavy' ? 2 : zone === 'light' ? 1 : role === 'primary-hypertrophy' ? 1 : 2,
+      restSeconds: Math.round((base.restSeconds * ZONE_REST_FACTOR[zone]) / 5) * 5,
+    };
   }
 
   return {

@@ -3,7 +3,7 @@ import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 import { UNFINISHED_STALE_HOURS } from '../../core/alerts/cues';
 import type { LocationProfile } from '../../core/validation/location';
-import type { UserProfile } from '../../core/validation/profile';
+import type { ProgramStyle, UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { estimateWorkout } from '../duration/duration';
 import { weightStep } from '../plateMath/plateMath';
@@ -25,6 +25,8 @@ import {
 } from '../strategy/plateau';
 import type { StrategyInsight } from '../strategy/strategy';
 import { coachingPolicy, type CoachingPolicy } from './experience';
+import { adviseStyle, allowsFailure, resolveStyle, undulatingCase } from '../planning/styleAdvice';
+import { leadEvidence, styleInfo } from '../planning/styles';
 import {
   computeExposure,
   computeMusclePriorities,
@@ -79,7 +81,9 @@ type CoachActionBase =
   /** The next session leads with this muscle (a coach focus). */
   | { kind: 'focus'; muscle: MuscleId; label: string }
   /** Opens the end-of-workout sheet, where the day is saved as it stands. */
-  | { kind: 'finish'; label: string };
+  | { kind: 'finish'; label: string }
+  /** Sets the programming style; the plan is rebuilt under it. */
+  | { kind: 'style'; style: ProgramStyle; label: string };
 
 export type CoachAction = CoachActionBase & { route?: RouteRef };
 
@@ -559,6 +563,7 @@ function strategySignals(input: CoachInput): CoachSignal[] {
 function progressionSignals(input: CoachInput): CoachSignal[] {
   const signals: CoachSignal[] = [];
   const units = input.profile.units;
+  const leanDown = resolveStyle(input.profile) === 'lean-down';
   let lowered = false;
   let offered = false;
   for (const entry of remainingEntries(input)) {
@@ -582,8 +587,15 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
         exerciseId: entry.exerciseId,
       });
     }
-    // An extra set on offer ends in a tap.
-    if (!offered && progression.setsAdvice === 1 && !started(input, entry) && !entry.manual?.sets) {
+    // An extra set on offer ends in a tap. Not while losing fat: more sets kept no more muscle
+    // in a deficit (Roth et al., 2023), so the plan holds its volume.
+    if (
+      !offered &&
+      !leanDown &&
+      progression.setsAdvice === 1 &&
+      !started(input, entry) &&
+      !entry.manual?.sets
+    ) {
       offered = true;
       signals.push({
         domain: 'progression',
@@ -778,7 +790,11 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
 
 function tipSignals(input: CoachInput): CoachSignal[] {
   const signals: CoachSignal[] = [];
-  if (input.profile.techniques.dropSets && input.status !== 'completed') {
+  if (
+    input.profile.techniques.dropSets &&
+    input.status !== 'completed' &&
+    allowsFailure(resolveStyle(input.profile))
+  ) {
     const keys = doneKeys(input.completed);
     const isDone = (id: string, index: number) => keys.has(`${id}:${index}`);
     const volume = computeWeeklyVolume(input.history, input.now);
@@ -1006,14 +1022,79 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
   return signals;
 }
 
-export function gatherSignals(input: CoachInput): CoachSignal[] {
-  const policy = input.policy ?? coachingPolicy(input.profile.experience);
+/** Sources of the two style offers; a decline is remembered per source. */
+export const STYLE_GOALS_SOURCE = 'style: goals';
+export const STYLE_UNDULATING_SOURCE = 'style: undulating';
+
+/**
+ * The programming style, as an offer. A profile from before Auto existed is
+ * offered it once: the goals and settings pick the style, and the card says
+ * which one they point to and why. And when several lifts are stuck at a fixed
+ * rep range, rotating the ranges is offered, with the research and its limits.
+ * A style change rebuilds the plan, so neither is offered once a workout is
+ * under way, and a style the lifter picked by hand is never second-guessed.
+ */
+function styleSignals(input: CoachInput): CoachSignal[] {
+  if (input.status !== 'preview') return [];
+  const profile = input.profile;
+  const signals: CoachSignal[] = [];
+  if (profile.programStyle === undefined) {
+    const advice = adviseStyle(profile);
+    const advised = styleInfo(advice.style);
+    const current = styleInfo(profile.trainingStyle);
+    const differs = advice.style !== profile.trainingStyle;
+    const research = leadEvidence(advice.style);
+    signals.push({
+      domain: differs ? 'progression' : 'tips',
+      headline: differs
+        ? `Your goals point to ${advised.name}, not ${current.name}`
+        : 'Your goals can pick the programming style',
+      why: differs
+        ? [advice.reasons[0] as string, research]
+        : [
+            `They point to ${advised.name}, the style you have now, and the plan follows if your goals change.`,
+            research,
+          ],
+      action: { kind: 'style', style: 'auto', label: 'Let my goals choose' },
+      confidence: 'high',
+      severity: 1,
+      source: STYLE_GOALS_SOURCE,
+    });
+  }
+  const stuck = undulatingCase(profile, input.stalls ?? []);
+  if (stuck.length > 0) {
+    const names = stuck.slice(0, 3).map((stall) => requireExercise(stall.exerciseId).name);
+    signals.push({
+      domain: 'plateau',
+      headline: `${stuck.length} lifts have stalled at a fixed rep range`,
+      // Two lines, so the limits of the research are on the card at every experience level.
+      why: [
+        `${names.join(', ')}${stuck.length > names.length ? ' and more' : ''}: no better estimated max in weeks, at the prescribed effort.`,
+        'Rotating the rep range built more max strength in trained lifters (Moesgaard 2022). The evidence is mixed (ACSM 2026), and nothing is given up for size.',
+      ],
+      action: { kind: 'style', style: 'undulating', label: 'Rotate the rep ranges' },
+      confidence: 'medium',
+      severity: 3,
+      source: STYLE_UNDULATING_SOURCE,
+    });
+  }
+  return signals;
+}
+
+export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
+  const policy = rawInput.policy ?? coachingPolicy(rawInput.profile.experience);
+  // Stalls are read once: the plateau routes and the style offer both start from them.
+  const input: CoachInput = {
+    ...rawInput,
+    stalls: rawInput.stalls ?? detectStalls(rawInput.history, rawInput.profile, policy),
+  };
   return [
     ...safetySignals(input),
     ...unfinishedSignals(input),
     ...saveSignals(input),
     ...recoverySignals(input),
     ...plateauSignals(input, policy),
+    ...styleSignals(input),
     ...strategySignals(input),
     ...progressionSignals(input),
     ...restSignals(input),

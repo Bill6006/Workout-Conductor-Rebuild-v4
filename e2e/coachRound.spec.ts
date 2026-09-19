@@ -18,9 +18,10 @@ test.describe('the coach round', () => {
     await expect(primary.getByRole('radio', { name: /Balanced development/ })).toHaveCount(0);
     await primary.getByRole('radio', { name: /Strength progress/ }).click();
     await expect(
-      page.getByText('For lower reps and longer rests, set Programming style to Strength focus.', {
-        exact: false,
-      }),
+      page.getByText(
+        'For lower reps and longer rests, set Programming style to Strength focus or Auto.',
+        { exact: false },
+      ),
     ).toBeVisible();
     await primary.getByRole('radio', { name: /Build muscle/ }).click();
     await expect(page.getByText(/Programming style decides how each set is done/)).toBeVisible();

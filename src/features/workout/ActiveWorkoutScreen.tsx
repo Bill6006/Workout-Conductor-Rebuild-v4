@@ -312,6 +312,10 @@ export function ActiveWorkoutScreen() {
           if (!action.route) store.acceptCoachSignal(signal);
         });
         break;
+      case 'style':
+        // The plan is rebuilt under the new style by the profile save itself.
+        void store.setProgramStyle(action.style).catch(() => undefined);
+        break;
     }
   };
 

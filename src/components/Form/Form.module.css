@@ -45,6 +45,13 @@
   gap: 8px;
 }
 
+/* One full-width chip per row: a longer list whose options each carry a line of description. */
+.chipsStack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
 .chip {
   display: inline-flex;
   flex-direction: column;

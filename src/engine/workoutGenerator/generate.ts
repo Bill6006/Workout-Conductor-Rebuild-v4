@@ -37,12 +37,14 @@ import {
   MIN_REST_SECONDS,
   ROLE_RANK,
   buildSets,
-  prescribe,
+  prescribeFor,
   rampSetsFor,
   restCategory,
   type Prescription,
   type RampContext,
 } from '../progression/roles';
+import { allowsFailure, isAutoStyle, resolveStyle } from '../planning/styleAdvice';
+import { styleInfo } from '../planning/styles';
 import { loadingFor } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
 import {
@@ -314,10 +316,12 @@ function chooseTemplate(
   focus: MuscleId | null = null,
 ): Template {
   const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
-  const strengthGoal =
-    profile.goals.primary === 'strength' || profile.trainingStyle === 'strength-focus';
+  const style = resolveStyle(profile);
+  const strengthGoal = profile.goals.primary === 'strength' || style === 'strength-focus';
+  // A new lifter gains most from training each muscle about three times a week (Rhea et al.,
+  // 2003), which full-body and upper/lower sessions give and a four-way split does not.
   const pool =
-    profile.schedule.weeklyFrequency <= 3
+    profile.schedule.weeklyFrequency <= 3 || style === 'foundation'
       ? [FULL_BODY, UPPER, LOWER]
       : strengthGoal
         ? [FULL_BODY, LOWER, UPPER, PUSH_ARMS, PULL_ARMS]
@@ -646,7 +650,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     }
     chosenExercises.push(pick);
     const prescription = adjustPrescription(
-      prescribe(pick, slotSpec.role, profile),
+      prescribeFor(pick, slotSpec.role, profile, history),
       slotSpec.role,
       adjust,
     );
@@ -919,8 +923,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     break;
   }
 
-  // 5. One optional, intelligent drop set on a safe isolation move.
-  if (profile.techniques.dropSets) {
+  // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
+  // to failure, so a style that takes nothing to failure plans none.
+  if (profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {
     const deficitMuscles = new Set(
       priorities
         .filter(
@@ -1141,14 +1146,11 @@ function goalLabel(
 }
 
 function styleLine(profile: UserProfile): string {
-  switch (profile.trainingStyle) {
-    case 'hybrid':
-      return 'heavy strength work first and hypertrophy volume after it';
-    case 'hypertrophy-focus':
-      return 'moderate loads and more total volume';
-    case 'strength-focus':
-      return 'heavier loads, lower reps, longer rests';
-  }
+  const info = styleInfo(resolveStyle(profile));
+  // Under Auto the line says which style the goals came to.
+  return isAutoStyle(profile)
+    ? `${info.session} (${info.name}, picked from your goals)`
+    : info.session;
 }
 
 function roleLabel(role: TrainingRole): string {

@@ -6,7 +6,7 @@ import { allEntries, workingSets } from '../../engine/workout/types';
 import type { UserProfile } from '../validation/profile';
 import type { TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import { recommendNextTarget } from '../../engine/progression/progression';
-import { prescribe } from '../../engine/progression/roles';
+import { prescribeFor } from '../../engine/progression/roles';
 import { sessionFeedback } from '../../engine/strategy/strategy';
 import {
   computeExposure,
@@ -199,7 +199,7 @@ export function buildCompletion(
     const target = recommendNextTarget({
       exercise,
       role,
-      prescription: prescribe(exercise, role, profile),
+      prescription: prescribeFor(exercise, role, profile, after),
       history: after,
       profile,
     });

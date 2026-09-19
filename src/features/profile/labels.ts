@@ -2,15 +2,19 @@ import type {
   ExperienceLevel,
   PainArea,
   PrimaryGoal,
+  ProgramStyle,
   RestStyle,
   SecondaryGoal,
   Sex,
   ShoulderLimitation,
-  TrainingStyle,
   UnitSystem,
+  UserProfile,
   Weekday,
 } from '../../core/validation/profile';
 import type { LocationKind } from '../../core/validation/location';
+import { styleChoice } from '../../core/validation/profile';
+import { adviseStyle } from '../../engine/planning/styleAdvice';
+import { STYLES, STYLE_ORDER } from '../../engine/planning/styles';
 
 export interface LabelledOption<T extends string> {
   value: T;
@@ -61,15 +65,33 @@ export const EXPERIENCE_OPTIONS: readonly LabelledOption<ExperienceLevel>[] = [
   { value: 'advanced', label: 'Advanced', description: 'Years of progressive training' },
 ];
 
-export const STYLE_OPTIONS: readonly LabelledOption<TrainingStyle>[] = [
-  { value: 'hybrid', label: 'Hybrid', description: 'Strength and hypertrophy in every session' },
-  {
-    value: 'hypertrophy-focus',
-    label: 'Hypertrophy focus',
-    description: 'More volume, moderate loads',
-  },
-  { value: 'strength-focus', label: 'Strength focus', description: 'Heavier loads, fewer reps' },
-];
+/** Auto first, then every style the research tells apart; Auto says what it comes to right now. */
+export function styleOptions(
+  profile: Pick<UserProfile, 'goals' | 'experience'>,
+): LabelledOption<ProgramStyle>[] {
+  return [
+    {
+      value: 'auto',
+      label: 'Auto',
+      description: `Your goals choose: ${STYLES[adviseStyle(profile).style].name} right now`,
+    },
+    ...STYLE_ORDER.map((id) => ({
+      value: id,
+      label: STYLES[id].name,
+      description: STYLES[id].line,
+    })),
+  ];
+}
+
+/** "Auto · Hypertrophy focus" under Auto, the style's own name otherwise. */
+export function styleLabel(
+  profile: Pick<UserProfile, 'programStyle' | 'trainingStyle' | 'goals' | 'experience'>,
+): string {
+  const choice = styleChoice(profile);
+  return choice === 'auto'
+    ? `Auto · ${STYLES[adviseStyle(profile).style].name}`
+    : STYLES[choice].name;
+}
 
 export const REST_STYLE_OPTIONS: readonly LabelledOption<RestStyle>[] = [
   { value: 'short', label: 'Short', description: 'Dense sessions, quicker pace' },

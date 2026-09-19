@@ -23,7 +23,7 @@ import {
 } from '../progression/progression';
 import {
   buildSets,
-  prescribe,
+  prescribeFor,
   rampRoom,
   rampSetsFor,
   type RampContext,
@@ -465,7 +465,7 @@ function applySubstitution(
   const logged = request.completed.sets.some((set) => set.entryId === entry.id);
   const previousId = entry.exerciseId;
   if (!logged) {
-    const prescription = prescribe(exercise, entry.role, request.profile);
+    const prescription = prescribeFor(exercise, entry.role, request.profile, request.history);
     const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
     const context = sessionContextFor(request, request.workout, entry.id, exercise);
     const target = recommendNextTarget({
@@ -948,7 +948,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       }
       const role: TrainingRole = exercise.compound ? 'secondary-hypertrophy' : 'isolation';
       const prescription = {
-        ...prescribe(exercise, role, request.profile),
+        ...prescribeFor(exercise, role, request.profile, request.history),
         sets: Math.max(1, Math.round(trigger.sets)),
       };
       const target = recommendNextTarget({
@@ -1012,7 +1012,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         );
         if (logged || entry.manual?.weight) continue;
         const exercise = requireExercise(entry.exerciseId);
-        const prescription = prescribe(exercise, entry.role, request.profile);
+        const prescription = prescribeFor(exercise, entry.role, request.profile, request.history);
         const working =
           entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
         const context = sessionContextFor(request, workout, entry.id, exercise);
@@ -1081,7 +1081,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         );
         if (logged || entry.manual?.weight) continue;
         const exercise = requireExercise(entry.exerciseId);
-        const prescription = prescribe(exercise, entry.role, request.profile);
+        const prescription = prescribeFor(exercise, entry.role, request.profile, request.history);
         const working =
           entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
         const context = sessionContextFor(request, workout, entry.id, exercise);
@@ -1291,7 +1291,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           };
         }
         const last = [...entry.sets].reverse().find((set) => set.kind === 'working');
-        const prescription = prescribe(exercise, entry.role, request.profile);
+        const prescription = prescribeFor(exercise, entry.role, request.profile, request.history);
         const added: SetPrescription = {
           index: nextSetIndex(entry),
           kind: 'working',

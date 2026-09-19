@@ -6,7 +6,7 @@ interface ChoiceGroupProps<T extends string> {
   value: T;
   options: readonly LabelledOption<T>[];
   onChange: (value: T) => void;
-  layout?: 'wrap' | 'grid-2' | 'grid-3';
+  layout?: 'wrap' | 'grid-2' | 'grid-3' | 'stack';
   compact?: boolean;
 }
 
@@ -20,7 +20,13 @@ export function ChoiceGroup<T extends string>({
   compact = false,
 }: ChoiceGroupProps<T>) {
   const containerClass =
-    layout === 'grid-2' ? styles.chipsGrid : layout === 'grid-3' ? styles.chipsGrid3 : styles.chips;
+    layout === 'grid-2'
+      ? styles.chipsGrid
+      : layout === 'grid-3'
+        ? styles.chipsGrid3
+        : layout === 'stack'
+          ? styles.chipsStack
+          : styles.chips;
   const chipClass = compact ? `${styles.chip} ${styles.chipCompact}` : styles.chip;
 
   return (

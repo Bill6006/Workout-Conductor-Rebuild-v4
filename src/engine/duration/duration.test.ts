@@ -122,7 +122,7 @@ describe('progression roles', () => {
       prescribe(bench, 'primary-strength', { ...profile, restStyle: 'short' }).restSeconds,
     ).toBeLessThan(strength.restSeconds);
     expect(
-      prescribe(bench, 'primary-strength', { ...profile, trainingStyle: 'hypertrophy-focus' }).sets,
+      prescribe(bench, 'primary-strength', { ...profile, programStyle: 'hypertrophy-focus' }).sets,
     ).toBe(3);
   });
 

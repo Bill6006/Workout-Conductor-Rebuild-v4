@@ -157,7 +157,14 @@ import {
   LocationProfileSchema,
   type LocationProfile,
 } from '../validation/location';
-import { UserProfileSchema, type UserProfile, normalizeProfile } from '../validation/profile';
+import {
+  UserProfileSchema,
+  type ProgramStyle,
+  type UserProfile,
+  legacyStyleFor,
+  normalizeProfile,
+} from '../validation/profile';
+import { resolveStyle } from '../../engine/planning/styleAdvice';
 import type { LocalSettings } from '../validation/settings';
 import {
   parseWorkoutRecords,
@@ -424,6 +431,16 @@ function sameEquipment(a: readonly string[], b: readonly string[]): boolean {
   return [...a].sort().join('|') === [...b].sort().join('|');
 }
 
+/**
+ * Once the newer style field is in use, `trainingStyle` follows it: always the
+ * nearest style a copy of the app from before the newer ones can read and train by.
+ */
+export function alignLegacyStyle(profile: UserProfile): UserProfile {
+  if (profile.programStyle === undefined) return profile;
+  const trainingStyle = legacyStyleFor(resolveStyle(profile));
+  return trainingStyle === profile.trainingStyle ? profile : { ...profile, trainingStyle };
+}
+
 /** Which recalibration a profile save calls for; notes and units never trigger one. */
 export function profileTrigger(
   previous: UserProfile,
@@ -434,14 +451,18 @@ export function profileTrigger(
   if (techniques.length === 1)
     return { type: 'technique', technique: techniques[0] as (typeof TECHNIQUES)[number] };
   if (techniques.length > 1) return { type: 'profile' };
+  // Losing fat counts through the style it resolves to: under a style picked by hand it changes
+  // nothing the plan is built from, so it must not rebuild a session that is under way.
   const relevant = (profile: UserProfile) =>
     JSON.stringify([
-      profile.goals,
+      { ...profile.goals, bodyweight: undefined },
+      resolveStyle(profile),
       profile.experience,
       profile.schedule,
       profile.exercisePreferences,
       { ...profile.limitations, notes: '' },
       profile.trainingStyle,
+      profile.programStyle ?? null,
       profile.restStyle,
       profile.bodyweight ?? null,
       profile.age ?? null,
@@ -1595,7 +1616,9 @@ export class AppStore {
 
   async saveProfile(profile: UserProfile): Promise<SaveReceipt> {
     const previous = this.state.profile;
-    const next = normalizeProfile(UserProfileSchema.parse({ ...profile, updatedAt: this.now() }));
+    const next = alignLegacyStyle(
+      normalizeProfile(UserProfileSchema.parse({ ...profile, updatedAt: this.now() })),
+    );
     const db = await this.getDatabase();
     const receipt = await putVerified(db, 'profile', next, { now: this.now });
     this.setState({ profile: next, lastReceipt: receipt, error: null });
@@ -2278,6 +2301,13 @@ export class AppStore {
   // ---------------------------------------------------------------- coach focus
 
   /** The coverage card's tap when today has no room: the next session leads with the muscle. */
+  /** Sets the programming style (Auto included); the plan is rebuilt under it like any profile change. */
+  async setProgramStyle(style: ProgramStyle): Promise<void> {
+    const profile = this.state.profile;
+    if (!profile) throw new Error('Finish setup first.');
+    await this.saveProfile({ ...profile, programStyle: style });
+  }
+
   async setCoachFocus(muscle: MuscleId): Promise<void> {
     const focus = createFocus(muscle, this.now());
     const db = await this.getDatabase();

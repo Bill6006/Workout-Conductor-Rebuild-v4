@@ -343,11 +343,41 @@ function floorTarget(target: NextTarget, input: NextTargetInput): NextTarget {
   };
 }
 
+/** Rep ranges whose tops sit this close are the same zone; holding at a cap moves a range by two. */
+export const SAME_ZONE_REPS = 2;
+/** A same-zone session older than this, with newer sessions in other zones, is no longer the reference. */
+export const ZONE_REFERENCE_DAYS = 42;
+/** The share of what the latest estimated max implies that a lift new to a rep range is asked for. */
+export const ZONE_FRACTION = 0.95;
+
+/** The top of the rep range a logged session was run at, when the log says. */
+function zoneTop(point: PerformancePoint): number | null {
+  const target = point.sets.find((set) => set.targetReps !== null)?.targetReps ?? null;
+  return target ? target[1] : null;
+}
+
+function sameZone(point: PerformancePoint, reps: [number, number]): boolean {
+  const top = zoneTop(point);
+  return top === null || Math.abs(top - reps[1]) <= SAME_ZONE_REPS;
+}
+
 function recommendBaseTarget(input: NextTargetInput): NextTarget {
   const { exercise, role, prescription, history, profile } = input;
   const units = profile.units;
   const step = weightStep(exercise, units);
-  const points = performanceHistory(history, exercise);
+  // A weight belongs to the rep range it was lifted at. When the range moves (an undulating
+  // day, a new style, the same lift in a different role) the sessions run at today's range
+  // are the reference, and without one the latest estimated max sets the load.
+  const recent = performanceHistory(history, exercise, 12);
+  const latest = recent[0];
+  const zoned = latest && !latest.viaFamily;
+  const inZone = zoned ? recent.filter((point) => sameZone(point, prescription.reps)) : recent;
+  const zoneFresh =
+    zoned &&
+    inZone[0] !== undefined &&
+    Date.parse(latest.date) - Date.parse(inZone[0].date) <= ZONE_REFERENCE_DAYS * DAY_MS;
+  const newToZone = zoned && !zoneFresh;
+  const points = (newToZone ? recent : inZone).slice(0, 6);
   const base: Omit<NextTarget, 'mode' | 'weight' | 'evidence' | 'confidence'> = {
     reps: prescription.reps,
     rir: prescription.rir,
@@ -514,7 +544,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     );
   }
   const daysSince = input.now
-    ? Math.floor((Date.parse(input.now) - Date.parse(last.date)) / DAY_MS)
+    ? Math.floor((Date.parse(input.now) - Date.parse((latest ?? last).date)) / DAY_MS)
     : 0;
   const enteredRecord = maxes?.maxes[exercise.id];
   if (
@@ -538,6 +568,14 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       'return',
       loadFromEstimate(last.e1rm, prescription.reps[1], prescription.rir, fraction, step),
       `${daysSince} days since the last session: back at ${Math.round(fraction * 100)}% of the estimated max (${last.e1rm} ${units}) and rebuilding from there.`,
+    );
+  }
+  if (newToZone && last.e1rm !== null) {
+    const range = last.sets.find((set) => set.targetReps !== null)?.targetReps ?? null;
+    return result(
+      'estimate',
+      loadFromEstimate(last.e1rm, prescription.reps[1], prescription.rir, ZONE_FRACTION, step),
+      `${range ? `Last run at ${range[0]}-${range[1]} reps` : 'Last run at a different rep range'}; today is ${prescription.reps[0]}-${prescription.reps[1]}. The weight follows the reps: ${Math.round(ZONE_FRACTION * 100)}% of what your estimated max (${last.e1rm} ${units}) implies for ${prescription.reps[0]}-${prescription.reps[1]} at RIR ${prescription.rir}; log a set and the target follows.`,
     );
   }
   if (consecutiveUnder >= 3) {

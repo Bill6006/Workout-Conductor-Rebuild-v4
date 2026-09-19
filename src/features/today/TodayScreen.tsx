@@ -14,7 +14,7 @@ import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import { allEntries, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
 import type { CoachAction, CoachSignal } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
-import { GOAL_OPTIONS, STYLE_OPTIONS, labelFor } from '../profile/labels';
+import { GOAL_OPTIONS, labelFor, styleLabel } from '../profile/labels';
 import { LocationSheet } from './LocationSheet';
 import { ReadinessSheet } from './ReadinessSheet';
 import { WorkoutPreviewCard } from './WorkoutPreviewCard';
@@ -143,6 +143,10 @@ export function TodayScreen() {
           if (!action.route) store.acceptCoachSignal(signal);
         });
         break;
+      case 'style':
+        // The plan is rebuilt under the new style by the profile save itself.
+        void store.setProgramStyle(action.style).catch(() => undefined);
+        break;
     }
   };
   const readiness = session.constraints.readiness;
@@ -219,7 +223,7 @@ export function TodayScreen() {
         <FactList
           items={[
             { label: 'Goal', value: labelFor(GOAL_OPTIONS, profile.goals.primary) },
-            { label: 'Style', value: labelFor(STYLE_OPTIONS, profile.trainingStyle) },
+            { label: 'Style', value: styleLabel(profile) },
             {
               label: 'Schedule',
               value: `${profile.schedule.weeklyFrequency} × ${profile.schedule.typicalDurationMinutes} min per week`,
