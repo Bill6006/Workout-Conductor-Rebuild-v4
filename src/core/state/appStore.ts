@@ -232,8 +232,10 @@ export interface AppState {
   sessionRecovery: SessionRecovery | null;
   /** Membership barcodes, one per place at most; device only, never synced or backed up. */
   barcodes: PlaceBarcode[];
-  /** The place whose barcode is on screen, or null. */
-  barcodeOpen: string | null;
+  /** The place whose barcode popup is open, or null. */
+  barcodeSheet: string | null;
+  /** The place whose barcode is full screen, or null; opened from the popup. */
+  barcodeFullScreen: string | null;
   calibration: CalibrationState;
   customExercises: CustomExercise[];
   /** Per-exercise notes and cue memory. */
@@ -555,7 +557,8 @@ export class AppStore {
       finishRequested: false,
       sessionRecovery: null,
       barcodes: [],
-      barcodeOpen: null,
+      barcodeSheet: null,
+      barcodeFullScreen: null,
       calibration: IDLE_CALIBRATION,
       customExercises: [],
       customInstructions: [],
@@ -1034,9 +1037,9 @@ export class AppStore {
         currentEntryId: position?.entryId ?? null,
       },
     });
-    // At a place with a barcode set to show, it comes up for the desk as the workout starts.
+    // At a place with a barcode set to show, its popup comes up for the desk as the workout starts.
     const barcode = this.barcodeFor(this.state.profile?.currentLocationId);
-    if (barcode?.autoShow) this.setState({ barcodeOpen: barcode.locationId });
+    if (barcode?.autoShow) this.setState({ barcodeSheet: barcode.locationId });
   }
 
   pauseWorkout(): void {
@@ -1729,6 +1732,7 @@ export class AppStore {
     const locations = this.state.locations.filter((location) => location.id !== id);
     this.setState({ locations });
     if (this.barcodeFor(id)) await this.removeBarcode(id);
+    if (this.state.barcodeSheet === id) this.setState({ barcodeSheet: null });
     if (this.state.profile?.currentLocationId === id) {
       await this.saveProfile({ ...this.state.profile, currentLocationId: HOME_LOCATION_ID });
     }
@@ -1780,18 +1784,33 @@ export class AppStore {
     await deleteVerified(db, 'device', barcodeIdFor(locationId));
     this.setState({
       barcodes: this.state.barcodes.filter((item) => item.locationId !== locationId),
-      barcodeOpen: this.state.barcodeOpen === locationId ? null : this.state.barcodeOpen,
+      barcodeFullScreen:
+        this.state.barcodeFullScreen === locationId ? null : this.state.barcodeFullScreen,
     });
   }
 
-  /** Puts a place's barcode on screen; the current place when none is named. */
-  openBarcode(locationId?: string): void {
-    const barcode = this.barcodeFor(locationId ?? this.state.profile?.currentLocationId);
-    if (barcode) this.setState({ barcodeOpen: barcode.locationId });
+  /** Opens a place's barcode popup; the current place when none is named. Home has none. */
+  openBarcodeSheet(locationId?: string): void {
+    const id = locationId ?? this.state.profile?.currentLocationId;
+    if (!id || id === HOME_LOCATION_ID) return;
+    if (this.state.locations.some((location) => location.id === id)) {
+      this.setState({ barcodeSheet: id });
+    }
   }
 
-  closeBarcode(): void {
-    if (this.state.barcodeOpen !== null) this.setState({ barcodeOpen: null });
+  closeBarcodeSheet(): void {
+    if (this.state.barcodeSheet !== null || this.state.barcodeFullScreen !== null) {
+      this.setState({ barcodeSheet: null, barcodeFullScreen: null });
+    }
+  }
+
+  /** Puts a place's barcode full screen, on white for the scanner. */
+  openBarcodeFullScreen(locationId: string): void {
+    if (this.barcodeFor(locationId)) this.setState({ barcodeFullScreen: locationId });
+  }
+
+  closeBarcodeFullScreen(): void {
+    if (this.state.barcodeFullScreen !== null) this.setState({ barcodeFullScreen: null });
   }
 
   async setCurrentLocation(id: string): Promise<SaveReceipt> {

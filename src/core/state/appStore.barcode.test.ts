@@ -45,12 +45,23 @@ describe('a place barcode in the store', () => {
       code: PICKED.code,
       autoShow: true,
     });
-    expect(store.getSnapshot().barcodeOpen).toBeNull();
+    expect(store.getSnapshot().barcodeSheet).toBeNull();
 
+    // The popup comes first; full screen is a tap on it.
     store.startWorkout();
-    expect(store.getSnapshot().barcodeOpen).toBe(GYM_LOCATION_ID);
-    store.closeBarcode();
-    expect(store.getSnapshot().barcodeOpen).toBeNull();
+    expect(store.getSnapshot()).toMatchObject({
+      barcodeSheet: GYM_LOCATION_ID,
+      barcodeFullScreen: null,
+    });
+    store.openBarcodeFullScreen(GYM_LOCATION_ID);
+    expect(store.getSnapshot().barcodeFullScreen).toBe(GYM_LOCATION_ID);
+    store.closeBarcodeFullScreen();
+    expect(store.getSnapshot()).toMatchObject({
+      barcodeSheet: GYM_LOCATION_ID,
+      barcodeFullScreen: null,
+    });
+    store.closeBarcodeSheet();
+    expect(store.getSnapshot().barcodeSheet).toBeNull();
   });
 
   it('stays closed at Start once switched off, and still opens when asked', async () => {
@@ -58,9 +69,9 @@ describe('a place barcode in the store', () => {
     await store.saveBarcode(GYM_LOCATION_ID, PICKED);
     await store.setBarcodeAutoShow(GYM_LOCATION_ID, false);
     store.startWorkout();
-    expect(store.getSnapshot().barcodeOpen).toBeNull();
-    store.openBarcode();
-    expect(store.getSnapshot().barcodeOpen).toBe(GYM_LOCATION_ID);
+    expect(store.getSnapshot().barcodeSheet).toBeNull();
+    store.openBarcodeSheet();
+    expect(store.getSnapshot().barcodeSheet).toBe(GYM_LOCATION_ID);
 
     // A replaced picture keeps the choice made for the place.
     await store.saveBarcode(GYM_LOCATION_ID, { image: PICKED.image });
@@ -69,14 +80,17 @@ describe('a place barcode in the store', () => {
     expect(barcode?.code).toBeUndefined();
   });
 
-  it('does not pop up at a place without one', async () => {
+  it('does not pop up at a place without one, and Home has no popup', async () => {
     const { store } = await onboarded();
     await store.saveBarcode(GYM_LOCATION_ID, PICKED);
     await store.setCurrentLocation(HOME_LOCATION_ID);
     store.startWorkout();
-    expect(store.getSnapshot().barcodeOpen).toBeNull();
-    store.openBarcode();
-    expect(store.getSnapshot().barcodeOpen).toBeNull();
+    expect(store.getSnapshot().barcodeSheet).toBeNull();
+    store.openBarcodeSheet();
+    expect(store.getSnapshot().barcodeSheet).toBeNull();
+    // Full screen needs a barcode to show.
+    store.openBarcodeFullScreen(HOME_LOCATION_ID);
+    expect(store.getSnapshot().barcodeFullScreen).toBeNull();
   });
 
   it('comes back after the app is closed, and goes with its place', async () => {
@@ -89,10 +103,14 @@ describe('a place barcode in the store', () => {
       GYM_LOCATION_ID,
     ]);
 
-    again.store.openBarcode();
+    again.store.openBarcodeSheet(GYM_LOCATION_ID);
+    again.store.openBarcodeFullScreen(GYM_LOCATION_ID);
     await again.store.deleteLocation(GYM_LOCATION_ID);
-    expect(again.store.getSnapshot().barcodes).toEqual([]);
-    expect(again.store.getSnapshot().barcodeOpen).toBeNull();
+    expect(again.store.getSnapshot()).toMatchObject({
+      barcodes: [],
+      barcodeSheet: null,
+      barcodeFullScreen: null,
+    });
     const db = await again.store.getDatabase();
     expect(await db.count('device')).toBe(0);
   });
@@ -100,9 +118,15 @@ describe('a place barcode in the store', () => {
   it('can be removed, and refuses a place that is no longer saved', async () => {
     const { store } = await onboarded();
     await store.saveBarcode(GYM_LOCATION_ID, PICKED);
-    store.openBarcode();
+    store.openBarcodeSheet(GYM_LOCATION_ID);
+    store.openBarcodeFullScreen(GYM_LOCATION_ID);
     await store.removeBarcode(GYM_LOCATION_ID);
-    expect(store.getSnapshot()).toMatchObject({ barcodes: [], barcodeOpen: null });
+    // The popup stays, ready for a new picture; the full-screen view has nothing left to show.
+    expect(store.getSnapshot()).toMatchObject({
+      barcodes: [],
+      barcodeSheet: GYM_LOCATION_ID,
+      barcodeFullScreen: null,
+    });
     await expect(store.saveBarcode('gone', PICKED)).rejects.toThrow(
       'That place is no longer saved.',
     );

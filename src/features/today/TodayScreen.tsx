@@ -180,7 +180,7 @@ export function TodayScreen() {
           if (session.status === 'preview') store.startWorkout();
           window.location.hash = routeHref('workout');
         }}
-        onShowBarcode={hasBarcode ? () => store.openBarcode() : undefined}
+        onShowBarcode={hasBarcode ? () => store.openBarcodeSheet() : undefined}
       />
 
       {coach ? (

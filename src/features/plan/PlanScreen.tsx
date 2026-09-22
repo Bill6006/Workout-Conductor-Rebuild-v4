@@ -17,7 +17,6 @@ import { useToast } from '../../components/Toast/useToast';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import { HOME_LOCATION_ID, type LocationProfile } from '../../core/validation/location';
 import type { Weekday } from '../../core/validation/profile';
-import { PlaceBarcodeSheet } from '../barcode/PlaceBarcodeSheet';
 import { updateProfile } from '../profile/draft';
 import { LOCATION_KIND_OPTIONS, WEEKDAY_OPTIONS, labelFor } from '../profile/labels';
 import { useProfileEditor } from '../profile/useProfileEditor';
@@ -36,7 +35,6 @@ export function PlanScreen() {
   const editor = useProfileEditor();
   const [sheet, setSheet] = useState<SheetState>({ open: false });
   const [sheetKey, setSheetKey] = useState(0);
-  const [barcodePlace, setBarcodePlace] = useState<LocationProfile | null>(null);
 
   function openSheet(location: LocationProfile | null) {
     setSheetKey((key) => key + 1);
@@ -359,7 +357,7 @@ export function PlanScreen() {
                     <button
                       type="button"
                       className={styles.smallButton}
-                      onClick={() => setBarcodePlace(location)}
+                      onClick={() => store.openBarcodeSheet(location.id)}
                     >
                       Barcode
                     </button>
@@ -396,10 +394,6 @@ export function PlanScreen() {
             toast.show('Place removed', 'info');
           }}
         />
-      ) : null}
-
-      {barcodePlace ? (
-        <PlaceBarcodeSheet location={barcodePlace} onClose={() => setBarcodePlace(null)} />
       ) : null}
     </>
   );

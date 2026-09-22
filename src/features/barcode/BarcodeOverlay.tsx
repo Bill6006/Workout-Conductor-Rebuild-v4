@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import type { PlaceBarcode } from '../../core/validation/placeBarcode';
 import { BarcodeGraphicSvg } from './BarcodeGraphic';
 import { encodeBarcode, type BarcodeGraphic } from './encode';
+import { useBackCloses } from './useBackCloses';
 import styles from './Barcode.module.css';
 
 /**
- * A place's barcode, full screen on white for the scanner at the desk. It keeps
- * the screen awake while it is up (a browser cannot raise the brightness, so a
- * plain white page and full contrast do that job), and one tap on the X closes it.
+ * A place's barcode, full screen on white for the scanner at the desk, opened
+ * from its popup. It keeps the screen awake while it is up (a browser cannot
+ * raise the brightness, so a plain white page and full contrast do that job),
+ * and one tap on the X goes back to the popup.
  */
 export function BarcodeOverlay() {
   const store = useAppStore();
-  const open = useAppSelector((state) => state.barcodeOpen);
+  const open = useAppSelector((state) => state.barcodeFullScreen);
   const barcodes = useAppSelector((state) => state.barcodes);
   const locations = useAppSelector((state) => state.locations);
   const barcode = open ? barcodes.find((item) => item.locationId === open) : undefined;
@@ -24,7 +26,7 @@ export function BarcodeOverlay() {
       key={barcode.updatedAt}
       barcode={barcode}
       place={place}
-      onClose={() => store.closeBarcode()}
+      onClose={() => store.closeBarcodeFullScreen()}
     />
   );
 }
@@ -61,61 +63,6 @@ function useWakeLock(): void {
 /** How long the drawing is waited on before the picture shows instead. */
 const DRAWING_WAIT_MS = 1500;
 
-const BACK_MARKER = 'barcodeOverlay';
-
-function isMarked(): boolean {
-  const state: unknown = window.history.state;
-  return (
-    typeof state === 'object' &&
-    state !== null &&
-    (state as Record<string, unknown>)[BACK_MARKER] === true
-  );
-}
-
-/**
- * Android's Back closes the barcode rather than moving the screen underneath it:
- * the view adds one history entry, and Back takes it. The X and Escape spend
- * that entry too, so a later Back is not wasted on it. Returns the close action.
- */
-function useBackCloses(onClose: () => void): () => void {
-  const onCloseRef = useRef(onClose);
-  const closing = useRef(false);
-  const fallback = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    // Only one entry, even when the view mounts twice (a replaced barcode, or StrictMode).
-    if (!isMarked()) {
-      const current: unknown = window.history.state;
-      const base = typeof current === 'object' && current !== null ? current : {};
-      window.history.pushState({ ...base, [BACK_MARKER]: true }, '');
-    }
-    const onPop = () => {
-      if (!isMarked()) onCloseRef.current();
-    };
-    window.addEventListener('popstate', onPop);
-    return () => {
-      window.removeEventListener('popstate', onPop);
-      window.clearTimeout(fallback.current);
-    };
-  }, []);
-
-  return useCallback(() => {
-    // A second tap while Back is on its way must not go back a second screen.
-    if (closing.current) return;
-    closing.current = true;
-    if (!isMarked()) {
-      onCloseRef.current();
-      return;
-    }
-    window.history.back();
-    // Should the Back never arrive, it closes anyway.
-    fallback.current = window.setTimeout(() => onCloseRef.current(), 400);
-  }, []);
-}
-
 function BarcodeView({
   barcode,
   place,
@@ -130,7 +77,7 @@ function BarcodeView({
   // Without a read code the picture is all there is; with one, the drawing comes first.
   const [showPicture, setShowPicture] = useState(!code);
   useWakeLock();
-  const close = useBackCloses(onClose);
+  const close = useBackCloses('barcodeOverlay', onClose);
 
   useEffect(() => {
     if (!code) return undefined;

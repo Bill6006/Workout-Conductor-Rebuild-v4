@@ -6,12 +6,14 @@ import { useToast } from '../../components/Toast/useToast';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import type { LocationProfile } from '../../core/validation/location';
 import { barcodeFromFile } from './barcodeFile';
+import { useBackCloses } from './useBackCloses';
 import styles from './Barcode.module.css';
 import formStyles from '../../components/Form/Form.module.css';
 
 /**
- * A place's membership barcode on a sheet of its own, apart from the place's
- * equipment. It saves the moment a picture is picked, and it stays on this phone.
+ * A place's membership barcode on a popup of its own, apart from the place's
+ * equipment: opened from Plan to add it, and from Today or at Start to show it,
+ * with the barcode itself a tap from full screen. A picked picture saves at once.
  */
 export function PlaceBarcodeSheet({
   location,
@@ -29,6 +31,7 @@ export function PlaceBarcodeSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const close = useBackCloses('barcodeSheet', onClose);
 
   async function pick(file: File | undefined) {
     if (!file) return;
@@ -64,26 +67,24 @@ export function PlaceBarcodeSheet({
     <Sheet
       open
       title={`${location.name} barcode`}
-      onClose={onClose}
+      onClose={close}
       footer={
-        <Button variant="primary" onClick={onClose}>
+        <Button variant="primary" onClick={close}>
           Done
         </Button>
       }
     >
       <div className={styles.section}>
-        <p className={styles.note}>
-          {barcode
-            ? 'Stays on this phone.'
-            : "A screenshot from your gym's app works best. It stays on this phone."}
-        </p>
+        {barcode ? null : (
+          <p className={styles.note}>A screenshot from your gym’s app works best.</p>
+        )}
         {barcode ? (
           <div className={styles.section} data-testid="barcode-section">
             {/* The picture is the preview: a tap shows it full screen, as the desk sees it. */}
             <button
               type="button"
               className={styles.thumbButton}
-              onClick={() => store.openBarcode(location.id)}
+              onClick={() => store.openBarcodeFullScreen(location.id)}
               aria-label="Show it full screen"
               data-testid="barcode-thumb"
             >
@@ -94,9 +95,7 @@ export function PlaceBarcodeSheet({
               />
             </button>
             <p className={styles.note} data-testid="barcode-read">
-              {barcode.code
-                ? 'Code read: it shows redrawn, sharp and full width.'
-                : 'Shows as the picture you added.'}
+              {barcode.code ? 'Code read. Tap it for full screen.' : 'Tap it for full screen.'}
             </p>
             <Toggle
               label="Show when I start a workout here"

@@ -50,7 +50,11 @@ describe('cloud copy in the store', () => {
     const handle = storeWith(cloud);
     await onboard(handle.store);
     const state = handle.store.getSnapshot();
-    expect(state.cloud).toMatchObject({ url: DEFAULT_CLOUD_URL, configured: false, syncing: false });
+    expect(state.cloud).toMatchObject({
+      url: DEFAULT_CLOUD_URL,
+      configured: false,
+      syncing: false,
+    });
     expect(state.cloud.deviceId).toBeTruthy();
     expect(state.cloud.pending).toBeGreaterThan(0);
     expect(await handle.store.syncNow()).toBeNull();

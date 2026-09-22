@@ -25,7 +25,7 @@ async function openWithCode() {
       <BarcodeOverlay />
     </Providers>,
   );
-  act(() => handle.store.openBarcode());
+  act(() => handle.store.openBarcodeFullScreen(GYM_LOCATION_ID));
 }
 
 describe('the barcode when the drawing is slow or fails', () => {
