@@ -3,7 +3,8 @@
 Everything the app knows lives in the browser on the phone: IndexedDB `workout-conductor-v4`
 (profile, places, workouts, notes and cues, custom exercises, your demonstrations, saved
 workouts, meta, automatic backups, and, for the optional cloud copy, an outbox and the pasted token)
-and three small localStorage keys (settings, an unfinished onboarding draft, the current session).
+and three small localStorage keys (settings, an unfinished onboarding draft, the current session),
+plus, only if a stored workout ever could not be read back, the copies kept for recovery.
 Nothing is uploaded anywhere unless the owner pastes a database token into Settings > Cloud copy,
 and then only to the owner's own database at the URL shown there (`docs/cloud-copy.md`). No user
 data is ever committed to this repository.

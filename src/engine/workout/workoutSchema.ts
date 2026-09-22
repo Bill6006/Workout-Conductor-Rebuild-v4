@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRAINING_ROLES } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
-import type { GeneratedWorkout } from './types';
+import { PROGRESSION_MODES, type GeneratedWorkout } from './types';
 
 /**
  * Zod schemas for the generated workout, used only where a workout crosses a
@@ -32,9 +32,11 @@ export const WorkoutEntrySchema = z.looseObject({
   pinned: z.boolean(),
   slot: z.number().int().min(0).optional(),
   replacedFrom: z.string().optional(),
+  // Why a target is what it is: advisory. A note this copy of the app cannot read (one written
+  // by a newer copy, say) is dropped rather than costing the whole workout.
   progression: z
     .looseObject({
-      mode: z.enum(['start', 'double', 'weight', 'reps', 'sets', 'maintain', 'deload', 'regress']),
+      mode: z.enum(PROGRESSION_MODES),
       evidence: z.array(z.string()),
       sessions: z.number().int().min(0),
       viaFamily: z.boolean(),
@@ -42,7 +44,8 @@ export const WorkoutEntrySchema = z.looseObject({
       setsAdvice: z.union([z.literal(0), z.literal(1)]),
       capped: z.looseObject({ at: z.number() }).optional(),
     })
-    .optional(),
+    .optional()
+    .catch(undefined),
   manual: z
     .looseObject({
       weight: z.boolean().optional(),

@@ -107,7 +107,11 @@ Custom exercises (`CustomExerciseSchema`) are presented to the engines through
 Every change after generation goes through the Recalibration Engine (see
 [recalibration-engine.md](recalibration-engine.md)): the store builds a typed request, the pure
 engine returns a new valid workout with a change summary or a failure that keeps the previous one,
-and the session (workout, constraints, logged work, log) persists in localStorage.
+and the session (workout, constraints, logged work, log) persists in localStorage. It is
+validated only when read back at startup, against the same lists the engines write from
+(`PROGRESSION_MODES`, for example); a stored workout that still cannot be read and may hold work
+is moved aside to `wc.v1.sessionRecovery` before a fresh session is written, and the app says so
+(Maintenance 17).
 
 `generateWorkout` (see [workout-engine.md](workout-engine.md)) is pure and deterministic:
 profile, place, history, date, and length choice in; an explained `GeneratedWorkout` out. Today

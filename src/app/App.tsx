@@ -6,6 +6,7 @@ import { useWorkoutAlerts } from '../core/alerts/useWorkoutAlerts';
 import { useAppState } from '../core/state/useAppStore';
 import { type RouteId } from './navigation';
 import { UpdatePrompt } from './pwa/UpdatePrompt';
+import { SessionRecoveryNotice } from './SessionRecoveryNotice';
 import { ActiveScreen } from './routes';
 import { useHashRoute } from './useHashRoute';
 import { useSetupLink } from './useSetupLink';
@@ -45,6 +46,7 @@ export function App() {
           <p style={{ color: 'var(--color-text-muted)' }}>{state.error}</p>
         </Card>
       ) : null}
+      {showNav ? <SessionRecoveryNotice /> : null}
       <ActiveScreen routeId={effectiveRoute} />
       <CalibrationOverlay />
       <UpdatePrompt />

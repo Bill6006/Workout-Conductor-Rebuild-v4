@@ -361,6 +361,96 @@ export function readSession(storage: KeyValueStorage): WorkoutSession | null {
   return session;
 }
 
+/** Where a stored workout that could not be read back is kept, newest first, so nothing writes over it. */
+export const SESSION_RECOVERY_KEY = 'wc.v1.sessionRecovery';
+/** Kept copies beyond this many are dropped, oldest first. */
+export const SESSION_RECOVERY_KEPT = 3;
+
+export interface SessionRecovery {
+  keptAt: string;
+  /** The stored status, when the copy says: active, paused, or completed. */
+  status: string | null;
+  /** How many sets the copy had logged, when it says. */
+  setsLogged: number | null;
+  /** False when even the kept copy could not be written; the notice then says so. */
+  saved: boolean;
+}
+
+export interface KeptSession {
+  keptAt: string;
+  status: string | null;
+  setsLogged: number | null;
+  /** The stored session as it was: parsed JSON when it parses, the raw text when it does not. */
+  session: unknown;
+}
+
+function describeUnreadable(raw: string): {
+  value: unknown;
+  status: string | null;
+  setsLogged: number | null;
+} {
+  try {
+    const value: unknown = JSON.parse(raw);
+    const record =
+      value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+    const status = typeof record.status === 'string' ? record.status : null;
+    const completed = record.completed as { sets?: unknown } | undefined;
+    const setsLogged = Array.isArray(completed?.sets) ? completed.sets.length : null;
+    return { value, status, setsLogged };
+  } catch {
+    return { value: raw, status: null, setsLogged: null };
+  }
+}
+
+/** The kept copies, newest first; anything unreadable there reads as none. */
+export function readKeptSessions(storage: KeyValueStorage): KeptSession[] {
+  try {
+    const raw = storage.getItem(SESSION_RECOVERY_KEY);
+    if (raw === null) return [];
+    const list: unknown = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    return list.filter(
+      (item): item is KeptSession =>
+        item !== null && typeof item === 'object' && typeof item.keptAt === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The stored session, or null when there is none to use. When something is
+ * stored but cannot be read back and it may hold work (a workout started or
+ * finished, sets logged, or a copy too damaged to tell), it is moved aside to
+ * the recovery key before anything else happens, so the fresh session that
+ * takes its place can never write over the only copy of that work. A preview
+ * with nothing logged holds nothing of the lifter's and is simply replaced.
+ */
+export function readSessionOrKeep(
+  storage: KeyValueStorage,
+  now: string,
+): { session: WorkoutSession | null; kept: SessionRecovery | null } {
+  const session = readSession(storage);
+  if (session) return { session, kept: null };
+  let raw: string | null;
+  try {
+    raw = storage.getItem(SESSION_KEY);
+  } catch {
+    raw = null;
+  }
+  if (raw === null) return { session: null, kept: null };
+  const { value, status, setsLogged } = describeUnreadable(raw);
+  const plainPreview = status === 'preview' && (setsLogged ?? 0) === 0;
+  if (plainPreview) return { session: null, kept: null };
+  const kept: KeptSession = { keptAt: now, status, setsLogged, session: value };
+  const saved = writeJson(
+    SESSION_RECOVERY_KEY,
+    [kept, ...readKeptSessions(storage)].slice(0, SESSION_RECOVERY_KEPT),
+    storage,
+  );
+  return { session: null, kept: { keptAt: now, status, setsLogged, saved } };
+}
+
 export function writeSession(session: WorkoutSession, storage: KeyValueStorage): void {
   writeJson(SESSION_KEY, session, storage);
 }

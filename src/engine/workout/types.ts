@@ -12,19 +12,29 @@ export type DurationChoice = 15 | 30 | 45 | 'default';
 
 export type SetKind = 'warmup' | 'working' | 'drop';
 
-export type ProgressionMode =
-  | 'start'
-  | 'double'
-  | 'weight'
-  | 'reps'
-  | 'sets'
-  | 'maintain'
-  | 'deload'
-  | 'regress'
-  /** Back after three weeks or more: a percentage of the estimated max. */
-  | 'return'
-  /** A new variation: a discounted percentage of the family's estimated max. */
-  | 'estimate';
+/**
+ * Every way the progression engine arrives at a target, as one list. The
+ * stored-session reader validates against this same list, so the two can never
+ * drift apart again: when they did, a workout in progress whose targets came
+ * from 'return' or 'estimate' could not be read back after the app reopened,
+ * and was replaced by a fresh one (Maintenance 17).
+ */
+export const PROGRESSION_MODES = [
+  'start',
+  'double',
+  'weight',
+  'reps',
+  'sets',
+  'maintain',
+  'deload',
+  'regress',
+  // Back after three weeks or more: a percentage of the estimated max.
+  'return',
+  // A new variation, or a rep range the lift has not been run at lately: a share of an estimated max.
+  'estimate',
+] as const;
+
+export type ProgressionMode = (typeof PROGRESSION_MODES)[number];
 
 /** Why an entry's loads and reps are what they are, from the progression engine. */
 export interface EntryProgression {

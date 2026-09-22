@@ -141,7 +141,7 @@ import {
   type HistoryExport,
   type SettingsExport,
 } from '../validation/backup';
-import { SESSION_KEY } from './session';
+import { SESSION_KEY, SESSION_RECOVERY_KEY } from './session';
 import {
   CUSTOM_ID_PREFIX,
   CustomExerciseSchema,
@@ -181,11 +181,13 @@ import {
   createSession,
   doneKeys,
   elapsedSeconds,
-  readSession,
+  readKeptSessions,
+  readSessionOrKeep,
   writeSession,
   type CalibrationState,
   type CompletionSummary,
   type RestState,
+  type SessionRecovery,
   type SetDraft,
   type WorkoutSession,
 } from './session';
@@ -219,6 +221,8 @@ export interface AppState {
   session: WorkoutSession | null;
   /** Today asked for the end-of-workout sheet; the workout screen opens it and clears this. */
   finishRequested: boolean;
+  /** A stored workout could not be read back when the app opened and was kept aside; the notice says so. */
+  sessionRecovery: SessionRecovery | null;
   calibration: CalibrationState;
   customExercises: CustomExercise[];
   /** Per-exercise notes and cue memory. */
@@ -538,6 +542,7 @@ export class AppStore {
       savedWorkouts: [],
       session: null,
       finishRequested: false,
+      sessionRecovery: null,
       calibration: IDLE_CALIBRATION,
       customExercises: [],
       customInstructions: [],
@@ -719,7 +724,14 @@ export class AppStore {
       this.setState({ session: null });
       return;
     }
-    const current = this.state.session ?? readSession(this.storage);
+    let current = this.state.session;
+    if (!current) {
+      // A stored workout that cannot be read back is kept aside first, so the fresh session
+      // generated below can never write over the only copy of logged work.
+      const read = readSessionOrKeep(this.storage, this.now());
+      current = read.session;
+      if (read.kept) this.setState({ sessionRecovery: read.kept });
+    }
     if (current && current.status !== 'preview') {
       if (this.state.session !== current) this.setState({ session: current });
       return;
@@ -745,6 +757,11 @@ export class AppStore {
     });
     const session = createSession(key, workout, now);
     this.setSession({ ...session, constraints: { ...session.constraints, deload, focus } });
+  }
+
+  /** Puts the kept-workout notice away; the kept copy itself stays on the device. */
+  dismissSessionRecovery(): void {
+    if (this.state.sessionRecovery) this.setState({ sessionRecovery: null });
   }
 
   /** Re-checks the session against today's inputs; a new day starts a fresh session. */
@@ -2440,6 +2457,7 @@ export class AppStore {
       LOCAL_SETTINGS_KEY,
       ONBOARDING_DRAFT_KEY,
       SESSION_KEY,
+      SESSION_RECOVERY_KEY,
       TOKEN_MIRROR_KEY,
       TOKEN_MARK_KEY,
       TOKEN_LOG_KEY,
@@ -2522,6 +2540,9 @@ export class AppStore {
       `Saved workouts (${await db.count('savedWorkouts')})`,
       `Automatic backups (${Math.min(snapshots.length, SNAPSHOTS_KEPT)})`,
       ...(this.storage.getItem(SESSION_KEY) !== null ? ['Active or previewed session'] : []),
+      ...(readKeptSessions(this.storage).length > 0
+        ? [`Workouts kept for recovery (${readKeptSessions(this.storage).length})`]
+        : []),
     ];
     return { removed, kept };
   }
