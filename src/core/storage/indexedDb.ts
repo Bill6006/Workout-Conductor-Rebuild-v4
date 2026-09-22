@@ -16,7 +16,7 @@
  * per origin, so the name carries the app generation to stay clear of earlier apps.
  */
 export const DB_NAME = 'workout-conductor-v4';
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 /**
  * Every write is flushed to disk before it counts. The browser's default lets a
@@ -40,6 +40,8 @@ export const STORE_NAMES = [
   'outbox',
   /** The cloud token and sync state. This device only; never in a backup. */
   'cloud',
+  /** Personal things that stay on this phone: a place's membership barcode. Never synced, never in a backup. */
+  'device',
 ] as const;
 export type StoreName = (typeof STORE_NAMES)[number];
 

@@ -57,6 +57,9 @@ src/
     today/                      Today dashboard; useTodayWorkout runs the generator; WorkoutPreviewCard
     library/                    exercise library: search, muscle-group filter, detail sheet, preferences
     plan/                       training days, location list, LocationEditorSheet
+    barcode/                    a place's membership barcode: add from a picture, read it where the
+                                phone can, redraw it (JsBarcode, qrcode-generator, loaded on demand),
+                                full-screen overlay; device-only store, never synced or backed up
     settings/                   editor sections, BackupCard, DiagnosticsCard
     workout/                    Active Workout List preview (one row per block); logging in Phase 5
     progress/                   placeholder until Phase 7

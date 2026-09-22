@@ -143,6 +143,13 @@ import {
 } from '../validation/backup';
 import { SESSION_KEY, SESSION_RECOVERY_KEY } from './session';
 import {
+  barcodeIdFor,
+  parsePlaceBarcodes,
+  PlaceBarcodeSchema,
+  type PickedBarcode,
+  type PlaceBarcode,
+} from '../validation/placeBarcode';
+import {
   CUSTOM_ID_PREFIX,
   CustomExerciseSchema,
   CustomInstructionSchema,
@@ -223,6 +230,10 @@ export interface AppState {
   finishRequested: boolean;
   /** A stored workout could not be read back when the app opened and was kept aside; the notice says so. */
   sessionRecovery: SessionRecovery | null;
+  /** Membership barcodes, one per place at most; device only, never synced or backed up. */
+  barcodes: PlaceBarcode[];
+  /** The place whose barcode is on screen, or null. */
+  barcodeOpen: string | null;
   calibration: CalibrationState;
   customExercises: CustomExercise[];
   /** Per-exercise notes and cue memory. */
@@ -543,6 +554,8 @@ export class AppStore {
       session: null,
       finishRequested: false,
       sessionRecovery: null,
+      barcodes: [],
+      barcodeOpen: null,
       calibration: IDLE_CALIBRATION,
       customExercises: [],
       customInstructions: [],
@@ -597,6 +610,7 @@ export class AppStore {
         deloadRaw,
         maxesRaw,
         focusRaw,
+        deviceRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -610,6 +624,7 @@ export class AppStore {
         db.get<Identified>('meta', DELOAD_WEEK_ID),
         db.get<Identified>('meta', STRENGTH_MAXES_ID),
         db.get<Identified>('meta', COACH_FOCUS_ID),
+        db.getAll<Identified>('device'),
       ]);
       const deviceId = ensureDeviceId(this.storage);
       // Finds the token in either of its copies and heals the other. A copy that
@@ -662,6 +677,7 @@ export class AppStore {
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
         strengthMaxes: parseStrengthMaxes(maxesRaw),
         coachFocus: parseCoachFocus(focusRaw, this.now()),
+        barcodes: parsePlaceBarcodes(deviceRaw),
         cloud: {
           ...this.state.cloud,
           url: cloudUrl,
@@ -1018,6 +1034,9 @@ export class AppStore {
         currentEntryId: position?.entryId ?? null,
       },
     });
+    // At a place with a barcode set to show, it comes up for the desk as the workout starts.
+    const barcode = this.barcodeFor(this.state.profile?.currentLocationId);
+    if (barcode?.autoShow) this.setState({ barcodeOpen: barcode.locationId });
   }
 
   pauseWorkout(): void {
@@ -1709,9 +1728,70 @@ export class AppStore {
     await deleteVerified(db, 'locations', id);
     const locations = this.state.locations.filter((location) => location.id !== id);
     this.setState({ locations });
+    if (this.barcodeFor(id)) await this.removeBarcode(id);
     if (this.state.profile?.currentLocationId === id) {
       await this.saveProfile({ ...this.state.profile, currentLocationId: HOME_LOCATION_ID });
     }
+  }
+
+  private barcodeFor(locationId: string | undefined): PlaceBarcode | undefined {
+    if (!locationId) return undefined;
+    return this.state.barcodes.find((barcode) => barcode.locationId === locationId);
+  }
+
+  /** Saves a place's barcode on this device only; a new one shows at Start unless switched off. */
+  async saveBarcode(locationId: string, picked: PickedBarcode): Promise<SaveReceipt> {
+    if (!this.state.locations.some((location) => location.id === locationId)) {
+      throw new Error('That place is no longer saved.');
+    }
+    const now = this.now();
+    const previous = this.barcodeFor(locationId);
+    const record = PlaceBarcodeSchema.parse({
+      id: barcodeIdFor(locationId),
+      locationId,
+      image: picked.image,
+      ...(picked.code ? { code: picked.code } : {}),
+      autoShow: previous?.autoShow ?? true,
+      addedAt: previous?.addedAt ?? now,
+      updatedAt: now,
+    });
+    const db = await this.getDatabase();
+    const receipt = await putVerified(db, 'device', record, { now: this.now });
+    this.setState({
+      barcodes: [...this.state.barcodes.filter((item) => item.locationId !== locationId), record],
+      lastReceipt: receipt,
+    });
+    return receipt;
+  }
+
+  async setBarcodeAutoShow(locationId: string, autoShow: boolean): Promise<void> {
+    const barcode = this.barcodeFor(locationId);
+    if (!barcode || barcode.autoShow === autoShow) return;
+    const record = { ...barcode, autoShow, updatedAt: this.now() };
+    const db = await this.getDatabase();
+    await putVerified(db, 'device', record, { now: this.now });
+    this.setState({
+      barcodes: this.state.barcodes.map((item) => (item.locationId === locationId ? record : item)),
+    });
+  }
+
+  async removeBarcode(locationId: string): Promise<void> {
+    const db = await this.getDatabase();
+    await deleteVerified(db, 'device', barcodeIdFor(locationId));
+    this.setState({
+      barcodes: this.state.barcodes.filter((item) => item.locationId !== locationId),
+      barcodeOpen: this.state.barcodeOpen === locationId ? null : this.state.barcodeOpen,
+    });
+  }
+
+  /** Puts a place's barcode on screen; the current place when none is named. */
+  openBarcode(locationId?: string): void {
+    const barcode = this.barcodeFor(locationId ?? this.state.profile?.currentLocationId);
+    if (barcode) this.setState({ barcodeOpen: barcode.locationId });
+  }
+
+  closeBarcode(): void {
+    if (this.state.barcodeOpen !== null) this.setState({ barcodeOpen: null });
   }
 
   async setCurrentLocation(id: string): Promise<SaveReceipt> {

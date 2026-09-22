@@ -37,6 +37,8 @@ interface WorkoutPreviewCardProps {
   /** 'preview' offers Start; an active or completed session offers to continue. */
   sessionStatus?: 'preview' | 'active' | 'paused' | 'completed';
   onStart?: () => void;
+  /** Puts this place's barcode on screen; only passed when the place has one. */
+  onShowBarcode?: () => void;
 }
 
 const CHANGE_TAGS: Record<EntryChange['kind'], string> = {
@@ -131,6 +133,7 @@ export function WorkoutPreviewCard({
   onEndByChange,
   sessionStatus = 'preview',
   onStart,
+  onShowBarcode,
 }: WorkoutPreviewCardProps) {
   const { duration } = workout;
   const fitted = duration.choice !== 'default' || (endBy?.on ?? false);
@@ -170,6 +173,17 @@ export function WorkoutPreviewCard({
           </a>
         )}
       </div>
+
+      {onShowBarcode ? (
+        <button
+          type="button"
+          className={styles.link}
+          onClick={onShowBarcode}
+          data-testid="barcode-open"
+        >
+          Show barcode
+        </button>
+      ) : null}
 
       <p className={styles.estimate} data-testid="workout-estimate">
         {fitted ? `Fitted to ${duration.targetMinutes} min: ` : 'Default time: '}

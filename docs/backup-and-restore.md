@@ -2,7 +2,8 @@
 
 Everything the app knows lives in the browser on the phone: IndexedDB `workout-conductor-v4`
 (profile, places, workouts, notes and cues, custom exercises, your demonstrations, saved
-workouts, meta, automatic backups, and, for the optional cloud copy, an outbox and the pasted token)
+workouts, meta, automatic backups, a place's membership barcode, and, for the optional cloud copy,
+an outbox and the pasted token)
 and three small localStorage keys (settings, an unfinished onboarding draft, the current session),
 plus, only if a stored workout ever could not be read back, the copies kept for recovery.
 Nothing is uploaded anywhere unless the owner pastes a database token into Settings > Cloud copy,
@@ -18,7 +19,9 @@ data is ever committed to this repository.
 | Settings JSON    | `workout-conductor-settings` | profile, places, local settings                                                                                        |
 
 Only a Full Backup JSON can be imported. History and settings files are for other tools. No
-export carries the cloud copy's token, its sync state, the outbox, or the device id.
+export carries the cloud copy's token, its sync state, the outbox, or the device id. No export or
+automatic backup carries a place's membership barcode either, and a restore leaves the barcode on
+the phone as it is (Maintenance 18).
 
 A restore writes through the same durable-data owner as everything else, so with a token on the
 device the restored records are queued for the cloud copy and records the restore removed are
@@ -36,7 +39,7 @@ are migrated forward before validation:
 
 A backup from a newer app version is imported as it is and flagged in the preview.
 
-The database is at version 4. Upgrades only ever add stores; a deployment never wipes data. If
+The database is at version 6. Upgrades only ever add stores; a deployment never wipes data. If
 another app on the same origin already opened the database at a higher version, the app opens
 it as it is and adds only the stores it is missing.
 

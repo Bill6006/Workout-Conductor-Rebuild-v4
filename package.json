@@ -34,6 +34,8 @@
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
+    "jsbarcode": "3.12.3",
+    "qrcode-generator": "2.0.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "workbox-window": "^7.4.1",

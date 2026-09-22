@@ -45,6 +45,9 @@ export function TodayScreen() {
   const coach = useCoach();
   const history = useAppSelector((state) => state.history);
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
+  const hasBarcode = useAppSelector((state) =>
+    state.barcodes.some((item) => item.locationId === state.profile?.currentLocationId),
+  );
 
   if (!today) {
     return (
@@ -177,6 +180,7 @@ export function TodayScreen() {
           if (session.status === 'preview') store.startWorkout();
           window.location.hash = routeHref('workout');
         }}
+        onShowBarcode={hasBarcode ? () => store.openBarcode() : undefined}
       />
 
       {coach ? (

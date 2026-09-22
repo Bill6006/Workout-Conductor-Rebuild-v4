@@ -4,6 +4,7 @@ import { CalibrationOverlay } from '../components/CalibrationOverlay/Calibration
 import { Card } from '../components/Card/Card';
 import { useWorkoutAlerts } from '../core/alerts/useWorkoutAlerts';
 import { useAppState } from '../core/state/useAppStore';
+import { BarcodeOverlay } from '../features/barcode/BarcodeOverlay';
 import { type RouteId } from './navigation';
 import { UpdatePrompt } from './pwa/UpdatePrompt';
 import { SessionRecoveryNotice } from './SessionRecoveryNotice';
@@ -50,6 +51,7 @@ export function App() {
       <ActiveScreen routeId={effectiveRoute} />
       <CalibrationOverlay />
       <UpdatePrompt />
+      <BarcodeOverlay />
     </AppShell>
   );
 }

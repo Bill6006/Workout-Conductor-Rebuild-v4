@@ -15,8 +15,9 @@ import { muscleCoverage } from '../../engine/scoring/analytics';
 import { allEntries } from '../../engine/workout/types';
 import { useToast } from '../../components/Toast/useToast';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
-import type { LocationProfile } from '../../core/validation/location';
+import { HOME_LOCATION_ID, type LocationProfile } from '../../core/validation/location';
 import type { Weekday } from '../../core/validation/profile';
+import { PlaceBarcodeSheet } from '../barcode/PlaceBarcodeSheet';
 import { updateProfile } from '../profile/draft';
 import { LOCATION_KIND_OPTIONS, WEEKDAY_OPTIONS, labelFor } from '../profile/labels';
 import { useProfileEditor } from '../profile/useProfileEditor';
@@ -35,6 +36,7 @@ export function PlanScreen() {
   const editor = useProfileEditor();
   const [sheet, setSheet] = useState<SheetState>({ open: false });
   const [sheetKey, setSheetKey] = useState(0);
+  const [barcodePlace, setBarcodePlace] = useState<LocationProfile | null>(null);
 
   function openSheet(location: LocationProfile | null) {
     setSheetKey((key) => key + 1);
@@ -353,6 +355,15 @@ export function PlanScreen() {
                       Use
                     </button>
                   ) : null}
+                  {location.id !== HOME_LOCATION_ID ? (
+                    <button
+                      type="button"
+                      className={styles.smallButton}
+                      onClick={() => setBarcodePlace(location)}
+                    >
+                      Barcode
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className={styles.smallButton}
@@ -385,6 +396,10 @@ export function PlanScreen() {
             toast.show('Place removed', 'info');
           }}
         />
+      ) : null}
+
+      {barcodePlace ? (
+        <PlaceBarcodeSheet location={barcodePlace} onClose={() => setBarcodePlace(null)} />
       ) : null}
     </>
   );
