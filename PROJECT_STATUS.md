@@ -1,23 +1,23 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-18_
+_Last updated: 2026-09-22_
 
-| Item                   | Value                                                                                                                                                                                                       |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                    |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                    |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                            |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                       |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                           |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, and 13 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, and 16 at their review gates. Maintenance 17, the lost-workout hotfix, at its review gate      |
-| Phase gate             | Maintenance 17 **YELLOW** - built, deployed, and verified against the live URL; awaiting the owner's Android review (issue #18). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, and 16 YELLOW (reviews still open) |
-| Current branch         | `main`                                                                                                                                                                                                      |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                |
-| Work in progress       | None. Maintenance 17 is at its review gate (`docs/reports/maintenance-17.md`). Agreed and not started: items 1 to 6 of the owner's list; Round A (6, 5, 4, and Proposed 13) is next on his go               |
-| Latest commit          | Status and live screenshots for build `1ccd356` (this commit); app build under review is `1ccd356`                                                                                                          |
-| Latest deployment      | `1ccd356` deployed by Deploy Pages run 35774248314 (success); browser suite against the live URL: 231 passed + 14 skipped by design, none failed                                                            |
-| Test totals            | Unit: 587 passed (122 files). Browser/mobile: 231 passed + 14 skipped by design locally and 231 passed + 14 skipped by design, none failed against the live URL                                             |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                |
+| Item                   | Value                                                                                                                                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                        |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                        |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                           |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                               |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, and 13 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 at their review gates. Maintenance 18, the gym barcode, at its review gate              |
+| Phase gate             | Maintenance 18 **YELLOW** - built, deployed, and verified against the live URL; awaiting the owner's Android review (issue #19). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open) |
+| Current branch         | `main`                                                                                                                                                                                                          |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                    |
+| Work in progress       | None. Maintenance 18 is at its review gate (`docs/reports/maintenance-18.md`). Agreed and not started: items 1, 3, 4, 5, and 6 of the owner's list; Round A (6, 5, 4, and Proposed 13) is next on his go        |
+| Latest commit          | Status and live screenshots for build `c5e1db4` (this commit); app build under review is `c5e1db4`                                                                                                              |
+| Latest deployment      | `c5e1db4` deployed by Deploy Pages run 35782236319 (success); browser suite against the live URL: 237 passed + 14 skipped by design, none failed                                                                |
+| Test totals            | Unit: 621 passed (128 files). Browser/mobile: 237 passed + 14 skipped by design locally and 237 passed + 14 skipped by design, none failed against the live URL                                                 |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                    |
 
 ## Phase checklist
 
@@ -137,6 +137,16 @@ _Last updated: 2026-09-18_
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 18: the gym barcode (YELLOW - awaiting review)
+
+- From the owner: when he starts a workout at his gym, his membership barcode pops up so it can be scanned, with an X in case it was already scanned, and a setting to stop it popping up.
+- Added once, on a sheet of its own: Plan, Where you train, Barcode on a place's row (every place but Home). A screenshot from the gym's app or a photo of the card; it saves on the pick. A first version sat at the bottom of Edit Gym under the equipment; on the owner's word mid-build it moved to its own sheet, and its Show button went (the picture itself opens it full screen).
+- Where the phone can read the code (Chrome on Android), the app keeps it and redraws it: black on white, full width, the number under it. Code 128, Code 39, Code 93, Codabar, ITF, EAN-13, EAN-8, UPC-A, UPC-E and QR; anything else shows as the picture.
+- Start Workout at that place brings it up full screen on white with a large X, the screen kept awake; the phone's Back closes it too. The switch "Show when I start a workout here" turns the pop-up off. Today's card has Show barcode before and during the workout.
+- Device only: the `device` store (database version 6) is never synced, never in a backup, a snapshot, or an export, and a restore leaves it alone. Reading gives up after six seconds and keeps the picture; the overlay falls back to the picture if the drawing is slow.
+- Cannot: pop up on arrival (no background location for a web app) or raise the brightness. The camera-to-drawn-code path ran with a stand-in reader here; it needs one try on the phone.
+- Report: `docs/reports/maintenance-18.md`.
 
 ## Maintenance 17: a workout in progress survives the app reopening, hotfix (YELLOW - awaiting review)
 
@@ -279,8 +289,11 @@ _Last updated: 2026-09-18_
 - Vibration on rest completion depends on the phone allowing it; there is never a sound.
 - Demonstrations are original placeholder diagrams (one animated loop per movement pattern); your own GIF, photo, or video replaces them per exercise.
 - Automatic backups include your demonstrations inline, so three of them cost about three times the size of your media.
+- The gym barcode comes up at Start Workout, not on arrival, and cannot raise the brightness; it is read and redrawn only where the browser can read barcodes (Chrome on Android), and shows as the picture elsewhere.
 
 ## Mobile screenshots
+
+Maintenance 18, captured by Playwright from the deployed build `c5e1db4` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-18](docs/screenshots/maintenance-18)): [Where you train: Barcode beside Use and Edit](docs/screenshots/maintenance-18/android-412-plan-places.png) · [The Gym's barcode sheet](docs/screenshots/maintenance-18/android-412-gym-barcode-sheet.png) · [Show barcode on Today's card](docs/screenshots/maintenance-18/android-412-today-show-barcode.png) · [Full screen on white as the workout starts](docs/screenshots/maintenance-18/android-412-barcode-at-start.png) · [A code read from the picture, redrawn full width](docs/screenshots/maintenance-18/android-412-barcode-redrawn.png).
 
 Maintenance 17, captured by Playwright from the deployed build `1ccd356` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-17](docs/screenshots/maintenance-17)): [A workout back after the app reopened, its logged set intact](docs/screenshots/maintenance-17/android-412-workout-after-reopening.png) · [The notice for a stored workout that could not be read back](docs/screenshots/maintenance-17/android-412-workout-kept-for-recovery.png).
 
