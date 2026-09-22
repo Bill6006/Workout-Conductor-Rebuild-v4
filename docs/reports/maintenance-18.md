@@ -1,7 +1,7 @@
 # Maintenance 18: the gym barcode
 
-Shipped on 2026-09-22 on the owner's go ("let's do the gym barcode part now"), from his
-earlier ask: when he starts a workout at his gym, his membership barcode pops up so it can be
+Shipped on 2026-09-22 on the owner's go ("let's do the gym barcode part now"), from the
+owner's earlier ask: starting a workout at the gym brings up the membership barcode so it can be
 scanned, with an X in case it was already scanned, and a setting to stop it popping up.
 
 ## Delivered

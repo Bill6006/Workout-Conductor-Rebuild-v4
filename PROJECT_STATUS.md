@@ -14,7 +14,7 @@ _Last updated: 2026-09-22_
 | Current branch         | `main`                                                                                                                                                                                                          |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                    |
 | Work in progress       | None. Maintenance 18 is at its review gate (`docs/reports/maintenance-18.md`). Agreed and not started: items 1, 3, 4, 5, and 6 of the owner's list; Round A (6, 5, 4, and Proposed 13) is next on his go        |
-| Latest commit          | Status and live screenshots for build `c5e1db4` (this commit); app build under review is `c5e1db4`                                                                                                              |
+| Latest commit          | Wording in the Maintenance 18 report and status (this commit), after the status and live screenshots for build `c5e1db4`; app build under review is `c5e1db4`                                                   |
 | Latest deployment      | `c5e1db4` deployed by Deploy Pages run 35782236319 (success); browser suite against the live URL: 237 passed + 14 skipped by design, none failed                                                                |
 | Test totals            | Unit: 621 passed (128 files). Browser/mobile: 237 passed + 14 skipped by design locally and 237 passed + 14 skipped by design, none failed against the live URL                                                 |
 | Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                    |
@@ -140,7 +140,7 @@ _Last updated: 2026-09-22_
 
 ## Maintenance 18: the gym barcode (YELLOW - awaiting review)
 
-- From the owner: when he starts a workout at his gym, his membership barcode pops up so it can be scanned, with an X in case it was already scanned, and a setting to stop it popping up.
+- From the owner: starting a workout at the gym brings up the membership barcode so it can be scanned, with an X in case it was already scanned, and a setting to stop it popping up.
 - Added once, on a sheet of its own: Plan, Where you train, Barcode on a place's row (every place but Home). A screenshot from the gym's app or a photo of the card; it saves on the pick. A first version sat at the bottom of Edit Gym under the equipment; on the owner's word mid-build it moved to its own sheet, and its Show button went (the picture itself opens it full screen).
 - Where the phone can read the code (Chrome on Android), the app keeps it and redraws it: black on white, full width, the number under it. Code 128, Code 39, Code 93, Codabar, ITF, EAN-13, EAN-8, UPC-A, UPC-E and QR; anything else shows as the picture.
 - Start Workout at that place brings it up full screen on white with a large X, the screen kept awake; the phone's Back closes it too. The switch "Show when I start a workout here" turns the pop-up off. Today's card has Show barcode before and during the workout.
