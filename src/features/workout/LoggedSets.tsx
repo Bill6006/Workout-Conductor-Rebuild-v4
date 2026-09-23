@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CompletedSet } from '../../engine/recalibration/types';
+import { holdById, targetText } from '../../engine/workout/setText';
 import type { SetPrescription, WorkoutEntry } from '../../engine/workout/types';
 import styles from './ActiveWorkout.module.css';
 import { describeSet, describeSetRange, formatLogged } from './setFormat';
@@ -24,14 +25,18 @@ function restLabel(seconds: number): string {
 }
 
 /** What the remaining sets have in common, for the collapsed row. */
-function describeUpcoming(sets: readonly SetPrescription[]): string {
+function describeUpcoming(sets: readonly SetPrescription[], hold: boolean): string {
   const working = sets.filter((set) => set.kind === 'working');
   const ramps = sets.filter((set) => set.kind === 'warmup').length;
   const drops = sets.filter((set) => set.kind === 'drop').length;
   const parts: string[] = [`${sets.length} more ${sets.length === 1 ? 'set' : 'sets'}`];
   const first = working[0];
   if (first) {
-    parts.push(`${first.targetReps[0]}-${first.targetReps[1]} reps @ RIR ${first.targetRir}`);
+    parts.push(
+      hold
+        ? targetText(first.targetReps, true)
+        : `${targetText(first.targetReps, false)} @ RIR ${first.targetRir}`,
+    );
   }
   if (ramps > 0) parts.push(`${ramps} warm-up`);
   if (drops > 0) parts.push('1 drop');
@@ -167,7 +172,7 @@ export function LoggedSets({
             aria-expanded={false}
             data-testid="sets-summary"
           >
-            ▸ {describeUpcoming(upcoming)}
+            ▸ {describeUpcoming(upcoming, holdById(entry.exerciseId))}
           </button>
           {nextTarget ? (
             <span className={styles.setAside} data-testid="set-aside">
@@ -187,12 +192,14 @@ export function LoggedSets({
             >
               <span className={styles.setName}>{describeSetRange(set, last, entry)}</span>
               <span className={styles.setTarget}>
-                {set.targetReps[0]}-{set.targetReps[1]} reps
-                {set.kind === 'working'
-                  ? ` @ RIR ${set.targetRir}`
-                  : set.kind === 'warmup'
-                    ? ` · easy, RIR ${set.targetRir}`
-                    : ' · last clean rep'}
+                {targetText(set.targetReps, holdById(entry.exerciseId))}
+                {holdById(entry.exerciseId)
+                  ? ''
+                  : set.kind === 'working'
+                    ? ` @ RIR ${set.targetRir}`
+                    : set.kind === 'warmup'
+                      ? ` · easy, RIR ${set.targetRir}`
+                      : ' · last clean rep'}
               </span>
               <span className={styles.setAside} data-testid="set-aside">
                 {set.targetWeight !== null

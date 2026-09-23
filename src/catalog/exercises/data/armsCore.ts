@@ -388,6 +388,9 @@ export const ARM_CORE_EXERCISES = [
     strength: 0,
     hypertrophy: 2,
     reps: { hypertrophy: [30, 60] },
+    measure: 'seconds',
+    // A drop set is reps to failure; a hold has neither.
+    dropSetSafe: false,
     substitutions: ['dead-bug', 'ab-wheel-rollout'],
     setup: [
       'Forearms on the floor under the shoulders, feet together.',

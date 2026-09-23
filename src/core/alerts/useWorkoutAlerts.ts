@@ -4,7 +4,7 @@ import type { WorkoutSession } from '../state/session';
 import { allEntries } from '../../engine/workout/types';
 import { SCHEDULE_AHEAD_SECONDS, UNFINISHED_NUDGE_MINUTES } from './cues';
 import { REST_TAG, UNFINISHED_TAG, closeAlerts, notifyPermission, showAlert } from './notify';
-import { restSounds } from './restSounds';
+import { holdSounds, restSounds } from './restSounds';
 
 /** The last moment anything was logged or started in the session. */
 export function lastActivityAt(session: WorkoutSession): string | null {
@@ -30,7 +30,7 @@ export function progressLine(session: WorkoutSession): string {
 
 /**
  * The workout's alerts, mounted once for the whole app so they work from any
- * tab: the rest timer's sounds, a notification when a rest ends while the app
+ * tab: the rest timer's and a hold's sounds, a notification when a rest ends while the app
  * is in the background, and a nudge when a workout has been left open.
  * Everything is a plain timer against absolute times, so a change to the rest
  * or a new logged set simply replaces it. Nothing here asks for permission.
@@ -59,6 +59,26 @@ export function useWorkoutAlerts(): void {
       restSounds.cancel();
     };
   }, [endsAt, sounds]);
+
+  // A hold counting down: the same ticks and end tone, on a player of its own.
+  const hold = session?.hold ?? null;
+  const holdEndsAt =
+    session?.status === 'active' && hold && hold.pausedRemaining === null && hold.held === null
+      ? hold.endsAt
+      : null;
+  useEffect(() => {
+    if (!holdEndsAt || !sounds) return undefined;
+    const lay = () => {
+      const remaining = (Date.parse(holdEndsAt) - Date.now()) / 1000;
+      if (remaining > 0) holdSounds.schedule(holdEndsAt, remaining);
+    };
+    const wait = Date.parse(holdEndsAt) - Date.now() - SCHEDULE_AHEAD_SECONDS * 1000;
+    const timer = window.setTimeout(lay, Math.max(0, wait));
+    return () => {
+      window.clearTimeout(timer);
+      holdSounds.cancel();
+    };
+  }, [holdEndsAt, sounds]);
 
   // The rest ended while the app was in the background: say so, once.
   useEffect(() => {

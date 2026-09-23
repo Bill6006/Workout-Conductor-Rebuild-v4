@@ -14,6 +14,7 @@ import {
   type WorkoutBlock,
   type WorkoutEntry,
 } from '../../engine/workout/types';
+import { holdById } from '../../engine/workout/setText';
 import styles from './TodayScreen.module.css';
 
 interface WorkoutPreviewCardProps {
@@ -56,8 +57,13 @@ function restLabel(seconds: number): string {
 function setsLabel(entry: WorkoutEntry): string {
   const working = workingSets(entry).filter((set) => set.kind === 'working');
   const first = working[0];
-  const reps = first ? `${first.targetReps[0]}-${first.targetReps[1]}` : '';
-  const rir = first ? ` @ RIR ${first.targetRir}` : '';
+  const hold = holdById(entry.exerciseId);
+  const reps = first
+    ? hold
+      ? `${first.targetReps[0]} s`
+      : `${first.targetReps[0]}-${first.targetReps[1]}`
+    : '';
+  const rir = first && !hold ? ` @ RIR ${first.targetRir}` : '';
   const warm = entry.warmupSets > 0 ? ` · ${entry.warmupSets} warm-up` : '';
   const load = first && first.targetWeight !== null ? `${first.targetWeight} × ` : '';
   return `${working.length} × ${load}${reps}${rir}${warm}`;

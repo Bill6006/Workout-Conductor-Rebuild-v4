@@ -1,5 +1,9 @@
 import { getExercise } from '../../catalog/exercises/catalog';
-import type { CatalogExercise, TrainingRole } from '../../catalog/exercises/exerciseSchema';
+import {
+  isHold,
+  type CatalogExercise,
+  type TrainingRole,
+} from '../../catalog/exercises/exerciseSchema';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { coachingPolicy, policyLabel } from '../coach/experience';
@@ -82,6 +86,8 @@ export interface NextTarget {
   from?: number | null;
   /** The weights here could not make the load asked for; the line says what they make instead. */
   rack?: RackNote;
+  /** A hold: `reps` is [today's seconds, the top of the range], and loads never move the seconds. */
+  hold?: boolean;
   /** The logged session the target was read from, and whether that day met its reps and reserve. */
   reference?: { recordId: string; exerciseId: string; clean: boolean };
 }
@@ -146,7 +152,11 @@ function toPoint(
       rirs.length > 0
         ? Math.round((rirs.reduce((a, b) => a + b, 0) / rirs.length) * 10) / 10
         : null,
-    e1rm: best.weight !== null ? estimateOneRepMax(best.weight, best.reps) : null,
+    // A hold's reps are seconds: no strength estimate reads from them.
+    e1rm:
+      best.weight !== null && !isHold(getExercise(exerciseId))
+        ? estimateOneRepMax(best.weight, best.reps)
+        : null,
     plannedSets: sets[0]?.planned ?? 0,
   };
 }
@@ -157,7 +167,8 @@ function toPoint(
  */
 export function performanceHistory(
   history: readonly WorkoutRecord[],
-  exercise: Pick<CatalogExercise, 'id' | 'progressionFamily'>,
+  exercise: Pick<CatalogExercise, 'id' | 'progressionFamily'> &
+    Partial<Pick<CatalogExercise, 'measure'>>,
   limit = 6,
 ): PerformancePoint[] {
   const newestFirst = [...history].sort((a, b) =>
@@ -176,6 +187,8 @@ export function performanceHistory(
       if (entry.exerciseId === exercise.id) continue;
       const other = getExercise(entry.exerciseId);
       if (!other || other.progressionFamily !== exercise.progressionFamily) continue;
+      // A hold's seconds never stand in for a lift's reps, nor reps for seconds.
+      if (other.measure !== (exercise.measure ?? 'reps')) continue;
       const point = toPoint(record, entry.exerciseId, true);
       if (point) family.push(point);
     }
@@ -322,11 +335,109 @@ function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget 
 }
 
 export function recommendNextTarget(input: NextTargetInput): NextTarget {
-  return withSessionFatigue(withEnteredMax(recommendBiasedTarget(input), input), input);
+  const target = withSessionFatigue(withEnteredMax(recommendBiasedTarget(input), input), input);
+  return settleHold(target, input.profile.units);
+}
+
+/** Seconds a hold's target grows by once every set reaches it. */
+export const HOLD_STEP_SECONDS = 5;
+
+/**
+ * A hold's seconds (Maintenance 20). Its target is `reps[0]`, and `reps[1]` stays the top of the
+ * range. It starts at the bottom; once every set of the last session reached its target it grows
+ * by five seconds past the shortest hold, never beyond the top; a set short of it holds the
+ * target. At the top on every set, a loaded carry takes the next weight (the load decision below
+ * made that call) and starts again at the bottom, and a bodyweight hold is ready for a harder
+ * variation. Only the hold's own sessions count: a related exercise's reps are not seconds.
+ */
+function withHoldSeconds(target: NextTarget, input: NextTargetInput): NextTarget {
+  const [bottom, top] = input.prescription.reps;
+  const units = input.profile.units;
+  const hold = (seconds: number, line: string, mode: NextTarget['mode'] = target.mode) => ({
+    ...target,
+    hold: true,
+    mode,
+    // The seconds are the lever here; an extra set is not offered on a hold.
+    setsAdvice: 0 as const,
+    // The load moves only once the seconds reach the top; until then the last load stays.
+    weight:
+      mode === 'weight' || target.mode !== 'weight'
+        ? target.weight
+        : (target.from ?? target.weight),
+    reps: [Math.min(top, Math.max(bottom, seconds)), top] as [number, number],
+    evidence: [line],
+  });
+  const last = performanceHistory(input.history, input.exercise, 1).find(
+    (point) => !point.viaFamily,
+  );
+  if (!last || last.sets.length === 0) {
+    return hold(
+      bottom,
+      `First time: hold ${bottom} s, and the seconds grow as it gets easier.`,
+      'start',
+    );
+  }
+  const asked = last.sets.find((set) => set.targetReps !== null)?.targetReps?.[0] ?? bottom;
+  const lastTarget = Math.min(top, Math.max(bottom, asked));
+  const shortest = Math.min(...last.sets.map((set) => set.reps));
+  // A long break starts the seconds again from the bottom, and a carry a step lighter.
+  const daysSince = input.now
+    ? Math.floor((Date.parse(input.now) - Date.parse(last.date)) / DAY_MS)
+    : 0;
+  if (daysSince >= RETURN_AFTER_DAYS) {
+    const lastWeight = last.bestWeight;
+    const lighter =
+      lastWeight === null
+        ? null
+        : Math.max(target.increment, roundToStep(lastWeight - target.increment, target.increment));
+    return {
+      ...hold(
+        bottom,
+        lighter === null
+          ? `${daysSince} days since the last session: back to ${bottom} s.`
+          : `${daysSince} days since the last session: back to ${bottom} s at ${lighter} ${units}.`,
+        'return',
+      ),
+      weight: lighter,
+    };
+  }
+  if (shortest < lastTarget) {
+    // Missed twice or more in a row, a carry comes down in load as any lift does; the seconds stay.
+    if ((target.mode === 'deload' || target.mode === 'regress') && target.weight !== null) {
+      return hold(
+        lastTarget,
+        `Short of ${lastTarget} s more than once in a row: ${target.weight} ${units} for ${lastTarget} s.`,
+      );
+    }
+    return hold(
+      lastTarget,
+      `A set came in under ${lastTarget} s: ${lastTarget} s again.`,
+      'maintain',
+    );
+  }
+  if (input.fatigueLevel === 'high') {
+    return hold(lastTarget, `Fatigue is high: ${lastTarget} s again.`, 'maintain');
+  }
+  if (last.sets.every((set) => set.reps >= top)) {
+    if (target.mode === 'weight' && target.weight !== null) {
+      return hold(
+        bottom,
+        `The full ${top} s on every set: ${target.weight} ${units} next, from ${bottom} s again.`,
+      );
+    }
+    return target.weight === null
+      ? hold(top, `The full ${top} s on every set: ready for a harder variation.`, 'maintain')
+      : hold(top, `The full ${top} s on every set: the load goes up once it stays this steady.`);
+  }
+  const next = Math.max(lastTarget, Math.floor(shortest / HOLD_STEP_SECONDS) * HOLD_STEP_SECONDS);
+  const grown = Math.min(top, next + HOLD_STEP_SECONDS);
+  return hold(grown, `Held ${lastTarget} s or more on every set: ${grown} s next.`, 'reps');
 }
 
 function recommendBiasedTarget(input: NextTargetInput): NextTarget {
-  const target = floorTarget(recommendBaseTarget(input), input);
+  const base = floorTarget(recommendBaseTarget(input), input);
+  // A hold's seconds are decided on the base; the steps after it move only the load.
+  const target = isHold(input.exercise) ? withHoldSeconds(base, input) : base;
   if (target.weight === null || !BIASABLE.has(target.mode)) return target;
   const bias = overrideBias(input.history, input.exercise.id, target.increment);
   if (bias.steps === 0 || !bias.evidence) return target;
@@ -823,13 +934,15 @@ export function rackFit(
   reps: readonly [number, number],
   loading: Loading,
   units: string,
+  /** A hold's seconds stay as they are: only the load comes down. */
+  hold = false,
 ): (RackNote & { missing: boolean }) | null {
   const available = loading.available;
   if (available === null || available.length === 0) return null;
   const loaded = snapDown(asked, available);
   if (loaded >= asked - 1e-6) return null;
-  const extra = extraRepsFor(asked, loaded, reps);
-  const what = extra === 0 ? 'the reps are already at the top' : EXTRA_WORDS[extra];
+  const extra = hold ? 0 : extraRepsFor(asked, loaded, reps);
+  const what = hold ? '' : extra === 0 ? 'the reps are already at the top' : EXTRA_WORDS[extra];
   const missingToday = loading.missingToday ?? [];
   const usually = (loading.usual ?? []).some((weight) => Math.abs(weight - asked) < 1e-6);
   if (missingToday.length > 0 && usually && loading.perSide !== null) {
@@ -843,7 +956,7 @@ export function rackFit(
       loaded,
       extra,
       missing: true,
-      line: `No ${plateNames(alone.length > 0 ? alone : missingToday)} today: ${loaded} instead of ${asked}, ${what}.`,
+      line: `No ${plateNames(alone.length > 0 ? alone : missingToday)} today: ${loaded} instead of ${asked}${what ? `, ${what}` : ''}.`,
     };
   }
   const things = loading.perSide !== null ? 'plates' : 'weights';
@@ -852,7 +965,7 @@ export function rackFit(
     loaded,
     extra,
     missing: false,
-    line: `The ${things} here make ${loaded}, not ${asked} ${units}: ${what}.`,
+    line: `The ${things} here make ${loaded}, not ${asked} ${units}${what ? `: ${what}` : ''}.`,
   };
 }
 
@@ -862,9 +975,36 @@ export function rackFit(
  * are the coach's to offer, never applied here.
  */
 export function capTarget(target: NextTarget, loading: Loading | null, units: string): NextTarget {
+  return settleHold(fitToPlace(target, loading, units), units);
+}
+
+/**
+ * A hold at the top of its range starts again from the bottom only for a heavier load. When the
+ * weights here cannot go heavier than the load it was held at, it stays at the full seconds.
+ */
+function settleHold(target: NextTarget, units: string): NextTarget {
+  const from = target.from ?? null;
+  if (!target.hold || target.mode !== 'weight' || target.weight === null || from === null) {
+    return target;
+  }
+  if (target.weight > from + 1e-6) return target;
+  const top = target.reps[1];
+  return {
+    ...target,
+    mode: 'maintain',
+    reps: [top, top],
+    evidence: [
+      `The full ${top} s on every set, and no heavier weight here than ${from} ${units}: ${top} s again.`,
+      ...target.evidence.slice(1),
+    ],
+  };
+}
+
+function fitToPlace(target: NextTarget, loading: Loading | null, units: string): NextTarget {
   if (!loading || target.weight === null) return target;
   const [low, high] = target.reps;
-  const shift = Math.min(2, Math.max(0, 20 - high));
+  // A hold's seconds are its own target; the load alone answers to the weights here.
+  const shift = target.hold ? 0 : Math.min(2, Math.max(0, 20 - high));
   const holdAndPushReps = (weight: number, line: string, capped?: { at: number }): NextTarget => ({
     ...target,
     ...(capped ? { capped } : {}),
@@ -875,13 +1015,15 @@ export function capTarget(target: NextTarget, loading: Loading | null, units: st
   if (loading.cap !== null && target.weight > loading.cap + 1e-6) {
     return holdAndPushReps(
       loading.cap,
-      `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
-        shift === 0 ? ', and they are already at the top' : ''
-      }.`,
+      target.hold
+        ? `Held at the heaviest weight here (${loading.cap} ${units}).`
+        : `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
+            shift === 0 ? ', and they are already at the top' : ''
+          }.`,
       { at: loading.cap },
     );
   }
-  const fit = rackFit(target.weight, target.reps, loading, units);
+  const fit = rackFit(target.weight, target.reps, loading, units, target.hold === true);
   if (!fit) return target;
   const { missing, ...note } = fit;
   // A step the place cannot make: snapped onto the weights here, the target would land on or
@@ -891,6 +1033,17 @@ export function capTarget(target: NextTarget, loading: Loading | null, units: st
   const from = target.from ?? null;
   const next = loading.available?.find((weight) => from !== null && weight > from + 1e-6);
   if (!missing && from !== null && target.weight > from + 1e-6 && fit.loaded <= from + 1e-6) {
+    // A hold has no reps to earn the step with: it takes the next real weight, from the bottom.
+    if (next !== undefined && target.hold) {
+      return {
+        ...target,
+        weight: next,
+        evidence: [
+          ...target.evidence,
+          `The next weight here after ${from} ${units} is ${next}: ${next} ${units}, from ${low} s.`,
+        ],
+      };
+    }
     if (next !== undefined) {
       const line = `The next weight here after ${from} ${units} is ${next}: the reps go up first, and the load follows once they are earned.`;
       return {

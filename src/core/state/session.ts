@@ -63,6 +63,31 @@ export interface RestState {
   nextLabel: string;
 }
 
+/**
+ * A hold counting down (Maintenance 20): kept on the session like the rest, so it freezes with a
+ * pause and survives a reload. `held` is set when the lifter stops it early; a countdown that ran
+ * out held the full `seconds`.
+ */
+export interface HoldState {
+  entryId: string;
+  setIndex: number;
+  /** The seconds asked for: the countdown's length. */
+  seconds: number;
+  startedAt: string;
+  endsAt: string;
+  /** Remaining seconds frozen while the workout is paused. */
+  pausedRemaining: number | null;
+  /** Seconds held when stopped before the end; null while counting. */
+  held: number | null;
+}
+
+/** The seconds a hold has finished with, or null while it still counts. */
+export function heldSeconds(hold: HoldState, nowMs: number): number | null {
+  if (hold.held !== null) return hold.held;
+  if (hold.pausedRemaining !== null) return null;
+  return nowMs >= Date.parse(hold.endsAt) ? hold.seconds : null;
+}
+
 export interface SetDraft {
   weight: number | null;
   reps: number | null;
@@ -111,6 +136,8 @@ export interface WorkoutSession {
   activeSince: string | null;
   pausedAt: string | null;
   rest: RestState | null;
+  /** A hold counting down on a held exercise; null otherwise. */
+  hold: HoldState | null;
   /** Per-exercise entry values the logger remembers between sets. */
   drafts: Record<string, SetDraft>;
   /** Session-only loading exceptions: plates that are not around today. */
@@ -224,6 +251,16 @@ const RestSchema = z.looseObject({
   nextLabel: z.string(),
 });
 
+const HoldSchema = z.looseObject({
+  entryId: z.string(),
+  setIndex: z.number().int().min(0),
+  seconds: z.number().min(0),
+  startedAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  pausedRemaining: z.number().nullable(),
+  held: z.number().min(0).nullable(),
+});
+
 const DraftSchema = z.looseObject({
   weight: z.number().min(0).nullable(),
   reps: z.number().int().min(0).nullable(),
@@ -267,6 +304,8 @@ const SessionSchema = z.looseObject({
   activeSince: z.iso.datetime().nullable().default(null),
   pausedAt: z.iso.datetime().nullable().default(null),
   rest: RestSchema.nullable().default(null),
+  // A countdown that does not read is dropped, never the workout around it.
+  hold: HoldSchema.nullable().default(null).catch(null),
   drafts: z.record(z.string(), DraftSchema).default({}),
   coachAccepted: z.array(z.string()).default([]),
   loading: z
@@ -322,6 +361,7 @@ export function createSession(
     activeSince: null,
     pausedAt: null,
     rest: null,
+    hold: null,
     drafts: {},
     loading: { missingPlates: [] },
     coachAccepted: [],

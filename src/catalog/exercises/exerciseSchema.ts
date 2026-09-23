@@ -84,6 +84,14 @@ export const TRAINING_ROLES = [
 export type TrainingRole = (typeof TRAINING_ROLES)[number];
 
 const suitability = z.number().int().min(0).max(3);
+/**
+ * What a set of an exercise counts: reps, or seconds held (a plank, a carry). A hold keeps its
+ * seconds where reps go, so stored sets and older copies of the app read it unchanged; the
+ * measure says how to time, log, show, and progress it (Maintenance 20).
+ */
+export const MEASURES = ['reps', 'seconds'] as const;
+export type Measure = (typeof MEASURES)[number];
+
 // Up to 120 so timed holds (seconds) fit the same range shape.
 const repRange = z.tuple([z.number().int().min(1).max(120), z.number().int().min(1).max(120)]);
 const text = z.string().trim().min(1).max(240);
@@ -111,6 +119,7 @@ export const ExerciseSchema = z.object({
     strength: repRange.optional(),
     hypertrophy: repRange,
   }),
+  measure: z.enum(MEASURES).default('reps'),
   dropSetSafe: z.boolean(),
   supersetFriendly: z.boolean(),
   stabilityDemand: z.enum(DEMAND_LEVELS),
@@ -136,3 +145,8 @@ export const ExerciseSchema = z.object({
 });
 
 export type CatalogExercise = z.infer<typeof ExerciseSchema>;
+
+/** A set of this exercise is held for seconds rather than counted in reps. */
+export function isHold(exercise: Pick<CatalogExercise, 'measure'> | undefined): boolean {
+  return exercise?.measure === 'seconds';
+}

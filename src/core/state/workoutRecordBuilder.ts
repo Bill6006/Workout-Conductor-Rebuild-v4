@@ -3,6 +3,7 @@ import type { MuscleId } from '../../catalog/muscles/muscles';
 import { muscleName } from '../../catalog/muscles/muscles';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import { allEntries, workingSets } from '../../engine/workout/types';
+import { holdById } from '../../engine/workout/setText';
 import type { UserProfile } from '../validation/profile';
 import type { TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import { recommendNextTarget } from '../../engine/progression/progression';
@@ -15,6 +16,7 @@ import {
 } from '../../engine/volume/weeklyVolume';
 import type { LoggedExercise, SessionRating, WorkoutRecord } from '../validation/workoutRecord';
 import type { CompletionSummary, WorkoutSession } from './session';
+import { painNextLine } from '../../engine/recovery/painReport';
 
 /**
  * Turns a session into the durable workout record (one entry per exercise,
@@ -99,7 +101,8 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
 
 function nextImplication(record: WorkoutRecord, muscles: readonly MuscleId[]): string {
   const rating = record.rating;
-  if (rating?.pain) return 'Pain was reported: the next session works around that joint first.';
+  const pain = painNextLine(rating);
+  if (pain) return pain;
   switch (rating?.effort) {
     case 'too-easy':
       return 'Felt easy: expect a small load step on the main lift next time.';
@@ -130,6 +133,15 @@ const MODE_LABEL: Record<string, string> = {
   double: 'double progression',
 };
 
+/** Joints hurt during the workout that the end-of-workout rating did not already name. */
+function duringWorkoutPain(record: WorkoutRecord): string {
+  const said = record.rating?.pain ? record.rating.joint : undefined;
+  const joints = (record.painJoints ?? []).filter((joint) => joint !== said);
+  if (joints.length === 0) return '';
+  const words = joints.map((joint) => joint.replace('-', ' ')).join(', ');
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} pain noted during the workout.`;
+}
+
 export function buildCompletion(
   session: WorkoutSession,
   record: WorkoutRecord,
@@ -151,10 +163,11 @@ export function buildCompletion(
     (sum, entry) => sum + entry.sets.filter((set) => set.kind === 'warmup' && set.completed).length,
     0,
   );
+  // Volume is load times reps; a hold's seconds are not reps, so holds stay out of it.
   const volume = record.entries.reduce(
     (sum, entry) =>
       sum +
-      entry.sets
+      (holdById(entry.exerciseId) ? [] : entry.sets)
         .filter((set) => set.kind !== 'warmup' && set.completed && set.weight !== null)
         .reduce((inner, set) => inner + (set.weight ?? 0) * set.reps, 0),
     0,
@@ -176,6 +189,7 @@ export function buildCompletion(
   const highlights: string[] = [];
   let best: { name: string; weight: number; reps: number } | null = null;
   for (const entry of record.entries) {
+    if (holdById(entry.exerciseId)) continue;
     for (const set of completedWorking(entry)) {
       if (set.weight === null) continue;
       if (!best || set.weight * set.reps > best.weight * best.reps) {
@@ -203,6 +217,11 @@ export function buildCompletion(
       history: after,
       profile,
     });
+    if (target.hold) {
+      return target.weight === null
+        ? `${exercise.name}: hold ${target.reps[0]} s`
+        : `${exercise.name}: ${target.weight} ${profile.units} × ${target.reps[0]} s`;
+    }
     const load = target.weight === null ? 'log a weight' : `${target.weight} ${profile.units}`;
     return `${exercise.name}: ${load} × ${target.reps[0]}-${target.reps[1]} (${MODE_LABEL[target.mode]})`;
   });
@@ -223,9 +242,8 @@ export function buildCompletion(
           .join(', ')} about 48 h before loading them again.`
       : 'Nothing was trained hard enough to need recovery time.',
     record.rating?.effort === 'too-hard' ? 'Rated too hard: an easier day or a rest day next.' : '',
-    record.rating?.pain || (record.painJoints ?? []).length > 0
-      ? 'Pain was reported: the next session protects that joint first.'
-      : '',
+    // The rating's pain is said once, under Next time; only other joints hurt mid-workout add here.
+    duringWorkoutPain(record),
   ]
     .filter(Boolean)
     .join(' ');

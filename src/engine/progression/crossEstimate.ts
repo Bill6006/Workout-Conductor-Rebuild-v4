@@ -1,5 +1,5 @@
 import { getExercise } from '../../catalog/exercises/catalog';
-import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
+import { isHold, type CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { muscleGroupOf } from '../../catalog/muscles/muscles';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
@@ -49,7 +49,8 @@ function knownLifts(history: readonly WorkoutRecord[], now: string): KnownLift[]
     if (!Number.isFinite(daysAgo) || daysAgo > MAX_AGE_DAYS || daysAgo < 0) continue;
     for (const entry of record.entries) {
       const exercise = getExercise(entry.exerciseId);
-      if (!exercise) continue;
+      // A hold's seconds are not reps: a long carry says nothing about a max.
+      if (!exercise || isHold(exercise)) continue;
       for (const set of entry.sets) {
         if (set.kind !== 'working' || !set.completed || set.weight === null || set.reps <= 0)
           continue;

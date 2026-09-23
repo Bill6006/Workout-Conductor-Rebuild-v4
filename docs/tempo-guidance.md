@@ -114,6 +114,9 @@ is fitted to less time, rests shorten toward the floors before sets are trimmed 
 - Set rows and the logger say "warm-up" beside a ramp set's RIR and "last clean rep" for a drop
   set, so the working-set target and the warm-up target are never mistaken for each other.
 - The How-to panel's "Why this target" list ends with the effort and rest evidence for the set.
+- A hold (Plank, Farmer Carry) has no rep tempo and no reps in reserve: the card shows "Hold 30 s"
+  where the bar would be, and its detail keeps the cue, the effort ("Good form: hold the position
+  for the seconds, and stop when it slips") and the rest (Maintenance 20).
 
 ## The skimmable detail (Maintenance 8)
 

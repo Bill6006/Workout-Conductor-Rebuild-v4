@@ -1,4 +1,5 @@
 import type { CompletedSet } from '../../engine/recalibration/types';
+import { amountText, holdById } from '../../engine/workout/setText';
 import type { SetPrescription, WorkoutEntry } from '../../engine/workout/types';
 
 /** "Set 2", "Ramp 1", or "Drop" for a planned set within its exercise. */
@@ -32,10 +33,12 @@ export function describeSetPosition(set: SetPrescription, entry: WorkoutEntry): 
   return `${noun} ${ordinal} of ${sameKind.length}`;
 }
 
-/** "185 lb × 6 @ RIR 2", "bodyweight × 12", or "skipped". */
+/** "185 lb × 6 @ RIR 2", "bodyweight × 12", "45 s" or "50 lb × 30 s" for a hold, or "skipped". */
 export function formatLogged(set: CompletedSet, units: 'lb' | 'kg'): string {
   if (set.skipped) return 'skipped';
+  const hold = holdById(set.exerciseId);
+  if (hold && set.weight === null) return amountText(set.reps, true);
   const weight = set.weight === null ? 'bodyweight' : `${set.weight} ${units}`;
-  const rir = set.rir === null ? '' : ` @ RIR ${set.rir}`;
-  return `${weight} × ${set.reps}${rir}`;
+  const rir = set.rir === null || hold ? '' : ` @ RIR ${set.rir}`;
+  return `${weight} × ${amountText(set.reps, hold)}${rir}`;
 }

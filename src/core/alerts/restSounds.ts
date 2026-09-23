@@ -112,5 +112,14 @@ export function createWebAudioOutput(): ToneOutput {
   };
 }
 
-/** The app's one player; it touches no audio until the first unlock or tone. */
-export const restSounds = new RestSounds(createWebAudioOutput());
+/** The app's one speaker; it touches no audio until the first unlock or tone. */
+const speaker = createWebAudioOutput();
+
+/** The rest's player. */
+export const restSounds = new RestSounds(speaker);
+
+/**
+ * A hold's player: the same ticks and end tone through the same speaker, so the tap that unlocks
+ * one unlocks both, and neither cancels the other.
+ */
+export const holdSounds = new RestSounds(speaker);

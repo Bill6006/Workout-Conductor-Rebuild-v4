@@ -29,6 +29,8 @@ export interface RankingSignals {
   muscleLoad?: Readonly<Record<MuscleId, 'behind' | 'open' | 'covered'>>;
   /** Joints reported painful in this session; high stress excludes, moderate costs. */
   sessionPainJoints?: ReadonlySet<Joint>;
+  /** The joint named when the last workout was saved: spared like today's pain, said so. */
+  recentPainJoints?: ReadonlySet<Joint>;
   /** The coach route for the current lift is at its variation step. */
   routeWantsVariation?: boolean;
   /** The current lift is held at the heaviest weight the place has; a variation that is heavier per pound scores. */
@@ -169,7 +171,9 @@ export function rankAlternatives(request: AlternativeRequest): AlternativeResult
     const muscleOverlap = overlapRatio(candidate.primaryMuscles, current.primaryMuscles);
     if (muscleOverlap === 0) continue; // wrong primary muscle
     const sessionPain = request.signals?.sessionPainJoints;
-    if (sessionPain && [...sessionPain].some((joint) => candidate.jointStress[joint] === 'high')) {
+    const recentPain = request.signals?.recentPainJoints;
+    const sore = [...(sessionPain ?? []), ...(recentPain ?? [])];
+    if (sore.some((joint) => candidate.jointStress[joint] === 'high')) {
       excludedForFit += 1;
       continue;
     }
@@ -228,6 +232,14 @@ export function rankAlternatives(request: AlternativeRequest): AlternativeResult
             `moderate stress on your ${joint.replace('-', ' ')}, which hurts today`,
           ]);
       }
+    }
+    for (const joint of recentPain ?? []) {
+      if (sessionPain?.has(joint)) continue;
+      if (candidate.jointStress[joint] === 'moderate')
+        contributions.push([
+          -12,
+          `moderate stress on your ${joint.replace('-', ' ')}, sore last time`,
+        ]);
     }
     if (request.signals?.routeWantsVariation) {
       const variation =

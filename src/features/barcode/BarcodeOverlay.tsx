@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useWakeLock } from '../../core/screen/useWakeLock';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import type { PlaceBarcode } from '../../core/validation/placeBarcode';
 import { BarcodeGraphicSvg } from './BarcodeGraphic';
@@ -29,35 +30,6 @@ export function BarcodeOverlay() {
       onClose={() => store.closeBarcodeFullScreen()}
     />
   );
-}
-
-function useWakeLock(): void {
-  useEffect(() => {
-    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return undefined;
-    let cancelled = false;
-    let sentinel: WakeLockSentinel | null = null;
-    const request = () => {
-      navigator.wakeLock
-        .request('screen')
-        .then((lock) => {
-          if (cancelled) void lock.release().catch(() => undefined);
-          else sentinel = lock;
-        })
-        // Refused (no user gesture, low battery): the screen may dim, and the code still shows.
-        .catch(() => undefined);
-    };
-    request();
-    // The browser drops the lock when the page is hidden; take it again on the way back.
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && !cancelled) request();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      cancelled = true;
-      document.removeEventListener('visibilitychange', onVisible);
-      void sentinel?.release().catch(() => undefined);
-    };
-  }, []);
 }
 
 /** How long the drawing is waited on before the picture shows instead. */

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { nudge, snapDown } from '../../engine/loading/loading';
 import type { SetKind } from '../../engine/workout/types';
 import styles from './SetLogger.module.css';
@@ -9,7 +9,8 @@ import styles from './SetLogger.module.css';
  * chevron or typed directly on the Android numeric keyboard, and one dominant
  * thumb-reach button that logs the set. A normal set is one tap; a small
  * change is two. The same surface edits a completed set in place, so there is
- * never a separate edit page or a keypad grid.
+ * never a separate edit page or a keypad grid. A hold logs seconds instead of
+ * reps and asks no reps in reserve; its countdown sits above the button.
  */
 
 export interface SetLoggerValues {
@@ -49,6 +50,12 @@ interface SetLoggerProps {
   onWeightHintTap?: () => void;
   /** Why the target is what it is when the weights here changed it, shown by the target. */
   note?: string | null;
+  /** A held exercise: the reps dial counts seconds, and there is no RIR. */
+  hold?: boolean;
+  /** Seconds a finished countdown filled in; a new nonce fills again without losing the weight. */
+  filled?: { reps: number; nonce: string } | null;
+  /** The hold's countdown, shown above the button. */
+  timer?: ReactNode;
 }
 
 type Field = 'weight' | 'reps' | 'rir';
@@ -83,8 +90,13 @@ export function SetLogger({
   available = null,
   onWeightHintTap,
   note = null,
+  hold = false,
+  filled = null,
+  timer = null,
 }: SetLoggerProps) {
-  const [values, setValues] = useState<SetLoggerValues>(initial);
+  const [values, setValues] = useState<SetLoggerValues>(() =>
+    filled ? { ...initial, reps: filled.reps } : initial,
+  );
   const [typing, setTyping] = useState<Field | null>(null);
   const [typed, setTyped] = useState('');
   const [cooling, setCooling] = useState(false);
@@ -100,6 +112,18 @@ export function SetLogger({
     setValues(next);
     onChange?.(next);
   };
+
+  // A countdown that ends, or is stopped, writes its seconds into the dial. Only the seconds
+  // change, so the weight (and the screen's plate line that follows it) stays as it was.
+  const fillNonce = filled?.nonce ?? null;
+  const fillReps = filled?.reps ?? null;
+  const lastFill = useRef(fillNonce);
+  useEffect(() => {
+    if (fillNonce === null || fillReps === null || lastFill.current === fillNonce) return;
+    lastFill.current = fillNonce;
+    setTyping(null);
+    setValues((current) => ({ ...current, reps: clampReps(fillReps) }));
+  }, [fillNonce, fillReps]);
 
   const nudgeWeight = (direction: 1 | -1) => {
     const base = values.weight ?? target.weight ?? 0;
@@ -146,12 +170,13 @@ export function SetLogger({
     onCommit({
       weight: final.weight,
       reps: clampReps(final.reps),
-      rir: final.rir === null ? null : clampRir(final.rir),
+      rir: hold || final.rir === null ? null : clampRir(final.rir),
     });
   };
 
   const [low, high] = target.reps;
-  const inRange = values.reps >= low && values.reps <= high;
+  // A hold's target is its first number; holding past it is never too much.
+  const inRange = values.reps >= low && (hold || values.reps <= high);
   // Zero reps is a skip, and the button says so before the tap rather than after it.
   const shownReps = typing === 'reps' ? typedValues().reps : values.reps;
   const skipping = shownReps === 0;
@@ -193,8 +218,9 @@ export function SetLogger({
     target.weight !== null &&
     values.weight !== null &&
     values.weight < target.weight - 1e-6;
-  const repsHint =
-    target.kind === 'drop'
+  const repsHint = hold
+    ? `Target ${low} s${target.kind === 'warmup' ? ' · warm-up, not counted' : ''}`
+    : target.kind === 'drop'
       ? `Drop set · aim ${low}-${high}`
       : `Target ${low}-${high}${target.kind === 'warmup' ? ' · warm-up, not counted' : ''}`;
 
@@ -294,7 +320,7 @@ export function SetLogger({
         </span>
         {helper ? <span className={styles.helper}>{helper}</span> : null}
       </div>
-      <div className={styles.dials}>
+      <div className={styles.dials} data-count={hold ? 2 : 3}>
         {dial(
           'weight',
           'Weight',
@@ -309,35 +335,38 @@ export function SetLogger({
         )}
         {dial(
           'reps',
-          'Reps',
-          'reps',
+          hold ? 'Seconds' : 'Reps',
+          hold ? 'seconds' : 'reps',
           String(values.reps),
-          'reps',
+          hold ? 'seconds' : 'reps',
           () => nudgeReps(1),
           () => nudgeReps(-1),
           repsHint,
           inRange || target.kind !== 'working' ? 'normal' : 'warn',
         )}
-        {dial(
-          'rir',
-          'RIR',
-          'RIR',
-          values.rir === null ? '—' : String(values.rir),
-          'in reserve',
-          () => nudgeRir(1),
-          () => nudgeRir(-1),
-          target.kind === 'warmup'
-            ? `Target RIR ${target.rir} · easy warm-up`
-            : target.kind === 'drop'
-              ? 'Last clean rep'
-              : `Target RIR ${target.rir}`,
-        )}
+        {hold
+          ? null
+          : dial(
+              'rir',
+              'RIR',
+              'RIR',
+              values.rir === null ? '—' : String(values.rir),
+              'in reserve',
+              () => nudgeRir(1),
+              () => nudgeRir(-1),
+              target.kind === 'warmup'
+                ? `Target RIR ${target.rir} · easy warm-up`
+                : target.kind === 'drop'
+                  ? 'Last clean rep'
+                  : `Target RIR ${target.rir}`,
+            )}
       </div>
       {note ? (
         <p className={styles.note} data-testid="target-note">
           {note}
         </p>
       ) : null}
+      {timer}
       <div className={styles.actions}>
         {mode === 'edit' ? (
           <>

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { JOINTS, type Joint } from '../../catalog/exercises/exerciseSchema';
+import { jointName } from '../../catalog/exercises/joints';
 import { Button } from '../../components/Button/Button';
 import { Sheet } from '../../components/Sheet/Sheet';
 import type { SessionRating } from '../../core/validation/workoutRecord';
@@ -26,6 +28,7 @@ const ENERGY_WORDS = ['Drained', 'Low', 'Okay', 'Good', 'Full'] as const;
 export function RatingSheet({ open, endedEarly, onClose, onSave, onDiscard }: RatingSheetProps) {
   const [effort, setEffort] = useState<SessionRating['effort']>('right');
   const [pain, setPain] = useState(false);
+  const [joint, setJoint] = useState<Joint | null>(null);
   const [energy, setEnergy] = useState(3);
   const [note, setNote] = useState('');
 
@@ -38,7 +41,16 @@ export function RatingSheet({ open, endedEarly, onClose, onSave, onDiscard }: Ra
         <div className={styles.ratingActions}>
           <Button
             variant="primary"
-            onClick={() => onSave({ effort, pain, energyAfter: energy, note: note.trim() })}
+            onClick={() =>
+              onSave({
+                effort,
+                pain,
+                // Where it hurt goes with the pain, and only with it.
+                ...(pain && joint ? { joint } : {}),
+                energyAfter: energy,
+                note: note.trim(),
+              })
+            }
             data-testid="save-workout"
           >
             {endedEarly ? 'End and save' : 'Save workout'}
@@ -78,16 +90,58 @@ export function RatingSheet({ open, endedEarly, onClose, onSave, onDiscard }: Ra
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={pain}
-        className={styles.ratingChip}
-        onClick={() => setPain((current) => !current)}
+      {/* Two plain answers, never a switch whose label says the opposite of what a tap does. */}
+      <p className={styles.panelLabel} id="pain-label">
+        Pain
+      </p>
+      <div
+        className={styles.ratingGroup}
+        role="radiogroup"
+        aria-labelledby="pain-label"
         data-testid="rating-pain"
       >
-        {pain ? 'Pain reported ✓' : 'No pain'}
-      </button>
+        {[
+          { value: false, label: 'No pain' },
+          { value: true, label: 'Some pain' },
+        ].map((option) => (
+          <button
+            key={option.label}
+            type="button"
+            role="radio"
+            aria-checked={pain === option.value}
+            className={styles.ratingChip}
+            onClick={() => setPain(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {pain ? (
+        <>
+          <p className={styles.panelLabel} id="pain-where-label">
+            Where?
+          </p>
+          <div
+            className={styles.ratingGroup}
+            role="radiogroup"
+            aria-labelledby="pain-where-label"
+            data-testid="rating-pain-where"
+          >
+            {JOINTS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={joint === option}
+                className={styles.ratingChip}
+                onClick={() => setJoint(option)}
+              >
+                {jointName(option)}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
       <p className={styles.panelLabel} id="energy-after-label">
         Energy after
       </p>

@@ -7,6 +7,7 @@ interface FakeState {
   session: {
     status: 'preview' | 'active' | 'paused' | 'completed';
     rest: { endsAt: string; pausedRemaining: number | null; nextLabel: string } | null;
+    hold?: { endsAt: string; pausedRemaining: number | null; held: number | null } | null;
     completed: { startedAt: string | null; sets: { entryId: string; completedAt: string }[] };
     activeSince: string | null;
     workout: { blocks: never[] };
@@ -20,6 +21,8 @@ const state: { current: FakeState } = {
 const showAlert = vi.fn(() => Promise.resolve(true));
 const schedule = vi.fn();
 const cancel = vi.fn();
+const holdSchedule = vi.fn();
+const holdCancel = vi.fn();
 
 vi.mock('../state/useAppStore', () => ({
   useAppSelector: (selector: (value: FakeState) => unknown) => selector(state.current),
@@ -37,6 +40,11 @@ vi.mock('./restSounds', () => ({
   restSounds: {
     schedule: (...args: unknown[]) => schedule(...args),
     cancel: () => cancel(),
+    unlock: () => undefined,
+  },
+  holdSounds: {
+    schedule: (...args: unknown[]) => holdSchedule(...args),
+    cancel: () => holdCancel(),
     unlock: () => undefined,
   },
 }));
@@ -72,6 +80,8 @@ describe('the workout alerts', () => {
     showAlert.mockClear();
     schedule.mockClear();
     cancel.mockClear();
+    holdSchedule.mockClear();
+    holdCancel.mockClear();
     setVisibility('visible');
     state.current = { session: null, localSettings: { restSounds: true, notifications: true } };
   });
@@ -94,6 +104,33 @@ describe('the workout alerts', () => {
     state.current = { ...state.current, session: resting(25) };
     rerender();
     expect(cancel).toHaveBeenCalled();
+    unmount();
+  });
+
+  it('gives a hold its own ticks and end tone, which a rest never cancels, and stops them on Stop', () => {
+    state.current.session = {
+      ...resting(90),
+      hold: { endsAt: at(20), pausedRemaining: null, held: null },
+    };
+    const { rerender, unmount } = renderHook(() => useWorkoutAlerts());
+    vi.advanceTimersByTime(16_500);
+    expect(holdSchedule).toHaveBeenCalledTimes(1);
+    expect(holdSchedule.mock.calls[0]?.[0]).toBe(at(20));
+    expect(schedule).not.toHaveBeenCalled();
+    // The rest changing leaves the hold's sounds alone.
+    state.current = {
+      ...state.current,
+      session: { ...resting(120), hold: state.current.session!.hold },
+    };
+    rerender();
+    expect(holdCancel).not.toHaveBeenCalled();
+    // Stopped early: the pending end tone goes.
+    state.current = {
+      ...state.current,
+      session: { ...resting(120), hold: { endsAt: at(20), pausedRemaining: null, held: 12 } },
+    };
+    rerender();
+    expect(holdCancel).toHaveBeenCalled();
     unmount();
   });
 

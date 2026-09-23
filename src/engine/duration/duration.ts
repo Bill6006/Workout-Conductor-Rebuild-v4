@@ -1,4 +1,4 @@
-import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
+import { isHold, type CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { restCategory } from '../progression/roles';
 import { blockSequence, isPairedSwitch, restBetween } from '../workout/sequence';
 import type {
@@ -71,16 +71,21 @@ export type SetDonePredicate = (entryId: string, setIndex: number) => boolean;
 
 const NOTHING_DONE: SetDonePredicate = () => false;
 
-/** Lifting time for one set: the middle of its rep range at the coached tempo, plus getting set. */
+/**
+ * Lifting time for one set: the middle of its rep range at the coached tempo, plus getting set.
+ * A hold's range is seconds, and it runs for today's target: the first number.
+ */
 export function workSecondsFor(
   entry: Pick<WorkoutEntry, 'role' | 'progression'>,
   set: Pick<SetPrescription, 'kind' | 'targetReps'>,
+  hold = false,
 ): number {
   const reps = (set.targetReps[0] + set.targetReps[1]) / 2;
   const category = restCategory(entry.role);
   if (set.kind === 'drop') return reps * REP_SECONDS.drop + SET_OVERHEAD_SECONDS.drop;
   const overhead =
     category === 'strength' ? SET_OVERHEAD_SECONDS.strength : SET_OVERHEAD_SECONDS.other;
+  if (hold) return set.targetReps[0] + overhead;
   if (set.kind === 'warmup') return reps * REP_SECONDS.warmup + overhead;
   const perRep = entry.progression?.capped ? REP_SECONDS.capped : REP_SECONDS[category];
   return reps * perRep + overhead;
@@ -137,7 +142,7 @@ export function estimateSeconds(
       setup += Math.max(0, blockSetup - restBefore);
       lastBlockId = item.blockId;
     }
-    work += workSecondsFor(entry, item.set);
+    work += workSecondsFor(entry, item.set, isHold(exerciseOf(entry.exerciseId)));
     const next = sequence[index + 1] ?? null;
     const more = sequence.slice(index + 1).some((later) => !isDone(later.entryId, later.setIndex));
     if (!more) return;
@@ -177,7 +182,8 @@ export function estimateWorkout(
  * Time still to go, for the workout screen, so that the clock and this number
  * add up to the length the plan promised. Until the first set is logged the
  * general warm-up is still ahead, less whatever the clock has already run; a
- * rest in progress counts for what is left of it.
+ * rest in progress counts for what is left of it, and a hold counting down for
+ * what is left of it.
  */
 export function remainingMinutes(input: {
   blocks: readonly WorkoutBlock[];
@@ -187,6 +193,8 @@ export function remainingMinutes(input: {
   anythingLogged: boolean;
   elapsedSeconds: number;
   restSecondsLeft: number;
+  /** Seconds of a hold already counted: that much of its set is behind the lifter. */
+  holdSecondsDone?: number;
 }): number {
   const running = Math.max(0, input.restSecondsLeft);
   const { work, rest, setup } = estimateSeconds(
@@ -198,5 +206,6 @@ export function remainingMinutes(input: {
   const warmup = input.anythingLogged
     ? 0
     : Math.max(0, input.generalWarmupMinutes * 60 - input.elapsedSeconds);
-  return (work + rest + setup + warmup + running) / 60;
+  const held = Math.max(0, input.holdSecondsDone ?? 0);
+  return (Math.max(0, work - held) + rest + setup + warmup + running) / 60;
 }

@@ -341,6 +341,8 @@ export const PULL_EXERCISES = [
     hypertrophy: 2,
     role: 'finisher',
     reps: { hypertrophy: [20, 40] },
+    measure: 'seconds',
+    dropSetSafe: false,
     supersetFriendly: false,
     substitutions: ['dumbbell-shrug', 'plank'],
     setup: [
@@ -348,7 +350,7 @@ export const PULL_EXERCISES = [
       'Shoulders down, ribs stacked over the hips.',
     ],
     execution: [
-      'Walk with short, quick steps for the target distance or step count.',
+      'Walk with short, quick steps for the target seconds.',
       'Set the weights down with the same flat back.',
     ],
     mistakes: ['Leaning to one side.', 'Rushing the setdown and rounding the back.'],

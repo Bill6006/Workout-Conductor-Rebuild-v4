@@ -40,7 +40,20 @@ export const REST_EVIDENCE = {
     'Your rest style in Settings scales every rest by 0.8, 1, or 1.2; the floors below never move.',
 } as const;
 
-export function effortGuidance(kind: SetKind, targetRir: number, role: TrainingRole): Guidance {
+export function effortGuidance(
+  kind: SetKind,
+  targetRir: number,
+  role: TrainingRole,
+  /** A hold counts seconds, not reps, so there are no reps to keep in reserve. */
+  hold = false,
+): Guidance {
+  if (hold) {
+    return {
+      label: 'Good form',
+      why: 'hold the position for the seconds, and stop when it slips',
+      evidence: [],
+    };
+  }
   if (kind === 'warmup') {
     return {
       label: `RIR ${targetRir} · easy`,

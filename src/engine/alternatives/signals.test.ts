@@ -139,3 +139,32 @@ describe('ranking with signals', () => {
     expect(variation.candidates[0]!.reasons.join(' ')).toMatch(/variation/);
   });
 });
+
+describe('pain named when the last workout was saved', () => {
+  it('spares that joint in the swap list, and says why', () => {
+    const sore = {
+      ...record(2, 'barbell-bench-press', [[5, 185, 2]]),
+      rating: {
+        effort: 'right' as const,
+        pain: true,
+        joint: 'shoulder' as const,
+        energyAfter: 3,
+        note: '',
+      },
+    };
+    const signals = buildRankingSignals({
+      profile,
+      history: [sore],
+      now: RECORD_NOW,
+      currentExerciseId: bench.id,
+    });
+    expect([...(signals.recentPainJoints ?? [])]).toEqual(['shoulder']);
+    const ranked = rankAlternatives({ current: bench, context: context(), signals, limit: 8 });
+    for (const candidate of ranked.candidates) {
+      expect(candidate.exercise.jointStress.shoulder).not.toBe('high');
+      if (candidate.exercise.jointStress.shoulder === 'moderate') {
+        expect(candidate.reasons.join(' ')).toContain('sore last time');
+      }
+    }
+  });
+});

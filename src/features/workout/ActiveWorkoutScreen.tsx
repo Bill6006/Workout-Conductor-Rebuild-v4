@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { requireExercise } from '../../catalog/exercises/catalog';
+import { isHold } from '../../catalog/exercises/exerciseSchema';
+import { HoldTimer } from '../../components/HoldTimer/HoldTimer';
+import { holdById } from '../../engine/workout/setText';
 import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
-import { restSounds } from '../../core/alerts/restSounds';
+import { holdSounds, restSounds } from '../../core/alerts/restSounds';
 import { Button } from '../../components/Button/Button';
 import { Card } from '../../components/Card/Card';
 import { DurationSelector } from '../../components/DurationSelector/DurationSelector';
@@ -18,7 +21,12 @@ import { Sheet } from '../../components/Sheet/Sheet';
 import { SupersetGroup } from '../../components/SupersetGroup/SupersetGroup';
 import { useToast } from '../../components/Toast/useToast';
 import { explainSaveFailure } from '../../core/storage/explainSaveFailure';
-import { doneKeys, elapsedSeconds, type WorkoutSession } from '../../core/state/session';
+import {
+  doneKeys,
+  elapsedSeconds,
+  heldSeconds,
+  type WorkoutSession,
+} from '../../core/state/session';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { useTicker } from '../../core/time/useTicker';
 import type { UnitSystem } from '../../core/validation/profile';
@@ -92,12 +100,15 @@ function initialFor(
   previousWeight: number | null,
   step: number,
   workingLogged: boolean,
+  /** A hold starts from today's seconds, never from the top of its range or the last hold. */
+  hold = false,
 ): SetLoggerValues {
   const draft = workingLogged ? session.drafts[entry.id] : undefined;
+  const firstReps = hold ? set.targetReps[0] : set.targetReps[1];
   if (set.kind === 'warmup' || set.kind === 'drop') {
-    const rir = set.kind === 'warmup' ? 5 : 0;
+    const rir = hold ? null : set.kind === 'warmup' ? 5 : 0;
     if (set.targetWeight !== null) {
-      return { weight: set.targetWeight, reps: set.targetReps[1], rir };
+      return { weight: set.targetWeight, reps: firstReps, rir };
     }
     const base = draft?.weight ?? previousWeight;
     return {
@@ -107,15 +118,15 @@ function initialFor(
           : set.kind === 'warmup'
             ? roundTo(base * 0.6, step)
             : dropSetWeight(base, step),
-      reps: set.targetReps[1],
+      reps: firstReps,
       rir,
     };
   }
   const base = draft?.weight ?? set.targetWeight ?? previousWeight;
   return {
     weight: base ?? null,
-    reps: draft?.reps ?? set.targetReps[1],
-    rir: draft?.rir ?? set.targetRir,
+    reps: hold ? firstReps : (draft?.reps ?? firstReps),
+    rir: hold ? null : (draft?.rir ?? set.targetRir),
   };
 }
 
@@ -198,6 +209,17 @@ export function ActiveWorkoutScreen() {
   const restSecondsLeft = session.rest
     ? (session.rest.pausedRemaining ?? (Date.parse(session.rest.endsAt) - now) / 1000)
     : 0;
+  // A hold counting down has already used part of its set's time.
+  const holdLeft =
+    session.hold && session.hold.held === null
+      ? (session.hold.pausedRemaining ?? (Date.parse(session.hold.endsAt) - now) / 1000)
+      : null;
+  // Stopped or run out, the hold is behind the lifter either way: all of it counts as done.
+  const holdSecondsDone = !session.hold
+    ? 0
+    : holdLeft === null
+      ? session.hold.seconds
+      : Math.min(session.hold.seconds, Math.max(0, session.hold.seconds - holdLeft));
   const minutesLeft = Math.round(
     remainingMinutes({
       blocks: workout.blocks,
@@ -207,6 +229,7 @@ export function ActiveWorkoutScreen() {
       anythingLogged: session.completed.sets.length > 0,
       elapsedSeconds: elapsed,
       restSecondsLeft,
+      holdSecondsDone,
     }),
   );
   const currentBlock = position
@@ -273,7 +296,9 @@ export function ActiveWorkoutScreen() {
   const knowMaxFor = (entry: WorkoutEntry, block: WorkoutBlock) => {
     const mode = entry.progression?.mode;
     if (mode !== 'start' && mode !== 'estimate' && mode !== 'return') return undefined;
-    if (startRatio(requireExercise(entry.exerciseId)) === null) return undefined;
+    const exercise = requireExercise(entry.exerciseId);
+    // A max is read from reps; a hold's seconds say nothing about one.
+    if (startRatio(exercise) === null || isHold(exercise)) return undefined;
     const logged = session.completed.sets.some(
       (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
     );
@@ -340,6 +365,12 @@ export function ActiveWorkoutScreen() {
     });
   };
 
+  const startHold = (entryId: string, setIndex: number, seconds: number) => {
+    // The tap that starts a hold is what lets the browser play its ticks and end tone.
+    if (soundsOn) holdSounds.unlock();
+    store.startHold(entryId, setIndex, seconds);
+  };
+
   const commitEdit = (entryId: string, setIndex: number, values: SetLoggerValues) => {
     setEditing(null);
     void store.logSet(entryId, setIndex, values).catch((error: unknown) => {
@@ -360,6 +391,7 @@ export function ActiveWorkoutScreen() {
 
   const loggerFor = (entry: WorkoutEntry, block: WorkoutBlock) => {
     const exercise = requireExercise(entry.exerciseId);
+    const hold = isHold(exercise);
     // What this place can load for the exercise today: the dial's step, its list, its plates.
     const loading = loadingFor(currentLocation?.loading, session.loading, exercise, units);
     const step = loading.step;
@@ -375,8 +407,25 @@ export function ActiveWorkoutScreen() {
     // the dial has been turned to, or, with no set in front of you, the last working weight
     // logged here. A warm-up's draft never reaches a working set.
     const dialRaw = currentHere
-      ? initialFor(session, entry, currentHere.set, previous?.weight ?? null, step, workingLogged)
+      ? initialFor(
+          session,
+          entry,
+          currentHere.set,
+          previous?.weight ?? null,
+          step,
+          workingLogged,
+          hold,
+        )
       : null;
+    // This set's countdown, and the seconds it has finished with: they fill the dial.
+    const holdHere =
+      hold &&
+      currentHere &&
+      session.hold?.entryId === entry.id &&
+      session.hold.setIndex === currentHere.setIndex
+        ? session.hold
+        : null;
+    const heldHere = holdHere ? heldSeconds(holdHere, now) : null;
     // A weight derived here rather than written by the engine lands on what the place can load.
     const dial =
       dialRaw && dialRaw.weight !== null && currentHere?.set.targetWeight === null
@@ -427,6 +476,7 @@ export function ActiveWorkoutScreen() {
             }}
             initial={loggedValues(session, entry.id, editingSet.index)}
             mode="edit"
+            hold={hold}
             weightStep={step}
             onCommit={(values) => commitEdit(entry.id, editingSet.index, values)}
             onCancel={() => setEditing(null)}
@@ -457,7 +507,28 @@ export function ActiveWorkoutScreen() {
                   previous?.weight ?? null,
                   step,
                   workingLogged,
+                  hold,
                 )
+              }
+              hold={hold}
+              filled={
+                holdHere && heldHere !== null
+                  ? { reps: heldHere, nonce: `${holdHere.startedAt}|${heldHere}` }
+                  : null
+              }
+              timer={
+                hold ? (
+                  <HoldTimer
+                    hold={holdHere}
+                    seconds={currentHere.set.targetReps[0]}
+                    paused={paused}
+                    disabled={calibrating}
+                    onStart={() =>
+                      startHold(entry.id, currentHere.setIndex, currentHere.set.targetReps[0])
+                    }
+                    onStop={() => store.stopHold()}
+                  />
+                ) : null
               }
               available={loading.available}
               onWeightHintTap={() => setPlatesRequest({ entryId: entry.id, at: Date.now() })}
@@ -824,7 +895,11 @@ export function ActiveWorkoutScreen() {
               .map((entry) => {
                 const first = entry.sets.find((set) => set.kind === 'working');
                 return first
-                  ? `${requireExercise(entry.exerciseId).name}: ${first.targetReps[0]}-${first.targetReps[1]} reps @ RIR ${first.targetRir}`
+                  ? `${requireExercise(entry.exerciseId).name}: ${
+                      holdById(entry.exerciseId)
+                        ? `hold ${first.targetReps[0]} s`
+                        : `${first.targetReps[0]}-${first.targetReps[1]} reps @ RIR ${first.targetRir}`
+                    }`
                   : requireExercise(entry.exerciseId).name;
               })
               .join(' · ')}
@@ -891,7 +966,10 @@ export function ActiveWorkoutScreen() {
         }
         editActions={editActions}
         maxAction={
-          selected && selectedExercise && startRatio(selectedExercise) !== null
+          selected &&
+          selectedExercise &&
+          startRatio(selectedExercise) !== null &&
+          !isHold(selectedExercise)
             ? {
                 line: (() => {
                   const saved = strengthMaxes.maxes[selectedExercise.id];

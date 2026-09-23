@@ -296,7 +296,7 @@ _Last updated: 2026-09-22_
 
 - Progress scores need records: with none logged the cards show their definitions and "none" confidence until sessions accumulate.
 - Trends and rankings need at least three sessions per lift; the first session of a lift is its baseline and never a record.
-- Vibration on rest completion depends on the phone allowing it; there is never a sound.
+- Vibration at the end of a rest or a hold depends on the phone allowing it. The ticks and end tone play only after a tap has let the page make sound, and a locked phone may not run them.
 - Demonstrations are original placeholder diagrams (one animated loop per movement pattern); your own GIF, photo, or video replaces them per exercise.
 - Automatic backups include your demonstrations inline, so three of them cost about three times the size of your media.
 - The gym barcode's popup comes up at Start Workout, not on arrival, and cannot raise the brightness; it is read and redrawn only where the browser can read barcodes (Chrome on Android), and shows as the picture elsewhere.

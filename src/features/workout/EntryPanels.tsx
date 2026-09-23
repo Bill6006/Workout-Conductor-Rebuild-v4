@@ -148,9 +148,10 @@ export function EntryPanels({
           <ExerciseDemo exercise={exercise} customMedia={customMedia} />
           {previous ? (
             <p className={styles.panelNote}>
-              Last time: {previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} ×{' '}
-              {previous.reps}
-              {previous.rir === null ? '' : ` @ RIR ${previous.rir}`}, {previous.sets} working sets.
+              {exercise.measure === 'seconds'
+                ? `Last time: ${previous.weight === null ? '' : `${previous.weight} ${units} × `}${previous.reps} s`
+                : `Last time: ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}${previous.rir === null ? '' : ` @ RIR ${previous.rir}`}`}
+              , {previous.sets} working sets.
             </p>
           ) : null}
           <h4 className={styles.panelTitle}>Why this target</h4>
@@ -166,6 +167,7 @@ export function EntryPanels({
                 'working',
                 entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
                 entry.role,
+                exercise.measure === 'seconds',
               ).evidence,
               ...restGuidance(entry.role, entry.restSeconds).evidence,
             ].map((line) => (

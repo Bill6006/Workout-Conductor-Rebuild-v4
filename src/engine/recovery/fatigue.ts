@@ -1,5 +1,7 @@
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { Readiness } from '../recalibration/types';
+import { holdById } from '../workout/setText';
+import { ratingPainWords } from './painReport';
 
 /**
  * Fatigue interpretation from actual records and today's readiness: sessions
@@ -122,7 +124,13 @@ export function interpretFatigue(
   }
   if (recentRatings.some((rating) => rating?.pain)) {
     score += 1;
-    evidence.push('Pain reported in a recent session.');
+    const named = recentRatings.find((rating) => rating?.pain && rating.joint);
+    const words = named ? ratingPainWords(named) : null;
+    evidence.push(
+      words
+        ? `${words.charAt(0).toUpperCase()}${words.slice(1)} reported in a recent session.`
+        : 'Pain reported in a recent session.',
+    );
   }
 
   // Saved check-ins: a trend, not just today.
@@ -177,6 +185,8 @@ export function interpretFatigue(
   const maxes = new Map<string, number[]>();
   for (const record of qualifying.slice(0, 4)) {
     for (const entry of record.entries) {
+      // A hold's seconds are not reps, so they carry no estimated max to drift.
+      if (holdById(entry.exerciseId)) continue;
       let best = 0;
       for (const set of entry.sets) {
         if (set.kind === 'working' && set.completed && set.weight !== null) {

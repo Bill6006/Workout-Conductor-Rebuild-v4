@@ -144,6 +144,7 @@ export function customToCatalogExercise(custom: CustomExercise): CatalogExercise
     transitionCost: 1,
     station: 'open',
     repRanges: compound ? { hypertrophy: [6, 10] } : { hypertrophy: [10, 15] },
+    measure: 'reps',
     dropSetSafe: custom.dropSetSafe,
     supersetFriendly: custom.supersetFriendly,
     stabilityDemand: 'medium',

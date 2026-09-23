@@ -1,6 +1,7 @@
 import { dropSetWeight } from './dropSet';
 import { EQUIPMENT } from '../../catalog/equipment/equipment';
 import { requireExercise } from '../../catalog/exercises/catalog';
+import { holdById, targetText } from '../workout/setText';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import { muscleName } from '../../catalog/muscles/muscles';
 import { rankAlternatives } from '../alternatives/rankAlternatives';
@@ -417,7 +418,7 @@ function refitStarted(
     const reps: [number, number] = changedBefore
       ? [set.targetReps[0] - before.extra, set.targetReps[1] - before.extra]
       : [set.targetReps[0], set.targetReps[1]];
-    const fit = rackFit(asked, reps, loading, units);
+    const fit = rackFit(asked, reps, loading, units, holdById(entry.exerciseId));
     note = note ?? fit;
     const weight = fit ? fit.loaded : asked;
     const targetReps: [number, number] = fit ? [reps[0] + fit.extra, reps[1] + fit.extra] : reps;
@@ -1463,7 +1464,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         workout,
         headline:
           changed > 0
-            ? `${name}: ${low}-${high} reps for the remaining ${changed === 1 ? 'set' : 'sets'}.`
+            ? `${name}: ${targetText([low, high], holdById(entry.exerciseId))} for the remaining ${changed === 1 ? 'set' : 'sets'}.`
             : `No sets left to change on ${name}.`,
       };
     }

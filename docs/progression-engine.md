@@ -369,3 +369,50 @@ max can be entered or updated from the exercise's Options at any time.
   `alignLegacyStyle` in the store), so a copy of the app from before this round still reads a
   synced profile.
 - The research, study by study: `docs/research/programming-styles.md`.
+
+## Holds (`withHoldSeconds`, `isHold`, Maintenance 20)
+
+- **What a hold is.** A catalog exercise with `measure: 'seconds'` (Plank, Farmer Carry). The
+  field defaults to `'reps'`, so every other exercise and every custom one reads as before. A
+  hold's seconds are stored in the existing reps fields (`LoggedSet.reps`, whole seconds, up to
+  200), so older records and other devices read them unchanged.
+- **The target.** `targetReps` is `[today's seconds, top of the range]`; the top never moves, so
+  the rep-range zone rule still sees one range. The first time, today's seconds are the bottom of
+  the range. After a session in which every set reached the target, the next is five seconds past
+  the shortest hold, rounded down to five (`HOLD_STEP_SECONDS`), never past the top; a set short
+  of it keeps the target. At the top on every set, a bodyweight hold is ready for a harder
+  variation (`maintain`), and a loaded carry takes the weight the load rule gives (`weight`) and
+  starts again from the bottom. Until then a carry keeps the load it was lifted at, whatever the
+  role's load rule said. Only the hold's own sessions count: a related exercise's reps are not
+  seconds. No extra set is offered on a hold. A long break (`RETURN_AFTER_DAYS`) starts again
+  from the bottom, a carry a step lighter; high fatigue repeats the target. When the place has
+  nothing heavier than the load it was held at (`settleHold`, in `capTarget` and at the end of
+  `recommendNextTarget`), a hold at the top stays at the full seconds; a rack that skips a step
+  takes the next real weight, from the bottom.
+- **Kept out of the weight maths.** `toPoint` gives a hold no estimated max, so plateau, stall
+  routes, the return and zone estimates, `withEnteredMax` and Progress's strength rows pass it
+  by. `knownLifts` (cross-lift estimates), personal records, volume (completion and Progress),
+  fatigue drift, strategy insights and the coach's rep cards (reps fell, aim higher, capped) skip
+  holds by `isHold`/`holdById`. The max sheet is never offered for one. Autoregulation does not
+  run on a hold's sets, and `lightRange` keeps a hold's own range.
+- **Time.** `workSecondsFor(entry, set, hold)` counts a hold as its seconds plus the set overhead,
+  not reps at a tempo; `remainingMinutes` takes away the part of a running hold already counted.
+- **The countdown.** `WorkoutSession.hold` (`HoldState`) holds an absolute `endsAt`, frozen into
+  `pausedRemaining` by a pause and re-armed by resume, and `held` once stopped early.
+  `heldSeconds` is the seconds finished with: `held`, or the full length once `endsAt` passes.
+  Start ends a running rest; a log, skip, undo or finish clears it; a rebuild keeps it only while
+  its entry is still a hold (`holdStillFits`). The stored field reads an unknown shape as none.
+
+## Pain from the rating (`src/engine/recovery/painReport.ts`, Maintenance 20)
+
+- The rating keeps an optional `joint` beside `pain`. `lastPainReport(history)` reads the
+  newest saved workout (by `completedAt ?? startedAt`); with pain and a joint, it is the report,
+  however long ago, until a later workout answers it again. Pain without a joint names nothing.
+  `painNextLine` promises the coach's flag only for a joint some exercise loads at moderate or
+  high stress.
+- The coach (`RATING_PAIN_SOURCE`) names the first remaining, unstarted exercise with moderate or
+  high stress on that joint, with the source line first ("Sep 12, Push + arms: shoulder."), and
+  offers the swap. Not on a finished workout, and not when the same joint is marked as hurting
+  today, whose card already covers it.
+- The accessory picker treats the joint as a pain joint, and `rankAlternatives` leaves out high
+  stress on it and ranks moderate stress 12 lower, with the reason in words.

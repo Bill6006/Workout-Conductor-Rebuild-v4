@@ -46,6 +46,8 @@ export interface ExerciseInput {
   difficulty?: Difficulty;
   load?: LoadType;
   reps?: { strength?: [number, number]; hypertrophy?: [number, number] };
+  /** A hold counts seconds; its reps ranges are then seconds. */
+  measure?: 'reps' | 'seconds';
   substitutions?: string[];
   setup: string[];
   execution: string[];
@@ -256,6 +258,7 @@ export function defineExercise(input: ExerciseInput): CatalogExercise {
           : 0),
     station: input.station ?? defaultStation(input.equipment),
     repRanges: defaultReps(input, compound),
+    measure: input.measure ?? 'reps',
     dropSetSafe: input.dropSetSafe ?? !(heavyBarbell || (spinal && load !== 'stack')),
     supersetFriendly: input.supersetFriendly ?? !(compound && input.strength === 3),
     stabilityDemand:

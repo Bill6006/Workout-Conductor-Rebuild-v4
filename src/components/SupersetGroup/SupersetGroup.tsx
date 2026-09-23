@@ -3,6 +3,7 @@ import { requireExercise } from '../../catalog/exercises/catalog';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
+import { holdById } from '../../engine/workout/setText';
 import type { WorkoutBlock } from '../../engine/workout/types';
 import { formatLogged } from '../../features/workout/setFormat';
 import styles from './SupersetGroup.module.css';
@@ -109,7 +110,11 @@ export function SupersetGroup({
                       </button>
                     ) : set ? (
                       <span className={isNow ? styles.now : styles.pending}>
-                        {isNow ? 'now' : `${set.targetReps[0]}-${set.targetReps[1]}`}
+                        {isNow
+                          ? 'now'
+                          : holdById(entry.exerciseId)
+                            ? `${set.targetReps[0]} s`
+                            : `${set.targetReps[0]}-${set.targetReps[1]}`}
                       </span>
                     ) : (
                       <span className={styles.pending}>—</span>

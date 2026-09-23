@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { requireExercise } from '../../catalog/exercises/catalog';
+import { isHold } from '../../catalog/exercises/exerciseSchema';
 import type { RestStyle, UnitSystem } from '../../core/validation/profile';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
@@ -88,15 +89,19 @@ export function ExerciseCard({
   const tempo = tempoCue(entry.role, target?.kind ?? 'working', exercise, {
     capped: Boolean(entry.progression?.capped),
   });
+  // A hold has no rep tempo: the card says how long, and the details keep the cue, effort and rest.
+  const hold = isHold(exercise);
   const effort = effortGuidance(
     target?.kind ?? 'working',
     target?.targetRir ?? entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
     entry.role,
+    hold,
   );
   const restNote = restGuidance(entry.role, rest);
-  const research = evidenceLines([...tempo.evidence, ...effort.evidence, ...restNote.evidence], {
-    restStyle,
-  });
+  const research = evidenceLines(
+    [...(hold ? [] : tempo.evidence), ...effort.evidence, ...restNote.evidence],
+    { restStyle },
+  );
 
   return (
     <section
@@ -141,29 +146,46 @@ export function ExerciseCard({
               </button>
             </p>
           ) : null}
-          <button
-            type="button"
-            className={styles.tempoBarButton}
-            onClick={() => setTempoOpen((open) => !open)}
-            aria-expanded={tempoOpen}
-            aria-label={`Tempo ${tempo.tempo}: ${tempoOpen ? 'hide' : 'show'} the reason and cue`}
-            data-testid="tempo-toggle"
-          >
-            <TempoBar
-              phases={tempo.phases}
-              totalSeconds={tempo.totalSeconds}
-              trackEnd={
-                // The notation sits at the end of the bar it abbreviates; bar, phases, and chip are
-                // one tap target, so the demonstration has the right-hand column to itself.
-                <span className={styles.tempoChip} data-testid="tempo-line">
-                  <span className={styles.visuallyHidden}>Tempo </span>
-                  <span className={styles.tempoChipValue}>
-                    {tempo.tempo} {tempoOpen ? '▴' : '▾'}
-                  </span>
+          {hold ? (
+            <button
+              type="button"
+              className={styles.tempoBarButton}
+              onClick={() => setTempoOpen((open) => !open)}
+              aria-expanded={tempoOpen}
+              aria-label={`Hold ${target?.targetReps[0] ?? 0} s: ${tempoOpen ? 'hide' : 'show'} the cue`}
+              data-testid="tempo-toggle"
+            >
+              <span className={styles.tempoChip} data-testid="hold-line">
+                <span className={styles.tempoChipValue}>
+                  Hold {target?.targetReps[0] ?? 0} s {tempoOpen ? '▴' : '▾'}
                 </span>
-              }
-            />
-          </button>
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.tempoBarButton}
+              onClick={() => setTempoOpen((open) => !open)}
+              aria-expanded={tempoOpen}
+              aria-label={`Tempo ${tempo.tempo}: ${tempoOpen ? 'hide' : 'show'} the reason and cue`}
+              data-testid="tempo-toggle"
+            >
+              <TempoBar
+                phases={tempo.phases}
+                totalSeconds={tempo.totalSeconds}
+                trackEnd={
+                  // The notation sits at the end of the bar it abbreviates; bar, phases, and chip are
+                  // one tap target, so the demonstration has the right-hand column to itself.
+                  <span className={styles.tempoChip} data-testid="tempo-line">
+                    <span className={styles.visuallyHidden}>Tempo </span>
+                    <span className={styles.tempoChipValue}>
+                      {tempo.tempo} {tempoOpen ? '▴' : '▾'}
+                    </span>
+                  </span>
+                }
+              />
+            </button>
+          )}
         </div>
         <div className={styles.headAside}>
           <button
@@ -182,13 +204,15 @@ export function ExerciseCard({
       {tempoOpen ? (
         <div className={styles.tempoDetail} data-testid="tempo-detail">
           <dl className={styles.detailRows}>
-            <div className={styles.detailRow}>
-              <dt>Tempo</dt>
-              <dd>
-                <strong>{tempo.tempo}</strong> · {tempo.why}
-                {tempo.tempo.includes('X') ? '; X is as fast as you can' : ''}
-              </dd>
-            </div>
+            {hold ? null : (
+              <div className={styles.detailRow}>
+                <dt>Tempo</dt>
+                <dd>
+                  <strong>{tempo.tempo}</strong> · {tempo.why}
+                  {tempo.tempo.includes('X') ? '; X is as fast as you can' : ''}
+                </dd>
+              </div>
+            )}
             {tempo.cue ? (
               <div className={styles.detailRow}>
                 <dt>Cue</dt>

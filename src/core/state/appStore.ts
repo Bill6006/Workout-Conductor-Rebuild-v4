@@ -5,6 +5,8 @@ import {
   registerCustomExercises,
   requireExercise,
 } from '../../catalog/exercises/catalog';
+import { isHold } from '../../catalog/exercises/exerciseSchema';
+import { holdById } from '../../engine/workout/setText';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import { resolveTargetMinutes } from '../../engine/duration/duration';
@@ -189,11 +191,13 @@ import {
   createSession,
   doneKeys,
   elapsedSeconds,
+  heldSeconds,
   readKeptSessions,
   readSessionOrKeep,
   writeSession,
   type CalibrationState,
   type CompletionSummary,
+  type HoldState,
   type RestState,
   type SessionRecovery,
   type SetDraft,
@@ -497,6 +501,9 @@ export function describePosition(workout: GeneratedWorkout, position: SetPositio
   const [low, high] = position.set.targetReps;
   if (position.kind === 'warmup') return `${name} · warm-up set ${position.ordinal} of ${count}`;
   if (position.kind === 'drop') return `${name} · drop set: strip about 20% and go`;
+  if (holdById(position.exerciseId)) {
+    return `${name} · set ${position.ordinal} of ${count} · hold ${low} s`;
+  }
   return `${name} · set ${position.ordinal} of ${count} · ${low}-${high} reps @ RIR ${position.set.targetRir}`;
 }
 
@@ -520,6 +527,38 @@ function restPointingAt(
 ): WorkoutSession['rest'] {
   if (!rest || !next) return rest;
   return { ...rest, nextLabel: `Next: ${describePosition(workout, next)}` };
+}
+
+/**
+ * A hold survives a rebuild only while its set is still a hold in the rebuilt workout and still the
+ * set in front of the lifter: a countdown the screen no longer shows must not keep ticking.
+ */
+function holdStillFits(
+  hold: WorkoutSession['hold'],
+  workout: GeneratedWorkout,
+  next: SetPosition | null,
+): WorkoutSession['hold'] {
+  if (!hold) return hold;
+  const entry = allEntries(workout.blocks).find((candidate) => candidate.id === hold.entryId);
+  const fits =
+    entry !== undefined &&
+    isHold(getExercise(entry.exerciseId)) &&
+    next?.entryId === hold.entryId &&
+    next.setIndex === hold.setIndex;
+  return fits ? hold : null;
+}
+
+/** A timer frozen by a pause, running again from now with what it had left. */
+function rearmed<T extends { endsAt: string; pausedRemaining: number | null }>(
+  timer: T | null,
+  nowMs: number,
+): T | null {
+  if (!timer || timer.pausedRemaining === null) return timer;
+  return {
+    ...timer,
+    pausedRemaining: null,
+    endsAt: new Date(nowMs + timer.pausedRemaining * 1000).toISOString(),
+  };
 }
 
 export class AppStore {
@@ -923,6 +962,7 @@ export class AppStore {
             ? result.workout.duration.estimatedMinutes
             : latest.defaultEstimatedMinutes,
         rest: restPointingAt(latest.rest, result.workout, position),
+        hold: holdStillFits(latest.hold, result.workout, position),
         lastSummary: result.summary,
         lastChanges: result.changes,
         previous: {
@@ -982,6 +1022,7 @@ export class AppStore {
           ? session.previous.workout.duration.estimatedMinutes
           : session.defaultEstimatedMinutes,
       rest: restPointingAt(session.rest, session.previous.workout, position),
+      hold: holdStillFits(session.hold, session.previous.workout, position),
       previous: null,
       lastSummary: {
         headline,
@@ -1068,6 +1109,14 @@ export class AppStore {
           pausedRemaining: Math.max(0, (Date.parse(session.rest.endsAt) - nowMs) / 1000),
         }
       : null;
+    // A hold still counting freezes with the workout, exactly as the rest does.
+    const hold: HoldState | null =
+      session.hold && heldSeconds(session.hold, nowMs) === null
+        ? {
+            ...session.hold,
+            pausedRemaining: Math.max(0, (Date.parse(session.hold.endsAt) - nowMs) / 1000),
+          }
+        : session.hold;
     this.setSession({
       ...session,
       status: 'paused',
@@ -1075,6 +1124,7 @@ export class AppStore {
       activeSince: null,
       completed: { ...session.completed, elapsedSeconds: elapsedSeconds(session, nowMs) },
       rest,
+      hold,
     });
   }
 
@@ -1092,12 +1142,21 @@ export class AppStore {
             endsAt: new Date(nowMs + session.rest.pausedRemaining * 1000).toISOString(),
           }
         : session.rest;
+    const hold: HoldState | null =
+      session.hold && session.hold.pausedRemaining !== null
+        ? {
+            ...session.hold,
+            pausedRemaining: null,
+            endsAt: new Date(nowMs + session.hold.pausedRemaining * 1000).toISOString(),
+          }
+        : session.hold;
     this.setSession({
       ...session,
       status: 'active',
       activeSince: this.now(),
       pausedAt: null,
       rest,
+      hold,
     });
     if (away >= LONG_INTERRUPTION_SECONDS) {
       await this.recalibrate({ type: 'resume', awaySeconds: Math.round(away) });
@@ -1183,7 +1242,10 @@ export class AppStore {
       activeSince: resuming ? now : session.activeSince,
       pausedAt: null,
       completed: { ...completed, currentEntryId: next?.entryId ?? null },
-      rest,
+      // A log resumes a paused workout, so whatever the pause froze runs again from here.
+      rest: resuming ? rearmed(rest, nowMs) : rest,
+      // A new log takes the hold's seconds with it; a correction leaves a running hold alone.
+      hold: isEdit ? (resuming ? rearmed(session.hold, nowMs) : session.hold) : null,
       // A skip carries no numbers, and a warm-up or drop set carries the wrong ones, so only
       // a working set becomes the next set's prefill.
       drafts:
@@ -1192,7 +1254,9 @@ export class AppStore {
           : { ...session.drafts, [entryId]: { weight: values.weight, reps, rir: values.rir } },
     });
 
-    if (!isEdit && set.kind === 'working' && !skipped) {
+    // A hold's seconds are not reps: nothing about them moves the load or the target mid-workout.
+    const held = isHold(getExercise(entry.exerciseId));
+    if (!isEdit && set.kind === 'working' && !skipped && !held) {
       const remaining = entry.sets.filter(
         (candidate) =>
           candidate.kind === 'working' &&
@@ -1344,6 +1408,7 @@ export class AppStore {
       ...session,
       completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
       rest: null,
+      hold: null,
     });
   }
 
@@ -1382,6 +1447,7 @@ export class AppStore {
       ...session,
       completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
       rest: null,
+      hold: null,
     });
   }
 
@@ -1394,9 +1460,12 @@ export class AppStore {
     if (sets.length === session.completed.sets.length) return;
     const keys = new Set(sets.map((c) => `${c.entryId}:${c.setIndex}`));
     const next = currentPosition(session.workout, (id, index) => keys.has(`${id}:${index}`));
+    const hold = session.hold;
     this.setSession({
       ...session,
       completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
+      // A countdown stays only while its set is still the one in front of the lifter.
+      hold: hold && next?.entryId === hold.entryId && next.setIndex === hold.setIndex ? hold : null,
     });
   }
 
@@ -1427,6 +1496,47 @@ export class AppStore {
     const session = this.requireSession();
     if (!session.rest) return;
     this.setSession({ ...session, rest: null });
+  }
+
+  /**
+   * Starts a hold's countdown for a set of a held exercise. Holding means the rest is over, so a
+   * running rest ends here; starting again replaces the countdown.
+   */
+  startHold(entryId: string, setIndex: number, seconds: number): void {
+    const session = this.requireSession();
+    if (session.status !== 'active') return;
+    const entry = allEntries(session.workout.blocks).find((candidate) => candidate.id === entryId);
+    if (!entry || !isHold(getExercise(entry.exerciseId))) return;
+    if (!entry.sets.some((set) => set.index === setIndex)) return;
+    const length = Math.max(1, Math.round(seconds));
+    const nowMs = this.nowMs();
+    this.setSession({
+      ...session,
+      rest: null,
+      hold: {
+        entryId,
+        setIndex,
+        seconds: length,
+        startedAt: this.now(),
+        endsAt: new Date(nowMs + length * 1000).toISOString(),
+        pausedRemaining: null,
+        held: null,
+      },
+    });
+  }
+
+  /** Stops a hold before its end: the seconds held so far become the set's seconds. */
+  stopHold(): void {
+    const session = this.requireSession();
+    const hold = session.hold;
+    if (!hold || hold.held !== null) return;
+    const nowMs = this.nowMs();
+    const left =
+      hold.pausedRemaining !== null
+        ? hold.pausedRemaining
+        : Math.max(0, (Date.parse(hold.endsAt) - nowMs) / 1000);
+    const held = Math.max(0, Math.min(hold.seconds, Math.floor(hold.seconds - left)));
+    this.setSession({ ...session, hold: { ...hold, pausedRemaining: null, held } });
   }
 
   /** Per-exercise notes and cue memory, kept with the user's custom content and backed up. */
@@ -1492,6 +1602,7 @@ export class AppStore {
       activeSince: null,
       pausedAt: null,
       rest: null,
+      hold: null,
       rating,
       completion,
       completed: { ...session.completed, elapsedSeconds: elapsed },

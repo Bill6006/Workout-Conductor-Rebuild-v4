@@ -39,6 +39,10 @@ are migrated forward before validation:
 
 A backup from a newer app version is imported as it is and flagged in the preview.
 
+Maintenance 20 changed no schema version. A held exercise (Plank, Farmer Carry) keeps its seconds
+in the set's `reps`, and a rating may carry an optional `joint`; an older copy of the app reads
+both, and an unknown joint reads as none.
+
 The database is at version 6. Upgrades only ever add stores; a deployment never wipes data. If
 another app on the same origin already opened the database at a higher version, the app opens
 it as it is and adds only the stores it is missing.

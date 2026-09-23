@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { JOINTS } from '../../catalog/exercises/exerciseSchema';
 
 /**
  * A completed (or partially completed) workout as stored in IndexedDB `workouts`.
@@ -37,6 +38,8 @@ export const LoggedExerciseSchema = z.looseObject({
 export const SessionRatingSchema = z.looseObject({
   effort: z.enum(['too-easy', 'right', 'too-hard']),
   pain: z.boolean().default(false),
+  /** Where it hurt, when the lifter said (Maintenance 20); a joint this copy does not know is dropped, never the rating. */
+  joint: z.enum(JOINTS).optional().catch(undefined),
   energyAfter: z.number().int().min(1).max(5),
   note: z.string().max(500).default(''),
 });

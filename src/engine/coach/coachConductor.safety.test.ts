@@ -9,7 +9,14 @@ import { emptyCompleted, emptyConstraints } from '../recalibration/recalibrate';
 import { interpretFatigue } from '../recovery/fatigue';
 import { allEntries } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
-import { conductCoach, isDeclined, setAsideKey, type CoachInput } from './coachConductor';
+import {
+  RATING_PAIN_SOURCE,
+  conductCoach,
+  gatherSignals,
+  isDeclined,
+  setAsideKey,
+  type CoachInput,
+} from './coachConductor';
 
 const NOW = '2026-09-10T12:00:00.000Z';
 const profile = createDefaultProfile(NOW);
@@ -55,6 +62,15 @@ function loadedJoints(coachInput: CoachInput): Joint[] {
   return [...new Set(joints)];
 }
 
+/** A saved workout `daysAgo` whose rating says pain, and where when a joint is given. */
+function painRecord(daysAgo: number, joint?: Joint): WorkoutRecord {
+  return {
+    ...record(daysAgo, 'back-squat', [[5, 185, 2]]),
+    title: 'Lower body',
+    rating: { effort: 'right', pain: true, ...(joint ? { joint } : {}), energyAfter: 3, note: '' },
+  };
+}
+
 describe('Not now on a safety card', () => {
   it('sets that worry aside for this workout; a new one still shows, and the next workout starts clean', () => {
     const [first, second] = loadedJoints(input());
@@ -77,25 +93,14 @@ describe('Not now on a safety card', () => {
     expect(conductCoach({ ...input([], [first]), accepted: [] })?.signal.concern).toBe(first);
   });
 
-  it('stays away for the rest of the workout when the pain was last session, whichever exercise it names', () => {
-    const today = input();
-    const [firstEntry, secondEntry] = allEntries(today.workout.blocks);
-    if (!firstEntry || !secondEntry) throw new Error('need two exercises');
-    // Last session hurt, and it had two of today's lifts in it.
-    const last = {
-      ...record(2, firstEntry.exerciseId, [[8, 100, 2]]),
-      rating: { effort: 'right' as const, pain: true, energyAfter: 3, note: '' },
-    };
-    const [logged] = last.entries;
-    if (!logged) throw new Error('no entry');
-    last.entries.push({ ...logged, exerciseId: secondEntry.exerciseId });
+  it('sets the pain named last time aside for the rest of the workout', () => {
+    const last = painRecord(2, 'knee');
     const card = conductCoach(input([last]));
-    expect(card?.signal.source).toBe('last rating');
-    expect(card?.signal.headline).toContain(requireExercise(firstEntry.exerciseId).name);
-
+    expect(card?.signal.source).toBe(RATING_PAIN_SOURCE);
     const accepted = [setAsideKey(card?.signal ?? { source: '' })];
-    const after = conductCoach({ ...input([last]), accepted });
-    expect(after?.signal.source).not.toBe('last rating');
+    expect(conductCoach({ ...input([last]), accepted })?.signal.source).not.toBe(
+      RATING_PAIN_SOURCE,
+    );
   });
 
   it('is still never declined for days', () => {
@@ -107,5 +112,49 @@ describe('Not now on a safety card', () => {
       declines: { [`${signal.source}|*`]: { count: 5, lastAt: NOW } },
     };
     expect(isDeclined(declines, signal, NOW)).toBe(false);
+  });
+});
+
+describe('pain named when the last workout was saved', () => {
+  const ratingCard = (coachInput: CoachInput) =>
+    gatherSignals(coachInput).find((signal) => signal.source === RATING_PAIN_SOURCE);
+
+  it('warns only about exercises that load that joint, and says where it came from', () => {
+    const signal = ratingCard(input([painRecord(2, 'knee')]));
+    if (!signal) throw new Error('no card');
+    const named = allEntries(input().workout.blocks).find(
+      (entry) => signal.action?.kind === 'alternatives' && entry.id === signal.action.entryId,
+    );
+    const stress = named ? requireExercise(named.exerciseId).jointStress.knee : undefined;
+    expect(stress === 'moderate' || stress === 'high').toBe(true);
+    expect(signal.headline).toBe(
+      `Knee pain last time: ${requireExercise(named?.exerciseId ?? '').name} loads it`,
+    );
+    // "Sep 8, Lower body: knee." first, so it survives a two-line Why.
+    expect(signal.why[0]).toBe('Sep 8, Lower body: knee.');
+    expect(signal.why[1]).toMatch(/puts (moderate|high) stress on it/);
+    expect(signal).toMatchObject({ domain: 'safety', confidence: 'high', severity: 2 });
+  });
+
+  it('names nothing when no exercise today loads it, or when the rating did not say where', () => {
+    // Nothing in the catalog loads the neck.
+    expect(ratingCard(input([painRecord(2, 'neck')]))).toBeUndefined();
+    // An older rating said pain without where: nothing is guessed from it.
+    expect(ratingCard(input([painRecord(2)]))).toBeUndefined();
+  });
+
+  it('goes quiet once a later workout is saved without pain, and not before, however long the break', () => {
+    const fine = { ...record(1, 'cable-fly', [[12, 40, 1]]), rating: null };
+    expect(ratingCard(input([painRecord(3, 'knee'), fine]))).toBeUndefined();
+    expect(ratingCard(input([painRecord(40, 'knee')]))).toBeDefined();
+  });
+
+  it('gives way to the card for the same joint marked today, so one Not now quiets both', () => {
+    expect(ratingCard(input([painRecord(3, 'knee')], ['knee']))).toBeUndefined();
+    expect(ratingCard(input([painRecord(3, 'knee')], ['shoulder']))).toBeDefined();
+  });
+
+  it('never warns about the workout that report came from', () => {
+    expect(ratingCard({ ...input([painRecord(0, 'knee')]), status: 'completed' })).toBeUndefined();
   });
 });

@@ -7,6 +7,7 @@ import { ScreenHeader } from '../../components/Screen/Screen';
 import type { WorkoutSession } from '../../core/state/session';
 import { useAppStore } from '../../core/state/useAppStore';
 import type { UnitSystem } from '../../core/validation/profile';
+import { ratingPainWords } from '../../engine/recovery/painReport';
 import styles from './ActiveWorkout.module.css';
 
 interface WorkoutCompletionProps {
@@ -92,7 +93,7 @@ export function WorkoutCompletion({ session, units }: WorkoutCompletionProps) {
             {
               label: 'Rating',
               value: rating
-                ? `${rating.effort.replace('-', ' ')}, energy ${rating.energyAfter}/5${rating.pain ? ', pain reported' : ''}${rating.note ? `: ${rating.note}` : ''}`
+                ? `${rating.effort.replace('-', ' ')}, energy ${rating.energyAfter}/5${ratingPainWords(rating) ? `, ${ratingPainWords(rating)} reported` : ''}${rating.note ? `: ${rating.note}` : ''}`
                 : 'not rated',
             },
             { label: 'Next time', value: summary.nextImplication },

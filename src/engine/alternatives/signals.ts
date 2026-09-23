@@ -1,9 +1,11 @@
 import { getExercise } from '../../catalog/exercises/catalog';
-import type { Joint } from '../../catalog/exercises/exerciseSchema';
+import { isHold, type Joint } from '../../catalog/exercises/exerciseSchema';
+import { amountText } from '../workout/setText';
 import { MUSCLE_IDS, type MuscleId } from '../../catalog/muscles/muscles';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { performanceHistory } from '../progression/progression';
+import { lastPainReport } from '../recovery/painReport';
 import { ROUTE_STEPS, type CoachRoutes } from '../strategy/plateau';
 import { computeWeeklyVolume, weeklyTargets } from '../volume/weeklyVolume';
 import { preferredIdsOf } from '../conflicts/context';
@@ -83,9 +85,10 @@ export function buildRankingSignals(sources: SignalSources): RankingSignals {
     const load = point.bestWeight === null ? 'bodyweight' : `${point.bestWeight} ${profile.units}`;
     lastPerformance.set(id, {
       daysAgo,
-      line: `last done ${shortDate(point.date)}: ${load} × ${point.bestReps}`,
+      line: `last done ${shortDate(point.date)}: ${load} × ${amountText(point.bestReps, isHold(exercise))}`,
     });
   }
+  const recentJoint = lastPainReport(history)?.joint;
   const route = sources.coachRoutes?.routes[sources.currentExerciseId];
   const routeWantsVariation =
     route !== undefined && !route.exhausted && ROUTE_STEPS[route.step] === 'variation';
@@ -95,6 +98,7 @@ export function buildRankingSignals(sources: SignalSources): RankingSignals {
     lastPerformance,
     muscleLoad: muscleLoads(history, profile, now),
     sessionPainJoints: new Set(sources.sessionPainJoints ?? []),
+    recentPainJoints: new Set(recentJoint ? [recentJoint] : []),
     routeWantsVariation,
   };
 }

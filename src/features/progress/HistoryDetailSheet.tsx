@@ -4,7 +4,18 @@ import { Sheet } from '../../components/Sheet/Sheet';
 import { formatDateTime } from '../../core/time/clock';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { ratingPainWords } from '../../engine/recovery/painReport';
+import { amountText } from '../../engine/workout/setText';
 import styles from './Progress.module.css';
+
+/** Joints that hurt in a workout: reported during it, and named when it was saved. */
+/** Joints that hurt during the workout; the one picked at the end is already in the Rating row. */
+function painJointsOf(record: WorkoutRecord): string[] {
+  const said = record.rating?.pain ? record.rating.joint : undefined;
+  return (record.painJoints ?? [])
+    .filter((joint) => joint !== said)
+    .map((joint) => joint.replace('-', ' '));
+}
 
 interface HistoryDetailSheetProps {
   record: WorkoutRecord | null;
@@ -33,7 +44,7 @@ export function HistoryDetailSheet({ record, units, notesFor, onClose }: History
               {
                 label: 'Rating',
                 value: record.rating
-                  ? `${record.rating.effort.replace('-', ' ')}, energy ${record.rating.energyAfter}/5${record.rating.pain ? ', pain' : ''}${record.rating.note ? `: ${record.rating.note}` : ''}`
+                  ? `${record.rating.effort.replace('-', ' ')}, energy ${record.rating.energyAfter}/5${ratingPainWords(record.rating) ? `, ${ratingPainWords(record.rating)}` : ''}${record.rating.note ? `: ${record.rating.note}` : ''}`
                   : 'not rated',
               },
               {
@@ -50,8 +61,8 @@ export function HistoryDetailSheet({ record, units, notesFor, onClose }: History
                     ? record.skippedExerciseIds.map((id) => requireExercise(id).name).join(', ')
                     : 'nothing',
               },
-              ...((record.painJoints ?? []).length > 0
-                ? [{ label: 'Pain', value: (record.painJoints ?? []).join(', ') }]
+              ...(painJointsOf(record).length > 0
+                ? [{ label: 'Pain', value: painJointsOf(record).join(', ') }]
                 : []),
             ]}
           />
@@ -78,7 +89,7 @@ export function HistoryDetailSheet({ record, units, notesFor, onClose }: History
                       : entry.sets
                           .map(
                             (set) =>
-                              `${set.kind === 'warmup' ? 'warm-up ' : set.kind === 'drop' ? 'drop ' : ''}${set.weight ?? 'bw'} × ${set.reps}${set.rir !== null ? ` @ RIR ${set.rir}` : ''}${set.completed ? '' : ' (not done)'}`,
+                              `${set.kind === 'warmup' ? 'warm-up ' : set.kind === 'drop' ? 'drop ' : ''}${set.weight ?? 'bw'} × ${amountText(set.reps, exercise.measure === 'seconds')}${set.rir !== null && exercise.measure !== 'seconds' ? ` @ RIR ${set.rir}` : ''}${set.completed ? '' : ' (not done)'}`,
                           )
                           .join(' · ')}
                     {units ? '' : ''}

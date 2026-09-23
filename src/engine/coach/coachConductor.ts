@@ -1,5 +1,5 @@
 import { requireExercise } from '../../catalog/exercises/catalog';
-import type { Joint } from '../../catalog/exercises/exerciseSchema';
+import { isHold, type Joint } from '../../catalog/exercises/exerciseSchema';
 import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 import { UNFINISHED_STALE_HOURS } from '../../core/alerts/cues';
 import type { LocationProfile } from '../../core/validation/location';
@@ -14,6 +14,7 @@ import type {
 } from '../recalibration/types';
 import type { PlannedSession } from '../planning/weeklyPlan';
 import type { FatigueSignal } from '../recovery/fatigue';
+import { lastPainReport, painSourceLine } from '../recovery/painReport';
 import {
   ROUTE_STEPS,
   describeRoute,
@@ -238,6 +239,14 @@ function jointLabel(joint: Joint): string {
   return joint.replace('-', ' ');
 }
 
+/** Joints an offer must spare today: those reported this session, and the one named last time. */
+function jointsToProtect(input: CoachInput): Joint[] {
+  const report = lastPainReport(input.history);
+  const joints = [...input.constraints.painJoints];
+  if (report && !joints.includes(report.joint)) joints.push(report.joint);
+  return joints;
+}
+
 function safetySignals(input: CoachInput): CoachSignal[] {
   const signals: CoachSignal[] = [];
   const remaining = remainingEntries(input);
@@ -263,29 +272,35 @@ function safetySignals(input: CoachInput): CoachSignal[] {
       });
     }
   }
-  const last = [...input.history].reverse()[0];
-  if (last?.rating?.pain) {
-    const repeated = remaining.find((entry) =>
-      last.entries.some(
-        (logged) =>
-          logged.exerciseId === entry.exerciseId &&
-          logged.sets.some((set) => set.kind === 'working' && set.completed),
-      ),
-    );
-    if (repeated && !started(input, repeated)) {
-      const name = requireExercise(repeated.exerciseId).name;
+  // Pain reported where it hurt when the last workout was saved: only exercises that load that
+  // joint are named, and never the workout that report came from.
+  const report = input.status === 'completed' ? null : lastPainReport(input.history);
+  // Pain marked on the same joint today already has its own card, and its Not now covers both.
+  if (report && !input.constraints.painJoints.includes(report.joint)) {
+    const loading = remaining.filter((entry) => {
+      const stress = requireExercise(entry.exerciseId).jointStress[report.joint];
+      return (stress === 'moderate' || stress === 'high') && !started(input, entry);
+    });
+    const [first, ...others] = loading;
+    if (first) {
+      const exercise = requireExercise(first.exerciseId);
+      const joint = jointLabel(report.joint);
       signals.push({
         domain: 'safety',
-        headline: `Pain last session: ease into ${name}`,
+        headline: `${joint.charAt(0).toUpperCase()}${joint.slice(1)} pain last time: ${exercise.name} loads it`,
         why: [
-          'Your last session rating reported pain.',
-          `${name} was in that session; start lighter or swap it if anything hurts.`,
+          `${painSourceLine(report)}.`,
+          `${exercise.name} puts ${exercise.jointStress[report.joint]} stress on it${
+            others.length === 0
+              ? ''
+              : `, and ${others.length === 1 ? 'one more exercise' : `${others.length} more exercises`} today ${others.length === 1 ? 'does' : 'do'} too`
+          }.`,
         ],
-        action: { kind: 'alternatives', entryId: repeated.id, label: `Alternatives for ${name}` },
-        confidence: 'medium',
+        action: { kind: 'alternatives', entryId: first.id, label: `Swap ${exercise.name}` },
+        confidence: 'high',
         severity: 2,
-        source: 'last rating',
-        concern: last.id,
+        source: RATING_PAIN_SOURCE,
+        concern: `${report.recordId}|${report.joint}`,
       });
     }
   }
@@ -321,6 +336,9 @@ function safetySignals(input: CoachInput): CoachSignal[] {
  */
 /** The source of the card that names a workout left open; Not now on it lasts for that workout only. */
 export const UNFINISHED_SOURCE = 'unfinished workout';
+
+/** The card for pain reported, and where, when the last workout was saved. */
+export const RATING_PAIN_SOURCE = 'rating pain';
 
 function unfinishedSignals(input: CoachInput): CoachSignal[] {
   if (input.status !== 'active' && input.status !== 'paused') return [];
@@ -464,7 +482,7 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
       };
     }
     case 'add-reps': {
-      if (!entry || !untouched) return null;
+      if (!entry || !untouched || (exercise && isHold(exercise))) return null;
       const first = workingSets(entry).find((set) => set.kind === 'working');
       if (!first) return null;
       return {
@@ -559,7 +577,7 @@ function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction | 
       constraints: {
         excludeExerciseIds: input.constraints.avoidExerciseIds,
         unavailableEquipment: input.constraints.busyEquipment,
-        painJoints: input.constraints.painJoints,
+        painJoints: jointsToProtect(input),
       },
       history: input.history,
       now: input.now,
@@ -659,7 +677,8 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
     }
     // Held at the heaviest weight the place has: the reps are already climbing; the next
     // levers are a harder variation, then an extra set. Each ends in a tap.
-    if (!offered && progression.capped && !started(input, entry)) {
+    // A hold's seconds already climb on their own rule, so the rep levers here do not apply.
+    if (!offered && progression.capped && !started(input, entry) && !isHold(exercise)) {
       offered = true;
       const top = workingSets(entry).find((set) => set.kind === 'working')?.targetReps[1] ?? 0;
       // An exercise whose sets were already changed today is not offered another one.
@@ -701,6 +720,8 @@ function restSignals(input: CoachInput): CoachSignal[] {
   );
   if (logged.length < 2) return [];
   const [previous, latest] = logged.slice(-2) as [(typeof logged)[number], (typeof logged)[number]];
+  // A shorter second hold is how holds go; it says nothing about the rest.
+  if (isHold(requireExercise(latest.exerciseId))) return [];
   if (previous.reps - latest.reps >= 2 && (latest.rir ?? 1) <= 0) {
     const name = requireExercise(latest.exerciseId).name;
     return [
@@ -785,7 +806,7 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
             constraints: {
               excludeExerciseIds: input.constraints.avoidExerciseIds,
               unavailableEquipment: input.constraints.busyEquipment,
-              painJoints: input.constraints.painJoints,
+              painJoints: jointsToProtect(input),
             },
             history: input.history,
             now: input.now,

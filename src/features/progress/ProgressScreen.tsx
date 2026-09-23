@@ -22,6 +22,7 @@ import {
   type Score,
 } from '../../engine/scoring/analytics';
 import { recentPersonalRecords } from '../../engine/scoring/personalRecords';
+import { amountText, holdById } from '../../engine/workout/setText';
 import { HistoryDetailSheet } from './HistoryDetailSheet';
 import styles from './Progress.module.css';
 
@@ -50,7 +51,8 @@ function volumeOf(record: WorkoutRecord): number {
     record.entries.reduce(
       (sum, entry) =>
         sum +
-        entry.sets
+        // A hold's seconds are not reps: volume counts lifts only, as the completion does.
+        (holdById(entry.exerciseId) ? [] : entry.sets)
           .filter((set) => set.kind !== 'warmup' && set.completed && set.weight !== null)
           .reduce((inner, set) => inner + (set.weight ?? 0) * set.reps, 0),
       0,
@@ -229,9 +231,9 @@ export function ProgressScreen() {
                     <span className={styles.rowMeta}>
                       {row.sessions} {row.sessions === 1 ? 'session' : 'sessions'}
                       {row.best.weight !== null
-                        ? ` · best ${row.best.weight} ${units} × ${row.best.reps}`
+                        ? ` · best ${row.best.weight} ${units} × ${amountText(row.best.reps, holdById(row.exerciseId))}`
                         : row.best.reps > 0
-                          ? ` · best ${row.best.reps} reps`
+                          ? ` · best ${holdById(row.exerciseId) ? `${row.best.reps} s` : `${row.best.reps} reps`}`
                           : ''}
                       {row.timesReplaced + row.timesSkipped > 0
                         ? ` · swapped or skipped ${row.timesReplaced + row.timesSkipped}×`
@@ -402,18 +404,23 @@ export function ProgressScreen() {
                 { label: 'Sessions', value: String(exercise.sessions) },
                 {
                   label: 'Best',
-                  value:
-                    exercise.best.weight !== null
+                  value: holdById(exercise.exerciseId)
+                    ? `${exercise.best.weight !== null ? `${exercise.best.weight} ${units} × ` : ''}${exercise.best.reps} s`
+                    : exercise.best.weight !== null
                       ? `${exercise.best.weight} ${units} × ${exercise.best.reps} (~${Math.round(exercise.best.e1rm ?? 0)} ${units} e1RM)`
                       : `${exercise.best.reps} reps`,
                 },
-                {
-                  label: 'Trend',
-                  value:
-                    exercise.trendPct === null
-                      ? 'needs two sessions with weights'
-                      : `${exercise.trendPct > 0 ? '+' : ''}${exercise.trendPct}% over the last ${Math.min(4, exercise.points.length)} sessions`,
-                },
+                ...(holdById(exercise.exerciseId)
+                  ? []
+                  : [
+                      {
+                        label: 'Trend',
+                        value:
+                          exercise.trendPct === null
+                            ? 'needs two sessions with weights'
+                            : `${exercise.trendPct > 0 ? '+' : ''}${exercise.trendPct}% over the last ${Math.min(4, exercise.points.length)} sessions`,
+                      },
+                    ]),
                 {
                   label: 'Swaps',
                   value: `${exercise.timesReplaced} replaced, ${exercise.timesSkipped} skipped`,
@@ -431,9 +438,10 @@ export function ProgressScreen() {
                     <span className={styles.rowName}>{formatDateTime(point.date)}</span>
                     <span className={styles.rowMeta}>
                       {point.sets
-                        .map(
-                          (set) =>
-                            `${set.weight ?? 'bw'}×${set.reps}${set.rir !== null ? `@${set.rir}` : ''}`,
+                        .map((set) =>
+                          holdById(exercise.exerciseId)
+                            ? `${set.weight ?? 'bw'}×${set.reps}s`
+                            : `${set.weight ?? 'bw'}×${set.reps}${set.rir !== null ? `@${set.rir}` : ''}`,
                         )
                         .join('  ')}
                     </span>
@@ -444,10 +452,12 @@ export function ProgressScreen() {
                 </li>
               ))}
             </ul>
-            <p className={styles.muted}>
-              {requireExercise(exercise.exerciseId).name}: e1RM uses Epley on the best completed
-              working set of each session. Warm-ups are never counted.
-            </p>
+            {holdById(exercise.exerciseId) ? null : (
+              <p className={styles.muted}>
+                {requireExercise(exercise.exerciseId).name}: e1RM uses Epley on the best completed
+                working set of each session. Warm-ups are never counted.
+              </p>
+            )}
           </>
         ) : null}
       </Sheet>

@@ -1,5 +1,6 @@
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../workout/types';
+import { holdById, targetText } from '../workout/setText';
 import type { ChangeCounts, ChangeSummary, EntryChange } from './types';
 
 /**
@@ -37,9 +38,15 @@ function adjustmentDetail(previous: WorkoutEntry, next: WorkoutEntry): string | 
     (firstBefore.targetReps[0] !== firstAfter.targetReps[0] ||
       firstBefore.targetReps[1] !== firstAfter.targetReps[1])
   ) {
-    changes.push(`new target ${firstAfter.targetReps[0]}-${firstAfter.targetReps[1]} reps`);
+    changes.push(`new target ${targetText(firstAfter.targetReps, holdById(next.exerciseId))}`);
   }
-  if (firstBefore && firstAfter && firstBefore.targetRir !== firstAfter.targetRir)
+  // A hold asks no reps in reserve, so a change to it is not news.
+  if (
+    firstBefore &&
+    firstAfter &&
+    firstBefore.targetRir !== firstAfter.targetRir &&
+    !holdById(next.exerciseId)
+  )
     changes.push(`RIR ${firstAfter.targetRir}`);
   const lastBefore = [...previous.sets].reverse().find((set) => set.kind === 'working');
   const lastAfter = [...next.sets].reverse().find((set) => set.kind === 'working');

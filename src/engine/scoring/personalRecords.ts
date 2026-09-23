@@ -1,4 +1,5 @@
 import { requireExercise } from '../../catalog/exercises/catalog';
+import { holdById } from '../workout/setText';
 import type { LoggedExercise, WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { CompletedSet } from '../recalibration/types';
 
@@ -105,6 +106,8 @@ export function detectPersonalRecords(
   for (const entry of record.entries) {
     if (seen.has(entry.exerciseId)) continue;
     seen.add(entry.exerciseId);
+    // Records are about load and reps; a hold's seconds are neither.
+    if (holdById(entry.exerciseId)) continue;
     const sets = record.entries
       .filter((candidate) => candidate.exerciseId === entry.exerciseId)
       .flatMap(completedWorking);
@@ -189,6 +192,7 @@ export function liveSetRecords(
   logged: readonly CompletedSet[],
   history: readonly WorkoutRecord[],
 ): LiveRecord[] {
+  if (holdById(exerciseId)) return [];
   const baseline = baselineFor(exerciseId, history);
   if (baseline.sessions === 0) return [];
   const sets = logged.filter((set) => set.kind === 'working' && !set.skipped);

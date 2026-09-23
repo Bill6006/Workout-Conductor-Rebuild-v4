@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { exerciseEquipmentLabel } from '../../catalog/exercises/catalog';
-import { JOINTS, type CatalogExercise, type Joint } from '../../catalog/exercises/exerciseSchema';
+import {
+  JOINTS,
+  isHold,
+  type CatalogExercise,
+  type Joint,
+} from '../../catalog/exercises/exerciseSchema';
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
 import type { AlternativeResult } from '../../engine/alternatives/rankAlternatives';
@@ -80,6 +85,8 @@ const ROLE_LABELS: Record<CatalogExercise['defaultRole'], string> = {
 
 function repRangeLabel(exercise: CatalogExercise): string {
   const { strength, hypertrophy } = exercise.repRanges;
+  // A hold's range is seconds: it starts at the first and grows toward the second.
+  if (isHold(exercise)) return `${hypertrophy[0]}-${hypertrophy[1]} s`;
   const parts = [`${hypertrophy[0]}-${hypertrophy[1]} hypertrophy`];
   if (strength) parts.unshift(`${strength[0]}-${strength[1]} strength`);
   return parts.join(' · ');
@@ -173,7 +180,7 @@ export function ExerciseDetailSheet({
         <dd>{exerciseEquipmentLabel(exercise, availableEquipment)}</dd>
         <dt>Role</dt>
         <dd>{ROLE_LABELS[exercise.defaultRole]}</dd>
-        <dt>Reps</dt>
+        <dt>{isHold(exercise) ? 'Seconds' : 'Reps'}</dt>
         <dd>{repRangeLabel(exercise)}</dd>
         <dt>Difficulty</dt>
         <dd>{exercise.difficulty}</dd>
@@ -349,7 +356,7 @@ export function ExerciseDetailSheet({
               min={1}
               max={120}
               placeholder="low"
-              aria-label="Rep range low"
+              aria-label={isHold(exercise) ? 'Seconds low' : 'Rep range low'}
               value={repLow}
               onChange={(event) => setRepLow(event.target.value)}
             />
@@ -359,7 +366,7 @@ export function ExerciseDetailSheet({
               min={1}
               max={120}
               placeholder="high"
-              aria-label="Rep range high"
+              aria-label={isHold(exercise) ? 'Seconds high' : 'Rep range high'}
               value={repHigh}
               onChange={(event) => setRepHigh(event.target.value)}
             />
@@ -369,7 +376,7 @@ export function ExerciseDetailSheet({
               disabled={repLow === '' || repHigh === ''}
               onClick={() => editActions.onRepRange([Number(repLow), Number(repHigh)])}
             >
-              Set reps
+              {isHold(exercise) ? 'Set seconds' : 'Set reps'}
             </button>
           </div>
         </section>

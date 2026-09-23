@@ -70,8 +70,14 @@ export function zoneForCount(
   return zones[((Math.trunc(sessions) % zones.length) + zones.length) % zones.length] as RepZone;
 }
 
-/** The light end of a lift: from the top of its usual range up, never past 25. */
-export function lightRange(exercise: Pick<CatalogExercise, 'repRanges'>): [number, number] {
+/**
+ * The light end of a lift: from the top of its usual range up, never past 25. A hold's range is
+ * seconds, and a light day does not shorten it.
+ */
+export function lightRange(
+  exercise: Pick<CatalogExercise, 'repRanges'> & Partial<Pick<CatalogExercise, 'measure'>>,
+): [number, number] {
+  if (exercise.measure === 'seconds') return exercise.repRanges.hypertrophy;
   const low = Math.min(exercise.repRanges.hypertrophy[1], 20);
   return [low, Math.min(low + 5, 25)];
 }

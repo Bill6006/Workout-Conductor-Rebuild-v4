@@ -393,6 +393,7 @@ export function painPatterns(
     const joints = new Set([
       ...(record.painJoints ?? []),
       ...(record.readiness?.jointDiscomfort ?? []),
+      ...(record.rating?.pain && record.rating.joint ? [record.rating.joint] : []),
     ]);
     if (joints.size > 0 || record.rating?.pain) painSessions += 1;
     for (const joint of joints) counts.set(joint, (counts.get(joint) ?? 0) + 1);

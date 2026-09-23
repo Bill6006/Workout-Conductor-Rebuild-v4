@@ -4,6 +4,7 @@ import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { weightStep } from '../plateMath/plateMath';
 import { performanceHistory, type PerformancePoint } from '../progression/progression';
+import { amountText, holdById } from '../workout/setText';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { computeWeeklyVolume, goalWeights, weeklyTargets } from '../volume/weeklyVolume';
 
@@ -82,7 +83,8 @@ function exerciseInsights(
   );
   for (const exerciseId of ids) {
     const exercise = getExercise(exerciseId);
-    if (!exercise) continue;
+    // Load, fade and flat-rep insights read reps; a hold's seconds have their own progression.
+    if (!exercise || exercise.measure === 'seconds') continue;
     const points = performanceHistory(sessions, exercise, 4).filter((point) => !point.viaFamily);
     if (points.length < 3) continue;
     const [a, b, c] = points as [PerformancePoint, PerformancePoint, PerformancePoint];
@@ -249,6 +251,7 @@ function recoveryInsights(
   const { fatigue } = input;
   const anchors = sessions.slice(0, 4).map((record) => {
     const best = record.entries
+      .filter((entry) => !holdById(entry.exerciseId))
       .flatMap((entry) =>
         entry.sets
           .filter((set) => set.kind === 'working' && set.completed && set.weight !== null)
@@ -339,8 +342,26 @@ export function sessionFeedback(
     )[0] as (typeof sets)[number];
     const floor = sets.every((set) => !set.targetReps || set.reps >= set.targetReps[0]);
     const planned = entry.plannedSets ?? sets.length;
-    const bestLine = `${best.weight === null ? 'bodyweight' : `${best.weight} ${units}`} × ${best.reps}`;
-    if (
+    const hold = exercise.measure === 'seconds';
+    const bestLine =
+      hold && best.weight === null
+        ? amountText(best.reps, true)
+        : `${best.weight === null ? 'bodyweight' : `${best.weight} ${units}`} × ${amountText(best.reps, hold)}`;
+    // A hold progresses by holding longer at the same load or more.
+    const heldLonger =
+      hold &&
+      previous !== undefined &&
+      best.reps > previous.bestReps &&
+      (best.weight ?? 0) >= (previous.bestWeight ?? 0);
+    if (heldLonger && previous) {
+      progressed += 1;
+      const before =
+        previous.bestWeight === null
+          ? amountText(previous.bestReps, true)
+          : `${previous.bestWeight} × ${amountText(previous.bestReps, true)}`;
+      lines.push(`${exercise.name}: progressed, ${before} became ${bestLine}.`);
+    } else if (
+      !hold &&
       previous &&
       previous.e1rm !== null &&
       best.weight !== null &&
@@ -353,7 +374,9 @@ export function sessionFeedback(
     } else if (sets.length < planned || !floor) {
       short += 1;
       lines.push(
-        `${exercise.name}: short, ${sets.length} of ${planned} sets${floor ? '' : ' with reps under the floor'}. Hold the load next time.`,
+        hold
+          ? `${exercise.name}: short, ${sets.length} of ${planned} sets${floor ? '' : ' under the target seconds'}.`
+          : `${exercise.name}: short, ${sets.length} of ${planned} sets${floor ? '' : ' with reps under the floor'}. Hold the load next time.`,
       );
     } else {
       onTarget += 1;
@@ -363,9 +386,9 @@ export function sessionFeedback(
   if (lines.length === 0) return ['Nothing logged this session, so there is nothing to grade.'];
   const summary = `${progressed} progressed, ${onTarget} on target, ${short} short.`;
   const rating = record.rating;
-  const tone = rating?.pain
-    ? 'Pain was reported: the next session protects that joint first.'
-    : rating?.effort === 'too-hard'
+  // Pain is said once, in the summary's Next time line, so the feedback keeps to the effort.
+  const tone =
+    rating?.effort === 'too-hard'
       ? 'Rated too hard: loads hold until the reps come easier.'
       : rating?.effort === 'too-easy'
         ? 'Rated too easy: the next targets step up where the reps allow.'

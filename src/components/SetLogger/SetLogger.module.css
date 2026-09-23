@@ -45,6 +45,11 @@
   gap: 8px;
 }
 
+/* A hold has no reps in reserve: weight and seconds share the row. */
+.dials[data-count='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .dial {
   display: grid;
   grid-template-rows: 40px minmax(64px, auto) 40px auto;
