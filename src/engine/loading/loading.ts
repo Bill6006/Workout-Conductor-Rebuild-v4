@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import type { UnitSystem } from '../../core/validation/profile';
-import { PLATE_INVENTORY, weightStep } from '../plateMath/plateMath';
+import { PLATE_INVENTORY, sideWeights, weightStep } from '../plateMath/plateMath';
 
 /**
  * What a place can actually load. A machine has a stack with fixed steps, a
@@ -40,7 +40,10 @@ export interface SessionLoading {
 }
 
 export interface Loading {
-  /** Every weight this exercise can be loaded to here, ascending; null when any step works. */
+  /**
+   * Every weight this exercise can be loaded to here, ascending; null when any step works. For
+   * a bar, every total the plates make on it, from the empty bar up.
+   */
   available: number[] | null;
   /** What the dial moves by, and what targets round to when `available` is null. */
   step: number;
@@ -48,6 +51,10 @@ export interface Loading {
   cap: number | null;
   /** One side's plates, for the plate line; null for anything that is not a bar. */
   perSide: number[] | null;
+  /** For a bar: the totals with every plate the rack keeps, today's missing ones back. */
+  usual?: number[] | null;
+  /** Plates the rack keeps that are not around today, heaviest first. */
+  missingToday?: number[];
 }
 
 const EPSILON = 1e-6;
@@ -109,6 +116,20 @@ export function nudge(
   return previous ?? (available[0] as number);
 }
 
+/** The heaviest one side of a bar is ever taken to: far past any lift the app will plan. */
+const MAX_SIDE: Record<UnitSystem, number> = { lb: 600, kg: 300 };
+const totalsSeen = new Map<string, number[]>();
+
+/** Every total a bar makes with these plates, ascending from the empty bar. */
+export function barTotals(bar: number, plates: readonly number[], units: UnitSystem): number[] {
+  const key = `${units}|${bar}|${[...plates].sort((a, b) => b - a).join(',')}`;
+  const seen = totalsSeen.get(key);
+  if (seen) return seen;
+  const totals = sideWeights(plates, MAX_SIDE[units]).map((side) => round(bar + side * 2));
+  totalsSeen.set(key, totals);
+  return totals;
+}
+
 function isBarLoad(load: CatalogExercise['load']): boolean {
   return load === 'barbell' || load === 'ez-bar' || load === 'trap-bar' || load === 'smith';
 }
@@ -156,7 +177,18 @@ export function loadingFor(
     const smallest = perSide[perSide.length - 1];
     // Two of the smallest plate is the finest total step the rack allows.
     const step = smallest === undefined ? usual : Math.max(usual, round(smallest * 2));
-    return { available: null, step, cap: null, perSide };
+    const bar = exercise.barWeight?.[units] ?? (units === 'lb' ? 45 : 20);
+    // Exactly what the plates make on this bar, so a target is never one they cannot build.
+    const available = barTotals(bar, perSide, units);
+    const missingToday = [...rack].filter((plate) => missing.has(plate)).sort((a, b) => b - a);
+    return {
+      available,
+      step,
+      cap: null,
+      perSide,
+      usual: missingToday.length > 0 ? barTotals(bar, rack, units) : available,
+      missingToday,
+    };
   }
   if (spec && spec.kind !== 'plates') {
     const available = expandRanges(spec.ranges);
@@ -174,8 +206,8 @@ export function loadingFor(
 
 /**
  * A weight the place can load, never above the one asked for: snapped down onto
- * the list when there is one, else down onto the step's grid, which for a bar
- * starts at the bar itself (a 45 bar with 10 lb steps loads 115, not 120).
+ * the list, which for a bar is every total its plates make (a 45 bar without
+ * 2.5s loads 115, not 120), else down onto the step's grid.
  */
 export function fitWeight(weight: number, loading: Loading, floor: number | null = null): number {
   if (loading.available !== null) {

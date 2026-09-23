@@ -43,6 +43,15 @@ export const WorkoutEntrySchema = z.looseObject({
       confidence: z.enum(['low', 'medium', 'high']),
       setsAdvice: z.union([z.literal(0), z.literal(1)]),
       capped: z.looseObject({ at: z.number() }).optional(),
+      rack: z
+        .looseObject({
+          asked: z.number(),
+          loaded: z.number(),
+          extra: z.number().int().min(0),
+          line: z.string(),
+        })
+        .optional()
+        .catch(undefined),
     })
     .optional()
     .catch(undefined),

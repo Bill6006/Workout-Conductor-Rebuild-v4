@@ -31,6 +31,14 @@
   font-size: 0.8rem;
 }
 
+/* The weights here changed the target: said once, by it, in plain words. */
+.note {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 .dials {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

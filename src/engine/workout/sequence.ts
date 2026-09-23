@@ -97,6 +97,22 @@ export function currentPosition(
   return workoutSequence(workout).find((item) => !isDone(item.entryId, item.setIndex)) ?? null;
 }
 
+/**
+ * The block to go to after the one in front of the lifter: the block of the next set not yet
+ * done, in the order sets are done. A rebuild can leave a finished block after the current
+ * one, and the next row in the list would then point at work already done.
+ */
+export function nextBlockAfter(
+  workout: GeneratedWorkout,
+  blockId: string,
+  isDone: SetDonePredicate,
+): WorkoutBlock | undefined {
+  const next = workoutSequence(workout).find(
+    (item) => item.blockId !== blockId && !isDone(item.entryId, item.setIndex),
+  );
+  return next ? workout.blocks.find((block) => block.id === next.blockId) : undefined;
+}
+
 /** The set that follows `current` in execution order, done or not. */
 export function nextPosition(workout: GeneratedWorkout, current: SetPosition): SetPosition | null {
   const sequence = workoutSequence(workout);

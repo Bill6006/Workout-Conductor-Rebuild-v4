@@ -106,6 +106,36 @@ describe('what a place can load', () => {
     expect(session(handle).loading.missingPlates).toEqual([]);
   });
 
+  it('a plate missing mid-exercise moves the sets to come, and the dial starts from them', async () => {
+    const handle = await seeded();
+    const { store } = handle;
+    const [lift] = entriesWithLoad(handle, ['barbell']);
+    if (!lift) throw new Error('no bar lift');
+    store.startWorkout();
+    // Every ramp and the first working set, the working one at 100.
+    const firstWorking = lift.sets.findIndex((set) => set.kind === 'working');
+    for (const set of lift.sets.slice(0, firstWorking + 1)) {
+      await store.logSet(lift.id, set.index, {
+        weight: set.kind === 'working' ? 100 : set.targetWeight,
+        reps: 9,
+        rir: 2,
+      });
+    }
+    expect(session(handle).drafts[lift.id]?.weight).toBe(100);
+
+    await store.setMissingPlates([2.5]);
+    // 100 cannot be made without the 2.5s, so the dial does not start from it.
+    expect(session(handle).drafts[lift.id]).toBeUndefined();
+    const after = allEntries(session(handle).workout.blocks).find((entry) => entry.id === lift.id);
+    const logged = session(handle).completed.sets.filter((set) => set.entryId === lift.id);
+    expect(logged.map((set) => set.weight).at(-1)).toBe(100);
+    for (const set of after?.sets ?? []) {
+      if (set.kind !== 'working' || logged.some((done) => done.setIndex === set.index)) continue;
+      const bar = getExercise(lift.exerciseId)?.barWeight?.lb ?? 45;
+      expect(((set.targetWeight ?? bar) - bar) % 10).toBe(0);
+    }
+  });
+
   it('forgetting a record puts the usual step back', async () => {
     const handle = await seeded();
     const { store } = handle;

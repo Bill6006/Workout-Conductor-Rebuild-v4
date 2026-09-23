@@ -99,6 +99,12 @@ export interface CoachSignal {
   obvious?: boolean;
   /** The lift the signal is about, when it is about one; declines are remembered per lift. */
   exerciseId?: string;
+  /**
+   * What a safety card is about (a joint, or last session's pain). Not now sets that aside
+   * for the rest of the workout; the same worry about another exercise stays quiet with it,
+   * and a new one still shows.
+   */
+  concern?: string;
 }
 
 /** Declined offers, kept in the meta store: key `source|exerciseId` (or `*`). */
@@ -130,6 +136,20 @@ export function recordDecline(
     ...declines,
     declines: { ...declines.declines, [key]: { count: (current?.count ?? 0) + 1, lastAt: now } },
   };
+}
+
+/**
+ * A safety card's Not now lasts for this workout only: safety is never declined for days, but
+ * a warning the lifter has read and set aside must not sit on the screen for the rest of it.
+ */
+export function setAsideKey(signal: Pick<CoachSignal, 'source' | 'concern'>): string {
+  return `set aside|${signal.source}|${signal.concern ?? '*'}`;
+}
+
+export function isSetAside(accepted: readonly string[] | undefined, signal: CoachSignal): boolean {
+  return (
+    signal.domain === 'safety' && accepted !== undefined && accepted.includes(setAsideKey(signal))
+  );
 }
 
 /** What identifies an offer once it has been taken: where it came from, and what it said. */
@@ -239,6 +259,7 @@ function safetySignals(input: CoachInput): CoachSignal[] {
         confidence: 'high',
         severity: 3,
         source: 'session pain',
+        concern: joint,
       });
     }
   }
@@ -264,6 +285,7 @@ function safetySignals(input: CoachInput): CoachSignal[] {
         confidence: 'medium',
         severity: 2,
         source: 'last rating',
+        concern: last.id,
       });
     }
   }
@@ -284,6 +306,7 @@ function safetySignals(input: CoachInput): CoachSignal[] {
         confidence: 'medium',
         severity: 1,
         source: 'profile limitations',
+        concern: joint,
       });
       break;
     }
@@ -1116,7 +1139,9 @@ export function conductCoach(input: CoachInput): CoachCard | null {
   const policy = input.policy ?? coachingPolicy(input.profile.experience);
   const all = gatherSignals(input).filter(
     (signal) =>
-      !isDeclined(input.declines, signal, input.now) && !isAccepted(input.accepted, signal),
+      !isDeclined(input.declines, signal, input.now) &&
+      !isAccepted(input.accepted, signal) &&
+      !isSetAside(input.accepted, signal),
   );
   const signals = policy.hideObvious ? all.filter((signal) => !signal.obvious) : all;
   if (signals.length === 0) return null;

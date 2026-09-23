@@ -35,17 +35,18 @@ function firstNumber(text: string | null): number {
   return Number(/\d+(?:\.\d+)?/.exec(text ?? '')?.[0]);
 }
 
-/** The total a plate line loads: "Bar 45 + per side: 25, 10" or "Empty bar (45 lb)"; null otherwise. */
+/** The total a plate line loads: "Empty bar · 45 lb", or "Bar 45 + 45, 25 each side · 185 lb". */
 function loadedTotal(line: string): number | null {
-  const empty = /^Empty bar \((\d+(?:\.\d+)?) (?:lb|kg)\)/.exec(line.trim());
+  const empty = /^Empty bar · (\d+(?:\.\d+)?) (?:lb|kg)$/.exec(line.trim());
   if (empty) return Number(empty[1]);
-  const match = /^Bar (\d+(?:\.\d+)?)(?: \+ per side: (.+))?$/.exec(line.trim());
+  const match = /^Bar (\d+(?:\.\d+)?) \+ (.+) each side · (\d+(?:\.\d+)?) (?:lb|kg)$/.exec(
+    line.trim(),
+  );
   if (!match) return null;
-  const bar = Number(match[1]);
-  const perSide = match[2]
-    ? match[2].split(',').reduce((sum, part) => sum + Number(part.trim()), 0)
-    : 0;
-  return bar + perSide * 2;
+  const perSide = (match[2] ?? '').split(',').reduce((sum, part) => sum + Number(part.trim()), 0);
+  const total = Number(match[1]) + perSide * 2;
+  // The line states its total, and the plates it names add up to it.
+  return total === Number(match[3]) ? total : null;
 }
 
 test.describe('logger fixes', () => {

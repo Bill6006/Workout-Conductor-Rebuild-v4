@@ -20,6 +20,7 @@ import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import {
+  blocksCandidate,
   checkExerciseFit,
   checkSupersetPair,
   checkWorkoutConflicts,
@@ -45,7 +46,7 @@ import {
 } from '../progression/roles';
 import { allowsFailure, isAutoStyle, resolveStyle } from '../planning/styleAdvice';
 import { styleInfo } from '../planning/styles';
-import { loadingFor } from '../loading/loading';
+import { loadingFor, type SessionLoading } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
 import {
   applyProgression,
@@ -93,6 +94,26 @@ export interface KeptEntry {
   entry: WorkoutEntry;
   /** Frozen entries carry logged sets: never trimmed, never dropped, never re-paired. */
   frozen: boolean;
+  /**
+   * Logged work that cannot go on here, its equipment not at this place: it ends at its
+   * logged sets, which stay as the history they are, and its slot takes a replacement for
+   * the working sets still owed.
+   */
+  closed?: boolean;
+}
+
+/**
+ * Ends an entry at its logged sets and returns how many working sets it still owed. Only
+ * unlogged sets go; a logged set, skipped or not, is never touched.
+ */
+function closeAtLogged(entry: WorkoutEntry, isDone: SetDonePredicate): number {
+  const owed = entry.sets.filter(
+    (set) => set.kind === 'working' && !isDone(entry.id, set.index),
+  ).length;
+  entry.sets = entry.sets.filter((set) => isDone(entry.id, set.index));
+  entry.warmupSets = entry.sets.filter((set) => set.kind === 'warmup').length;
+  entry.dropSet = entry.sets.some((set) => set.kind === 'drop');
+  return owed;
 }
 
 export interface PrescriptionAdjustment {
@@ -193,6 +214,8 @@ export interface GenerationConstraints {
   deload?: DeloadWindow | null;
   /** A coach focus: templates and picks that carry this muscle score higher, and its accessories lead. */
   focusMuscle?: MuscleId | null;
+  /** Plates not around today: new targets land on what the rest of the rack makes. */
+  sessionLoading?: SessionLoading;
 }
 
 export interface GenerationInput {
@@ -409,7 +432,10 @@ function pickForSlot(
     .filter((exercise) => !chosenIds.has(exercise.id))
     .filter((exercise) => (strengthRole ? exercise.compound : true))
     .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
-    .filter((exercise) => !isBlocked(checkWorkoutConflicts([...chosen, exercise], picker.context)));
+    .filter(
+      (exercise) =>
+        !blocksCandidate(checkWorkoutConflicts([...chosen, exercise], picker.context), exercise.id),
+    );
 
   const score = (exercise: CatalogExercise) => {
     const suitability = strengthRole
@@ -457,7 +483,10 @@ export function pickAccessoryFor(
     .filter((exercise) => exercise.primaryMuscles.includes(muscle))
     .filter((exercise) => !chosenIds.has(exercise.id))
     .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
-    .filter((exercise) => !isBlocked(checkWorkoutConflicts([...chosen, exercise], picker.context)));
+    .filter(
+      (exercise) =>
+        !blocksCandidate(checkWorkoutConflicts([...chosen, exercise], picker.context), exercise.id),
+    );
   const score = (exercise: CatalogExercise) =>
     exercise.hypertrophySuitability * 10 +
     (exercise.compound ? 0 : 8) +
@@ -615,10 +644,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const keep = constraints.keep ?? [];
   const keptIds = new Set(keep.map((kept) => kept.entry.id));
   const frozenIds = new Set(keep.filter((kept) => kept.frozen).map((kept) => kept.entry.id));
+  const closedIds = new Set(keep.filter((kept) => kept.closed).map((kept) => kept.entry.id));
+  // The working sets each slot still owes after its logged work was closed at another place.
+  const owedBySlot = new Map<number, number>();
   const keptBySlot = new Map<number, WorkoutEntry>();
   const keptUnslotted: WorkoutEntry[] = [];
   for (const kept of keep) {
     const entry = cloneEntry(kept.entry);
+    if (kept.closed) {
+      const owed = closeAtLogged(entry, isDone);
+      if (owed > 0 && entry.slot !== undefined && entry.slot < template.slots.length) {
+        owedBySlot.set(entry.slot, (owedBySlot.get(entry.slot) ?? 0) + owed);
+      }
+    }
     if (
       entry.slot !== undefined &&
       entry.slot < template.slots.length &&
@@ -634,13 +672,30 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const chosenExercises: CatalogExercise[] = [...keptBySlot.values(), ...keptUnslotted].map(
     (entry) => exerciseOf(entry.exerciseId),
   );
+  // New entries are named by their slot, unless a kept entry already has that name.
+  const takenIds = new Set(keep.map((kept) => kept.entry.id));
+  let spareId = Math.max(
+    template.slots.length,
+    ...[...takenIds].map((id) => Number(/^e(\d+)$/.exec(id)?.[1] ?? 0)),
+  );
+  const idFor = (index: number): string => {
+    let id = `e${index + 1}`;
+    if (takenIds.has(id)) {
+      spareId += 1;
+      id = `e${spareId}`;
+    }
+    takenIds.add(id);
+    return id;
+  };
   const entries: WorkoutEntry[] = [];
   const plannedSets = new Map<string, number>();
   template.slots.forEach((slotSpec, index) => {
     const kept = keptBySlot.get(index);
+    const owed = owedBySlot.get(index);
     if (kept) {
       entries.push(kept);
-      return;
+      // Work closed at another place leaves its slot owing sets: a replacement follows it.
+      if (owed === undefined) return;
     }
     const pick = pickForSlot(slotSpec, chosenExercises, picker);
     if (!pick) {
@@ -650,10 +705,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       return;
     }
     chosenExercises.push(pick);
+    const id = idFor(index);
     const basePrescription = prescribeFor(pick, slotSpec.role, profile, history);
-    const prescription = adjustPrescription(basePrescription, slotSpec.role, adjust);
+    const adjusted = adjustPrescription(basePrescription, slotSpec.role, adjust);
+    // A replacement carries only the working sets its slot still owes.
+    const prescription =
+      owed === undefined ? adjusted : { ...adjusted, sets: Math.min(adjusted.sets, owed) };
     // Asked to make it harder, the time fit may take back an added set, never one the plan had.
-    if ((adjust?.sets ?? 0) > 0) plannedSets.set(`e${index + 1}`, basePrescription.sets);
+    if ((adjust?.sets ?? 0) > 0) {
+      plannedSets.set(
+        id,
+        owed === undefined ? basePrescription.sets : Math.min(basePrescription.sets, owed),
+      );
+    }
     // What comes before this exercise today, planned or done, and whether a long break sits
     // between: the target and the ramps both read it.
     const earlier = sessionWork(entries, completedSets, exerciseOf);
@@ -672,7 +736,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     const floor = barWeightFor(pick, profile.units);
     // What this place can load: the target lands on a weight that exists here, or holds at
     // the heaviest one with the reps pushed instead.
-    const loading = loadingFor(location?.loading, undefined, pick, profile.units);
+    const loading = loadingFor(location?.loading, constraints.sessionLoading, pick, profile.units);
     const target = capTarget(
       floorTarget(scaleForDeload(baseTarget, adjust, loading.step), floor),
       loading,
@@ -687,7 +751,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     );
     const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
     entries.push({
-      id: `e${index + 1}`,
+      id,
       exerciseId: pick.id,
       role: slotSpec.role,
       sets: applyProgression(
@@ -719,6 +783,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   for (const original of constraints.keepBlocks ?? []) {
     if (original.kind === 'straight') continue;
     if (!original.entries.every((member) => keptIds.has(member.id))) continue;
+    // A member closed at its logged sets has nothing left to pair.
+    if (original.entries.some((member) => closedIds.has(member.id))) continue;
     const members = original.entries
       .map((member) => entries.find((entry) => entry.id === member.id))
       .filter((entry): entry is WorkoutEntry => entry !== undefined);

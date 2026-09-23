@@ -64,6 +64,18 @@ export function isBlocked(conflicts: readonly Conflict[]): boolean {
   return hasSeverity(conflicts, 'block');
 }
 
+/**
+ * Whether a candidate is kept out of a selection: only by a block it takes part
+ * in. A block among the others alone is not the candidate's to answer for: an
+ * exercise logged at the gym does not fit Home, and that must never stop Home
+ * from filling the rest of the session.
+ */
+export function blocksCandidate(conflicts: readonly Conflict[], candidateId: string): boolean {
+  return conflicts.some(
+    (conflict) => conflict.severity === 'block' && conflict.exerciseIds.includes(candidateId),
+  );
+}
+
 /** Flags the profile forbids outright. */
 export function blockedFlags(limitations: UserProfile['limitations']): Set<LimitationFlag> {
   const blocked = new Set<LimitationFlag>();

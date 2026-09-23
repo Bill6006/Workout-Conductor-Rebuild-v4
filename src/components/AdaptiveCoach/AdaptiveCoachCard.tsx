@@ -10,7 +10,7 @@ interface AdaptiveCoachCardProps {
   policy: CoachingPolicy;
   /** The action tapped, with the signal it belonged to so the offer can be marked as taken. */
   onAction: (action: CoachAction, signal: CoachSignal) => void;
-  /** Not now: the offer is remembered and not repeated for a while. */
+  /** Not now: an offer is not repeated for a while; a safety card is set aside for this workout. */
   onDismiss?: (signal: CoachSignal) => void;
 }
 

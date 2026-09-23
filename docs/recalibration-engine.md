@@ -66,7 +66,10 @@ the overlay shows while the engine works.
 ## Locking rules
 
 Never changed: logged sets, their weights, reps, and RIR. An entry with logged sets is
-_frozen_: never trimmed, dropped, re-paired, or moved. Entries that are pinned, explicitly
+_frozen_: never trimmed, dropped, re-paired, or moved. One exception since Maintenance 19: logged
+work that cannot go on here, its equipment not at the new place, is _closed_. It ends at its
+logged sets, which stay as the history they are, and its slot takes a replacement that fits the
+place for the working sets it still owed. Entries that are pinned, explicitly
 selected, accepted alternatives, or the current exercise are _locked_: never dropped or swapped,
 and their sets are kept unless the exact-end mode is on. A locked pick that can no longer be
 performed (the place changed, a joint now hurts) is unlocked and rebuilt, because keeping it would
@@ -75,7 +78,10 @@ be pretending.
 Partial rebuilds reuse the generator (`generateWorkout` with `constraints`): kept entries return
 to their template slots, pairings whose members are all kept survive, the remaining budget is the
 target minus elapsed time, warm-up is skipped once started, and logged sets cost no time in the
-estimate. The fitting loop then works only on new entries.
+estimate. The fitting loop then works only on new entries. A candidate is kept out only by a
+block it takes part in (`blocksCandidate`): an exercise logged at the gym does not fit Home, and
+that never stops Home filling the rest of the session. Before Maintenance 19 it did, and a move
+from the gym to Home left only what had been logged.
 
 ## Time rules
 

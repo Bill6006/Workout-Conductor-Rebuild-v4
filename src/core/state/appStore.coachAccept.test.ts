@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptKey } from '../../engine/coach/coachConductor';
+import { acceptKey, setAsideKey } from '../../engine/coach/coachConductor';
 import { allEntries } from '../../engine/workout/types';
 import { TEST_NOW, createTestStore } from '../../test/testStore';
 import { readSession } from './session';
@@ -45,5 +45,14 @@ describe('an offer taken is remembered for the session', () => {
     expect(Object.keys(store.getSnapshot().coachDeclines.declines)).toEqual([
       'extra set|cable-fly',
     ]);
+
+    // Not now on a safety card sets that worry aside for this workout, and records no decline.
+    const safety = { source: 'session pain', domain: 'safety', concern: 'shoulder' } as const;
+    await store.dismissCoachSignal(safety);
+    expect(store.getSnapshot().session?.coachAccepted).toContain(setAsideKey(safety));
+    expect(Object.keys(store.getSnapshot().coachDeclines.declines)).toEqual([
+      'extra set|cable-fly',
+    ]);
+    expect(readSession(handle.storage)?.coachAccepted).toContain(setAsideKey(safety));
   });
 });

@@ -110,6 +110,15 @@ test.describe('what the place can load', () => {
   }, testInfo) => {
     await startWorkout(page);
     const card = page.getByTestId('exercise-card').first();
+    // Nothing loads lighter than the empty bar, so give the lift a max: its target is then well
+    // above the bar, with room to log a set under it.
+    await card.getByTestId('know-max').click();
+    const sheet = page.getByRole('dialog', { name: /Your max for/ });
+    await sheet.getByTestId('max-weight').fill('185');
+    await sheet.getByTestId('max-reps').fill('5');
+    await sheet.getByTestId('max-save').click();
+    await settle(page);
+    await expect(card.getByTestId('target-line')).toContainText('Ramp 1 of');
     await reachWorkingSet(page, card);
     const hint = card.getByTestId('weight-hint');
     await expect(hint).not.toHaveAttribute('data-pulse', 'true');

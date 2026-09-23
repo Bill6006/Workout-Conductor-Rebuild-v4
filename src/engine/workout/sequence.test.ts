@@ -5,6 +5,7 @@ import { generateWorkout } from '../workoutGenerator/generate';
 import {
   blockSequence,
   currentPosition,
+  nextBlockAfter,
   nextPosition,
   restAfter,
   workoutProgress,
@@ -86,5 +87,27 @@ describe('set sequence', () => {
     for (const item of workoutSequence(workout)) done.add(`${item.entryId}:${item.setIndex}`);
     expect(currentPosition(workout, isDone)).toBeNull();
     expect(workoutProgress(workout, isDone).entriesDone).toBe(progress.entriesTotal);
+  });
+});
+
+describe('up next', () => {
+  it('names the block of the next set not done, not the next row in the list', () => {
+    const [first, second, third, fourth] = workout.blocks;
+    if (!first || !second || !third || !fourth) throw new Error('need four blocks');
+    // After a rebuild the second row is finished while the first is still going.
+    const done = new Set(
+      second.entries.flatMap((entry) => entry.sets.map((set) => `${entry.id}:${set.index}`)),
+    );
+    const isDone = (entryId: string, setIndex: number) => done.has(`${entryId}:${setIndex}`);
+    expect(currentPosition(workout, isDone)?.blockId).toBe(first.id);
+    expect(nextBlockAfter(workout, first.id, isDone)?.id).toBe(third.id);
+    // With the third done as well, the fourth is next.
+    for (const entry of third.entries)
+      for (const set of entry.sets) done.add(`${entry.id}:${set.index}`);
+    expect(nextBlockAfter(workout, first.id, isDone)?.id).toBe(fourth.id);
+    // Nothing left after the current block: no Up next.
+    const onlyFirstLeft = (entryId: string, setIndex: number) =>
+      !first.entries.some((entry) => entry.id === entryId) || setIndex < 0;
+    expect(nextBlockAfter(workout, first.id, onlyFirstLeft)).toBeUndefined();
   });
 });

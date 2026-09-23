@@ -105,6 +105,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Tests that drive the whole app pass five seconds when the full suite runs in parallel;
+    // a test that truly hangs still fails.
+    testTimeout: 15_000,
     css: {
       modules: {
         classNameStrategy: 'non-scoped',

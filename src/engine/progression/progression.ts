@@ -17,7 +17,13 @@ import { weightStep } from '../plateMath/plateMath';
 import { estimateFromOtherLifts } from './crossEstimate';
 import { fatigueSteps, precedingWorkInRecord } from '../recovery/sessionContext';
 import { fitWeight, snapDown, type Loading } from '../loading/loading';
-import type { EntryProgression, ProgressionMode, SetPrescription } from '../workout/types';
+import { platesFor } from '../plateMath/plateMath';
+import type {
+  EntryProgression,
+  ProgressionMode,
+  RackNote,
+  SetPrescription,
+} from '../workout/types';
 import { restCategory, type Prescription } from './roles';
 
 /**
@@ -74,6 +80,8 @@ export interface NextTarget {
   capped?: { at: number };
   /** The weight the target moved from: the last one lifted, when there is one. */
   from?: number | null;
+  /** The weights here could not make the load asked for; the line says what they make instead. */
+  rack?: RackNote;
   /** The logged session the target was read from, and whether that day met its reps and reserve. */
   reference?: { recordId: string; exerciseId: string; clean: boolean };
 }
@@ -782,6 +790,69 @@ export function summarizeProgression(target: NextTarget): EntryProgression {
     confidence: target.confidence,
     setsAdvice: target.setsAdvice,
     capped: target.capped,
+    ...(target.rack ? { rack: target.rack } : {}),
+  };
+}
+
+const EXTRA_WORDS = ['', 'one extra rep', 'two extra reps', 'three extra reps'] as const;
+
+/**
+ * Reps that keep the effort the same at a lighter load: the estimated max stays where it was
+ * (Epley). One to three more, and never past twenty.
+ */
+function extraRepsFor(asked: number, loaded: number, reps: readonly [number, number]): number {
+  const middle = (reps[0] + reps[1]) / 2;
+  const matched = 30 * (asked / loaded) * (1 + middle / 30) - 30;
+  return Math.min(3, Math.max(1, Math.round(matched - middle)), Math.max(0, 20 - reps[1]));
+}
+
+function plateNames(plates: readonly number[]): string {
+  const names = [...plates].sort((a, b) => a - b).map((plate) => `${plate}s`);
+  return names.length <= 1
+    ? names.join('')
+    : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+}
+
+/**
+ * Where the weights here cannot make a load: the one they make under it, the reps that keep
+ * the effort, and the line that says so by the target. A plate missing today is named, since
+ * that is why. Null when they make it, or when nothing here is that light.
+ */
+export function rackFit(
+  asked: number,
+  reps: readonly [number, number],
+  loading: Loading,
+  units: string,
+): (RackNote & { missing: boolean }) | null {
+  const available = loading.available;
+  if (available === null || available.length === 0) return null;
+  const loaded = snapDown(asked, available);
+  if (loaded >= asked - 1e-6) return null;
+  const extra = extraRepsFor(asked, loaded, reps);
+  const what = extra === 0 ? 'the reps are already at the top' : EXTRA_WORDS[extra];
+  const missingToday = loading.missingToday ?? [];
+  const usually = (loading.usual ?? []).some((weight) => Math.abs(weight - asked) < 1e-6);
+  if (missingToday.length > 0 && usually && loading.perSide !== null) {
+    // Name the plates whose return alone would make it; failing that, all of today's missing.
+    const side = (asked - (available[0] as number)) / 2;
+    const alone = missingToday.filter(
+      (plate) => platesFor(side, [...(loading.perSide ?? []), plate]) !== null,
+    );
+    return {
+      asked,
+      loaded,
+      extra,
+      missing: true,
+      line: `No ${plateNames(alone.length > 0 ? alone : missingToday)} today: ${loaded} instead of ${asked}, ${what}.`,
+    };
+  }
+  const things = loading.perSide !== null ? 'plates' : 'weights';
+  return {
+    asked,
+    loaded,
+    extra,
+    missing: false,
+    line: `The ${things} here make ${loaded}, not ${asked} ${units}: ${what}.`,
   };
 }
 
@@ -810,19 +881,30 @@ export function capTarget(target: NextTarget, loading: Loading | null, units: st
       { at: loading.cap },
     );
   }
+  const fit = rackFit(target.weight, target.reps, loading, units);
+  if (!fit) return target;
+  const { missing, ...note } = fit;
   // A step the place cannot make: snapped onto the weights here, the target would land on or
   // under the weight it moved from. The load holds there and the reps go up until the next
-  // real weight is earned, rather than the increase being rounded away in silence.
+  // real weight is earned, rather than the increase being rounded away in silence. A plate
+  // missing today says so instead: that is the reason, not the step.
   const from = target.from ?? null;
-  if (loading.available !== null && from !== null && target.weight > from + 1e-6) {
-    const fitted = snapDown(target.weight, loading.available);
-    const next = loading.available.find((weight) => weight > from + 1e-6);
-    if (fitted <= from + 1e-6 && next !== undefined) {
-      return holdAndPushReps(
-        fitted,
-        `The next weight here after ${from} ${units} is ${next}: the reps go up first, and the load follows once they are earned.`,
-      );
+  const next = loading.available?.find((weight) => from !== null && weight > from + 1e-6);
+  if (!missing && from !== null && target.weight > from + 1e-6 && fit.loaded <= from + 1e-6) {
+    if (next !== undefined) {
+      const line = `The next weight here after ${from} ${units} is ${next}: the reps go up first, and the load follows once they are earned.`;
+      return {
+        ...holdAndPushReps(fit.loaded, line),
+        rack: { asked: target.weight, loaded: fit.loaded, extra: shift, line },
+      };
     }
   }
-  return target;
+  // Otherwise the load comes down to what the weights here make, and the reps keep the effort.
+  return {
+    ...target,
+    weight: fit.loaded,
+    reps: [low + fit.extra, high + fit.extra],
+    evidence: [...target.evidence, fit.line],
+    rack: note,
+  };
 }

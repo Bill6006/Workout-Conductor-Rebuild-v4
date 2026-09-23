@@ -209,7 +209,10 @@ returns from a break, and estimates do not.
 
 "Not now" on the coach card records the offer by its source and lift in the meta store. A
 declined offer stays away for seven days; declined twice, it stays away until the record is
-cleared by a restore. Safety signals are never put away.
+cleared by a restore. Safety signals are never put away for days; since Maintenance 19, Not now
+on one sets its concern aside for this workout (`setAsideKey`, kept in `session.coachAccepted`):
+the same worry about another exercise stays quiet with it, a new one still shows, and the next
+workout starts clean.
 
 ## Fatigue signals beyond the session count (`src/engine/recovery/fatigue.ts`)
 
@@ -235,11 +238,19 @@ Each location records what it can load under three keys: a stack per machine exe
 exercise id), one `dumbbells` record shared by every dumbbell and kettlebell exercise, and
 `plates` per side for the rack. Stacks and dumbbells are one or two ranges `{ from, to, step }`,
 expanded to the exact weights; the rack is a list of plates. `loadingFor(locationLoading,
-sessionLoading, exercise, units)` derives `available` (the list, or null for a bar), `step` (the
-real increment: the smallest gap on the stack or between dumbbells, or twice the smallest plate
-the rack has today), `cap` (the heaviest weight, or null), and `perSide` for plate math.
-`fitWeight` snaps a target down onto the list or onto the bar's grid, never below a floor;
+sessionLoading, exercise, units)` derives `available` (the list; for a bar, every total its
+plates make on it, Maintenance 19), `step` (the real increment: the smallest gap on the stack or
+between dumbbells, or twice the smallest plate the rack has today), `cap` (the heaviest weight, or
+null), `perSide` for plate math, and for a bar `usual` (the totals with today's missing plates
+back) and `missingToday`. `fitWeight` snaps a target down onto the list, never below a floor;
 `nudge` moves the dial through real weights. A place with nothing recorded behaves as before.
+
+A bar's totals come from `sideWeights` in `plateMath.ts`: every side weight the plates make,
+taking as many of each as needed, so a rack of odd plates loads exactly what it can (45s and 25s
+make 145, two 25s a side, but never 115). `platesFor` finds the fewest plates for one side, and
+the plate line says what to load: "Bar 45 + 45, 10 each side · 155 lb". A weight the plates
+cannot make names the two they can, "The plates here make 95 or 105, not 100 lb"; there is no
+shortfall in brackets any more.
 
 Progression fits every target through `applyProgression(..., loading)`. When the target would
 pass the cap, `capTarget` holds the load there and raises the rep range by two
@@ -258,6 +269,19 @@ its slot. The generator fits the first preview through the same `capTarget` and
 when a target snapped onto the place's list would land on or under `from`, `capTarget` holds the
 load and raises the reps by two, naming the next real weight, instead of rounding the increase
 away in silence.
+
+Maintenance 19: a target the weights here cannot make is never passed through. `rackFit` takes it
+down to the weight under it that they make and adds the reps that keep the effort, the estimated
+max held where it was (Epley; one to three reps, never past twenty), and `capTarget` writes the
+line into the evidence and `NextTarget.rack` (copied to `EntryProgression.rack`): "No 2.5s today:
+95 instead of 100, two extra reps." when a plate missing today is the reason, naming the plates
+whose return would make it, or "The plates here make 95, not 100 lb: two extra reps." when the
+rack never does. The logger shows the line by the target. The `loading` trigger now re-fits a
+started exercise too: its logged sets stay as they are, its sets still to come land on what the
+weights make, and a load the weights changed goes back to the one asked for once they make it
+again. Weights carried from the last set that the plates cannot make are dropped before the
+rebuild, so the dial starts from the refitted target, and a rebuild mid-session takes today's
+missing plates into account (`GenerationConstraints.sessionLoading`).
 
 ## Session context (`src/engine/recovery/sessionContext.ts`, Maintenance 13)
 

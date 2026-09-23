@@ -37,7 +37,7 @@ import { maxPromptHidden } from '../../engine/progression/maxes';
 import { startRatio } from '../../engine/progression/startingLoad';
 import { contextFor } from '../../engine/recalibration/recalibrate';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
-import { currentPosition, workoutProgress } from '../../engine/workout/sequence';
+import { currentPosition, nextBlockAfter, workoutProgress } from '../../engine/workout/sequence';
 import {
   allEntries,
   type SetPrescription,
@@ -216,9 +216,7 @@ export function ActiveWorkoutScreen() {
     viewingBlockId !== null && viewingBlockId !== currentBlock?.id
       ? (workout.blocks.find((block) => block.id === viewingBlockId) ?? null)
       : null;
-  const nextBlock = currentBlock
-    ? workout.blocks[workout.blocks.indexOf(currentBlock) + 1]
-    : undefined;
+  const nextBlock = currentBlock ? nextBlockAfter(workout, currentBlock.id, isDone) : undefined;
   const lastLogged = session.completed.sets[session.completed.sets.length - 1];
   const undoable =
     lastLogged && !lastLogged.skipped
@@ -463,6 +461,9 @@ export function ActiveWorkoutScreen() {
               }
               available={loading.available}
               onWeightHintTap={() => setPlatesRequest({ entryId: entry.id, at: Date.now() })}
+              note={
+                currentHere.set.kind === 'working' ? (entry.progression?.rack?.line ?? null) : null
+              }
               mode="log"
               weightStep={step}
               onCommit={(values) => commitLog(entry, currentHere.set, values)}

@@ -47,6 +47,8 @@ interface SetLoggerProps {
   available?: readonly number[] | null;
   /** Makes the line under the weight tappable, for the way into Plates. */
   onWeightHintTap?: () => void;
+  /** Why the target is what it is when the weights here changed it, shown by the target. */
+  note?: string | null;
 }
 
 type Field = 'weight' | 'reps' | 'rir';
@@ -80,6 +82,7 @@ export function SetLogger({
   weightHint,
   available = null,
   onWeightHintTap,
+  note = null,
 }: SetLoggerProps) {
   const [values, setValues] = useState<SetLoggerValues>(initial);
   const [typing, setTyping] = useState<Field | null>(null);
@@ -330,6 +333,11 @@ export function SetLogger({
               : `Target RIR ${target.rir}`,
         )}
       </div>
+      {note ? (
+        <p className={styles.note} data-testid="target-note">
+          {note}
+        </p>
+      ) : null}
       <div className={styles.actions}>
         {mode === 'edit' ? (
           <>

@@ -78,6 +78,7 @@ import {
   acceptKey,
   emptyDeclines,
   recordDecline,
+  setAsideKey,
   type CoachAction,
   type CoachDeclines,
   type CoachSignal,
@@ -508,6 +509,19 @@ function slugify(name: string): string {
     .slice(0, 40);
 }
 
+/**
+ * A rest running when the workout is rebuilt names what comes next in the rebuilt workout: the
+ * set it named may have moved, or gone with the place it needed.
+ */
+function restPointingAt(
+  rest: WorkoutSession['rest'],
+  workout: GeneratedWorkout,
+  next: SetPosition | null,
+): WorkoutSession['rest'] {
+  if (!rest || !next) return rest;
+  return { ...rest, nextLabel: `Next: ${describePosition(workout, next)}` };
+}
+
 export class AppStore {
   private state: AppState;
   private readonly listeners = new Set<Listener>();
@@ -908,6 +922,7 @@ export class AppStore {
           result.duration === 'default'
             ? result.workout.duration.estimatedMinutes
             : latest.defaultEstimatedMinutes,
+        rest: restPointingAt(latest.rest, result.workout, position),
         lastSummary: result.summary,
         lastChanges: result.changes,
         previous: {
@@ -966,6 +981,7 @@ export class AppStore {
         session.previous.duration === 'default'
           ? session.previous.workout.duration.estimatedMinutes
           : session.defaultEstimatedMinutes,
+      rest: restPointingAt(session.rest, session.previous.workout, position),
       previous: null,
       lastSummary: {
         headline,
@@ -1688,6 +1704,8 @@ export class AppStore {
       session.status !== 'completed' &&
       this.state.profile?.currentLocationId === locationId
     ) {
+      // Before the rebuild, so the dial the rebuild brings up starts from the refitted target.
+      this.dropUnloadableDrafts();
       await this.recalibrate({ type: 'loading' });
     }
   }
@@ -1697,7 +1715,41 @@ export class AppStore {
     const session = this.requireSession();
     const missingPlates = [...new Set(plates)].sort((a, b) => b - a);
     this.setSession({ ...session, loading: { ...session.loading, missingPlates } });
-    if (session.status !== 'completed') await this.recalibrate({ type: 'loading' });
+    if (session.status !== 'completed') {
+      this.dropUnloadableDrafts();
+      await this.recalibrate({ type: 'loading' });
+    }
+  }
+
+  /**
+   * The dial starts the next set from the weight the last one used. When the weights here
+   * change and cannot make that weight any more, it starts from the refitted target instead.
+   */
+  private dropUnloadableDrafts(): void {
+    const session = this.state.session;
+    const units = this.state.profile?.units;
+    if (!session || !units) return;
+    const drafts = { ...session.drafts };
+    let dropped = false;
+    for (const [entryId, draft] of Object.entries(drafts)) {
+      if (draft.weight === null) continue;
+      const entry = allEntries(session.workout.blocks).find(
+        (candidate) => candidate.id === entryId,
+      );
+      if (!entry) continue;
+      const exercise = requireExercise(entry.exerciseId);
+      const available = loadingFor(
+        this.currentLocation()?.loading,
+        session.loading,
+        exercise,
+        units,
+      ).available;
+      const weight = draft.weight;
+      if (available === null || available.some((each) => Math.abs(each - weight) < 1e-6)) continue;
+      delete drafts[entryId];
+      dropped = true;
+    }
+    if (dropped) this.setSession({ ...session, drafts });
   }
 
   async saveLocation(location: LocationProfile): Promise<SaveReceipt> {
@@ -2458,14 +2510,25 @@ export class AppStore {
    * Not now. Most offers stay away for a while; the note about a workout left open is about
    * this workout only, so it stays away for this session and says so again for the next one.
    */
-  async dismissCoachSignal(signal: Pick<CoachSignal, 'source' | 'exerciseId'>): Promise<void> {
-    if (signal.source !== UNFINISHED_SOURCE) {
+  async dismissCoachSignal(
+    signal: Pick<CoachSignal, 'source' | 'exerciseId'> &
+      Partial<Pick<CoachSignal, 'domain' | 'concern'>>,
+  ): Promise<void> {
+    // Two cards are set aside for this workout only: the one naming a workout left open, and a
+    // safety card, which is never declined for days.
+    const key =
+      signal.source === UNFINISHED_SOURCE
+        ? UNFINISHED_SOURCE
+        : signal.domain === 'safety'
+          ? setAsideKey(signal)
+          : null;
+    if (key === null) {
       await this.declineCoachSignal(signal);
       return;
     }
     const session = this.state.session;
-    if (session && !session.coachAccepted.includes(UNFINISHED_SOURCE)) {
-      this.setSession({ ...session, coachAccepted: [...session.coachAccepted, UNFINISHED_SOURCE] });
+    if (session && !session.coachAccepted.includes(key)) {
+      this.setSession({ ...session, coachAccepted: [...session.coachAccepted, key] });
     }
   }
 

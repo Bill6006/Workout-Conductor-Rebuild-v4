@@ -82,13 +82,23 @@ describe('available weights', () => {
     const bench = requireExercise('barbell-bench-press');
     expect(loadingKeyFor(bench)).toBe(PLATES_KEY);
     const usual = loadingFor(undefined, undefined, bench, 'lb');
-    expect(usual).toMatchObject({ available: null, step: 5, cap: null });
+    expect(usual).toMatchObject({ step: 5, cap: null, missingToday: [] });
+    // Every total the standard plates make on the 45 bar: fives, from the empty bar.
+    expect(usual.available?.slice(0, 4)).toEqual([45, 50, 55, 60]);
     expect(usual.perSide).toEqual([45, 35, 25, 10, 5, 2.5]);
     expect(fitWeight(120, usual, 45)).toBe(120);
 
     const today = loadingFor(undefined, { missingPlates: [2.5] }, bench, 'lb');
     expect(today.step).toBe(10);
     expect(today.perSide).toEqual([45, 35, 25, 10, 5]);
+    expect(today.available?.slice(0, 4)).toEqual([45, 55, 65, 75]);
+    expect(today.missingToday).toEqual([2.5]);
+    // What the rack makes with the 2.5s back, so a line can say which plate changed a target.
+    expect(today.usual).toContain(100);
+    expect(today.available).not.toContain(100);
+    // The dial moves between weights the plates make, from wherever it stands.
+    expect(nudge(100, 1, today.available, today.step)).toBe(105);
+    expect(nudge(100, -1, today.available, today.step)).toBe(95);
     // 120 cannot be made without a 2.5: the bar is 45, so totals go 55, 65 ... 115, 125.
     expect(fitWeight(120, today, 45)).toBe(115);
     expect(fitWeight(125, today, 45)).toBe(125);
@@ -97,6 +107,20 @@ describe('available weights', () => {
     const rack = loadingFor(HOME, undefined, bench, 'lb');
     expect(rack.perSide).toEqual([45, 25, 10, 5]);
     expect(rack.step).toBe(10);
+  });
+
+  it('a rack of odd plates loads exactly what they make, not a grid', () => {
+    const bench = requireExercise('barbell-bench-press');
+    const odd = loadingFor(
+      { [PLATES_KEY]: { kind: 'plates', perSide: [45, 25] } },
+      undefined,
+      bench,
+      'lb',
+    );
+    // 50 a side is two 25s, 45 a side one 45; 35 a side cannot be made.
+    expect(odd.available?.slice(0, 6)).toEqual([45, 95, 135, 145, 185, 195]);
+    expect(fitWeight(120, odd, 45)).toBe(95);
+    expect(fitWeight(140, odd, 45)).toBe(135);
   });
 
   it('describes a spec in a line and refuses a broken one', () => {

@@ -5,6 +5,7 @@ import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercis
 import { muscleName } from '../../catalog/muscles/muscles';
 import { rankAlternatives } from '../alternatives/rankAlternatives';
 import {
+  blocksCandidate,
   checkExerciseFit,
   checkWorkoutConflicts,
   isBlocked,
@@ -17,6 +18,7 @@ import { weightStep } from '../plateMath/plateMath';
 import {
   applyProgression,
   capTarget,
+  rackFit,
   rampWeights,
   recommendNextTarget,
   summarizeProgression,
@@ -285,12 +287,16 @@ function keptEntries(
   return (
     allEntries(request.workout.blocks)
       .filter((entry) => classified.frozenIds.has(entry.id) || classified.lockedIds.has(entry.id))
-      .map((entry) => ({ entry, frozen: classified.frozenIds.has(entry.id) }))
+      .map((entry) => ({
+        entry,
+        frozen: classified.frozenIds.has(entry.id),
+        fits: !isBlocked(checkExerciseFit(requireExercise(entry.exerciseId), context)),
+      }))
       // A locked pick that no longer fits the place or the joint cannot be performed, so it is rebuilt.
-      .filter(
-        (kept) =>
-          kept.frozen ||
-          !isBlocked(checkExerciseFit(requireExercise(kept.entry.exerciseId), context)),
+      .filter((kept) => kept.frozen || kept.fits)
+      // Logged work that cannot go on here stays as history, and the rest of it is replaced.
+      .map(({ entry, frozen, fits }) =>
+        frozen && !fits ? { entry, frozen, closed: true } : { entry, frozen },
       )
   );
 }
@@ -348,6 +354,7 @@ function rebuild(
     readiness: constraints.readiness,
     deload: constraints.deload,
     focusMuscle: constraints.focus,
+    sessionLoading: request.loading,
   };
   return generateWorkout({
     profile: request.profile,
@@ -377,6 +384,67 @@ function relabel(block: WorkoutBlock): void {
   else if (block.kind === 'superset')
     block.label = names.map((name, index) => `A${index + 1} ${name}`).join(' + ');
   else block.label = `Circuit ×${block.rounds}: ${names.join(' / ')}`;
+}
+
+/**
+ * A started exercise under new weights: the sets it has logged stay as they are, and the ones
+ * still to come land on what the weights here make, with the reps that keep the effort. A load
+ * the weights changed goes back to the one asked for once they make it again. True when a set
+ * moved.
+ */
+function refitStarted(
+  entry: WorkoutEntry,
+  loading: Loading,
+  request: RecalibrationRequest,
+  isDone: SetDonePredicate,
+): boolean {
+  const units = request.profile.units;
+  const floor = barWeightFor(requireExercise(entry.exerciseId), units);
+  const before = entry.progression?.rack;
+  let note: ReturnType<typeof rackFit> = null;
+  let moved = false;
+  entry.sets = entry.sets.map((set) => {
+    if (isDone(entry.id, set.index) || set.targetWeight === null) return set;
+    if (set.kind !== 'working') {
+      const weight = fitWeight(set.targetWeight, loading, floor);
+      if (weight === set.targetWeight) return set;
+      moved = true;
+      return { ...set, targetWeight: weight };
+    }
+    // What the plan asked for, before any weights changed it.
+    const changedBefore = before !== undefined && Math.abs(set.targetWeight - before.loaded) < 1e-6;
+    const asked = changedBefore ? before.asked : set.targetWeight;
+    const reps: [number, number] = changedBefore
+      ? [set.targetReps[0] - before.extra, set.targetReps[1] - before.extra]
+      : [set.targetReps[0], set.targetReps[1]];
+    const fit = rackFit(asked, reps, loading, units);
+    note = note ?? fit;
+    const weight = fit ? fit.loaded : asked;
+    const targetReps: [number, number] = fit ? [reps[0] + fit.extra, reps[1] + fit.extra] : reps;
+    if (
+      weight === set.targetWeight &&
+      targetReps[0] === set.targetReps[0] &&
+      targetReps[1] === set.targetReps[1]
+    ) {
+      return set;
+    }
+    moved = true;
+    return { ...set, targetWeight: weight, targetReps };
+  });
+  if (entry.progression) {
+    const rest = { ...entry.progression };
+    delete rest.rack;
+    const evidence = rest.evidence.filter((line) => line !== before?.line);
+    const fit = note as ReturnType<typeof rackFit>;
+    entry.progression = fit
+      ? {
+          ...rest,
+          evidence: [...evidence, fit.line],
+          rack: { asked: fit.asked, loaded: fit.loaded, extra: fit.extra, line: fit.line },
+        }
+      : { ...rest, evidence };
+  }
+  return moved;
 }
 
 /** What this exercise can be loaded to at the request's place today. */
@@ -584,7 +652,11 @@ function bestAlternative(
     if (gentle.length > 0) candidates = gentle;
   }
   return candidates.find(
-    (candidate) => !isBlocked(checkWorkoutConflicts([...others, candidate.exercise], context)),
+    (candidate) =>
+      !blocksCandidate(
+        checkWorkoutConflicts([...others, candidate.exercise], context),
+        candidate.exercise.id,
+      ),
   )?.exercise;
 }
 
@@ -1002,15 +1074,29 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
     }
 
     case 'loading': {
-      // The place's weights changed, or a plate is missing today: every unlogged, untouched
-      // entry takes loads that exist here. Nothing is swapped, added, or removed.
+      // The place's weights changed, or a plate is missing today: every entry's sets still to
+      // come take loads that exist here, a started one included. Logged sets and weights set by
+      // hand stay as they are. Nothing is swapped, added, or removed.
       const workout = cloneWorkout(request.workout);
+      const { isDone } = classify(request);
       let updated = 0;
       for (const entry of allEntries(workout.blocks)) {
+        if (entry.manual?.weight) continue;
         const logged = request.completed.sets.some(
           (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
         );
-        if (logged || entry.manual?.weight) continue;
+        if (logged) {
+          if (
+            refitStarted(
+              entry,
+              loadingOf(request, requireExercise(entry.exerciseId)),
+              request,
+              isDone,
+            )
+          )
+            updated += 1;
+          continue;
+        }
         const exercise = requireExercise(entry.exerciseId);
         const prescription = prescribeFor(exercise, entry.role, request.profile, request.history);
         const working =

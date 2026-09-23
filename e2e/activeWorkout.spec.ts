@@ -120,7 +120,9 @@ test.describe('active workout', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('logger-weight')).toContainText('185');
     await page.getByTestId('plates-tab').click();
-    await expect(page.getByTestId('plate-math')).toContainText('Bar 45 + per side: 45, 25');
+    await expect(page.getByTestId('plate-math')).toContainText(
+      'Bar 45 + 45, 25 each side · 185 lb',
+    );
     await page.getByTestId('notes-tab').click();
     await page.getByLabel('Notes for Barbell Bench Press').fill('Bench 4, feet back');
     await page.getByTestId('save-notes').click();

@@ -3,6 +3,7 @@ import { GYM_DEFAULT_EQUIPMENT, HOME_DEFAULT_EQUIPMENT } from '../../catalog/equ
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { createDefaultProfile } from '../../core/validation/profile';
 import {
+  blocksCandidate,
   checkExerciseFit,
   checkSupersetPair,
   checkWorkoutConflicts,
@@ -148,6 +149,28 @@ describe('checkWorkoutConflicts', () => {
       context(),
     );
     expect(clean).toEqual([]);
+  });
+});
+
+describe('blocksCandidate', () => {
+  it('keeps a candidate out only for a block it takes part in', () => {
+    const home = context({
+      availableEquipment: new Set(HOME_DEFAULT_EQUIPMENT),
+      locationName: 'Home',
+    });
+    // A barbell press logged at the gym does not fit Home; a dumbbell curl joining it still does.
+    const logged = requireExercise('barbell-bench-press');
+    const curl = requireExercise('dumbbell-curl');
+    const conflicts = checkWorkoutConflicts([logged, curl], home);
+    expect(isBlocked(conflicts)).toBe(true);
+    expect(blocksCandidate(conflicts, curl.id)).toBe(false);
+    // Its own misfit, or a second primary lift of the same pattern, is the candidate's own block.
+    const squat = requireExercise('back-squat');
+    expect(blocksCandidate(checkWorkoutConflicts([curl, squat], home), squat.id)).toBe(true);
+    const closeGrip = requireExercise('close-grip-bench-press');
+    expect(
+      blocksCandidate(checkWorkoutConflicts([logged, closeGrip], context()), closeGrip.id),
+    ).toBe(true);
   });
 });
 

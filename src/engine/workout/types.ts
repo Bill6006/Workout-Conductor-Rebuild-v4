@@ -47,6 +47,18 @@ export interface EntryProgression {
   setsAdvice: 0 | 1;
   /** Set when the load is held at the heaviest weight the place has and the reps pushed instead. */
   capped?: { at: number };
+  /** Set when the weights here could not make the load asked for: what they make, and the line by the target. */
+  rack?: RackNote;
+}
+
+/** Weights that changed a target: the load asked for, the one loaded, the reps added, and why. */
+export interface RackNote {
+  asked: number;
+  loaded: number;
+  /** Reps added to each end of the range to keep the effort. */
+  extra: number;
+  /** The line by the target, for example "No 2.5s today: 95 instead of 100, two extra reps." */
+  line: string;
 }
 
 /** Values the user set by hand this session; the engines never override them. */
