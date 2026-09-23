@@ -19,13 +19,18 @@ const NOW = '2026-09-10T12:00:00.000Z';
 const profile = createDefaultProfile(NOW);
 const [, gym] = createDefaultLocations({ gymAccess: true }, NOW);
 
-function input(history: WorkoutRecord[] = [], overrides: Partial<CoachInput> = {}): CoachInput {
+function input(
+  history: WorkoutRecord[] = [],
+  overrides: Partial<CoachInput> = {},
+  templateId?: string,
+): CoachInput {
   const workout = generateWorkout({
     profile,
     location: gym,
     history,
     now: NOW,
     duration: 'default',
+    ...(templateId ? { constraints: { templateId } } : {}),
   });
   const fatigue = interpretFatigue(history, NOW, overrides.constraints?.readiness ?? null);
   return {
@@ -98,22 +103,54 @@ describe('coach conductor', () => {
         [5, 185, 2],
       ]),
     ];
-    // The load nudge is obvious past beginner level; a beginner still gets it as a plateau card.
+    // The load nudge is obvious past beginner level; a beginner still gets it as a plateau card,
+    // on a day whose workout has the bench press (the coach talks about today's workout only).
     const beginner = { policy: coachingPolicy('beginner') };
-    const plateau = conductCoach(input(history, beginner));
+    const plateau = conductCoach(input(history, beginner, 'push-arms'));
     expect(plateau?.signal.domain).toBe('plateau');
     expect(plateau?.signal.headline).toBe('Barbell Bench Press is ready for more load');
-    const loadedJoint = allEntries(plateau ? input(history).workout.blocks : []).flatMap((entry) =>
-      Object.entries(requireExercise(entry.exerciseId).jointStress)
-        .filter(([, level]) => level !== 'low')
-        .map(([joint]) => joint as Joint),
+    const loadedJoint = allEntries(input(history, {}, 'push-arms').workout.blocks).flatMap(
+      (entry) =>
+        Object.entries(requireExercise(entry.exerciseId).jointStress)
+          .filter(([, level]) => level !== 'low')
+          .map(([joint]) => joint as Joint),
     )[0] as Joint;
     const withPain = conductCoach(
-      input(history, { constraints: { ...emptyConstraints(), painJoints: [loadedJoint] } }),
+      input(
+        history,
+        { ...beginner, constraints: { ...emptyConstraints(), painJoints: [loadedJoint] } },
+        'push-arms',
+      ),
     );
     expect(withPain?.signal.domain).toBe('safety');
     expect(withPain?.signal.action?.kind).toBe('alternatives');
     expect(withPain?.considered).toBeGreaterThan(1);
+  });
+
+  it('says nothing about a lift that is not in today’s workout: the owner’s leg day and chin-ups', () => {
+    // Loaded, so the note is a strategy load card: a bench press stalling under its floor.
+    const bench = [9, 5, 2].map((daysAgo) =>
+      record(daysAgo, 'barbell-bench-press', [
+        [4, 185, 1],
+        [3, 185, 1],
+        [3, 185, 0],
+      ]),
+    );
+    const legDay = input(bench, { policy: coachingPolicy('beginner') }, 'lower');
+    expect(
+      allEntries(legDay.workout.blocks).some((e) => e.exerciseId === 'barbell-bench-press'),
+    ).toBe(false);
+    expect(
+      gatherSignals(legDay).some((signal) => signal.exerciseId === 'barbell-bench-press'),
+    ).toBe(true);
+    for (const status of ['preview', 'active'] as const) {
+      const card = conductCoach({ ...legDay, status });
+      expect(card?.signal.headline ?? '').not.toMatch(/Bench Press/);
+    }
+    const benchDay = conductCoach(
+      input(bench, { policy: coachingPolicy('beginner') }, 'push-arms'),
+    );
+    expect(benchDay?.signal.headline ?? '').toMatch(/Bench Press/);
   });
 
   it('asks for a backup before anything below it and puts recovery ahead of plateaus', () => {

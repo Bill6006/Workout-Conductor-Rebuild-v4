@@ -31,7 +31,7 @@ import {
   rampSetsFor,
   type RampContext,
 } from '../progression/roles';
-import { barWeightFor } from '../progression/startingLoad';
+import { barWeightFor, hasNoLoad } from '../progression/startingLoad';
 import { precedingWorkToday } from '../recovery/sessionContext';
 import {
   generateWorkout,
@@ -1415,12 +1415,18 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const workout = cloneWorkout(request.workout);
       const { entry } = findEntry(workout, trigger.entryId);
       const name = requireExercise(entry.exerciseId).name;
-      const first = entry.sets.find((set) => set.kind === 'working');
+      const { isDone } = classify(request);
+      // The ramp leads into the working sets still to come, so it reads their range.
+      const first =
+        entry.sets.find((set) => set.kind === 'working' && !isDone(entry.id, set.index)) ??
+        entry.sets.find((set) => set.kind === 'working');
       const reps = first?.targetReps ?? [8, 10];
+      // A lift with no load ramps by reps: its ramp never asks for more than the working sets.
+      const noLoad = hasNoLoad(requireExercise(entry.exerciseId));
       entry.sets.unshift({
         index: nextSetIndex(entry),
         kind: 'warmup',
-        targetReps: [Math.max(3, reps[0]), Math.max(5, reps[1])],
+        targetReps: noLoad ? [reps[0], reps[1]] : [Math.max(3, reps[0]), Math.max(5, reps[1])],
         targetRir: 5,
         targetWeight: null,
         restSeconds: 45,
@@ -1448,7 +1454,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         throw new Error('The rep range must be whole numbers between 1 and 120, low first.');
       }
       const workout = cloneWorkout(request.workout);
-      const { entry } = findEntry(workout, trigger.entryId);
+      const { entry, block } = findEntry(workout, trigger.entryId);
       const { isDone } = classify(request);
       const name = requireExercise(entry.exerciseId).name;
       let changed = 0;
@@ -1459,11 +1465,41 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         }
       }
       if (changed > 0) entry.manual = { ...entry.manual, reps: true };
+      // A lift with no load ramps by reps, not weight: its ramps never ask for more reps than the
+      // working sets now do.
+      if (changed > 0 && hasNoLoad(requireExercise(entry.exerciseId))) {
+        for (const set of entry.sets) {
+          if (set.kind === 'warmup' && !isDone(entry.id, set.index)) set.targetReps = [low, high];
+        }
+      }
+      // Fewer reps over more sets: the work moves into one more set at the new range.
+      const workingNow = entry.sets.filter((set) => set.kind === 'working').length;
+      const addSet = trigger.workingDelta === 1 && changed > 0 && workingNow < MAX_WORKING_SETS;
+      if (addSet) {
+        const last = [...entry.sets].reverse().find((set) => set.kind === 'working');
+        const added: SetPrescription = {
+          index: nextSetIndex(entry),
+          kind: 'working',
+          targetReps: [low, high],
+          targetRir: last?.targetRir ?? 2,
+          targetWeight: last?.targetWeight ?? null,
+          restSeconds: entry.restSeconds,
+        };
+        const dropAt = entry.sets.findIndex((set) => set.kind === 'drop');
+        if (dropAt >= 0) entry.sets.splice(dropAt, 0, added);
+        else entry.sets.push(added);
+        entry.manual = { ...entry.manual, sets: true };
+      }
+      // The session's length follows the sets it now has.
+      syncRounds(block);
+      refresh(workout, request, constraints);
+      const count = entry.sets.filter((set) => set.kind === 'working').length;
       return {
         ...base,
         workout,
-        headline:
-          changed > 0
+        headline: addSet
+          ? `${name}: ${count} sets of ${low}-${high}.`
+          : changed > 0
             ? `${name}: ${targetText([low, high], holdById(entry.exerciseId))} for the remaining ${changed === 1 ? 'set' : 'sets'}.`
             : `No sets left to change on ${name}.`,
       };

@@ -112,7 +112,7 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
   'rep-range': {
     label: 'Rep range',
     scope: 'local',
-    evaluating: ['Updating the remaining sets'],
+    evaluating: ['Updating the remaining sets', 'Re-estimating the session time'],
   },
   reorder: {
     label: 'Reordered',
@@ -219,7 +219,9 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
     case 'add-warmup':
       return `Adding a ramp set to ${name}`;
     case 'rep-range':
-      return `Updating the rep target for ${name}`;
+      return trigger.workingDelta
+        ? `Fewer reps over more sets for ${name}`
+        : `Updating the rep target for ${name}`;
     case 'reorder':
       return `Moving ${name} ${trigger.direction}`;
     case 'split-superset':

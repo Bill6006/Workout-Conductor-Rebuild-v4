@@ -57,7 +57,13 @@ export type RecalibrationTrigger =
   | { type: 'add-exercise'; exerciseId: string; muscle: MuscleId; sets: number }
   | { type: 'sets'; entryId: string; workingDelta: -1 | 1 }
   | { type: 'add-warmup'; entryId: string }
-  | { type: 'rep-range'; entryId: string; reps: [number, number] }
+  | {
+      type: 'rep-range';
+      entryId: string;
+      reps: [number, number];
+      /** Fewer reps over more sets: one more working set at the new range (Maintenance 21). */
+      workingDelta?: 1;
+    }
   | { type: 'reorder'; entryId: string; direction: 'up' | 'down' }
   | { type: 'split-superset'; blockId: string }
   | { type: 'drop-set'; entryId: string; on: boolean }

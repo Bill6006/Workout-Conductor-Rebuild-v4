@@ -47,7 +47,9 @@ fatigue holds loads in the progression engine and puts recovery first on the coa
 one poor set or one poor session:
 
 - **Load plateau**: three sessions at the same load while hitting the top of the range → add
-  weight; two sessions under the floor at the same load → micro-deload.
+  weight; two sessions under the floor at the same load → micro-deload. A loaded lift only:
+  at bodyweight there is no weight to add or take off, and the lift's own target says what to
+  do instead (Maintenance 21).
 - **Rep plateau**: reps fading by two or more from the first to the last set in two of three
   sessions → increase rest; best reps flat over three sessions inside the range → add reps.
 - **Fatigue**: fatigue high with top-set estimates down 5 % → micro-deload; high alone → hold.
@@ -82,8 +84,13 @@ Every card ends in a tap or a must-know. Cards that only restated a target or a 
 the superset readout lives on the superset card, the logging tip sits under the first working
 set until a weight is logged, and a coverage note with nothing to tap never reaches the card.
 Two kinds of card carry no action on purpose: a lowered load (micro-deload or reset), whose
-change is already in the plan and whose card says why, and a safety notice with no safe swap.
-The profile pain-area watch offers a swap; an extra set on offer offers "Add the set".
+change is already in the plan and whose card says why (only when there is a load: at bodyweight
+nothing is lowered), and a safety notice with no safe swap. The profile pain-area watch offers
+a swap; an extra set on offer offers "Add the set". Since Maintenance 21 every card has Not now,
+including one with nothing to tap, and the coach talks only about the workout on the screen: a
+note about a lift that is not in it (a stall route, a strategy note, a "keeps getting swapped"
+note) waits for a day that has the lift, in every state from the preview to the finished
+workout. Notes about the whole day, week or programme are unaffected.
 
 ## Coverage that acts or stays quiet (`coverageSignals`, `src/engine/planning/focus.ts`)
 
@@ -212,7 +219,13 @@ declined offer stays away for seven days; declined twice, it stays away until th
 cleared by a restore. Safety signals are never put away for days; since Maintenance 19, Not now
 on one sets its concern aside for this workout (`setAsideKey`, kept in `session.coachAccepted`):
 the same worry about another exercise stays quiet with it, a new one still shows, and the next
-workout starts clean.
+workout starts clean. Since Maintenance 21 a card with nothing to tap is set aside the same way
+(`setAsideForWorkout`; its key names the concern, else the lift): a note is never remembered for
+days, so a must-know comes back next workout, and the same source's next real offer is not
+hidden by it. An offer that is declined, taken or set aside holds no place either: the day's one
+progression offer, or the one lowered-load note, goes to the next lift that has one. A lift gets
+one offer per pass, so declining its extra set never brings its heaviest-weight card in its
+place.
 
 ## Fatigue signals beyond the session count (`src/engine/recovery/fatigue.ts`)
 
@@ -258,7 +271,8 @@ pass the cap, `capTarget` holds the load there and raises the rep range by two
 coach names it once (`source: 'capped'`), offering a harder variation while the reps have room or
 an extra set at the ceiling; `rankAlternatives` adds 12 points to candidates whose starting ratio
 is below the current one (`signals.capLimited`); `tempoCue(..., { capped: true })` slows the
-lowering and adds a pause. Manual weights are never re-fitted. A `loading` recalibration trigger
+lowering and adds a pause; a strength set keeps the fast lift (3-1-X-0), every other role reads
+3-1-1-0 (Maintenance 21). Manual weights are never re-fitted. A `loading` recalibration trigger
 re-fits every unlogged, non-manual entry when a record is saved during a workout, and
 `session.loading.missingPlates` is a session-only note that widens the bar's step without
 touching the place. The generator's `pickForSlot` now gives a preferred exercise that fits the
@@ -416,3 +430,46 @@ max can be entered or updated from the exercise's Options at any time.
   today, whose card already covers it.
 - The accessory picker treats the joint as a pain joint, and `rankAlternatives` leaves out high
   stress on it and ranks moderate stress 12 lower, with the reason in words.
+
+## Lifts done at bodyweight (Maintenance 21)
+
+- **Short of the floor.** A lift done at bodyweight has no weight to take off, so two or more
+  sessions in a row under the bottom of its range keep the target (`maintain`) with the line
+  "Short of 6 reps twice in a row: try fewer reps over more sets." and a `short` note
+  (`{ sessions, floor }`, optional in the stored plan, read as none when unreadable). Nothing is
+  lowered, so the coach's lowered-load card never appears for it, and that card now needs a load
+  whatever an older copy of the plan says. The run is counted against today's floor: a session
+  that missed a higher floor of its own (after "Aim one rep higher", or one raised mid-session)
+  but reached today's does not count. One short session reads "the same target again"; a last
+  session that reached today's floor falls to the ordinary bodyweight lines ("keep building
+  reps"), never to a deload. When the last session was at a
+  different range from today's, there is no `short` note and the line reads "Last time was a
+  different rep range: log what you do today and the target follows." High fatigue reads "the
+  same target".
+- **The coach's one tap.** On a day the lift is in the workout and untouched, the progression
+  card "Chin-Up: short of 6 reps twice in a row" offers `N+1 sets of (floor-3)-(floor-1) today`:
+  a `rep-range` recalibration with `workingDelta: 1`, which sets the remaining sets' reps, adds
+  one working set at that range and re-estimates the session (a plain rep-range edit now
+  re-estimates it too). Unfinished ramps of a lift with no load take the same range, and a ramp
+  added later ("add-warmup") takes the range of the working sets still to come as it is, so a
+  warm-up never asks for more reps than the working sets. Its Why adds "or swap in Lat Pulldown for a few weeks" only when
+  the first listed substitution with a load fits the place and is not already in today's
+  workout. It is made only when the floor that was missed is today's floor. Holds and lifts with
+  a floor under 3 are never offered it.
+- **Nothing assumes a weight.** The first target reads "First time logged: log what you do and
+  the next target follows from it."; the summary's next target reads "Chin-Up: bodyweight ×
+  6-12 (hold)"; the history notes never say "add 5 lb" or "micro-deload" at bodyweight.
+- **A 0 is the bodyweight.** On a lift with no load reference (`startRatio` null, `hasNoLoad`),
+  a logged 0 is stored and read as no weight (`loggedLoad`), so it never reads as a load to
+  change. `hasNoLoad` is the one test for "no weight" everywhere: the first-target line, the
+  summary's next target and the "Bodyweight" line under the weight dial. It covers Bench Dip and
+  Step-Up, whose only listed equipment is a bench.
+- **A finished workout.** Once the workout is over, the coach makes no offer that would change it:
+  no fewer-reps, extra-set or heaviest-weight offer, no route step (a tap there used to record a
+  step as applied that never was), no load step for undershooting, no safety swap and no
+  check-in. A strategy note about the week keeps its "Lead the next session with …" focus, which
+  still applies, unless that focus is already set.
+- **Family estimates.** A family estimate passes only between lifts measured the same way: a
+  bench press gives a push-up no weight ("New variation: log what you do …"), and a pulldown
+  after chin-ups starts from its own first-target rules rather than from the chin-ups' added
+  weight. Two lifts done at bodyweight still share their added weight.

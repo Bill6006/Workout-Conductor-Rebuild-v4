@@ -15,6 +15,7 @@ import {
   gatherSignals,
   isDeclined,
   recordDecline,
+  setAsideKey,
   type CoachInput,
 } from './coachConductor';
 import type { ExperienceLevel } from './experience';
@@ -97,13 +98,14 @@ function stalled(): WorkoutRecord[] {
 describe('coaching by experience', () => {
   it('tells a beginner the obvious and hides it from intermediate and advanced lifters', () => {
     const history = readyForLoad();
-    const beginner = conductCoach(input('beginner', history));
+    // The coach talks about today's workout only, so today's workout has the bench press.
+    const beginner = conductCoach(withBench(input('beginner', history)));
     expect(beginner?.signal.obvious).toBe(true);
     expect(beginner?.signal.headline).toMatch(/ready for more load|load goes up/);
     expect(beginner?.policy.tone).toBe('explain');
 
     for (const level of ['intermediate', 'advanced'] as const) {
-      const card = conductCoach(input(level, history));
+      const card = conductCoach(withBench(input(level, history)));
       const obvious = gatherSignals(input(level, history)).filter((signal) => signal.obvious);
       expect(obvious.length).toBeGreaterThan(0);
       expect(card?.signal.obvious ?? false).toBe(false);
@@ -150,8 +152,16 @@ describe('coaching by experience', () => {
     const justApplied = conductCoach(withBench(input('advanced', history, { routes })));
     expect(justApplied?.signal.why[1]).toMatch(/1 shift the rep range \(applied\)/);
     expect(justApplied?.signal.action).toBeNull();
+    // Not now on that note sets it aside for this workout; the next step's offer is not hidden.
+    const aside = [setAsideKey(justApplied!.signal)];
+    const setAside = conductCoach(
+      withBench(input('advanced', history, { routes, accepted: aside })),
+    );
+    expect(setAside?.signal.source ?? 'none').not.toBe('stall: route');
     const advanced = { ...routes, routes: { [BENCH]: { ...routes.routes[BENCH]!, step: 1 } } };
-    const card = conductCoach(withBench(input('advanced', history, { routes: advanced })));
+    const card = conductCoach(
+      withBench(input('advanced', history, { routes: advanced, accepted: aside })),
+    );
     expect(card?.signal.why[1]).toMatch(
       /1 shift the rep range \(done\) → 2 swap for a variation \(now\)/,
     );
@@ -192,7 +202,7 @@ describe('coaching by experience', () => {
     expect(card?.signal.action?.route).toBeUndefined();
   });
 
-  it('keeps the stall visible without an action when the lift is not in today’s session', () => {
+  it('keeps a stalled lift off a day without it, and brings it back with its step on a day that has it', () => {
     const history = stalled();
     const base = input('intermediate', history);
     const without = {
@@ -204,10 +214,22 @@ describe('coaching by experience', () => {
         }))
         .filter((block) => block.entries.length > 0),
     };
-    const card = conductCoach({ ...base, workout: without });
     expect(allEntries(without.blocks).some((entry) => entry.exerciseId === BENCH)).toBe(false);
-    expect(card?.signal.domain).toBe('plateau');
-    expect(card?.signal.action).toBeNull();
+    // The note exists, but it is about a lift today's workout does not have.
+    expect(
+      gatherSignals({ ...base, workout: without }).some((signal) => signal.exerciseId === BENCH),
+    ).toBe(true);
+    const card = conductCoach({ ...base, workout: without });
+    expect(card?.signal.exerciseId).not.toBe(BENCH);
+    expect(card?.signal.headline ?? '').not.toMatch(/Bench Press/);
+    for (const status of ['active', 'paused', 'completed'] as const) {
+      expect(conductCoach({ ...base, workout: without, status })?.signal.exerciseId).not.toBe(
+        BENCH,
+      );
+    }
+    const onBenchDay = conductCoach(withBench(base));
+    expect(onBenchDay?.signal.exerciseId).toBe(BENCH);
+    expect(onBenchDay?.signal.action).not.toBeNull();
   });
 
   it('stays quiet about a declined offer for a week, and for good after two declines', () => {
@@ -231,5 +253,66 @@ describe('coaching by experience', () => {
         NOW,
       ),
     ).toBe(false);
+  });
+});
+
+describe('a finished workout takes no tap that would change it', () => {
+  it('offers no route step, no load step, no swap and no check-in once it is over', () => {
+    const finished = (
+      history: WorkoutRecord[],
+      overrides: Partial<CoachInput> = {},
+      level: ExperienceLevel = 'intermediate',
+    ) => ({
+      ...withBench(input(level, history, overrides)),
+      status: 'completed' as const,
+    });
+    // A stalled bench press: the route is a note, not a step recorded as applied.
+    const route = gatherSignals(finished(stalled())).find((s) => s.source === 'stall: route');
+    expect(route).toBeDefined();
+    expect(route?.action).toBeNull();
+    const easy = [21, 14, 7, 1].map((daysAgo) =>
+      record(daysAgo, BENCH, [
+        [5, 185, 4],
+        [5, 185, 4],
+      ]),
+    );
+    const under = gatherSignals(finished(easy, {}, 'advanced')).find(
+      (s) => s.source === 'stall: undershooting',
+    );
+    expect(under).toBeDefined();
+    expect(under?.action).toBeNull();
+    // Warnings and a check-in were for the sets still to come.
+    const withPain = finished([], {
+      constraints: { ...emptyConstraints(), painJoints: ['shoulder'] },
+    });
+    expect(gatherSignals(withPain).some((s) => s.domain === 'safety')).toBe(false);
+    const tired = finished([], {
+      fatigue: { ...input('intermediate', []).fatigue, level: 'high', evidence: ['Tired.'] },
+    });
+    const recovery = gatherSignals(tired).find((s) => s.source === 'fatigue');
+    expect(recovery).toBeDefined();
+    expect(recovery?.action).toBeNull();
+  });
+
+  it('keeps a focus for the next session, which a finished workout can still take', () => {
+    const note = {
+      kind: 'coverage' as const,
+      recommendation: 'adjust-volume' as const,
+      headline: 'Triceps is under its weekly target',
+      why: ['Under half the weekly sets two weeks running.'],
+      muscle: 'triceps' as const,
+      sessions: 2,
+      confidence: 'medium' as const,
+      severity: 1,
+    };
+    const done = {
+      ...input('intermediate', [], { strategy: [note] }),
+      status: 'completed' as const,
+    };
+    const signal = gatherSignals(done).find((s) => s.source === 'strategy: coverage');
+    expect(signal?.action?.kind).toBe('focus');
+    // A focus already set is not offered again: the tap would only push its end out.
+    const already = { ...done, focus: 'triceps' as const };
+    expect(gatherSignals(already).some((s) => s.source === 'strategy: coverage')).toBe(false);
   });
 });

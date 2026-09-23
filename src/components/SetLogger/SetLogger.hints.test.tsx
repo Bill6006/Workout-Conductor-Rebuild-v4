@@ -48,3 +48,37 @@ describe('SetLogger weight hint', () => {
     expect(logger).toHaveTextContent('Enter a weight');
   });
 });
+
+describe('SetLogger hints short enough for a phone', () => {
+  it('says a ramp and a drop set in a few words; the head and the weight line say the rest', () => {
+    const { rerender } = render(
+      <SetLogger
+        {...base}
+        target={{ kind: 'warmup', reps: [4, 6], rir: 5, weight: 80, label: 'Ramp 1 of 2' }}
+        initial={{ weight: 80, reps: 6, rir: 5 }}
+      />,
+    );
+    expect(screen.getByTestId('reps-hint')).toHaveTextContent(/^Target 4-6$/);
+    expect(screen.getByTestId('rir-hint')).toHaveTextContent(/^Easy, RIR 5$/);
+
+    rerender(
+      <SetLogger
+        {...base}
+        target={{ kind: 'drop', reps: [8, 12], rir: 0, weight: 60, label: 'Drop set' }}
+        initial={{ weight: 60, reps: 12, rir: 0 }}
+      />,
+    );
+    expect(screen.getByTestId('reps-hint')).toHaveTextContent(/^Aim 8-12$/);
+    expect(screen.getByTestId('rir-hint')).toHaveTextContent(/^Last clean rep$/);
+
+    rerender(
+      <SetLogger
+        {...base}
+        target={{ kind: 'warmup', reps: [20, 40], rir: 5, weight: 25, label: 'Ramp 1 of 1' }}
+        initial={{ weight: 25, reps: 20, rir: null }}
+        hold
+      />,
+    );
+    expect(screen.getByTestId('reps-hint')).toHaveTextContent(/^Target 20 s$/);
+  });
+});

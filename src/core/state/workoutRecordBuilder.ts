@@ -4,6 +4,7 @@ import { muscleName } from '../../catalog/muscles/muscles';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import { allEntries, workingSets } from '../../engine/workout/types';
 import { holdById } from '../../engine/workout/setText';
+import { hasNoLoad } from '../../engine/progression/startingLoad';
 import type { UserProfile } from '../validation/profile';
 import type { TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import { recommendNextTarget } from '../../engine/progression/progression';
@@ -222,7 +223,15 @@ export function buildCompletion(
         ? `${exercise.name}: hold ${target.reps[0]} s`
         : `${exercise.name}: ${target.weight} ${profile.units} × ${target.reps[0]} s`;
     }
-    const load = target.weight === null ? 'log a weight' : `${target.weight} ${profile.units}`;
+    // A lift done at bodyweight or with a band has no weight to log (Maintenance 21).
+    const load =
+      target.weight !== null
+        ? `${target.weight} ${profile.units}`
+        : hasNoLoad(exercise)
+          ? exercise.load === 'band'
+            ? 'band'
+            : 'bodyweight'
+          : 'log a weight';
     return `${exercise.name}: ${load} × ${target.reps[0]}-${target.reps[1]} (${MODE_LABEL[target.mode]})`;
   });
   const priorities = computeMusclePriorities(

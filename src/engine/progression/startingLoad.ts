@@ -144,6 +144,25 @@ export function startRatio(exercise: StartExercise): number | null {
   return round(PATTERN_BAR_RATIO[exercise.movementPattern] * CLASS_FACTOR[cls], 3);
 }
 
+/**
+ * A lift with no load reference: done at bodyweight or with a band (Bench Dip and Step-Up too,
+ * whose only equipment is a bench). The one test for "no weight" everywhere (Maintenance 21).
+ */
+export function hasNoLoad(exercise: StartExercise): boolean {
+  return startRatio(exercise) === null;
+}
+
+/**
+ * The weight a logged set carries. On a lift with no load reference a 0 is the lifter's own
+ * bodyweight, not a load, so it reads as no weight at all (Maintenance 21).
+ */
+export function loggedLoad(
+  exercise: StartExercise | undefined,
+  weight: number | null,
+): number | null {
+  return weight === 0 && exercise !== undefined && hasNoLoad(exercise) ? null : weight;
+}
+
 export function ageFactor(age: number | undefined): number {
   if (age === undefined || age < 35) return 1;
   if (age < 45) return 0.92;

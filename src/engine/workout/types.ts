@@ -49,6 +49,14 @@ export interface EntryProgression {
   capped?: { at: number };
   /** Set when the weights here could not make the load asked for: what they make, and the line by the target. */
   rack?: RackNote;
+  /** A lift done at bodyweight fell short of its floor this many sessions running (Maintenance 21). */
+  short?: ShortRun;
+}
+
+/** Sessions in a row a lift done at bodyweight ended under the bottom of its range, and that floor. */
+export interface ShortRun {
+  sessions: number;
+  floor: number;
 }
 
 /** Weights that changed a target: the load asked for, the one loaded, the reps added, and why. */

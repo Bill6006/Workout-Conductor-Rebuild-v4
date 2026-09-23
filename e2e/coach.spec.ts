@@ -148,6 +148,13 @@ test.describe('adaptive coach', () => {
     await expect(card).toContainText(/Route: 1 shift the rep range \(applied\)/);
     await expect(card.getByTestId('coach-action')).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
+    // A card with nothing to tap still has Not now (Maintenance 21): it is set aside for this
+    // workout, and stays away when the app is opened again.
+    await card.getByTestId('coach-dismiss').click();
+    await expect(card).not.toContainText(/Route: 1 shift the rep range \(applied\)/);
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+    await expect(page.getByTestId('coach-card')).not.toContainText(/\(applied\)/);
   });
 
   test('Not now puts a declined offer away and the card goes quiet', async ({ page }) => {

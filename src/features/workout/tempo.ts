@@ -38,7 +38,7 @@ export const TEMPO_EVIDENCE = {
   intent:
     'Lifting with maximal intent, even when the bar moves slowly, builds strength and power better than a deliberately slow lift (Behm and Sale, 1993; Wilk, Zajac and Tufano, 2021, review).',
   eccentric:
-    'A controlled 2 to 4 s lowering phase loads the muscle through its stretch; eccentric work is at least as effective as concentric for size (Roig et al., 2009, meta-analysis; Wilk, Zajac and Tufano, 2021).',
+    'A slower lowering made no clear difference to muscle growth, and gave the same or a little more strength in trained lifters (Amdi and King, 2025, meta-analysis).',
   pause:
     'A brief pause at the bottom removes the bounce so the muscle, not the stretch reflex, moves the load; competition presses are judged the same way (coaching practice rather than a controlled trial).',
   squeeze:
@@ -109,6 +109,15 @@ export function tempoCue(
   }
   if (options.capped) {
     // The heaviest weight the place has: a slower lowering and a pause make it heavier per rep.
+    // A strength set still drives up as fast as it can (Maintenance 21).
+    if (restCategory(role) === 'strength') {
+      return build(
+        [lower(3), hold(1), lift(1, true), squeeze(0)],
+        'at the heaviest weight here: lower for 3, pause 1, drive up as fast as you can',
+        [TEMPO_EVIDENCE.eccentric, TEMPO_EVIDENCE.intent, TEMPO_EVIDENCE.pause],
+        cue,
+      );
+    }
     return build(
       [lower(3), hold(1), lift(1), squeeze(0)],
       'at the heaviest weight here: lower for 3, pause 1, make every rep count',

@@ -53,6 +53,8 @@
 .dial {
   display: grid;
   grid-template-rows: 40px minmax(64px, auto) 40px auto;
+  /* A hint on two lines never pushes this dial's arrows out of line with the others. */
+  align-content: start;
   gap: 2px;
   min-width: 0;
   padding: 4px;
@@ -142,14 +144,15 @@
   margin: 0;
 }
 
+/* Every hint wraps rather than being cut off: large text, a narrow phone, a superset's narrower
+   dials, or a wider font (Maintenance 21). */
 .hint {
-  overflow: hidden;
   color: var(--color-text-subtle);
   font-size: 0.7rem;
   line-height: 1.2;
   text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .actions {
@@ -209,10 +212,6 @@
   font-size: 0.7rem;
   font-weight: inherit;
   line-height: 1.2;
-  /* The one line worth reading in full: it wraps instead of being cut off. */
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
   cursor: pointer;
 }
 

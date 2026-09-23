@@ -1,4 +1,4 @@
-import { requireExercise } from '../../catalog/exercises/catalog';
+import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
 import { isHold, type Joint } from '../../catalog/exercises/exerciseSchema';
 import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 import { UNFINISHED_STALE_HOURS } from '../../core/alerts/cues';
@@ -33,7 +33,14 @@ import {
   computeMusclePriorities,
   computeWeeklyVolume,
 } from '../volume/weeklyVolume';
-import { accessoryPicker, pickAccessoryFor } from '../workoutGenerator/generate';
+import { checkExerciseFit } from '../conflicts/conflictEngine';
+import { startRatio } from '../progression/startingLoad';
+import { MAX_WORKING_SETS } from '../recalibration/recalibrate';
+import {
+  accessoryPicker,
+  pickAccessoryFor,
+  sessionConflictContext,
+} from '../workoutGenerator/generate';
 import {
   allEntries,
   workingSets,
@@ -142,14 +149,25 @@ export function recordDecline(
 /**
  * A safety card's Not now lasts for this workout only: safety is never declined for days, but
  * a warning the lifter has read and set aside must not sit on the screen for the rest of it.
+ * A card with nothing to tap is a note, not an offer, and is set aside the same way
+ * (Maintenance 21): it is never remembered for days, so a must-know comes back next workout.
  */
-export function setAsideKey(signal: Pick<CoachSignal, 'source' | 'concern'>): string {
-  return `set aside|${signal.source}|${signal.concern ?? '*'}`;
+export function setAsideKey(
+  signal: Pick<CoachSignal, 'source' | 'concern'> & Partial<Pick<CoachSignal, 'exerciseId'>>,
+): string {
+  return `set aside|${signal.source}|${signal.concern ?? signal.exerciseId ?? '*'}`;
+}
+
+/** Whether Not now puts this card away for the workout rather than declining it for days. */
+export function setAsideForWorkout(
+  signal: Partial<Pick<CoachSignal, 'domain' | 'action'>>,
+): boolean {
+  return signal.domain === 'safety' || signal.action === null;
 }
 
 export function isSetAside(accepted: readonly string[] | undefined, signal: CoachSignal): boolean {
   return (
-    signal.domain === 'safety' && accepted !== undefined && accepted.includes(setAsideKey(signal))
+    setAsideForWorkout(signal) && accepted !== undefined && accepted.includes(setAsideKey(signal))
   );
 }
 
@@ -165,6 +183,15 @@ export function acceptKey(signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'h
  */
 export function isAccepted(accepted: readonly string[] | undefined, signal: CoachSignal): boolean {
   return accepted !== undefined && accepted.includes(acceptKey(signal));
+}
+
+/** A signal the lifter already took or put away: it will not show, so it holds no place. */
+function putAway(input: CoachInput, signal: CoachSignal): boolean {
+  return (
+    isDeclined(input.declines, signal, input.now) ||
+    isAccepted(input.accepted, signal) ||
+    isSetAside(input.accepted, signal)
+  );
 }
 
 export function isDeclined(
@@ -248,6 +275,8 @@ function jointsToProtect(input: CoachInput): Joint[] {
 }
 
 function safetySignals(input: CoachInput): CoachSignal[] {
+  // A finished workout has nothing left to swap: its warnings were for the sets still to come.
+  if (input.status === 'completed') return [];
   const signals: CoachSignal[] = [];
   const remaining = remainingEntries(input);
   for (const joint of input.constraints.painJoints) {
@@ -274,7 +303,7 @@ function safetySignals(input: CoachInput): CoachSignal[] {
   }
   // Pain reported where it hurt when the last workout was saved: only exercises that load that
   // joint are named, and never the workout that report came from.
-  const report = input.status === 'completed' ? null : lastPainReport(input.history);
+  const report = lastPainReport(input.history);
   // Pain marked on the same joint today already has its own card, and its Not now covers both.
   if (report && !input.constraints.painJoints.includes(report.joint)) {
     const loading = remaining.filter((entry) => {
@@ -409,6 +438,8 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
   const { fatigue } = input;
   const signals: CoachSignal[] = [];
   const checkedIn = input.constraints.readiness !== null;
+  // A check-in adjusts today's workout, so a finished one is not offered it.
+  const finished = input.status === 'completed';
   if (fatigue.level === 'high') {
     const shorten = input.status === 'preview' && input.duration === 'default';
     signals.push({
@@ -421,7 +452,7 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
             trigger: { type: 'duration', choice: 45 },
             label: 'Fit to 45 min at held loads',
           }
-        : checkedIn
+        : checkedIn || finished
           ? null
           : { kind: 'readiness', label: 'Quick check-in' },
       confidence: 'medium',
@@ -436,7 +467,7 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
         ...fatigue.evidence.slice(0, 2),
         'Loads hold where reps were tight; nothing is added today.',
       ],
-      action: checkedIn ? null : { kind: 'readiness', label: 'Quick check-in' },
+      action: checkedIn || finished ? null : { kind: 'readiness', label: 'Quick check-in' },
       confidence: 'medium',
       severity: 1,
       source: 'fatigue',
@@ -451,7 +482,9 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
         (candidate) => candidate.exerciseId === insight.exerciseId,
       )
     : undefined;
-  const untouched = entry !== undefined && !started(input, entry);
+  // A finished workout takes no change to today: only a note, or a focus for the next session.
+  const finished = input.status === 'completed';
+  const untouched = entry !== undefined && !started(input, entry) && !finished;
   const exercise = insight.exerciseId ? requireExercise(insight.exerciseId) : null;
   switch (insight.recommendation) {
     case 'add-weight': {
@@ -496,7 +529,7 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
       };
     }
     case 'increase-rest':
-      if (!entry) return null;
+      if (!entry || finished) return null;
       return {
         kind: 'recalibrate',
         trigger: { type: 'rest-adjust', entryId: entry.id, deltaSeconds: 30 },
@@ -505,6 +538,15 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
     case 'adjust-volume': {
       const muscle = insight.muscle;
       if (!muscle) return null;
+      if (finished) {
+        // A focus already set would only be saved again, its end pushed out.
+        if (input.focus === muscle) return null;
+        return {
+          kind: 'focus',
+          muscle,
+          label: `Lead the next session with ${muscleName(muscle).toLowerCase()}`,
+        };
+      }
       // The extra set goes on direct work for the muscle. The heavy compounds that open the
       // session are the costliest place to add one and the least direct, so they never take
       // it; neither does an exercise whose sets were already changed today.
@@ -619,10 +661,72 @@ function strategySignals(input: CoachInput): CoachSignal[] {
   );
 }
 
+/** Where the fewer-reps offer comes from; a decline is remembered per lift. */
+export const FEWER_REPS_SOURCE = 'fewer reps';
+
+/**
+ * A lift done at bodyweight that ended under the bottom of its range twice or more: the same
+ * work in one more set of fewer reps. The swap is named only when a listed alternative with a
+ * load fits this place and is not already in today's workout.
+ */
+function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | null {
+  const progression = entry.progression;
+  const short = progression?.short;
+  if (!progression || !short || short.sessions < 2) return null;
+  const exercise = requireExercise(entry.exerciseId);
+  const working = workingSets(entry).filter((set) => set.kind === 'working');
+  const first = working[0];
+  if (!first || first.targetWeight !== null || isHold(exercise)) return null;
+  if (started(input, entry) || entry.manual?.reps || entry.manual?.sets) return null;
+  const floor = first.targetReps[0];
+  // Only when the floor missed is today's floor: a different range today is a different target.
+  if (floor !== short.floor || floor < 3 || working.length >= MAX_WORKING_SETS) return null;
+  const reps: [number, number] = [Math.max(1, floor - 3), floor - 1];
+  const today = new Set(allEntries(input.workout.blocks).map((candidate) => candidate.exerciseId));
+  const context = sessionConflictContext(input.profile, input.location, {
+    excludeExerciseIds: input.constraints.avoidExerciseIds,
+    unavailableEquipment: input.constraints.busyEquipment,
+    painJoints: jointsToProtect(input),
+  });
+  const swap = exercise.substitutions
+    .map((id) => getExercise(id))
+    .find(
+      (candidate) =>
+        candidate !== undefined &&
+        startRatio(candidate) !== null &&
+        !today.has(candidate.id) &&
+        !checkExerciseFit(candidate, context).some((conflict) => conflict.severity === 'block'),
+    );
+  return {
+    domain: 'progression',
+    headline:
+      short.sessions >= 3
+        ? `${exercise.name}: short of ${short.floor} reps ${short.sessions} sessions running`
+        : `${exercise.name}: short of ${short.floor} reps twice in a row`,
+    why: [
+      ...progression.evidence.slice(0, 1),
+      swap
+        ? `Do fewer reps over more sets, or swap in ${swap.name} for a few weeks.`
+        : 'Do fewer reps over more sets.',
+    ],
+    action: {
+      kind: 'recalibrate',
+      trigger: { type: 'rep-range', entryId: entry.id, reps, workingDelta: 1 },
+      label: `${working.length + 1} sets of ${reps[0]}-${reps[1]} today`,
+    },
+    confidence: progression.confidence,
+    severity: 2,
+    source: FEWER_REPS_SOURCE,
+    exerciseId: entry.exerciseId,
+  };
+}
+
 function progressionSignals(input: CoachInput): CoachSignal[] {
   const signals: CoachSignal[] = [];
   const units = input.profile.units;
   const leanDown = resolveStyle(input.profile) === 'lean-down';
+  // A finished workout takes no more "today" offers: a tap there would change nothing.
+  const finished = input.status === 'completed';
   let lowered = false;
   let offered = false;
   for (const entry of remainingEntries(input)) {
@@ -630,10 +734,14 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
     if (!progression || progression.mode === 'start') continue;
     const exercise = requireExercise(entry.exerciseId);
     const load = workingSets(entry).find((set) => set.kind === 'working')?.targetWeight ?? null;
-    // A lowered load is a must-know: the plan already changed, and the card says why.
-    if (!lowered && (progression.mode === 'deload' || progression.mode === 'regress')) {
-      lowered = true;
-      signals.push({
+    // A lowered load is a must-know: the plan already changed, and the card says why. With no
+    // load there is nothing lowered, whatever an older copy of the plan says.
+    if (
+      !lowered &&
+      load !== null &&
+      (progression.mode === 'deload' || progression.mode === 'regress')
+    ) {
+      const note: CoachSignal = {
         domain: 'progression',
         headline: `${exercise.name}: ${progression.mode === 'deload' ? 'micro-deload' : 'reset and rebuild'}${
           load === null ? '' : ` to ${load} ${units}`
@@ -644,19 +752,34 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
         severity: 2,
         source: 'progression',
         exerciseId: entry.exerciseId,
-      });
+      };
+      signals.push(note);
+      // One set aside with Not now leaves the place to the next lift's lowered load.
+      lowered = !putAway(input, note);
+    }
+    // A lift done at bodyweight that keeps falling short has no weight to take off: fewer reps
+    // over more sets is the one tap (Maintenance 21).
+    // One offer per lift: a lift whose offer was put away is not offered the next thing instead.
+    let thisLift = false;
+    const fewer: CoachSignal | null = !offered && !finished ? fewerRepsOffer(input, entry) : null;
+    if (fewer) {
+      signals.push(fewer);
+      thisLift = true;
+      // A declined or taken offer holds no place: the next lift's offer can still show.
+      offered = !putAway(input, fewer);
     }
     // An extra set on offer ends in a tap. Not while losing fat: more sets kept no more muscle
     // in a deficit (Roth et al., 2023), so the plan holds its volume.
     if (
       !offered &&
+      !thisLift &&
+      !finished &&
       !leanDown &&
       progression.setsAdvice === 1 &&
       !started(input, entry) &&
       !entry.manual?.sets
     ) {
-      offered = true;
-      signals.push({
+      const extra: CoachSignal = {
         domain: 'progression',
         headline: `${exercise.name}: an extra set is on the table`,
         why: [
@@ -673,17 +796,26 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
         severity: 1,
         source: 'extra set',
         exerciseId: entry.exerciseId,
-      });
+      };
+      signals.push(extra);
+      thisLift = true;
+      offered = !putAway(input, extra);
     }
     // Held at the heaviest weight the place has: the reps are already climbing; the next
     // levers are a harder variation, then an extra set. Each ends in a tap.
     // A hold's seconds already climb on their own rule, so the rep levers here do not apply.
-    if (!offered && progression.capped && !started(input, entry) && !isHold(exercise)) {
-      offered = true;
+    if (
+      !offered &&
+      !thisLift &&
+      !finished &&
+      progression.capped &&
+      !started(input, entry) &&
+      !isHold(exercise)
+    ) {
       const top = workingSets(entry).find((set) => set.kind === 'working')?.targetReps[1] ?? 0;
       // An exercise whose sets were already changed today is not offered another one.
       const repsAtCeiling = top >= 20 && !entry.manual?.sets;
-      signals.push({
+      const capped: CoachSignal = {
         domain: 'progression',
         headline: `${exercise.name}: at the heaviest weight here (${progression.capped.at} ${units})`,
         why: [
@@ -705,7 +837,9 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
         severity: 1,
         source: 'capped',
         exerciseId: entry.exerciseId,
-      });
+      };
+      signals.push(capped);
+      offered = !putAway(input, capped);
     }
   }
   return signals;
@@ -905,7 +1039,8 @@ function routeAction(
   const exercise = requireExercise(route.exerciseId);
   const units = input.profile.units;
   const ref = { exerciseId: route.exerciseId, step: route.step, baselineE1rm: route.baselineE1rm };
-  const usable = entry !== undefined && !started(input, entry);
+  // A finished workout cannot take a route step: the tap would record a step never applied.
+  const usable = entry !== undefined && !started(input, entry) && input.status !== 'completed';
   const first = entry ? workingSets(entry).find((set) => set.kind === 'working') : undefined;
   const applied = route.applied.find((entry) => entry.step === route.step);
   if (applied && !route.exhausted) {
@@ -1010,7 +1145,6 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
     const entry = allEntries(input.workout.blocks).find(
       (candidate) => candidate.exerciseId === stall.exerciseId,
     );
-    const inSession = entry !== undefined;
     if (stall.kind === 'undershooting') {
       const first = entry ? workingSets(entry).find((set) => set.kind === 'working') : undefined;
       const current = first?.targetWeight ?? null;
@@ -1018,14 +1152,9 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
       signals.push({
         domain: 'plateau',
         headline: `${exercise.name}: ${stall.exposures} exposures without progress, sets ending too easy`,
-        why: [
-          ...stall.why,
-          inSession
-            ? 'Work to the prescribed effort, or take the next load step now.'
-            : `Applies when ${exercise.name} is next in a session.`,
-        ],
+        why: [...stall.why, 'Work to the prescribed effort, or take the next load step now.'],
         action:
-          entry && !started(input, entry) && current !== null
+          entry && !started(input, entry) && current !== null && input.status !== 'completed'
             ? {
                 kind: 'recalibrate',
                 trigger: { type: 'target-weight', entryId: entry.id, weight: current + stepSize },
@@ -1055,13 +1184,7 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
         : `${exercise.name} has stalled for ${stall.exposures} exposures${
             stall.effortUnknown < stall.exposures ? ' at the prescribed effort' : ''
           }`,
-      why: [
-        stall.why[0] as string,
-        `Route: ${describeRoute(route)}.`,
-        inSession || action === null
-          ? explain
-          : `${explain} Applies when ${exercise.name} is next in a session.`,
-      ],
+      why: [stall.why[0] as string, `Route: ${describeRoute(route)}.`, explain],
       action,
       confidence: stall.effortUnknown === 0 ? 'high' : 'medium',
       severity: route.exhausted ? 3 : 2,
@@ -1155,11 +1278,18 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
 
 const CONFIDENCE_RANK = { high: 3, medium: 2, low: 1 } as const;
 
-/** Picks the one card: highest-priority domain first, then severity, then confidence. */
+/**
+ * Picks the one card: highest-priority domain first, then severity, then whether it has
+ * something to tap, then confidence. The coach talks only about the workout on the screen
+ * (Maintenance 21): a note about a lift that is not in it waits for a day that has it, while
+ * notes about the whole day, week or programme always count.
+ */
 export function conductCoach(input: CoachInput): CoachCard | null {
   const policy = input.policy ?? coachingPolicy(input.profile.experience);
+  const today = new Set(allEntries(input.workout.blocks).map((entry) => entry.exerciseId));
   const all = gatherSignals(input).filter(
     (signal) =>
+      (signal.exerciseId === undefined || today.has(signal.exerciseId)) &&
       !isDeclined(input.declines, signal, input.now) &&
       !isAccepted(input.accepted, signal) &&
       !isSetAside(input.accepted, signal),

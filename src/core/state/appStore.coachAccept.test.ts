@@ -54,5 +54,15 @@ describe('an offer taken is remembered for the session', () => {
       'extra set|cable-fly',
     ]);
     expect(readSession(handle.storage)?.coachAccepted).toContain(setAsideKey(safety));
+
+    // Not now on a card with nothing to tap sets that note aside for this workout: no decline.
+    const note = { source: 'stall: route', exerciseId: 'barbell-bench-press', action: null };
+    await store.dismissCoachSignal(note);
+    expect(setAsideKey(note)).toBe('set aside|stall: route|barbell-bench-press');
+    expect(store.getSnapshot().session?.coachAccepted).toContain(setAsideKey(note));
+    expect(Object.keys(store.getSnapshot().coachDeclines.declines)).toEqual([
+      'extra set|cable-fly',
+    ]);
+    expect(readSession(handle.storage)?.coachAccepted).toContain(setAsideKey(note));
   });
 });

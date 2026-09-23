@@ -15,6 +15,8 @@ import {
   barWeightFor,
   convertEstimate,
   estimateStartingMax,
+  hasNoLoad,
+  loggedLoad,
   startRatio,
 } from './startingLoad';
 import { weightStep } from '../plateMath/plateMath';
@@ -27,6 +29,7 @@ import type {
   ProgressionMode,
   RackNote,
   SetPrescription,
+  ShortRun,
 } from '../workout/types';
 import { restCategory, type Prescription } from './roles';
 
@@ -35,8 +38,10 @@ import { restCategory, type Prescription } from './roles';
  * completed records. Strength roles progress by load once every set clears the
  * rep floor with reps in reserve; hypertrophy and isolation roles use double
  * progression (reps to the top of the range, then load). One poor session is
- * never punished; two in a row earn a micro-deload and three a reset. A new
- * exercise in the same progression family inherits its family's history.
+ * never punished; two in a row earn a micro-deload and three a reset, except
+ * at bodyweight, where nothing can come off: the target stays and fewer reps
+ * over more sets is offered. A new exercise in the same progression family
+ * inherits its family's history when both are measured the same way.
  */
 
 export interface PerformanceSet {
@@ -88,6 +93,8 @@ export interface NextTarget {
   rack?: RackNote;
   /** A hold: `reps` is [today's seconds, the top of the range], and loads never move the seconds. */
   hold?: boolean;
+  /** A lift done at bodyweight fell short of its floor: there is no weight to take off. */
+  short?: ShortRun;
   /** The logged session the target was read from, and whether that day met its reps and reserve. */
   reference?: { recordId: string; exerciseId: string; clean: boolean };
 }
@@ -97,6 +104,7 @@ export function estimateOneRepMax(weight: number, reps: number): number {
 }
 
 function completedWorking(record: WorkoutRecord, exerciseId: string) {
+  const exercise = getExercise(exerciseId);
   return record.entries
     .filter((entry) => entry.exerciseId === exerciseId)
     .flatMap((entry) =>
@@ -104,7 +112,7 @@ function completedWorking(record: WorkoutRecord, exerciseId: string) {
         .filter((set) => set.kind === 'working' && set.completed)
         .map((set) => ({
           reps: set.reps,
-          weight: set.weight,
+          weight: loggedLoad(exercise, set.weight),
           rir: set.rir,
           targetReps: set.targetReps ?? null,
           targetRir: typeof set.targetRir === 'number' ? set.targetRir : null,
@@ -357,8 +365,9 @@ function withHoldSeconds(target: NextTarget, input: NextTargetInput): NextTarget
     ...target,
     hold: true,
     mode,
-    // The seconds are the lever here; an extra set is not offered on a hold.
+    // The seconds are the lever here; an extra set or fewer reps is not offered on a hold.
     setsAdvice: 0 as const,
+    short: undefined,
     // The load moves only once the seconds reach the top; until then the last load stays.
     weight:
       mode === 'weight' || target.mode !== 'weight'
@@ -544,7 +553,8 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       ],
     };
   }
-  if (!last) {
+  // The first target of a lift: from other lifts, then the reference table, then the bar.
+  const firstTarget = (): NextTarget => {
     // Lifts with history say how strong the lifter is against the reference table.
     const cross = estimateFromOtherLifts(
       exercise,
@@ -600,16 +610,21 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
         ],
       };
     }
+    // A lift done at bodyweight or with a band has no weight to enter.
+    const noWeight = hasNoLoad(exercise);
     return {
       ...base,
       mode: 'start',
       weight: null,
       confidence: 'low',
       evidence: [
-        `First time logged: enter the weight you use and the next target follows from it.${hint}`,
+        noWeight
+          ? 'First time logged: log what you do and the next target follows from it.'
+          : `First time logged: enter the weight you use and the next target follows from it.${hint}`,
       ],
     };
-  }
+  };
+  if (!last) return firstTarget();
 
   const strength = restCategory(role) === 'strength';
   const lastLine = `Last${last.viaFamily ? ` (${getExercise(last.exerciseId)?.name ?? 'same family'})` : ''}: ${
@@ -660,6 +675,21 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   if (last.viaFamily) {
     // A dumbbell per hand is not a barbell: convert the family estimate between load types.
     const source = getExercise(last.exerciseId);
+    // A family estimate passes only between lifts measured the same way (Maintenance 21): a
+    // bench press says nothing about weight to add to a push-up, and the weight added to a
+    // chin-up is not a pulldown's load.
+    const measuredAlike =
+      !source || (startRatio(source) === null) === (startRatio(exercise) === null);
+    if (!measuredAlike) {
+      if (startRatio(exercise) !== null) return firstTarget();
+      return {
+        ...base,
+        mode: 'estimate',
+        weight: null,
+        confidence,
+        evidence: ['New variation: log what you do and the next target follows from it.'],
+      };
+    }
     const familyMax =
       last.e1rm === null
         ? null
@@ -713,25 +743,63 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       `${range ? `Last run at ${range[0]}-${range[1]} reps` : 'Last run at a different rep range'}; today is ${prescription.reps[0]}-${prescription.reps[1]}. The weight follows the reps: ${Math.round(ZONE_FRACTION * 100)}% of what your estimated max (${last.e1rm} ${units}) implies for ${prescription.reps[0]}-${prescription.reps[1]} at RIR ${prescription.rir}; log a set and the target follows.`,
     );
   }
-  if (consecutiveUnder >= 3) {
+  // At bodyweight there is no weight to take off: the target stays, and the coach offers fewer
+  // reps over more sets (Maintenance 21). Nothing here is lowered, so it is never a deload, and
+  // falling short is judged against today's floor.
+  if (weight === null && consecutiveUnder >= 1) {
+    const floor = prescription.reps[0];
+    const lastFloor = last.sets.find((set) => set.targetReps !== null)?.targetReps?.[0] ?? floor;
+    // The advice is about today's range only: a floor missed at another range says nothing about
+    // how many reps today's sets should take.
+    if (lastFloor !== floor) {
+      return result(
+        'maintain',
+        null,
+        'Last time was a different rep range: log what you do today and the target follows.',
+      );
+    }
+    // The run is counted against today's floor: a session that missed a higher floor of its own
+    // (after "Aim one rep higher", or one raised mid-session) but reached today's was not short.
+    let sessions = 0;
+    for (const point of points) {
+      if (!point.sets.some((set) => set.reps < floor)) break;
+      sessions += 1;
+    }
+    if (sessions >= 2) {
+      const short: ShortRun = { sessions, floor };
+      return result(
+        'maintain',
+        null,
+        sessions >= 3
+          ? `Short of ${floor} reps ${sessions} sessions running: try fewer reps over more sets.`
+          : `Short of ${floor} reps twice in a row: try fewer reps over more sets.`,
+        { short },
+      );
+    }
+    if (sessions === 1) {
+      return result(
+        'maintain',
+        null,
+        'Missed the floor last time; one session is not a trend, so the same target again.',
+      );
+    }
+    // Today's floor was reached after all: the ordinary rules below say what comes next.
+  }
+  if (weight !== null && consecutiveUnder >= 3) {
     return result(
       'regress',
-      weight === null
-        ? null
-        : Math.min(roundToStep(weight * 0.85, step), Math.max(step, weight - step)),
+      Math.min(roundToStep(weight * 0.85, step), Math.max(step, weight - step)),
       'Below the rep floor three sessions running: reset 15% and rebuild; an alternative may fit better.',
     );
   }
-  if (consecutiveUnder >= 2) {
+  if (weight !== null && consecutiveUnder >= 2) {
     return result(
       'deload',
-      weight === null
-        ? null
-        : Math.min(roundToStep(weight * 0.9, step), Math.max(step, weight - step)),
+      Math.min(roundToStep(weight * 0.9, step), Math.max(step, weight - step)),
       'Missed the floor twice in a row: micro-deload 10% and win the reps back.',
     );
   }
-  if (last.under) {
+  if (weight !== null && last.under) {
     return result(
       'maintain',
       weight,
@@ -739,7 +807,13 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     );
   }
   if (input.fatigueLevel === 'high') {
-    return result('maintain', weight, 'Fatigue is high: hold the load and hit the reps cleanly.');
+    return result(
+      'maintain',
+      weight,
+      weight === null
+        ? 'Fatigue is high: the same target, and hit the reps cleanly.'
+        : 'Fatigue is high: hold the load and hit the reps cleanly.',
+    );
   }
   const setsAdvice: 0 | 1 = !strength && consecutiveTop >= 2 ? 1 : 0;
   const setsLine =
@@ -902,6 +976,7 @@ export function summarizeProgression(target: NextTarget): EntryProgression {
     setsAdvice: target.setsAdvice,
     capped: target.capped,
     ...(target.rack ? { rack: target.rack } : {}),
+    ...(target.short ? { short: target.short } : {}),
   };
 }
 

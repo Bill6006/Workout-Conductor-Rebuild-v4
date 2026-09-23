@@ -52,6 +52,14 @@ export const WorkoutEntrySchema = z.looseObject({
         })
         .optional()
         .catch(undefined),
+      // A lift done at bodyweight that fell short of its floor (Maintenance 21).
+      short: z
+        .looseObject({
+          sessions: z.number().int().min(0),
+          floor: z.number().int().min(0),
+        })
+        .optional()
+        .catch(undefined),
     })
     .optional()
     .catch(undefined),

@@ -50,6 +50,25 @@ describe('tempo at the heaviest weight the place has', () => {
     );
     expect(tempoCue('isolation', 'drop', fly, { capped: true }).why).toContain('drop set');
   });
+
+  it('keeps the fast lift on a strength set: 3-1-X-0, the lowering and the pause still slower', () => {
+    for (const role of ['primary-strength', 'secondary-strength'] as const) {
+      const capped = tempoCue(role, 'working', bench, { capped: true });
+      expect(capped.tempo).toBe('3-1-X-0');
+      expect(capped.phases[2]).toMatchObject({ fast: true, seconds: 1 });
+      expect(capped.why).toContain('heaviest weight here');
+      expect(capped.why).toContain('as fast as you can');
+      expect(capped.evidence).toContain(TEMPO_EVIDENCE.intent);
+    }
+    expect(tempoCue('isolation', 'working', fly, { capped: true }).tempo).toBe('3-1-1-0');
+  });
+});
+
+describe('the research behind a slower lowering', () => {
+  it('cites the review that tested lowering speed, not one of lowering-only training', () => {
+    expect(TEMPO_EVIDENCE.eccentric).toMatch(/Amdi and King, 2025/);
+    expect(TEMPO_EVIDENCE.eccentric).not.toMatch(/Roig/);
+  });
 });
 
 describe('the length estimate runs at the pace the tempo bar shows', () => {
@@ -68,6 +87,13 @@ describe('the length estimate runs at the pace the tempo bar shows', () => {
     expect(tempoCue('primary-strength', 'warmup', bench).totalSeconds).toBe(REP_SECONDS.warmup);
     expect(tempoCue('isolation', 'drop', bench).totalSeconds).toBe(REP_SECONDS.drop);
     expect(tempoCue('primary-hypertrophy', 'working', bench, { capped: true }).totalSeconds).toBe(
+      REP_SECONDS.capped,
+    );
+    // A fast lift counts as one second, so the heaviest-weight tempo times the same either way.
+    expect(tempoCue('primary-strength', 'working', bench, { capped: true }).totalSeconds).toBe(
+      REP_SECONDS.capped,
+    );
+    expect(tempoCue('isolation', 'working', bench, { capped: true }).totalSeconds).toBe(
       REP_SECONDS.capped,
     );
   });

@@ -57,6 +57,7 @@ import {
   type MaxInput,
   type StrengthMaxes,
 } from '../../engine/progression/maxes';
+import { loggedLoad } from '../../engine/progression/startingLoad';
 import { recalibrate as runRecalibration } from '../../engine/recalibration/recalibrate';
 import { describeTrigger, type TriggerContext } from '../../engine/recalibration/triggers';
 import type {
@@ -80,6 +81,7 @@ import {
   acceptKey,
   emptyDeclines,
   recordDecline,
+  setAsideForWorkout,
   setAsideKey,
   type CoachAction,
   type CoachDeclines,
@@ -1193,6 +1195,8 @@ export class AppStore {
     const reps = Math.max(0, Math.round(values.reps));
     // Zero reps is not a set: it is a skip, and it never feeds the engines.
     const skipped = reps === 0;
+    // A 0 on a lift done at bodyweight is the bodyweight, not a load.
+    values = { ...values, weight: loggedLoad(getExercise(entry.exerciseId), values.weight) };
     const existingAt = session.completed.sets.findIndex(
       (candidate) => candidate.entryId === entryId && candidate.setIndex === setIndex,
     );
@@ -2623,14 +2627,15 @@ export class AppStore {
    */
   async dismissCoachSignal(
     signal: Pick<CoachSignal, 'source' | 'exerciseId'> &
-      Partial<Pick<CoachSignal, 'domain' | 'concern'>>,
+      Partial<Pick<CoachSignal, 'domain' | 'concern' | 'action'>>,
   ): Promise<void> {
-    // Two cards are set aside for this workout only: the one naming a workout left open, and a
-    // safety card, which is never declined for days.
+    // Some cards are set aside for this workout only: the one naming a workout left open, a
+    // safety card, which is never declined for days, and a card with nothing to tap, which is a
+    // note rather than an offer.
     const key =
       signal.source === UNFINISHED_SOURCE
         ? UNFINISHED_SOURCE
-        : signal.domain === 'safety'
+        : setAsideForWorkout(signal)
           ? setAsideKey(signal)
           : null;
     if (key === null) {

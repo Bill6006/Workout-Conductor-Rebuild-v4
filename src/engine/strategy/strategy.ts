@@ -93,7 +93,11 @@ function exerciseInsights(
     const stuck = sameLoad(a, b, step) && sameLoad(b, c, step);
     const load = a.bestWeight === null ? 'bodyweight' : `${a.bestWeight} ${units}`;
 
+    // At bodyweight there is no weight to add or take off: the lift's own target says what to
+    // do instead, and the coach offers it on the day the lift is in the workout (Maintenance 21).
+    const noWeight = a.bestWeight === null;
     if (stuck && [a, b, c].filter((point) => point.topAll).length >= 2) {
+      if (noWeight) continue;
       insights.push({
         kind: 'load',
         recommendation: 'add-weight',
@@ -110,6 +114,7 @@ function exerciseInsights(
       continue;
     }
     if (stuck && [a, b].every((point) => point.under)) {
+      if (noWeight) continue;
       insights.push({
         kind: 'load',
         recommendation: 'micro-deload',

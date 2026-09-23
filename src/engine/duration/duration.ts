@@ -47,7 +47,8 @@ export function generalWarmupMinutes(targetMinutes: number): number {
 /**
  * Seconds one rep takes at the tempo the app coaches for the set's job: 2-1-X-0
  * for strength, 3-0-1-0 for hypertrophy, 2-0-2-1 for isolation, 2-0-1-0 for ramp
- * and drop sets, and 3-1-1-0 at the heaviest weight a place has. The tempo bar
+ * and drop sets, and at the heaviest weight a place has 3-1-X-0 for strength
+ * and 3-1-1-0 for the rest, five seconds either way. The tempo bar
  * on the card runs at the same pace (`features/workout/tempo.ts`; a test holds
  * the two together).
  */

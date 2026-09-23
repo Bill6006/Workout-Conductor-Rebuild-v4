@@ -42,7 +42,7 @@ import { plateMath } from '../../engine/plateMath/plateMath';
 import { dropSetWeight } from '../../engine/recalibration/dropSet';
 import { fitWeight, loadingFor, loadingKeyFor, specFor } from '../../engine/loading/loading';
 import { maxPromptHidden } from '../../engine/progression/maxes';
-import { startRatio } from '../../engine/progression/startingLoad';
+import { hasNoLoad, startRatio } from '../../engine/progression/startingLoad';
 import { contextFor } from '../../engine/recalibration/recalibrate';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import { currentPosition, nextBlockAfter, workoutProgress } from '../../engine/workout/sequence';
@@ -541,8 +541,7 @@ export function ActiveWorkoutScreen() {
               disabled={calibrating}
               helper={helper}
               weightHint={
-                currentHere.set.targetWeight === null &&
-                (exercise.load === 'bodyweight' || exercise.load === 'band')
+                currentHere.set.targetWeight === null && hasNoLoad(exercise)
                   ? exercise.load === 'band'
                     ? 'Band tension'
                     : 'Bodyweight'

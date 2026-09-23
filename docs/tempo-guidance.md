@@ -9,13 +9,15 @@ shown with the evidence behind them, and they never change what is logged.
 Notation is lower-pause-lift-squeeze in seconds; X means as fast as you can (modelled as one
 second on the bar).
 
-| Set                       | Tempo   | Why                                                         |
-| ------------------------- | ------- | ----------------------------------------------------------- |
-| Strength role (main lift) | 2-1-X-0 | Lower for 2, pause 1 at the bottom, drive up with intent    |
-| Hypertrophy role          | 3-0-1-0 | Lower for 3 to load the stretch, no pause, up under control |
-| Isolation, finisher       | 2-0-2-1 | Lower for 2, up for 2, squeeze the muscle for 1 at the top  |
-| Ramp (warm-up) set        | 2-0-1-0 | Easy load, rehearse the working tempo                       |
-| Drop set                  | 2-0-1-0 | Clean reps while the load comes down                        |
+| Set                                             | Tempo   | Why                                                                          |
+| ----------------------------------------------- | ------- | ---------------------------------------------------------------------------- |
+| Strength role (main lift)                       | 2-1-X-0 | Lower for 2, pause 1 at the bottom, drive up with intent                     |
+| Hypertrophy role                                | 3-0-1-0 | Lower for 3 to load the stretch, no pause, up under control                  |
+| Isolation, finisher                             | 2-0-2-1 | Lower for 2, up for 2, squeeze the muscle for 1 at the top                   |
+| Ramp (warm-up) set                              | 2-0-1-0 | Easy load, rehearse the working tempo                                        |
+| Drop set                                        | 2-0-1-0 | Clean reps while the load comes down                                         |
+| At the heaviest weight a place has, strength    | 3-1-X-0 | Lower for 3 and pause 1 so the same weight works harder; still drive up fast |
+| At the heaviest weight a place has, other roles | 3-1-1-0 | Lower for 3, pause 1, make every rep count                                   |
 
 - **Rep duration.** Rep durations from about 0.5 to 8 s produce similar hypertrophy; very slow
   reps (over 10 s) are inferior. Schoenfeld BJ, Ogborn DI, Krieger JW. Effect of repetition
@@ -27,11 +29,16 @@ second on the bar).
   Physiology, 1993. Reviewed with tempo more broadly in Wilk M, Zajac A, Tufano JJ. The
   influence of movement tempo during resistance training on muscular strength and hypertrophy
   responses: a review. Sports Medicine, 2021.
-- **Controlled lowering.** Eccentric training is at least as effective as concentric for muscle
-  size and strength, and a controlled 2 to 4 s lowering phase is the practical way to use it.
-  Roig M, et al. The effects of eccentric versus concentric resistance training on muscle
-  strength and mass in healthy adults: a systematic review with meta-analysis. British Journal
-  of Sports Medicine, 2009; Wilk, Zajac and Tufano, 2021.
+- **Controlled lowering.** A longer lowering phase made no clear difference to muscle growth
+  (g = 0.05, 90% CI -0.22 to 0.33, uncertain) and gave the same or greater strength gains in
+  trained lifters (g = 0.33, 0.07 to 0.60) and in trials matched for the work done (g = 0.25,
+  0.04 to 0.45), both with moderate certainty; a shorter lowering improved jump height, which the
+  app does not train. The app's 2 to 3 s lowering keeps each rep controlled; it is not a claim
+  that slower builds more muscle. Amdi CH, King A. The effect of eccentric phase duration on
+  maximal strength, muscle hypertrophy and countermovement jump height: a systematic review and
+  meta-analysis. Journal of Sports Sciences, 2025;43(20):2447-2464 (PMID 40692176). Until
+  Maintenance 21 this line cited Roig et al., 2009, a review of lowering-only against lifting-only
+  training, which does not test lowering speed.
 - **Squeeze with attention.** An internal focus on the working muscle raises its activation and,
   over weeks of training, its growth, which is what a short top-position squeeze is for.
   Schoenfeld BJ, Contreras B. Attentional focus for maximizing muscle development: the
@@ -111,8 +118,10 @@ is fitted to less time, rests shorten toward the floors before sets are trimmed 
 - The bar moves like the weight: the fill drops at the lowering pace, pauses at the bottom for the
   hold, rises at the lifting pace, holds at the top for the squeeze, then repeats; the legend
   brightens as each phase plays. Everything stands still when the phone prefers reduced motion.
-- Set rows and the logger say "warm-up" beside a ramp set's RIR and "last clean rep" for a drop
-  set, so the working-set target and the warm-up target are never mistaken for each other.
+- Set rows say "easy, RIR 5" beside a ramp set and "last clean rep" for a drop set, and the
+  logger's hints say the same in a few words ("Target 4-6", "Easy, RIR 5"; "Aim 8-12", "Last
+  clean rep") that wrap rather than being cut off; the head ("Ramp 1 of 2", "Drop set") and the
+  weight line say which kind of set it is (Maintenance 21).
 - The How-to panel's "Why this target" list ends with the effort and rest evidence for the set.
 - A hold (Plank, Farmer Carry) has no rep tempo and no reps in reserve: the card shows "Hold 30 s"
   where the bar would be, and its detail keeps the cue, the effort ("Good form: hold the position

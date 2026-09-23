@@ -28,5 +28,7 @@ describe('skimmable evidence', () => {
     });
     expect(lines.map((line) => line.lead)).toEqual(['Rest', 'Rest style']);
     expect(leadFor('something new')).toBe('Evidence');
+    // The lowering line was rewritten in place (Maintenance 21), and keeps its lead.
+    expect(leadFor(TEMPO_EVIDENCE.eccentric)).toBe('Lowering');
   });
 });

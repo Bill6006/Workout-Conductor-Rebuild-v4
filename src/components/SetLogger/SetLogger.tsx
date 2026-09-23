@@ -218,11 +218,13 @@ export function SetLogger({
     target.weight !== null &&
     values.weight !== null &&
     values.weight < target.weight - 1e-6;
+  // Short enough to fit under a dial on a phone: the head ("Ramp 1 of 2"), the weight line and
+  // the button already say a ramp is a warm-up, and the head says a drop set is one.
   const repsHint = hold
-    ? `Target ${low} s${target.kind === 'warmup' ? ' · warm-up, not counted' : ''}`
+    ? `Target ${low} s`
     : target.kind === 'drop'
-      ? `Drop set · aim ${low}-${high}`
-      : `Target ${low}-${high}${target.kind === 'warmup' ? ' · warm-up, not counted' : ''}`;
+      ? `Aim ${low}-${high}`
+      : `Target ${low}-${high}`;
 
   const dial = (
     field: Field,
@@ -355,7 +357,7 @@ export function SetLogger({
               () => nudgeRir(1),
               () => nudgeRir(-1),
               target.kind === 'warmup'
-                ? `Target RIR ${target.rir} · easy warm-up`
+                ? `Easy, RIR ${target.rir}`
                 : target.kind === 'drop'
                   ? 'Last clean rep'
                   : `Target RIR ${target.rir}`,

@@ -10,7 +10,10 @@ interface AdaptiveCoachCardProps {
   policy: CoachingPolicy;
   /** The action tapped, with the signal it belonged to so the offer can be marked as taken. */
   onAction: (action: CoachAction, signal: CoachSignal) => void;
-  /** Not now: an offer is not repeated for a while; a safety card is set aside for this workout. */
+  /**
+   * Not now, on every card: an offer is not repeated for a while; a safety card, or a card with
+   * nothing to tap, is set aside for this workout.
+   */
   onDismiss?: (signal: CoachSignal) => void;
 }
 
@@ -38,9 +41,17 @@ export function AdaptiveCoachCard({
   onAction,
   onDismiss,
 }: AdaptiveCoachCardProps) {
-  const [confirming, setConfirming] = useState(false);
   const signal = card?.signal ?? null;
   const action = signal?.action ?? null;
+  // A second tap confirms only the action it was asked for: when the card changes, the pending
+  // confirm is gone rather than carried to a different change.
+  const actionKey =
+    signal && action ? `${signal.source}|${signal.exerciseId ?? '*'}|${action.label}` : null;
+  const [confirmingFor, setConfirmingFor] = useState<string | null>(null);
+  // Once another card has shown, the pending confirm is dropped, so the first card, if it
+  // returns, asks for its second tap again rather than applying on one.
+  if (confirmingFor !== null && confirmingFor !== actionKey) setConfirmingFor(null);
+  const confirming = actionKey !== null && confirmingFor === actionKey;
 
   // Past beginner level a quiet plan gets one quiet line, not a card full of reasons.
   if (!signal && !policy.showClearCard) {
@@ -66,10 +77,10 @@ export function AdaptiveCoachCard({
   const act = () => {
     if (!action || !signal) return;
     if (action.kind === 'recalibrate' && action.major && !confirming) {
-      setConfirming(true);
+      setConfirmingFor(actionKey);
       return;
     }
-    setConfirming(false);
+    setConfirmingFor(null);
     onAction(action, signal);
   };
 
@@ -99,19 +110,22 @@ export function AdaptiveCoachCard({
           <li key={line}>{line}</li>
         ))}
       </ul>
-      {action ? (
+      {/* Every card can be put away, including one with nothing to tap (Maintenance 21). */}
+      {action || (signal && onDismiss) ? (
         <div className={styles.actions}>
-          <button
-            type="button"
-            className={styles.action}
-            onClick={act}
-            data-testid="coach-action"
-            aria-live="polite"
-          >
-            {confirming ? `Confirm: ${action.label}` : action.label}
-          </button>
-          {confirming ? (
-            <button type="button" className={styles.cancel} onClick={() => setConfirming(false)}>
+          {action ? (
+            <button
+              type="button"
+              className={styles.action}
+              onClick={act}
+              data-testid="coach-action"
+              aria-live="polite"
+            >
+              {confirming ? `Confirm: ${action.label}` : action.label}
+            </button>
+          ) : null}
+          {action && confirming ? (
+            <button type="button" className={styles.cancel} onClick={() => setConfirmingFor(null)}>
               Not now
             </button>
           ) : onDismiss && signal ? (
