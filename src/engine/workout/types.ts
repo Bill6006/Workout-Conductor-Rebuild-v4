@@ -105,6 +105,15 @@ export interface WorkoutEntry {
   replacedFrom?: string;
   progression?: EntryProgression;
   manual?: ManualEdits;
+  /**
+   * Stopped at its logged sets because a place could not equip it: the working sets it still
+   * owed then, which a stand-in in its slot carries through every later rebuild.
+   */
+  stopped?: StoppedWork;
+}
+
+export interface StoppedWork {
+  owed: number;
 }
 
 export type BlockKind = 'straight' | 'superset' | 'circuit';

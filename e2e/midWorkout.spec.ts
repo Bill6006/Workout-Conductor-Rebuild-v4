@@ -81,6 +81,52 @@ test.describe('mid-workout', () => {
     await capture(page, testInfo, 'moved-home', activeCard(page));
   });
 
+  // Maintenance 21's review: the owner moved Home, then changed place again, and the exercise
+  // carrying the stopped one's sets was gone.
+  test('a later change after the move keeps the exercise that took over', async ({
+    page,
+  }, testInfo) => {
+    await startAtGym(page);
+    await expect(activeCard(page)).toHaveAttribute('aria-label', /^Barbell Bench Press,/);
+    await skipWarmupIfShown(page);
+    await page.getByTestId('log-set').click();
+    await expect(activeCard(page)).toHaveAttribute('aria-label', /1 of \d+ sets done/);
+
+    const moveTo = async (place: 'home' | 'gym', headline: RegExp) => {
+      await page.goto('./#/today');
+      await page.getByTestId('location-open').click();
+      await page.getByTestId(`location-option-${place}`).click();
+      await settle(page);
+      await expect(page.getByTestId('recalibration-summary')).toContainText(headline);
+    };
+    /** Today's list: what comes right after the stopped bench press. */
+    const afterBench = async () => {
+      const ids = await page
+        .getByTestId('workout-entry')
+        .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-exercise-id')));
+      const at = ids.indexOf('barbell-bench-press');
+      expect(at).toBeGreaterThanOrEqual(0);
+      return ids[at + 1] ?? null;
+    };
+
+    await moveTo('home', /Rebuilt for Home/);
+    const standIn = await afterBench();
+    expect(standIn).not.toBeNull();
+    expect(standIn).not.toBe('barbell-bench-press');
+    // Back to the gym and Home again: it stays right after the bench press.
+    await moveTo('gym', /Rebuilt for Gym/);
+    expect(await afterBench()).toBe(standIn);
+    await moveTo('home', /Rebuilt for Home/);
+    expect(await afterBench()).toBe(standIn);
+    const row = page.locator(`[data-testid="workout-entry"][data-exercise-id="${standIn}"]`);
+    await expectNoHorizontalOverflow(page);
+    await capture(page, testInfo, 'moved-home-gym-home', row);
+
+    await page.goto('./#/workout');
+    await expect(activeCard(page)).toBeVisible();
+    await expect(activeCard(page)).not.toHaveAttribute('aria-label', /^Barbell Bench Press,/);
+  });
+
   test('a plate missing mid-exercise moves the sets to come onto the plates, and says so', async ({
     page,
   }, testInfo) => {

@@ -103,17 +103,34 @@ export interface KeptEntry {
 }
 
 /**
- * Ends an entry at its logged sets and returns how many working sets it still owed. Only
- * unlogged sets go; a logged set, skipped or not, is never touched.
+ * Ends an entry at its logged sets. Only unlogged sets go; a logged set, skipped or not, is
+ * never touched. The first close writes on the entry how many working sets it still owed:
+ * the sets it counted are gone after this, and every later rebuild still has to know.
  */
-function closeAtLogged(entry: WorkoutEntry, isDone: SetDonePredicate): number {
+function closeAtLogged(entry: WorkoutEntry, isDone: SetDonePredicate): void {
+  const planned = entry.sets.some((set) => set.kind === 'working');
   const owed = entry.sets.filter(
     (set) => set.kind === 'working' && !isDone(entry.id, set.index),
   ).length;
   entry.sets = entry.sets.filter((set) => isDone(entry.id, set.index));
   entry.warmupSets = entry.sets.filter((set) => set.kind === 'warmup').length;
   entry.dropSet = entry.sets.some((set) => set.kind === 'drop');
-  return owed;
+  if (entry.stopped === undefined && planned) entry.stopped = { owed };
+}
+
+/**
+ * An entry ended at its logged sets at another place. One ended by a copy of the app that
+ * wrote no count (Maintenance 19 to 21) is known by having no working set left: every other
+ * entry keeps at least one.
+ */
+function isStopped(entry: WorkoutEntry): boolean {
+  return entry.stopped !== undefined || !entry.sets.some((set) => set.kind === 'working');
+}
+
+/** The working sets a stopped entry still owes its slot; one with no count owes a whole prescription. */
+function owedBy(entry: WorkoutEntry): number {
+  if (entry.stopped !== undefined) return entry.stopped.owed;
+  return entry.sets.some((set) => set.kind === 'working') ? 0 : Number.POSITIVE_INFINITY;
 }
 
 export interface PrescriptionAdjustment {
@@ -644,34 +661,38 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const keep = constraints.keep ?? [];
   const keptIds = new Set(keep.map((kept) => kept.entry.id));
   const frozenIds = new Set(keep.filter((kept) => kept.frozen).map((kept) => kept.entry.id));
-  const closedIds = new Set(keep.filter((kept) => kept.closed).map((kept) => kept.entry.id));
-  // The working sets each slot still owes after its logged work was closed at another place.
-  const owedBySlot = new Map<number, number>();
-  const keptBySlot = new Map<number, WorkoutEntry>();
+  // Ended at their logged sets, here or at an earlier place: nothing left to pair.
+  const closedIds = new Set(
+    keep.filter((kept) => kept.closed || isStopped(kept.entry)).map((kept) => kept.entry.id),
+  );
+  // Every kept entry of a slot, in plan order: a stopped exercise, then the stand-in carrying on.
+  const keptBySlot = new Map<number, WorkoutEntry[]>();
   const keptUnslotted: WorkoutEntry[] = [];
   for (const kept of keep) {
     const entry = cloneEntry(kept.entry);
-    if (kept.closed) {
-      const owed = closeAtLogged(entry, isDone);
-      if (owed > 0 && entry.slot !== undefined && entry.slot < template.slots.length) {
-        owedBySlot.set(entry.slot, (owedBySlot.get(entry.slot) ?? 0) + owed);
-      }
-    }
-    if (
-      entry.slot !== undefined &&
-      entry.slot < template.slots.length &&
-      !keptBySlot.has(entry.slot)
-    ) {
-      keptBySlot.set(entry.slot, entry);
+    if (kept.closed) closeAtLogged(entry, isDone);
+    if (entry.slot !== undefined && entry.slot < template.slots.length) {
+      keptBySlot.set(entry.slot, [...(keptBySlot.get(entry.slot) ?? []), entry]);
     } else {
       keptUnslotted.push(entry);
     }
   }
+  // A slot whose kept entries were all stopped still owes sets, however many rebuilds ago
+  // they stopped: the least any of them owed, since each stand-in took over what the one
+  // before it owed and did some of it. A kept entry that can go on (a stand-in started, or
+  // the exercise under way) carries the slot on its own.
+  const owedBySlot = new Map<number, number>();
+  for (const [slot, kept] of keptBySlot) {
+    if (!kept.every(isStopped)) continue;
+    const owed = Math.min(...kept.map(owedBy));
+    if (owed > 0) owedBySlot.set(slot, owed);
+  }
 
   // 1. Fill the template's slots from the catalog around the kept entries.
-  const chosenExercises: CatalogExercise[] = [...keptBySlot.values(), ...keptUnslotted].map(
-    (entry) => exerciseOf(entry.exerciseId),
-  );
+  const chosenExercises: CatalogExercise[] = [
+    ...[...keptBySlot.values()].flat(),
+    ...keptUnslotted,
+  ].map((entry) => exerciseOf(entry.exerciseId));
   // New entries are named by their slot, unless a kept entry already has that name.
   const takenIds = new Set(keep.map((kept) => kept.entry.id));
   let spareId = Math.max(
@@ -693,8 +714,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     const kept = keptBySlot.get(index);
     const owed = owedBySlot.get(index);
     if (kept) {
-      entries.push(kept);
-      // Work closed at another place leaves its slot owing sets: a replacement follows it.
+      entries.push(...kept);
+      // Work stopped at another place leaves its slot owing sets: a stand-in follows it.
       if (owed === undefined) return;
     }
     const pick = pickForSlot(slotSpec, chosenExercises, picker);
@@ -774,7 +795,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   });
   entries.push(...keptUnslotted);
 
-  const anchor = entries.find((entry) => entry.role === 'primary-strength') ?? entries[0];
+  // The main lift is the first one still to do: a lift stopped at another place is history,
+  // and the stand-in carrying its sets leads in its place.
+  const anchor =
+    entries.find((entry) => entry.role === 'primary-strength' && !isStopped(entry)) ?? entries[0];
   const anchorId = anchor?.id;
 
   let blocks: WorkoutBlock[] = entries.map((entry) => straightBlock(entry, exerciseOf));

@@ -71,6 +71,12 @@ export const WorkoutEntrySchema = z.looseObject({
       rest: z.boolean().optional(),
     })
     .optional(),
+  // Stopped at its logged sets where the place could not equip it, and the working sets it
+  // still owed. An unreadable note is dropped rather than costing the whole workout.
+  stopped: z
+    .looseObject({ owed: z.number().int().min(0) })
+    .optional()
+    .catch(undefined),
 });
 
 export const WorkoutBlockSchema = z.looseObject({

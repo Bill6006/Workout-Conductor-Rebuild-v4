@@ -69,7 +69,15 @@ Never changed: logged sets, their weights, reps, and RIR. An entry with logged s
 _frozen_: never trimmed, dropped, re-paired, or moved. One exception since Maintenance 19: logged
 work that cannot go on here, its equipment not at the new place, is _closed_. It ends at its
 logged sets, which stay as the history they are, and its slot takes a replacement that fits the
-place for the working sets it still owed. Entries that are pinned, explicitly
+place for the working sets it still owed. Since Maintenance 21's review the closed entry keeps that
+count (`stopped.owed`), because its unlogged sets are gone after the first close: every later
+rebuild (a new length, another place, coming back from a pause) gives the slot a stand-in for the
+owed sets again, right after the stopped entry. A stand-in that is kept (started, or the exercise
+under way) carries the slot on its own, wherever it sits in the list; a stand-in stopped in turn
+hands on only what it still owed. An entry closed by a copy from before the count is known by
+having no working set left, and owes a whole prescription. The stand-in, not the stopped lift,
+is the session's main lift for the time fit. Before this, the first move was right and any later
+rebuild dropped the stand-in or moved it to the end of the list. Entries that are pinned, explicitly
 selected, accepted alternatives, or the current exercise are _locked_: never dropped or swapped,
 and their sets are kept unless the exact-end mode is on. A locked pick that can no longer be
 performed (the place changed, a joint now hurts) is unlocked and rebuilt, because keeping it would

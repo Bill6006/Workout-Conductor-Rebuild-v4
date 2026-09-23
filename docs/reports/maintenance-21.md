@@ -159,6 +159,46 @@ their history is unaffected.
   URL: 267 passed and 14 skipped by design; one cloud-copy test, not part of this round, missed a
   line of text once and passed when run again.
 
+## Fix from the owner's review: the Smith machine at Home
+
+**Found on the owner's phone:** a Smith Machine Squat started at the gym (its warm-up logged),
+then the place changed to Home. Today read "Smith Machine Squat · 0 × · 1 warm-up · Smith
+machine" and had no squat Home can do. Home has no Smith machine, and the app knew it.
+
+**Cause (Maintenance 19, not this round):** the first move worked. The squat stopped at its
+warm-up and a Goblet Squat took its sets, right after it. But the stop deleted the unlogged sets
+it was counting, so any later rebuild counted nothing owed and dropped the Goblet Squat. The
+same code also pushed a second kept exercise of one slot to the end of the list. Switching Home,
+Gym, Home reproduces the owner's list set for set, and so do a change of length and a long pause.
+Skipping the warm-up instead of logging it ends the same way. The build before this round did the
+same.
+
+**Delivered (the part the owner called critical for the next workout):** a stopped exercise keeps
+the number of sets it still owed (a new optional field on the saved plan, dropped if unreadable),
+and every later rebuild gives those sets to an exercise that fits the place, right after the
+stopped one. A stand-in already started, or under way, stays where it is and no second one
+joins it. A stand-in stopped in turn hands on only what it still owed. A workout stopped by the
+older code, with no count written, gets its stand-in back at its next rebuild (a change of place
+or length, or coming back from a pause of 20 minutes or more), which is the case on the owner's
+phone. The stand-in, not the stopped lift, is protected as the main lift when time
+is short.
+
+**Not done yet, by the owner's word ("don't do all of the bullet points just yet"):** back at a
+place that has the machine, the stopped exercise picks up where it left off (today a stand-in
+carries on there); the stopped exercise still reads "0 × · 1 warm-up" instead of saying it
+stopped. Both stay Proposed (item 28). Worth knowing: after any rebuild the workout goes to the
+first set not yet done, in list order, so a stand-in that comes back while another exercise is
+under way comes first. Maintenance 19's first move already worked that way.
+
+**Verification:** the owner's steps through the store (the warm-up logged, and skipped): Home,
+Gym, Home; a new length and back; a 25-minute pause; the app reopened; a damaged note; a plan
+stopped by the older code. On the engine: the count written at the stop, a stand-in through four
+changes after the ramps only and after a working set, a stand-in under way kept in place, one
+moved above the stopped lift, a stand-in stopped in turn at a bands-only place, and the older
+code's plan repaired. In the browser (all three device projects): a set at the gym, then Home, Gym
+and Home: the stand-in stays right after the bench press. All of these fail on the code before the
+fix, and each part of the fix, reverted on its own, fails at least one of them.
+
 ## Review
 
 Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
@@ -168,3 +208,6 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
    of 6 reps twice in a row", with "N sets of 3-5 today" and Not now. Nothing says 10%.
 3. Any coach card, including one with no button, has Not now.
 4. A ramp set's hints read "Target 4-6" and "Easy, RIR 5", nothing cut off.
+5. Start an exercise at the gym, log a set of it, change the place to Home, then change something
+   again (back to Gym and Home, or the length): a Home exercise stays right after the stopped
+   one, with the sets it still owed.
