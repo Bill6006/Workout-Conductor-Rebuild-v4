@@ -151,3 +151,20 @@ their history is unaffected.
   chin-up sessions, Chin-Up swapped in from the swap list, the card, its button and the new
   sets; the 3-1-X-0 chip with the Amdi and King note; the ramp hints not cut off at 360 and 412
   px, also at 130% text in a wide font; Not now on the applied stall step, gone after a reload.
+- Review fixes: every confirmed finding has its own test, and each of those tests was run against
+  the code with its fix reverted and failed, then passed with the fix back.
+- Totals: unit 704 passed (140 files); typecheck, lint, formatting and the privacy scan clean
+  (572 files, 0 findings). Browser, all projects, locally: 267 passed and 14 skipped by design,
+  none failed. Deployed as `5c2aee6` (Deploy Pages run 35877979861) and run against the live
+  URL: 267 passed and 14 skipped by design; one cloud-copy test, not part of this round, missed a
+  line of text once and passed when run again.
+
+## Review
+
+Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
+
+1. On a day without chin-ups, the coach card is about that day's workout, never Chin-Ups.
+2. On a day with chin-ups, after two sessions short of the bottom of the range: "Chin-Up: short
+   of 6 reps twice in a row", with "N sets of 3-5 today" and Not now. Nothing says 10%.
+3. Any coach card, including one with no button, has Not now.
+4. A ramp set's hints read "Target 4-6" and "Easy, RIR 5", nothing cut off.

@@ -2,22 +2,22 @@
 
 _Last updated: 2026-09-23_
 
-| Item                   | Value                                                                                                                                                                                                                                                                               |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                            |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                            |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                    |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                               |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                   |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, and 20 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 at their review gates. Maintenance 21 (round C) in progress                                                                                     |
-| Phase gate             | Maintenance 20 **GREEN** from the owner on 2026-09-23 (issue #21). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open)                                                                                                                                   |
-| Current branch         | `main`                                                                                                                                                                                                                                                                              |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                        |
-| Work in progress       | Maintenance 21, round C: the owner's items 15 to 20 (the coach talks about today's workout only, Not now on every card, bodyweight advice, the fast lift at the heaviest weight, the lowering-tempo note, warm-up hints that fit). Agreed and waiting: 1 to 8, 10 to 12, 14, and 21 |
-| Latest commit          | Maintenance 20 GREEN from the owner; Maintenance 21 (round C) begins (this commit); the live app build is `ab7c60e`, the same app code as `2894aad`                                                                                                                                 |
-| Latest deployment      | `2894aad` deployed by Deploy Pages run 35817767208 (success); browser suite against the live URL: 255 passed + 14 skipped by design (one cloud-sync wait passed on rerun)                                                                                                           |
-| Test totals            | Unit: 672 passed (137 files). Browser/mobile: 255 passed + 14 skipped by design locally, none failed; against the live URL the same, after one cloud-sync wait failed once and passed on rerun                                                                                      |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                                                        |
+| Item                   | Value                                                                                                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                       |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                       |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                               |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                          |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                              |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, and 20 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, and 21 at their review gates                                  |
+| Phase gate             | Maintenance 21 **YELLOW**, awaiting the owner's review (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open)                                             |
+| Current branch         | `main`                                                                                                                                                                                         |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                   |
+| Work in progress       | None in progress: Maintenance 21 (round C: the owner's items 15 to 20) is built, deployed, and at its review gate. Agreed and waiting: 1 to 8, 10 to 12, 14, and 21                            |
+| Latest commit          | Maintenance 21 status, report, and live screenshots (this commit); the round's build is `5c2aee6`                                                                                              |
+| Latest deployment      | `5c2aee6` deployed by Deploy Pages run 35877979861 (success); browser suite against the live URL: 267 passed + 14 skipped by design (one cloud-copy wait passed on rerun)                      |
+| Test totals            | Unit: 704 passed (140 files). Browser/mobile: 267 passed + 14 skipped by design locally, none failed; against the live URL the same, after one cloud-copy wait failed once and passed on rerun |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                   |
 
 ## Phase checklist
 
@@ -137,6 +137,16 @@ _Last updated: 2026-09-23_
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 21: round C, the coach card and quick fixes (YELLOW - awaiting review)
+
+- Built on the owner's GREEN for Maintenance 20. The owner's items 15 to 20. Review issue #22, build `5c2aee6`.
+- 15, the coach talks only about the workout on the screen: a note about one lift (a stall, a strategy note, "keeps getting swapped") shows only when that lift is in today's workout, in every state; notes about the day, week or programme are unchanged. On a leg day the one card no longer reads "Chin-Up is stalling at bodyweight".
+- 16, Not now on every card: a card with nothing to tap is set aside for this workout, like a safety card, never remembered for days. A pending "Confirm:" belongs to the card and action it was started on.
+- 17, advice that works without weight: a bodyweight lift short of today's floor twice keeps its target ("try fewer reps over more sets"), never a 10% deload; on a day with the lift the coach offers "N sets of a-b today" (one more set of fewer reps, ramps within the range) and names Lat Pulldown only where it fits. Also fixed under the same rule: a Push-Up no longer takes about 150 lb from bench history, a 0 on a bodyweight lift reads as the bodyweight, and one no-weight test (no load reference) is used everywhere, Bench Dip and Step-Up included.
+- 18, capped strength sets keep the fast lift (3-1-X-0); 19, the lowering note cites Amdi and King 2025 (PMID 40692176) instead of Roig 2009; 20, the dial hints are short ("Target 4-6", "Easy, RIR 5", "Aim 8-12") and wrap instead of being cut off.
+- Three adversarial review passes before shipping; every confirmed finding is fixed with a test that fails without its fix. Among them, a finished workout offers no tap that would change it (a stall-route step tapped there used to be recorded as applied, a defect older than this round), a put-away offer no longer holds the day's offer place, and one lift gets one offer.
+- Report: `docs/reports/maintenance-21.md`.
 
 ## Maintenance 20: round B, pain you can trust and a hold timer (GREEN)
 
@@ -312,6 +322,8 @@ _Last updated: 2026-09-23_
 
 ## Mobile screenshots
 
+Maintenance 21, captured by Playwright from the deployed build `5c2aee6` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-21](docs/screenshots/maintenance-21)): [The fewer-reps card on a chin-up day](docs/screenshots/maintenance-21/android-412-today-fewer-reps-card.png) · [A ramp set's hints in full](docs/screenshots/maintenance-21/android-412-workout-ramp-hints.png) · [3-1-X-0 at the heaviest weight here, with the Amdi and King note](docs/screenshots/maintenance-21/android-412-workout-capped-strength-tempo.png).
+
 Maintenance 20, captured by Playwright from the deployed build `2894aad` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-20](docs/screenshots/maintenance-20)): [A Plank hold counting down](docs/screenshots/maintenance-20/android-412-workout-hold-counting.png) · [The hold done, its seconds in the dial](docs/screenshots/maintenance-20/android-412-workout-hold-done.png) · [Some pain, and Where?](docs/screenshots/maintenance-20/android-412-rating-pain-where.png) · [The coach card naming the exercise that loads it](docs/screenshots/maintenance-20/android-412-today-pain-card.png).
 
 Maintenance 19, captured by Playwright from the deployed build `9fd2794` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-19](docs/screenshots/maintenance-19)): [Moved to Home mid-workout: the rest of the session from Home](docs/screenshots/maintenance-19/android-412-moved-home.png) · [No 2.5s today: the target, the line by it, and the plate line](docs/screenshots/maintenance-19/android-412-plate-missing-today.png) · [A safety card before Not now](docs/screenshots/maintenance-19/android-412-safety-card.png).
@@ -351,5 +363,8 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Maintenance 21 (round C: the owner's items 15 to 20) is being built; its review issue comes with the
-deploy. Then reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
+Owner reviews Maintenance 21 on an Android phone (issue #22): the coach card on a day without
+chin-ups is about that day; on a chin-up day after two short sessions, "Chin-Up: short of 6 reps
+twice in a row" with "N sets of 3-5 today" and Not now; Not now on any card; a warm-up set's
+hints in full.
+Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
