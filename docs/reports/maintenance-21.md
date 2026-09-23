@@ -197,7 +197,10 @@ changes after the ramps only and after a working set, a stand-in under way kept 
 moved above the stopped lift, a stand-in stopped in turn at a bands-only place, and the older
 code's plan repaired. In the browser (all three device projects): a set at the gym, then Home, Gym
 and Home: the stand-in stays right after the bench press. All of these fail on the code before the
-fix, and each part of the fix, reverted on its own, fails at least one of them.
+fix, and each part of the fix, reverted on its own, fails at least one of them. Totals after the fix: unit 717
+passed (141 files); browser 270 passed and 14 skipped by design locally (four active-workout load
+timeouts in the gate passed when that file was rerun one test at a time) and against the live URL,
+none failed. Deployed as `4bce35a` (Deploy Pages run 35894585947).
 
 ## Review
 
