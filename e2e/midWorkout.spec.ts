@@ -133,10 +133,13 @@ test.describe('mid-workout', () => {
       .getByRole('group', { name: 'Pain areas' })
       .getByRole('button', { name: 'Shoulder' })
       .click();
-    // The saved profile rebuilds the session; let that finish before looking at Today.
-    await expect(page.getByTestId('calibration-overlay')).toBeVisible({ timeout: 8_000 });
-    await settle(page);
+    // The saved profile rebuilds the session; Today says so once the rebuild is done.
     await page.goto('./#/today');
+    await expect(page.getByTestId('recalibration-summary')).toContainText(
+      'Rebuilt for your updated profile',
+      { timeout: 10_000 },
+    );
+    await settle(page);
     const headline = page.getByTestId('coach-headline');
     await expect(headline).toContainText('Watch your shoulder');
     await expect(page.getByText('Profile saved and verified on this device')).toBeHidden();
