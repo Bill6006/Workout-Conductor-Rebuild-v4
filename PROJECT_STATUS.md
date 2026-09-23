@@ -1,23 +1,23 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-09-22_
+_Last updated: 2026-09-23_
 
-| Item                   | Value                                                                                                                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                     |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                     |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                             |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                        |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                            |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, 13, 18, and 19 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 at their review gates. Maintenance 20 (round B) in progress                  |
-| Phase gate             | Maintenance 19 **GREEN** from the owner on 2026-09-22 (issue #20). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open)                                                            |
-| Current branch         | `main`                                                                                                                                                                                                       |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                 |
-| Work in progress       | Maintenance 20, round B: the owner's items 3 (pain you can trust) and 1 (a hold timer for held exercises). Nothing Agreed is left after it                                                                   |
-| Latest commit          | Maintenance 19 GREEN from the owner; Maintenance 20 (round B) begins (this commit); the live app build is `c3742a4`                                                                                          |
-| Latest deployment      | `9fd2794` deployed by Deploy Pages run 35807652290 (success); browser suite against the live URL: 246 passed + 14 skipped by design, none failed                                                             |
-| Test totals            | Unit: 641 passed (133 files). Browser/mobile: 245 passed + 14 skipped by design (one setup stall under load passed on rerun) locally and 246 passed + 14 skipped by design, none failed against the live URL |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                 |
+| Item                   | Value                                                                                                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                       |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                       |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                               |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                          |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                              |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, 13, 18, and 19 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, and 20 at their review gates                                      |
+| Phase gate             | Maintenance 20 **YELLOW**, awaiting the owner's review (issue #21). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open)                                             |
+| Current branch         | `main`                                                                                                                                                                                         |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                   |
+| Work in progress       | None. Maintenance 20 (round B: the owner's items 3 and 1) is built, deployed, and at its review gate. Nothing Agreed is left                                                                   |
+| Latest commit          | Maintenance 20 status, report, and screenshots (this commit); the round's build is `2894aad`                                                                                                   |
+| Latest deployment      | `2894aad` deployed by Deploy Pages run 35817767208 (success); browser suite against the live URL: 255 passed + 14 skipped by design (one cloud-sync wait passed on rerun)                      |
+| Test totals            | Unit: 672 passed (137 files). Browser/mobile: 255 passed + 14 skipped by design locally, none failed; against the live URL the same, after one cloud-sync wait failed once and passed on rerun |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                   |
 
 ## Phase checklist
 
@@ -137,6 +137,14 @@ _Last updated: 2026-09-22_
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 20: round B, pain you can trust and a hold timer (YELLOW - awaiting review)
+
+- Built on the owner's GREEN for Maintenance 19. The owner's items 3 and 1. Review issue #21, build `2894aad`.
+- 3, pain: the rating stored only pain yes or no, so the next workout named any exercise that had been in that workout (Chin-ups) as the pain. The end-of-workout sheet now asks No pain / Some pain, and Where? for Some pain; the joint is saved. The next workout's coach card names the joint, an exercise of today's that loads it and where the report came from, with the swap as its one action; the alternatives and the coach's added exercises keep away from it until the next saved workout. Pain without a joint names nothing; the summary says it once.
+- 1, holds: Plank and Farmer Carry are timed, their seconds kept in the reps fields. The logger shows Seconds and no RIR, Start hold counts down with Stop, and the seconds held fill the dial. The countdown lives on the workout (Pause, reload), ends a running rest, plays the rest's ticks and end tone, and keeps the screen awake only while it counts. Seconds grow by five once every set reaches them; at the top a carry takes the next real weight from the bottom. Holds stay out of the estimated max, records, volume and the coach's rep cards.
+- An adversarial review (four lenses, each finding checked by a skeptic) confirmed 17 defects in the first build of the round; all were fixed before it shipped.
+- Report: `docs/reports/maintenance-20.md`.
 
 ## Maintenance 19: round A, what happens mid-workout (GREEN)
 
@@ -303,6 +311,8 @@ _Last updated: 2026-09-22_
 
 ## Mobile screenshots
 
+Maintenance 20, captured by Playwright from the deployed build `2894aad` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-20](docs/screenshots/maintenance-20)): [A Plank hold counting down](docs/screenshots/maintenance-20/android-412-workout-hold-counting.png) · [The hold done, its seconds in the dial](docs/screenshots/maintenance-20/android-412-workout-hold-done.png) · [Some pain, and Where?](docs/screenshots/maintenance-20/android-412-rating-pain-where.png) · [The coach card naming the exercise that loads it](docs/screenshots/maintenance-20/android-412-today-pain-card.png).
+
 Maintenance 19, captured by Playwright from the deployed build `9fd2794` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-19](docs/screenshots/maintenance-19)): [Moved to Home mid-workout: the rest of the session from Home](docs/screenshots/maintenance-19/android-412-moved-home.png) · [No 2.5s today: the target, the line by it, and the plate line](docs/screenshots/maintenance-19/android-412-plate-missing-today.png) · [A safety card before Not now](docs/screenshots/maintenance-19/android-412-safety-card.png).
 
 Maintenance 18, captured by Playwright from the deployed build `c4966f5` at https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ (see [docs/screenshots/maintenance-18](docs/screenshots/maintenance-18)): [Where you train: Barcode beside Use and Edit](docs/screenshots/maintenance-18/android-412-plan-places.png) · [The Gym's barcode popup](docs/screenshots/maintenance-18/android-412-gym-barcode-sheet.png) · [Show barcode on Today's card](docs/screenshots/maintenance-18/android-412-today-show-barcode.png) · [The popup as the workout starts](docs/screenshots/maintenance-18/android-412-barcode-at-start.png) · [Full screen on white, a tap on the barcode](docs/screenshots/maintenance-18/android-412-barcode-full-screen.png) · [A code read from the picture, redrawn full width](docs/screenshots/maintenance-18/android-412-barcode-redrawn.png).
@@ -340,7 +350,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner opens the live link on an Android phone and checks Settings > Cloud copy shows the database
-address beside the token with their own install unchanged. Then, to bring one other person on:
-create a token for `life-record-p1` in the Turso dashboard and send that person a setup link.
+Owner reviews Maintenance 20 on an Android phone (issue #21): finish a workout with Some pain and a
+joint, and see the next workout's coach card name an exercise that loads it; swap a Plank or a
+Farmer Carry in and run a hold with Start hold and Stop.
 Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
