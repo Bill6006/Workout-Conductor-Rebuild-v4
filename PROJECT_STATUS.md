@@ -2,22 +2,22 @@
 
 _Last updated: 2026-09-23_
 
-| Item                   | Value                                                                                                                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                       |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                       |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                               |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                          |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                              |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, 13, 18, and 19 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, and 20 at their review gates                                      |
-| Phase gate             | Maintenance 20 **YELLOW**, awaiting the owner's review (issue #21). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open)                                             |
-| Current branch         | `main`                                                                                                                                                                                         |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                   |
-| Work in progress       | None in progress: Maintenance 20 (round B) is at its review gate. Agreed on 2026-09-23 and waiting to be built in rounds on the owner's go: the owner's items 1 to 8, 10 to 12, and 14 to 21   |
-| Latest commit          | Maintenance 20 status, report, and screenshots (this commit); the round's build is `2894aad`                                                                                                   |
-| Latest deployment      | `2894aad` deployed by Deploy Pages run 35817767208 (success); browser suite against the live URL: 255 passed + 14 skipped by design (one cloud-sync wait passed on rerun)                      |
-| Test totals            | Unit: 672 passed (137 files). Browser/mobile: 255 passed + 14 skipped by design locally, none failed; against the live URL the same, after one cloud-sync wait failed once and passed on rerun |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                   |
+| Item                   | Value                                                                                                                                                                                                                                                                               |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                            |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                            |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                    |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                               |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                   |
+| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, and 20 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 at their review gates. Maintenance 21 (round C) in progress                                                                                     |
+| Phase gate             | Maintenance 20 **GREEN** from the owner on 2026-09-23 (issue #21). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open)                                                                                                                                   |
+| Current branch         | `main`                                                                                                                                                                                                                                                                              |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                        |
+| Work in progress       | Maintenance 21, round C: the owner's items 15 to 20 (the coach talks about today's workout only, Not now on every card, bodyweight advice, the fast lift at the heaviest weight, the lowering-tempo note, warm-up hints that fit). Agreed and waiting: 1 to 8, 10 to 12, 14, and 21 |
+| Latest commit          | Maintenance 20 GREEN from the owner; Maintenance 21 (round C) begins (this commit); the live app build is `ab7c60e`, the same app code as `2894aad`                                                                                                                                 |
+| Latest deployment      | `2894aad` deployed by Deploy Pages run 35817767208 (success); browser suite against the live URL: 255 passed + 14 skipped by design (one cloud-sync wait passed on rerun)                                                                                                           |
+| Test totals            | Unit: 672 passed (137 files). Browser/mobile: 255 passed + 14 skipped by design locally, none failed; against the live URL the same, after one cloud-sync wait failed once and passed on rerun                                                                                      |
+| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 7`                                                                                                                                                                                                        |
 
 ## Phase checklist
 
@@ -138,8 +138,9 @@ _Last updated: 2026-09-23_
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
 
-## Maintenance 20: round B, pain you can trust and a hold timer (YELLOW - awaiting review)
+## Maintenance 20: round B, pain you can trust and a hold timer (GREEN)
 
+- GREEN from the owner on 2026-09-23 (issue #21), given on build `2894aad`.
 - Built on the owner's GREEN for Maintenance 19. The owner's items 3 and 1. Review issue #21, build `2894aad`.
 - 3, pain: the rating stored only pain yes or no, so the next workout named any exercise that had been in that workout (Chin-ups) as the pain. The end-of-workout sheet now asks No pain / Some pain, and Where? for Some pain; the joint is saved. The next workout's coach card names the joint, an exercise of today's that loads it and where the report came from, with the swap as its one action; the alternatives and the coach's added exercises keep away from it until the next saved workout. Pain without a joint names nothing; the summary says it once.
 - 1, holds: Plank and Farmer Carry are timed, their seconds kept in the reps fields. The logger shows Seconds and no RIR, Start hold counts down with Stop, and the seconds held fill the dial. The countdown lives on the workout (Pause, reload), ends a running rest, plays the rest's ticks and end tone, and keeps the screen awake only while it counts. Seconds grow by five once every set reaches them; at the top a carry takes the next real weight from the bottom. Holds stay out of the estimated max, records, volume and the coach's rep cards.
@@ -350,7 +351,5 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Owner reviews Maintenance 20 on an Android phone (issue #21): finish a workout with Some pain and a
-joint, and see the next workout's coach card name an exercise that loads it; swap a Plank or a
-Farmer Carry in and run a hold with Start hold and Stop.
-Reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
+Maintenance 21 (round C: the owner's items 15 to 20) is being built; its review issue comes with the
+deploy. Then reply with `GREEN - NEXT PHASE`, `YELLOW - FIX: <issue>`, or `RED - STOP`.
