@@ -240,7 +240,18 @@ has a test that fails without it.
 
 ## Verification
 
-To be filled in after the gate.
+- The gate (`npm run verify`) on the round's code passed: lint, type check, 827 unit tests (147
+  files), build, the privacy scan (584 files, no findings), the build check, and the browser suite
+  (279 passed, 14 skipped by design, none failed).
+- Every fix from the seven reviews was also taken out on its own to watch its test fail. The
+  screen fixes were checked the same way in the browser.
+- Build `95fe897` was deployed by Deploy Pages run 35949230067. The live bundle carries the build
+  and the new text.
+- The browser suite against the live URL: 279 passed, 14 skipped by design, none failed. The swaps
+  tests were run again against the live URL after their screenshots were improved (a bodyweight,
+  so the dumbbells show their own weight; toasts cleared first; each sheet caught fully open): 9
+  passed.
+- Screenshots: `docs/screenshots/maintenance-22`.
 
 ## Review on the phone
 

@@ -14,7 +14,20 @@ const screenshotDir = process.env.SCREENSHOT_DIR;
 async function capture(page: Page, testInfo: TestInfo, name: string, target?: Locator) {
   if (!screenshotDir || testInfo.project.name !== 'android-412') return;
   mkdirSync(screenshotDir, { recursive: true });
-  if (target) await target.scrollIntoViewIfNeeded();
+  // Toasts clear first; the recalibration summary is a status too, and stays.
+  await expect(page.locator('[role="status"][aria-live="polite"] > *')).toHaveCount(0, {
+    timeout: 8_000,
+  });
+  if (target) await target.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  // A sheet still fading in would show the page through it: finite animations finish first.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
   await page.screenshot({ path: path.join(screenshotDir, `${testInfo.project.name}-${name}.png`) });
 }
 
@@ -32,6 +45,15 @@ test.describe('swaps you can trust', () => {
     page,
   }, testInfo) => {
     await ensureProfile(page);
+    // A bodyweight gives every lift a starting weight, as on the owner's phone.
+    await page.goto('./#/settings');
+    await page.locator('#bodyweight').fill('180');
+    await expect(page.getByTestId('settings-save-status')).toHaveText(
+      'Saved and verified on this device',
+      { timeout: 10_000 },
+    );
+    await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
+    await page.goto('./#/today');
     await expect(page.getByTestId('location-open')).toContainText('Gym');
     await page.getByTestId('start-workout').click();
     await expect(page.getByTestId('workout-stats')).toBeVisible();
@@ -78,6 +100,8 @@ test.describe('swaps you can trust', () => {
     await page.goto('./#/workout');
     await expect(activeCard(page)).toHaveAttribute('aria-label', /^Dumbbell Bench Press,/);
     await expect(activeCard(page)).toHaveAttribute('aria-label', /0 of \d+ sets done/);
+    // A weight of their own: never none, and never the barbell's.
+    await expect(page.getByTestId('logger-weight')).toHaveText(/[0-9]/);
     await expect(page.getByTestId('logger-weight')).not.toHaveText(barbellDial);
     await capture(page, testInfo, 'workout-swapped-in', activeCard(page));
     // Its sheet here offers no set, order or session changes either.
