@@ -220,7 +220,7 @@ describe('a later change after the move', () => {
     const { bench, moved, standIn } = stoppedAtRamps();
     const stopped = allEntries(moved.workout.blocks).find((entry) => entry.id === bench.id);
     expect(stopped?.sets).toEqual(bench.sets.filter((set) => set.kind === 'warmup'));
-    expect(stopped?.stopped).toEqual({ owed: workingCount(bench) });
+    expect(stopped?.stopped).toEqual({ owed: workingCount(bench), why: 'place' });
     expect(patternOf(standIn)).toBe(patternOf(bench));
     expect(fitsAt(home, standIn)).toBe(true);
     // The stand-in leads now, as the main lift it stands in for.
@@ -233,7 +233,7 @@ describe('a later change after the move', () => {
     ['its ramps only', 0],
     ['a working set', 1],
   ])(
-    'keeps a stand-in for the owed sets through a new length, the gym, and Home again, after %s',
+    'keeps the owed sets through a new length, the gym, and Home again, after %s',
     (_, working) => {
       const { bench, completed, moved, standIn } = stoppedAtRamps(working);
       const loggedSets = bench.sets.slice(0, completed.sets.length);
@@ -250,12 +250,26 @@ describe('a later change after the move', () => {
       let workout = moved.workout;
       for (const [place, trigger] of steps) {
         workout = rebuildAt(place, workout, idle, trigger).workout;
-        const stopped = allEntries(workout.blocks).find((entry) => entry.id === bench.id);
-        expect(stopped?.sets).toEqual(loggedSets);
-        expect(stopped?.stopped).toEqual({ owed });
+        const entries = allEntries(workout.blocks);
+        const lift = entries.find((entry) => entry.id === bench.id);
+        // What was logged stays exactly as it was, wherever the session goes.
+        expect(lift?.sets.slice(0, loggedSets.length)).toEqual(loggedSets);
+        const alike = entries.filter(
+          (entry) => entry.id !== bench.id && patternOf(entry) === patternOf(bench),
+        );
+        if (fitsAt(place, bench)) {
+          // Back where it fits, the bench press picks up the sets still owed itself.
+          expect(lift?.stopped).toBeUndefined();
+          const picked = (lift ? workingCount(lift) : 0) - working;
+          expect(picked).toBeGreaterThan(0);
+          expect(picked).toBeLessThanOrEqual(owed);
+          expect(alike).toEqual([]);
+          continue;
+        }
+        expect(lift?.sets).toEqual(loggedSets);
+        expect(lift?.stopped).toEqual({ owed, why: 'place' });
         const next = after(workout, bench.id);
-        expect(next?.exerciseId).not.toBe(bench.exerciseId);
-        expect(patternOf(next)).toBe(patternOf(bench));
+        expect(alike.map((entry) => entry.id)).toEqual([next?.id]);
         expect(fitsAt(place, next)).toBe(true);
         expect(next && workingCount(next)).toBeGreaterThan(0);
         expect(next && workingCount(next)).toBeLessThanOrEqual(owed);
@@ -317,7 +331,7 @@ describe('a later change after the move', () => {
     const result = rebuildAt(hotel, moved.workout, withOneSetOf(completed, standIn));
     const entries = allEntries(result.workout.blocks);
     const second = entries.find((entry) => entry.id === standIn.id);
-    expect(second?.stopped).toEqual({ owed: workingCount(standIn) - 1 });
+    expect(second?.stopped).toEqual({ owed: workingCount(standIn) - 1, why: 'place' });
     expect(after(result.workout, bench.id)?.id).toBe(standIn.id);
     const third = after(result.workout, standIn.id);
     expect(fitsAt(hotel, third)).toBe(true);

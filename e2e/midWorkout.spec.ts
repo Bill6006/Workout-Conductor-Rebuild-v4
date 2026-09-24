@@ -113,12 +113,24 @@ test.describe('mid-workout', () => {
     const standIn = await afterBench();
     expect(standIn).not.toBeNull();
     expect(standIn).not.toBe('barbell-bench-press');
-    // Back to the gym and Home again: it stays right after the bench press.
-    await moveTo('gym', /Rebuilt for Gym/);
-    expect(await afterBench()).toBe(standIn);
-    await moveTo('home', /Rebuilt for Home/);
-    expect(await afterBench()).toBe(standIn);
     const row = page.locator(`[data-testid="workout-entry"][data-exercise-id="${standIn}"]`);
+    const bench = page.locator(
+      '[data-testid="workout-entry"][data-exercise-id="barbell-bench-press"]',
+    );
+    // A new length at Home: the exercise that took over stays right after the bench press.
+    await page.getByTestId('duration-select').selectOption('45');
+    await settle(page);
+    expect(await afterBench()).toBe(standIn);
+    // Back at the gym (Maintenance 22, item 28): the bench press picks up its own sets again,
+    // and the stand-in, with nothing logged, gives way.
+    await moveTo('gym', /Rebuilt for Gym/);
+    await expect(bench.getByTestId('entry-meta')).not.toContainText('Stopped');
+    await expect(row).toHaveCount(0);
+    await capture(page, testInfo, 'back-at-gym-picked-up', bench);
+    // Home again: it stops again, and the exercise that fits Home takes over right after it.
+    await moveTo('home', /Rebuilt for Home/);
+    await expect(bench.getByTestId('entry-meta')).toContainText('Stopped');
+    expect(await afterBench()).toBe(standIn);
     await expectNoHorizontalOverflow(page);
     await capture(page, testInfo, 'moved-home-gym-home', row);
 

@@ -32,6 +32,7 @@ export const WorkoutEntrySchema = z.looseObject({
   pinned: z.boolean(),
   slot: z.number().int().min(0).optional(),
   replacedFrom: z.string().optional(),
+  standsFor: z.string().optional().catch(undefined),
   // Why a target is what it is: advisory. A note this copy of the app cannot read (one written
   // by a newer copy, say) is dropped rather than costing the whole workout.
   progression: z
@@ -74,7 +75,10 @@ export const WorkoutEntrySchema = z.looseObject({
   // Stopped at its logged sets where the place could not equip it, and the working sets it
   // still owed. An unreadable note is dropped rather than costing the whole workout.
   stopped: z
-    .looseObject({ owed: z.number().int().min(0) })
+    .looseObject({
+      owed: z.number().int().min(0),
+      why: z.enum(['place', 'swap', 'skip']).optional().catch(undefined),
+    })
     .optional()
     .catch(undefined),
 });

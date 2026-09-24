@@ -103,17 +103,31 @@ export interface WorkoutEntry {
   slot?: number;
   /** Catalog id this entry replaced, when the user or the engine swapped it this session. */
   replacedFrom?: string;
+  /**
+   * The plan's own pick this entry stands in for, when a kept swap put it here: the swap's
+   * exercise, or the next best when that one could not join (Maintenance 22). It stays when the
+   * lifter swaps the entry today, which `replacedFrom` then says.
+   */
+  standsFor?: string;
   progression?: EntryProgression;
   manual?: ManualEdits;
   /**
-   * Stopped at its logged sets because a place could not equip it: the working sets it still
-   * owed then, which a stand-in in its slot carries through every later rebuild.
+   * Stopped at its logged sets, because a place could not equip it or it was swapped out once
+   * started: the working sets it still owed then, which a stand-in carries through every later
+   * rebuild.
    */
   stopped?: StoppedWork;
 }
 
 export interface StoppedWork {
   owed: number;
+  /**
+   * Why it stopped: `place`, the place could not equip it (it picks up again where it fits);
+   * `swap`, it was swapped out once started (it stays stopped unless swapped back); `skip`, the
+   * exercise carrying its sets was skipped, so it owes nothing more. An entry with no reason
+   * written stopped at a place.
+   */
+  why?: 'place' | 'swap' | 'skip';
 }
 
 export type BlockKind = 'straight' | 'superset' | 'circuit';
@@ -192,4 +206,85 @@ export function allEntries(blocks: readonly WorkoutBlock[]): WorkoutEntry[] {
 
 export function workingSets(entry: WorkoutEntry): SetPrescription[] {
   return entry.sets.filter((set) => set.kind !== 'warmup');
+}
+
+/**
+ * An entry ended at its logged sets: its place could not equip it, or it was swapped out once
+ * started. One ended by a copy of the app that wrote no count (Maintenance 19 to 21) is known
+ * by having no working set left: every other entry keeps at least one.
+ */
+export function isStopped(entry: WorkoutEntry): boolean {
+  return entry.stopped !== undefined || !entry.sets.some((set) => set.kind === 'working');
+}
+
+/**
+ * The exercise the plan itself picked for this entry's place, before any swap: followed back
+ * through the exercise it replaced today or stands in for by a kept swap, and the stopped ones
+ * of its slot they took over from.
+ */
+export function planOwnExercise(blocks: readonly WorkoutBlock[], entry: WorkoutEntry): string {
+  const entries = allEntries(blocks);
+  const seen = new Set([entry.exerciseId]);
+  let own = entry.standsFor ?? entry.replacedFrom ?? entry.exerciseId;
+  while (!seen.has(own)) {
+    seen.add(own);
+    const earlier = entries.find(
+      (candidate) =>
+        candidate.exerciseId === own &&
+        isStopped(candidate) &&
+        (entry.slot === undefined || candidate.slot === undefined || candidate.slot === entry.slot),
+    );
+    const before = earlier?.standsFor ?? earlier?.replacedFrom;
+    if (before === undefined) break;
+    own = before;
+  }
+  return own;
+}
+
+/**
+ * A saved workout made fresh to do again (Maintenance 22): each exercise stopped on the day it
+ * was saved leaves, and the exercise that took over its sets in a row of its own does them all
+ * again, as the plan had them.
+ */
+export function withoutStops(workout: GeneratedWorkout): GeneratedWorkout {
+  if (!allEntries(workout.blocks).some(isStopped)) return workout;
+  const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
+  const blocks = workout.blocks.flatMap((block): WorkoutBlock[] => {
+    const live = block.entries.filter((entry) => !isStopped(entry));
+    if (live.length === 0) return [];
+    if (block.kind !== 'straight' || live.length !== 1) return [{ ...block, entries: live }];
+    const entry = live[0] as WorkoutEntry;
+    const carried = stoppedBefore(workout.blocks, entry).reduce(
+      (sum, stopped) => sum + working(stopped).length,
+      0,
+    );
+    const last = working(entry).at(-1);
+    if (carried === 0 || !last) return [block];
+    let index = Math.max(...entry.sets.map((set) => set.index)) + 1;
+    const extra = Array.from({ length: carried }, () => ({ ...last, index: index++ }));
+    const at = entry.sets.indexOf(last) + 1;
+    const sets = [...entry.sets.slice(0, at), ...extra, ...entry.sets.slice(at)];
+    return [{ ...block, entries: [{ ...entry, sets }], rounds: working(entry).length + carried }];
+  });
+  return { ...workout, blocks };
+}
+
+/**
+ * The stopped entries a stand-in took over from (Maintenance 22): one in its own slot, or, for
+ * an entry with no slot, the exercise it replaced. The swap sheet offers them back, and swapping
+ * to one picks it up again. Never one of another slot, whose work would move onto it.
+ */
+export function stoppedBefore(
+  blocks: readonly WorkoutBlock[],
+  entry: WorkoutEntry,
+): WorkoutEntry[] {
+  return allEntries(blocks).filter(
+    (candidate) =>
+      candidate !== entry &&
+      candidate.exerciseId !== entry.exerciseId &&
+      isStopped(candidate) &&
+      (entry.slot !== undefined && candidate.slot !== undefined
+        ? candidate.slot === entry.slot
+        : candidate.exerciseId === entry.replacedFrom),
+  );
 }

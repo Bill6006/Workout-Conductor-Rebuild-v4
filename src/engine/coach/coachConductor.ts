@@ -12,6 +12,7 @@ import type {
   RecalibrationTrigger,
   SessionConstraints,
 } from '../recalibration/types';
+import type { LastingSwap } from '../planning/lastingSwaps';
 import type { PlannedSession } from '../planning/weeklyPlan';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { lastPainReport, painSourceLine } from '../recovery/painReport';
@@ -40,9 +41,11 @@ import {
   accessoryPicker,
   pickAccessoryFor,
   sessionConflictContext,
+  swappedOutIds,
 } from '../workoutGenerator/generate';
 import {
   allEntries,
+  isStopped,
   workingSets,
   type DurationChoice,
   type GeneratedWorkout,
@@ -243,6 +246,8 @@ export interface CoachInput {
   upcoming?: readonly PlannedSession[];
   /** The current coach focus, so it is never offered twice. */
   focus?: MuscleId | null;
+  /** The lifter's lasting swaps: an exercise swapped out is never offered. */
+  swaps?: readonly LastingSwap[];
 }
 
 const DAY_MS = 86_400_000;
@@ -251,10 +256,20 @@ function doneKeys(completed: CompletedWork): Set<string> {
   return new Set(completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
 }
 
+/** Entries with work still to do. A stopped one has none: its sets went to its stand-in. */
 function remainingEntries(input: CoachInput): WorkoutEntry[] {
   const keys = doneKeys(input.completed);
-  return allEntries(input.workout.blocks).filter((entry) =>
-    entry.sets.some((set) => set.kind === 'working' && !keys.has(`${entry.id}:${set.index}`)),
+  return allEntries(input.workout.blocks).filter(
+    (entry) =>
+      !isStopped(entry) &&
+      entry.sets.some((set) => set.kind === 'working' && !keys.has(`${entry.id}:${set.index}`)),
+  );
+}
+
+/** Today's entry for a lift an offer is about; a stopped one takes no change (Maintenance 22). */
+function liveEntryFor(input: CoachInput, exerciseId: string): WorkoutEntry | undefined {
+  return allEntries(input.workout.blocks).find(
+    (candidate) => candidate.exerciseId === exerciseId && !isStopped(candidate),
   );
 }
 
@@ -477,11 +492,7 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
 }
 
 function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAction | null {
-  const entry = insight.exerciseId
-    ? allEntries(input.workout.blocks).find(
-        (candidate) => candidate.exerciseId === insight.exerciseId,
-      )
-    : undefined;
+  const entry = insight.exerciseId ? liveEntryFor(input, insight.exerciseId) : undefined;
   // A finished workout takes no change to today: only a note, or a focus for the next session.
   const finished = input.status === 'completed';
   const untouched = entry !== undefined && !started(input, entry) && !finished;
@@ -551,7 +562,9 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
       // session are the costliest place to add one and the least direct, so they never take
       // it; neither does an exercise whose sets were already changed today.
       const candidates = allEntries(input.workout.blocks).filter((candidate) => {
-        if (started(input, candidate) || candidate.manual?.sets) return false;
+        if (isStopped(candidate) || started(input, candidate) || candidate.manual?.sets) {
+          return false;
+        }
         if (candidate.role === 'primary-strength' || candidate.role === 'secondary-strength')
           return false;
         return requireExercise(candidate.exerciseId).primaryMuscles.includes(muscle);
@@ -624,6 +637,7 @@ function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction | 
       history: input.history,
       now: input.now,
       focus: input.focus ?? null,
+      swaps: input.swaps,
     }),
   );
   if (!accessory) return null;
@@ -688,6 +702,8 @@ function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | n
     unavailableEquipment: input.constraints.busyEquipment,
     painJoints: jointsToProtect(input),
   });
+  // Never one the lifter swapped out for weeks.
+  const swappedOut = swappedOutIds(input.swaps ?? [], context);
   const swap = exercise.substitutions
     .map((id) => getExercise(id))
     .find(
@@ -695,6 +711,7 @@ function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | n
         candidate !== undefined &&
         startRatio(candidate) !== null &&
         !today.has(candidate.id) &&
+        !swappedOut.has(candidate.id) &&
         !checkExerciseFit(candidate, context).some((conflict) => conflict.severity === 'block'),
     );
   return {
@@ -945,6 +962,7 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
             history: input.history,
             now: input.now,
             focus: input.focus ?? null,
+            swaps: input.swaps,
           }),
         )
       : undefined;
@@ -1142,9 +1160,7 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
   const signals: CoachSignal[] = [];
   for (const stall of stalls) {
     const exercise = requireExercise(stall.exerciseId);
-    const entry = allEntries(input.workout.blocks).find(
-      (candidate) => candidate.exerciseId === stall.exerciseId,
-    );
+    const entry = liveEntryFor(input, stall.exerciseId);
     if (stall.kind === 'undershooting') {
       const first = entry ? workingSets(entry).find((set) => set.kind === 'working') : undefined;
       const current = first?.targetWeight ?? null;

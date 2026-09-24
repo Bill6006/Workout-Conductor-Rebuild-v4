@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { requireExercise } from '../../catalog/exercises/catalog';
+import { exercisesByMuscle, requireExercise } from '../../catalog/exercises/catalog';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { record } from '../../test/records';
+import { checkExerciseFit, isBlocked } from '../conflicts/conflictEngine';
+import { buildConflictContext } from '../conflicts/context';
+import { withSwap } from '../planning/lastingSwaps';
 import type { PlannedSession } from '../planning/weeklyPlan';
 import { emptyCompleted, emptyConstraints } from '../recalibration/recalibrate';
 import { interpretFatigue } from '../recovery/fatigue';
@@ -100,6 +103,26 @@ describe('coverage that acts or stays quiet', () => {
     expect(signal!.action?.label).toMatch(/^Add 2 sets of /);
     expect(signal!.why[0]).toMatch(/of \d+ weekly sets so far and nothing for it today\./);
     expect(signal!.why[1]).toMatch(/min of room today: two sets of .+ close most of the gap\./);
+  });
+
+  it('never offers an accessory the lifter swapped out for weeks', () => {
+    const base = withRoom(input(halfWeek), 10);
+    const accessory = (coachInput: CoachInput) => {
+      const action = coverage(gatherSignals(coachInput))[0]?.action;
+      if (action?.kind !== 'recalibrate' || action.trigger.type !== 'add-exercise') {
+        throw new Error('expected an accessory');
+      }
+      return action.trigger;
+    };
+    const { exerciseId: out, muscle } = accessory(base);
+    // Swapped out for another exercise for the muscle that fits here.
+    const context = buildConflictContext(profile, gym);
+    const to = exercisesByMuscle(muscle).find(
+      (exercise) => exercise.id !== out && !isBlocked(checkExerciseFit(exercise, context)),
+    );
+    expect(to).toBeDefined();
+    const swaps = withSwap([], out, to!.id, NOW);
+    expect(accessory({ ...base, swaps }).exerciseId).not.toBe(out);
   });
 
   it('measures the room against the clock: minutes already used are not room', () => {

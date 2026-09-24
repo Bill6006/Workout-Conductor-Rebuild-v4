@@ -1,5 +1,5 @@
 import { requireExercise } from '../../catalog/exercises/catalog';
-import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../workout/types';
+import { allEntries, isStopped, type GeneratedWorkout, type WorkoutEntry } from '../workout/types';
 import { holdById, targetText } from '../workout/setText';
 import type { ChangeCounts, ChangeSummary, EntryChange } from './types';
 
@@ -64,10 +64,58 @@ export function diffWorkouts(previous: GeneratedWorkout, next: GeneratedWorkout)
   const before = new Map(allEntries(previous.blocks).map((entry) => [entry.id, entry]));
   const after = new Map(allEntries(next.blocks).map((entry) => [entry.id, entry]));
   const changes: EntryChange[] = [];
+  // Entries that stopped at their logged sets in this change, and the stand-ins that took over
+  // their sets: together they read as one swap (Maintenance 22).
+  const stoppedNow = [...after.values()].filter((entry) => {
+    const old = before.get(entry.id);
+    return isStopped(entry) && old !== undefined && !isStopped(old);
+  });
+  const stoppedFor = new Map<string, WorkoutEntry>();
+  for (const [id, entry] of after) {
+    if (before.has(id)) continue;
+    const stopped = stoppedNow.find(
+      (candidate) =>
+        candidate.exerciseId !== entry.exerciseId &&
+        (candidate.exerciseId === entry.replacedFrom ||
+          (entry.slot !== undefined && candidate.slot === entry.slot)),
+    );
+    if (stopped) stoppedFor.set(id, stopped);
+  }
+  const handedOver = new Set([...stoppedFor.values()].map((stopped) => stopped.id));
+  // An entry stopped before and not now picked up again, taking over from the stand-in that
+  // stopped or went in this change: that too reads as one swap.
+  const tookOverFrom = new Map<string, WorkoutEntry>();
+  for (const [id, entry] of after) {
+    const old = before.get(id);
+    if (!old || !isStopped(old) || isStopped(entry)) continue;
+    const standIn = [...before.values()].find((candidate) => {
+      if (candidate.id === id || candidate.exerciseId === entry.exerciseId) return false;
+      if (isStopped(candidate)) return false;
+      const now = after.get(candidate.id);
+      if (now !== undefined && !isStopped(now)) return false;
+      return (
+        candidate.replacedFrom === entry.exerciseId ||
+        (entry.slot !== undefined && candidate.slot === entry.slot)
+      );
+    });
+    if (standIn) tookOverFrom.set(id, standIn);
+  }
+  const gaveWay = new Set([...tookOverFrom.values()].map((standIn) => standIn.id));
 
   for (const [id, entry] of after) {
     const old = before.get(id);
     if (!old) {
+      const stopped = stoppedFor.get(id);
+      if (stopped) {
+        changes.push({
+          entryId: id,
+          kind: 'replaced',
+          exerciseId: entry.exerciseId,
+          previousExerciseId: stopped.exerciseId,
+          detail: `Replaced ${nameOf(stopped)} with ${nameOf(entry)} for the sets still to come.`,
+        });
+        continue;
+      }
       changes.push({
         entryId: id,
         kind: 'added',
@@ -86,6 +134,19 @@ export function diffWorkouts(previous: GeneratedWorkout, next: GeneratedWorkout)
       });
       continue;
     }
+    const from = tookOverFrom.get(id);
+    if (from) {
+      changes.push({
+        entryId: id,
+        kind: 'replaced',
+        exerciseId: entry.exerciseId,
+        previousExerciseId: from.exerciseId,
+        detail: `Replaced ${nameOf(from)} with ${nameOf(entry)} for the sets still to come.`,
+      });
+      continue;
+    }
+    // A stopped entry's trimmed sets are the swap's other half, told by its stand-in.
+    if (handedOver.has(id) || gaveWay.has(id)) continue;
     const detail = adjustmentDetail(old, entry);
     if (detail) {
       changes.push({
@@ -98,7 +159,7 @@ export function diffWorkouts(previous: GeneratedWorkout, next: GeneratedWorkout)
   }
 
   for (const [id, entry] of before) {
-    if (!after.has(id)) {
+    if (!after.has(id) && !gaveWay.has(id)) {
       changes.push({
         entryId: id,
         kind: 'removed',
@@ -121,12 +182,18 @@ export function countChanges(
   const pairedBefore = paired(previous);
   const pairedAfter = paired(next);
   const before = new Map(allEntries(previous.blocks).map((entry) => [entry.id, entry]));
+  // Sets a stopped entry handed to its stand-in moved rather than went.
+  const handedFrom = new Set(
+    changes
+      .filter((change) => change.kind === 'replaced' && change.previousExerciseId !== undefined)
+      .map((change) => change.previousExerciseId),
+  );
   let setsTrimmed = 0;
   for (const entry of allEntries(next.blocks)) {
     const old = before.get(entry.id);
-    if (old && old.exerciseId === entry.exerciseId) {
-      setsTrimmed += Math.max(0, workingCount(old) - workingCount(entry));
-    }
+    if (!old || old.exerciseId !== entry.exerciseId) continue;
+    if (handedFrom.has(entry.exerciseId) && isStopped(entry) && !isStopped(old)) continue;
+    setsTrimmed += Math.max(0, workingCount(old) - workingCount(entry));
   }
   const count = (kind: EntryChange['kind']) =>
     changes.filter((change) => change.kind === kind).length;

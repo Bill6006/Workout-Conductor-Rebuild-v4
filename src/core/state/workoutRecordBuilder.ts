@@ -2,7 +2,7 @@ import { requireExercise } from '../../catalog/exercises/catalog';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import { muscleName } from '../../catalog/muscles/muscles';
 import type { CompletedSet } from '../../engine/recalibration/types';
-import { allEntries, workingSets } from '../../engine/workout/types';
+import { allEntries, isStopped, workingSets, type WorkoutBlock } from '../../engine/workout/types';
 import { holdById } from '../../engine/workout/setText';
 import { hasNoLoad } from '../../engine/progression/startingLoad';
 import type { UserProfile } from '../validation/profile';
@@ -39,6 +39,19 @@ function loggedFor(session: WorkoutSession, entryId: string): Map<number, Comple
   );
 }
 
+/**
+ * Entries that stopped and handed their sets on (Maintenance 22): swapped out or left at another
+ * place, so not skipped. One whose remaining sets were skipped with the exercise carrying them
+ * was skipped.
+ */
+function handedOverIds(blocks: readonly WorkoutBlock[]): Set<string> {
+  return new Set(
+    allEntries(blocks)
+      .filter((entry) => isStopped(entry) && entry.stopped?.why !== 'skip')
+      .map((entry) => entry.id),
+  );
+}
+
 export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptions): WorkoutRecord {
   const { workout } = session;
   const entries: LoggedExercise[] = workout.blocks.flatMap((block) =>
@@ -72,8 +85,10 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
       };
     }),
   );
+  const handed = handedOverIds(workout.blocks);
   const skippedExerciseIds = entries
     .filter((entry) => !entry.sets.some((set) => set.kind === 'working' && set.completed))
+    .filter((entry) => !handed.has(entry.entryId ?? ''))
     .map((entry) => entry.exerciseId);
   return {
     id: `w-${options.now.replace(/\D/g, '').slice(0, 14)}`,
@@ -177,8 +192,10 @@ export function buildCompletion(
   const muscles = [
     ...new Set(trained.flatMap((entry) => requireExercise(entry.exerciseId).primaryMuscles)),
   ];
+  const handed = handedOverIds(session.workout.blocks);
   const skipped = record.entries
     .filter((entry) => completedWorking(entry).length === 0)
+    .filter((entry) => !handed.has(entry.entryId ?? ''))
     .map((entry) => requireExercise(entry.exerciseId).name);
   const substitutions = record.entries
     .filter((entry) => entry.replacedFrom)

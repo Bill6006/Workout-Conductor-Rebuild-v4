@@ -144,6 +144,36 @@ describe('multi-session strategy', () => {
     expect(insight?.why[0]).toBe('2 of its last 3 appearances were replaced or skipped.');
   });
 
+  it('counts an exercise swapped out after a set once in that workout, not twice', () => {
+    const set = (weight: number, setIndex: number) => ({
+      kind: 'working' as const,
+      reps: 12,
+      weight,
+      rir: 1,
+      completed: true,
+      setIndex,
+      targetReps: [10, 15] as [number, number],
+      targetRir: 1,
+    });
+    // One set of the fly, then the pec deck took over the rest (Maintenance 22).
+    const started = (daysAgo: number) =>
+      record(daysAgo, 'cable-fly', [[12, 40, 1]], [10, 15], 1, {
+        entries: [
+          { exerciseId: 'cable-fly', plannedSets: 1, sets: [set(40, 0)] },
+          {
+            exerciseId: 'pec-deck',
+            replacedFrom: 'cable-fly',
+            plannedSets: 2,
+            sets: [set(100, 1), set(100, 2)],
+          },
+        ],
+      });
+    const history = [started(2), started(5), record(8, 'cable-fly', [[12, 40, 1]], [10, 15], 1)];
+    const insight = analyze(history).find((item) => item.kind === 'fit');
+    expect(insight).toMatchObject({ exerciseId: 'cable-fly', confidence: 'medium' });
+    expect(insight?.why[0]).toBe('2 of its last 3 appearances were replaced or skipped.');
+  });
+
   it('flags a priority muscle under half its weekly target two weeks running', () => {
     const history = [
       record(1, 'barbell-bench-press', [

@@ -8,13 +8,14 @@ import { ExerciseThumb } from '../../components/ExerciseDetail/ExerciseMedia';
 import type { LocationProfile } from '../../core/validation/location';
 import type { ChangeSummary, EntryChange } from '../../engine/recalibration/types';
 import {
+  isStopped,
   workingSets,
   type DurationChoice,
   type GeneratedWorkout,
   type WorkoutBlock,
   type WorkoutEntry,
 } from '../../engine/workout/types';
-import { holdById } from '../../engine/workout/setText';
+import { holdById, stoppedText } from '../../engine/workout/setText';
 import styles from './TodayScreen.module.css';
 
 interface WorkoutPreviewCardProps {
@@ -40,7 +41,11 @@ interface WorkoutPreviewCardProps {
   onStart?: () => void;
   /** Puts this place's barcode on screen; only passed when the place has one. */
   onShowBarcode?: () => void;
+  /** Sets logged this session, not skipped, as `entryId:setIndex`: what a stopped exercise counts. */
+  logged?: ReadonlySet<string>;
 }
+
+const NONE_LOGGED: ReadonlySet<string> = new Set();
 
 const CHANGE_TAGS: Record<EntryChange['kind'], string> = {
   added: 'New',
@@ -54,6 +59,10 @@ function restLabel(seconds: number): string {
   return seconds >= 60 ? `${Math.round((seconds / 60) * 10) / 10} min rest` : `${seconds} s rest`;
 }
 
+/**
+ * An exercise stopped at its logged sets (the place could not equip it, or it was swapped out
+ * once started) says so, instead of reading as work still to do (Maintenance 22).
+ */
 function setsLabel(entry: WorkoutEntry): string {
   const working = workingSets(entry).filter((set) => set.kind === 'working');
   const first = working[0];
@@ -75,6 +84,7 @@ function EntryRow({
   prefix,
   location,
   change,
+  logged,
   onSelect,
 }: {
   entry: WorkoutEntry;
@@ -82,9 +92,11 @@ function EntryRow({
   prefix?: string;
   location: LocationProfile | undefined;
   change?: EntryChange['kind'];
+  logged: ReadonlySet<string>;
   onSelect: (entry: WorkoutEntry, block: WorkoutBlock) => void;
 }) {
   const exercise = requireExercise(entry.exerciseId);
+  const stopped = isStopped(entry);
   return (
     <button
       type="button"
@@ -101,7 +113,7 @@ function EntryRow({
         <span className={styles.exerciseName}>
           {exercise.name}
           {entry.dropSet ? <span className={styles.badge}>Drop set</span> : null}
-          {entry.role === 'primary-strength' ? (
+          {entry.role === 'primary-strength' && !stopped ? (
             <span className={styles.badge}>Main lift</span>
           ) : null}
           {change ? <span className={styles.tag}>{CHANGE_TAGS[change]}</span> : null}
@@ -111,12 +123,18 @@ function EntryRow({
             <span className={`${styles.tag} ${styles.tagQuiet}`}>Your pick</span>
           ) : null}
         </span>
-        <span className={styles.exerciseMeta}>
-          {setsLabel(entry)} ·{' '}
-          {restLabel(
-            block.kind === 'straight' ? entry.restSeconds : block.restBetweenRoundsSeconds,
-          )}{' '}
-          · {exerciseEquipmentLabel(exercise, new Set(location?.equipment ?? []))}
+        <span className={styles.exerciseMeta} data-testid="entry-meta">
+          {stopped ? (
+            stoppedText(entry, logged)
+          ) : (
+            <>
+              {setsLabel(entry)} ·{' '}
+              {restLabel(
+                block.kind === 'straight' ? entry.restSeconds : block.restBetweenRoundsSeconds,
+              )}{' '}
+              · {exerciseEquipmentLabel(exercise, new Set(location?.equipment ?? []))}
+            </>
+          )}
         </span>
       </span>
     </button>
@@ -140,6 +158,7 @@ export function WorkoutPreviewCard({
   sessionStatus = 'preview',
   onStart,
   onShowBarcode,
+  logged = NONE_LOGGED,
 }: WorkoutPreviewCardProps) {
   const { duration } = workout;
   const fitted = duration.choice !== 'default' || (endBy?.on ?? false);
@@ -272,6 +291,7 @@ export function WorkoutPreviewCard({
                 prefix={String(index + 1)}
                 location={location}
                 change={changeOf(block.entries[0]!)}
+                logged={logged}
                 onSelect={onSelect}
               />
             ) : (
@@ -292,6 +312,7 @@ export function WorkoutPreviewCard({
                     }
                     location={location}
                     change={changeOf(entry)}
+                    logged={logged}
                     onSelect={onSelect}
                   />
                 ))}

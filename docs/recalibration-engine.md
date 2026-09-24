@@ -91,6 +91,34 @@ block it takes part in (`blocksCandidate`): an exercise logged at the gym does n
 that never stops Home filling the rest of the session. Before Maintenance 19 it did, and a move
 from the gym to Home left only what had been logged.
 
+Swaps (Maintenance 22). An entry with nothing logged takes the new exercise whole, and its
+`replacedFrom` keeps the plan's own pick through further swaps. A started entry (a set logged or
+skipped) stops at its logged sets, which stay under the exercise they were done on, and the new
+exercise follows it as a stand-in: a new id in the same slot, `replacedFrom` set, locked when the
+lifter chose it or the entry was locked, carrying the working sets still owed and targeted as its
+own lift after today's work, under a deload week and today's fatigue like any pick
+(`targetedSets`). Before, the entry was renamed and kept the old exercise's targets and filed the
+logged sets under the new name. A stopped entry records why (`stopped.why`: `place`, `swap`, or
+`skip` when the stand-in carrying its sets was skipped; a skip keeps the count it stopped at and
+owes nothing more). Swapping to the stopped exercise a stand-in took over from (`stoppedBefore`:
+the same slot, or `replacedFrom` for an entry with no slot; the swap sheet offers it) reopens it
+(`swapBack`) instead of adding it twice. In a pairing whose rounds have not started the stand-in
+takes the stopped member's place; once rounds are under way their sets no longer line up, so the
+pairing splits into straight blocks (`endPairing`), and so does a pairing whose stand-in stops on a
+swap back. A rebuild
+reopens only a stop the place made, when it fits again and no other kept entry of its slot is the
+lifter's own pick (locked or pinned) or under way (frozen); a stand-in kept only because it was the
+current exercise gives way. Skipping a stand-in skips the sets it carried. Loads changes, maxes
+and Uncomfortable leave a stopped entry alone, and a set, warm-up, rep-range, drop-set, weight,
+rest, pin or busy-equipment change on it is refused (its sheet shows what happened in place of its
+actions). The diff reads a stand-in, and an entry picked up again, as one `replaced` change and
+counts none of the moved sets as trimmed. The saved workout files a stopped entry as swapped,
+not skipped, unless the exercise carrying its sets was skipped too. Undo is offered only while
+every set logged so far keeps its place, on the same exercise, in the workout Undo would bring
+back (`undoAvailable`, the same rule the engine applies to every change); otherwise putting that
+workout back would lose or misfile a set. The coach aims its offers only at entries still to do,
+never at a stopped one.
+
 ## Time rules
 
 When the length changes mid-workout: elapsed time is subtracted, the time of the remaining locked

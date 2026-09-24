@@ -5,6 +5,7 @@ import { createDefaultProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { RECORD_NOW, record, type SetSpec } from '../../test/records';
 import { recommendNextTarget, summarizeProgression } from '../progression/progression';
+import { withSwap } from '../planning/lastingSwaps';
 import { prescribe } from '../progression/roles';
 import { emptyCompleted, emptyConstraints } from '../recalibration/recalibrate';
 import { interpretFatigue } from '../recovery/fatigue';
@@ -124,6 +125,14 @@ describe('a lift done at bodyweight that keeps falling short', () => {
     expect(card?.signal.headline).not.toMatch(/micro-deload|stalling/);
     const three = conductCoach(input(chinUps([9, 6, 2])));
     expect(three?.signal.headline).toBe('Chin-Up: short of 6 reps 3 sessions running');
+  });
+
+  it('never names an exercise the lifter swapped out for weeks', () => {
+    const swaps = withSwap([], 'lat-pulldown', 'chin-up', NOW);
+    const card = conductCoach({ ...input(chinUps([6, 2])), swaps });
+    expect(card?.signal.source).toBe(FEWER_REPS_SOURCE);
+    expect(card?.signal.why[1]).toMatch(/^Do fewer reps over more sets/);
+    expect(card?.signal.why.join(' ')).not.toMatch(/Lat Pulldown/);
   });
 
   it('names no swap at home, where no pulldown fits, and still offers the sets', () => {

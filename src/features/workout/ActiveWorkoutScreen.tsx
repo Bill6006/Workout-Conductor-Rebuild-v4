@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { requireExercise } from '../../catalog/exercises/catalog';
+import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
 import { HoldTimer } from '../../components/HoldTimer/HoldTimer';
-import { holdById } from '../../engine/workout/setText';
+import { holdById, stoppedNote } from '../../engine/workout/setText';
 import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
 import { holdSounds, restSounds } from '../../core/alerts/restSounds';
 import { Button } from '../../components/Button/Button';
@@ -25,6 +25,7 @@ import {
   doneKeys,
   elapsedSeconds,
   heldSeconds,
+  undoAvailable,
   type WorkoutSession,
 } from '../../core/state/session';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
@@ -48,6 +49,9 @@ import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import { currentPosition, nextBlockAfter, workoutProgress } from '../../engine/workout/sequence';
 import {
   allEntries,
+  isStopped,
+  planOwnExercise,
+  stoppedBefore,
   type SetPrescription,
   type WorkoutBlock,
   type WorkoutEntry,
@@ -657,13 +661,20 @@ export function ActiveWorkoutScreen() {
   };
 
   const selectedExercise = selected ? requireExercise(selected.entry.exerciseId) : null;
+  // A stopped exercise has nothing left to change: its sheet says so in place of its actions.
+  const selectedStopped = selected !== null && isStopped(selected.entry);
   const alternatives =
-    selected && selectedExercise
+    selected && selectedExercise && !selectedStopped
       ? rankAlternatives({
           current: selectedExercise,
           context,
+          // The exercise a stand-in took over from is offered back; swapping to it picks it up.
           otherExercises: allEntries(workout.blocks)
-            .filter((entry) => entry.id !== selected.entry.id)
+            .filter(
+              (entry) =>
+                entry.id !== selected.entry.id &&
+                !stoppedBefore(workout.blocks, selected.entry).includes(entry),
+            )
             .map((entry) => requireExercise(entry.exerciseId)),
           supersetPartner:
             selected.block.kind === 'superset'
@@ -694,26 +705,27 @@ export function ActiveWorkoutScreen() {
   const selectedStarted = selected
     ? session.completed.sets.some((set) => set.entryId === selected.entry.id)
     : false;
-  const editActions: EditActions | undefined = selected
-    ? {
-        canReorder: !selectedStarted,
-        inSuperset: selected.block.kind !== 'straight' && !selectedStarted,
-        hasWarmup: selected.entry.sets.some(
-          (set) => set.kind === 'warmup' && !isDone(selected.entry.id, set.index),
-        ),
-        onAddSet: () => act({ type: 'sets', entryId: selected.entry.id, workingDelta: 1 }),
-        onRemoveSet: () => act({ type: 'sets', entryId: selected.entry.id, workingDelta: -1 }),
-        onAddRamp: () => act({ type: 'add-warmup', entryId: selected.entry.id }),
-        onSkipWarmup: () => {
-          setSelected(null);
-          store.skipWarmup(selected.entry.id);
-        },
-        onRepRange: (reps) => act({ type: 'rep-range', entryId: selected.entry.id, reps }),
-        onMoveUp: () => act({ type: 'reorder', entryId: selected.entry.id, direction: 'up' }),
-        onMoveDown: () => act({ type: 'reorder', entryId: selected.entry.id, direction: 'down' }),
-        onSplit: () => act({ type: 'split-superset', blockId: selected.block.id }),
-      }
-    : undefined;
+  const editActions: EditActions | undefined =
+    selected && !selectedStopped
+      ? {
+          canReorder: !selectedStarted,
+          inSuperset: selected.block.kind !== 'straight' && !selectedStarted,
+          hasWarmup: selected.entry.sets.some(
+            (set) => set.kind === 'warmup' && !isDone(selected.entry.id, set.index),
+          ),
+          onAddSet: () => act({ type: 'sets', entryId: selected.entry.id, workingDelta: 1 }),
+          onRemoveSet: () => act({ type: 'sets', entryId: selected.entry.id, workingDelta: -1 }),
+          onAddRamp: () => act({ type: 'add-warmup', entryId: selected.entry.id }),
+          onSkipWarmup: () => {
+            setSelected(null);
+            store.skipWarmup(selected.entry.id);
+          },
+          onRepRange: (reps) => act({ type: 'rep-range', entryId: selected.entry.id, reps }),
+          onMoveUp: () => act({ type: 'reorder', entryId: selected.entry.id, direction: 'up' }),
+          onMoveDown: () => act({ type: 'reorder', entryId: selected.entry.id, direction: 'down' }),
+          onSplit: () => act({ type: 'split-superset', blockId: selected.block.id }),
+        }
+      : undefined;
 
   return (
     <>
@@ -768,11 +780,18 @@ export function ActiveWorkoutScreen() {
           <div className={styles.summary} role="status" data-testid="recalibration-summary">
             <span className={styles.summaryText}>{session.lastSummary.headline}</span>
             <span className={styles.summaryActions}>
-              {session.previous ? (
+              {undoAvailable(session) ? (
                 <button
                   type="button"
                   className={styles.smallButton}
-                  onClick={() => store.undoRecalibration()}
+                  onClick={() => {
+                    store.undoRecalibration().catch((error: unknown) => {
+                      toast.show(
+                        error instanceof Error ? error.message : 'Undo could not finish',
+                        'error',
+                      );
+                    });
+                  }}
                 >
                   Undo
                 </button>
@@ -947,8 +966,21 @@ export function ActiveWorkoutScreen() {
         onClose={() => setSelected(null)}
         availableEquipment={context.availableEquipment}
         alternatives={alternatives}
+        stoppedNote={
+          selected && selectedStopped
+            ? stoppedNote(
+                workout.blocks,
+                selected.entry,
+                new Set(
+                  session.completed.sets
+                    .filter((set) => !set.skipped)
+                    .map((set) => `${set.entryId}:${set.setIndex}`),
+                ),
+              )
+            : undefined
+        }
         sessionActions={
-          selected
+          selected && !selectedStopped
             ? {
                 pinned: selected.entry.pinned,
                 onPin: () =>
@@ -958,8 +990,20 @@ export function ActiveWorkoutScreen() {
                 onSkip: () => act({ type: 'skip', entryId: selected.entry.id }),
                 skipDisabledReason: skipReasonFor(selected.entry),
                 onPain: (joint) => act({ type: 'pain', entryId: selected.entry.id, joint }),
-                onUseAlternative: (exerciseId) =>
-                  act({ type: 'replace', entryId: selected.entry.id, exerciseId }),
+                onUseAlternative: (exerciseId, keep) => {
+                  const entryId = selected.entry.id;
+                  setSelected(null);
+                  store.swapExercise(entryId, exerciseId, keep).catch((error: unknown) => {
+                    toast.show(
+                      error instanceof Error ? error.message : 'The swap could not be kept',
+                      'error',
+                    );
+                  });
+                },
+                keepInPlaceOf: (
+                  getExercise(planOwnExercise(workout.blocks, selected.entry)) ??
+                  requireExercise(selected.entry.exerciseId)
+                ).name,
               }
             : undefined
         }

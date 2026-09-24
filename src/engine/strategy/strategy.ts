@@ -169,19 +169,23 @@ function exerciseInsights(
 function fitInsights(sessions: readonly WorkoutRecord[]): StrategyInsight[] {
   const appearances = new Map<string, { total: number; swappedOrSkipped: number }>();
   for (const record of sessions.slice(0, 8)) {
+    // Each exercise counts once a workout: an exercise stopped and the one that took over its
+    // sets are one swap, not an appearance and a swap (Maintenance 22).
+    const seen = new Map<string, boolean>();
     for (const entry of record.entries) {
       const ids = [entry.exerciseId, ...(entry.replacedFrom ? [entry.replacedFrom] : [])];
       for (const id of ids) {
-        const stat = appearances.get(id) ?? { total: 0, swappedOrSkipped: 0 };
-        stat.total += 1;
-        if (
-          (entry.replacedFrom && id === entry.replacedFrom) ||
-          record.skippedExerciseIds.includes(id)
-        ) {
-          stat.swappedOrSkipped += 1;
-        }
-        appearances.set(id, stat);
+        const swappedOrSkipped =
+          (entry.replacedFrom !== undefined && id === entry.replacedFrom) ||
+          record.skippedExerciseIds.includes(id);
+        seen.set(id, (seen.get(id) ?? false) || swappedOrSkipped);
       }
+    }
+    for (const [id, swappedOrSkipped] of seen) {
+      const stat = appearances.get(id) ?? { total: 0, swappedOrSkipped: 0 };
+      stat.total += 1;
+      if (swappedOrSkipped) stat.swappedOrSkipped += 1;
+      appearances.set(id, stat);
     }
   }
   const insights: StrategyInsight[] = [];

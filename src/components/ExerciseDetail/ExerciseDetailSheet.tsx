@@ -8,10 +8,12 @@ import {
 } from '../../catalog/exercises/exerciseSchema';
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
+import { SWAP_WEEKS } from '../../engine/planning/lastingSwaps';
 import type { AlternativeResult } from '../../engine/alternatives/rankAlternatives';
 import { customMediaFromFile } from '../../features/library/mediaFile';
 import { useCustomMedia } from '../../features/library/useCustomMedia';
 import { useAppStore } from '../../core/state/useAppStore';
+import { Toggle } from '../Form/Toggle';
 import { useToast } from '../Toast/useToast';
 import { Sheet } from '../Sheet/Sheet';
 import styles from './ExerciseDetail.module.css';
@@ -24,7 +26,10 @@ export interface PreferenceControls {
   onDislike: () => void;
 }
 
-/** Session-only actions for an exercise in today's workout; none touch the saved profile. */
+/**
+ * Actions for an exercise in today's workout; none touch the saved profile. Only a swap kept
+ * for a few weeks is saved, as a lasting swap the Plan tab shows and can stop.
+ */
 export interface SessionActions {
   pinned: boolean;
   onPin: () => void;
@@ -34,7 +39,10 @@ export interface SessionActions {
   /** When set, Skip today is greyed out and this says why. */
   skipDisabledReason?: string | null;
   onPain: (joint: Joint) => void;
-  onUseAlternative: (exerciseId: string) => void;
+  /** `keep`: use it in place of the plan's own exercise for the next few weeks, wherever it fits. */
+  onUseAlternative: (exerciseId: string, keep: boolean) => void;
+  /** The plan's own exercise a kept swap takes the place of: this one, or the one it was swapped in for. */
+  keepInPlaceOf: string;
 }
 
 /** Set and order edits for an exercise in the active workout; each runs through the engine. */
@@ -69,6 +77,8 @@ interface ExerciseDetailSheetProps {
   sessionActions?: SessionActions;
   editActions?: EditActions;
   maxAction?: MaxAction;
+  /** Set for an exercise that has stopped: said in place of the session's actions. */
+  stoppedNote?: string;
 }
 
 const ROLE_LABELS: Record<CatalogExercise['defaultRole'], string> = {
@@ -106,14 +116,19 @@ export function ExerciseDetailSheet({
   sessionActions,
   editActions,
   maxAction,
+  stoppedNote,
 }: ExerciseDetailSheetProps) {
   const [painJoint, setPainJoint] = useState<Joint>('shoulder');
+  // The keep-for-weeks switch belongs to the exercise it was turned on for.
+  const [keepFor, setKeepFor] = useState<string | null>(null);
   const [repLow, setRepLow] = useState('');
   const [repHigh, setRepHigh] = useState('');
   const customMedia = useCustomMedia(exercise?.id ?? '');
   const store = useAppStore();
   const toast = useToast();
   const [mediaBusy, setMediaBusy] = useState(false);
+  // Closed, the switch goes back off: it is never carried to the next time the sheet opens.
+  if (!exercise && keepFor !== null) setKeepFor(null);
   if (!exercise) return null;
 
   const exerciseId = exercise.id;
@@ -218,6 +233,15 @@ export function ExerciseDetailSheet({
             {preference.disliked ? 'Disliked ✓' : 'Dislike'}
           </button>
         </div>
+      ) : null}
+
+      {stoppedNote ? (
+        <section className={styles.section} aria-label="This session">
+          <h3 className={styles.sectionTitle}>This session only</h3>
+          <p className={styles.text} data-testid="stopped-note">
+            {stoppedNote}
+          </p>
+        </section>
       ) : null}
 
       {sessionActions ? (
@@ -415,6 +439,14 @@ export function ExerciseDetailSheet({
               ? ' Use one to swap only this exercise; the rest of the workout stays put.'
               : ''}
           </p>
+          {sessionActions && exercise && alternatives.candidates.length > 0 ? (
+            <Toggle
+              label={`Keep it for the next ${SWAP_WEEKS} weeks`}
+              description={`Where it fits, the plan picks it in place of ${sessionActions.keepInPlaceOf} until then.`}
+              checked={keepFor === exercise.id}
+              onChange={(on) => setKeepFor(on ? exercise.id : null)}
+            />
+          ) : null}
           {alternatives.candidates.length === 0 ? (
             <p className={styles.empty}>{alternatives.emptyReason}</p>
           ) : (
@@ -451,7 +483,12 @@ export function ExerciseDetailSheet({
                       type="button"
                       className={styles.useButton}
                       data-testid="use-alternative"
-                      onClick={() => sessionActions.onUseAlternative(candidate.exercise.id)}
+                      onClick={() =>
+                        sessionActions.onUseAlternative(
+                          candidate.exercise.id,
+                          keepFor !== null && keepFor === exercise?.id,
+                        )
+                      }
                       aria-label={`Use ${candidate.exercise.name} instead`}
                     >
                       Use

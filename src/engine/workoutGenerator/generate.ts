@@ -6,7 +6,12 @@ import {
   formatWindow,
   type DeloadWindow,
 } from '../planning/deload';
-import { allExercises, exercisesByPattern, requireExercise } from '../../catalog/exercises/catalog';
+import {
+  allExercises,
+  exercisesByPattern,
+  getExercise,
+  requireExercise,
+} from '../../catalog/exercises/catalog';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import {
@@ -67,6 +72,7 @@ import {
 } from '../volume/weeklyVolume';
 import {
   allEntries,
+  isStopped,
   workingSets,
   type DurationChoice,
   type GeneratedWorkout,
@@ -75,6 +81,7 @@ import {
   type WorkoutBlock,
   type WorkoutEntry,
 } from '../workout/types';
+import type { LastingSwap } from '../planning/lastingSwaps';
 
 /**
  * The pure, deterministic workout-generation engine.
@@ -107,7 +114,11 @@ export interface KeptEntry {
  * never touched. The first close writes on the entry how many working sets it still owed:
  * the sets it counted are gone after this, and every later rebuild still has to know.
  */
-function closeAtLogged(entry: WorkoutEntry, isDone: SetDonePredicate): void {
+export function closeAtLogged(
+  entry: WorkoutEntry,
+  isDone: SetDonePredicate,
+  why: 'place' | 'swap' = 'place',
+): void {
   const planned = entry.sets.some((set) => set.kind === 'working');
   const owed = entry.sets.filter(
     (set) => set.kind === 'working' && !isDone(entry.id, set.index),
@@ -115,20 +126,12 @@ function closeAtLogged(entry: WorkoutEntry, isDone: SetDonePredicate): void {
   entry.sets = entry.sets.filter((set) => isDone(entry.id, set.index));
   entry.warmupSets = entry.sets.filter((set) => set.kind === 'warmup').length;
   entry.dropSet = entry.sets.some((set) => set.kind === 'drop');
-  if (entry.stopped === undefined && planned) entry.stopped = { owed };
-}
-
-/**
- * An entry ended at its logged sets at another place. One ended by a copy of the app that
- * wrote no count (Maintenance 19 to 21) is known by having no working set left: every other
- * entry keeps at least one.
- */
-function isStopped(entry: WorkoutEntry): boolean {
-  return entry.stopped !== undefined || !entry.sets.some((set) => set.kind === 'working');
+  if (entry.stopped === undefined && planned) entry.stopped = { owed, why };
 }
 
 /** The working sets a stopped entry still owes its slot; one with no count owes a whole prescription. */
 function owedBy(entry: WorkoutEntry): number {
+  if (entry.stopped?.why === 'skip') return 0;
   if (entry.stopped !== undefined) return entry.stopped.owed;
   return entry.sets.some((set) => set.kind === 'working') ? 0 : Number.POSITIVE_INFINITY;
 }
@@ -233,6 +236,8 @@ export interface GenerationConstraints {
   focusMuscle?: MuscleId | null;
   /** Plates not around today: new targets land on what the rest of the rack makes. */
   sessionLoading?: SessionLoading;
+  /** The lifter's lasting swaps: where one fits, it is picked in place of the one swapped out. */
+  swaps?: readonly LastingSwap[];
 }
 
 export interface GenerationInput {
@@ -429,6 +434,8 @@ export interface Picker {
   exposure: Exposure;
   loads: Readonly<Record<MuscleId, MuscleLoad>>;
   focus: MuscleId | null;
+  /** Exercises a lasting swap took out of this plan: no other slot picks them back in. */
+  excluded?: ReadonlySet<string>;
 }
 
 function stressPenalty(exercise: CatalogExercise): number {
@@ -443,7 +450,7 @@ function pickForSlot(
   chosen: readonly CatalogExercise[],
   picker: Picker,
 ): CatalogExercise | undefined {
-  const chosenIds = new Set(chosen.map((exercise) => exercise.id));
+  const chosenIds = new Set([...chosen.map((exercise) => exercise.id), ...(picker.excluded ?? [])]);
   const strengthRole = restCategory(slotSpec.role) === 'strength';
   const candidates = exercisesByPattern(slotSpec.pattern)
     .filter((exercise) => !chosenIds.has(exercise.id))
@@ -495,7 +502,7 @@ export function pickAccessoryFor(
   chosen: readonly CatalogExercise[],
   picker: Picker,
 ): CatalogExercise | undefined {
-  const chosenIds = new Set(chosen.map((exercise) => exercise.id));
+  const chosenIds = new Set([...chosen.map((exercise) => exercise.id), ...(picker.excluded ?? [])]);
   const candidates = allExercises()
     .filter((exercise) => exercise.primaryMuscles.includes(muscle))
     .filter((exercise) => !chosenIds.has(exercise.id))
@@ -518,6 +525,68 @@ export function pickAccessoryFor(
 }
 
 /** The picker the coach needs, built without generating a workout. */
+/**
+ * The exercises the lifter's lasting swaps keep out of a plan here: each one swapped out whose
+ * swap-in fits this place. Where the swap-in does not fit, the plan's own pick stands.
+ */
+export function swappedOutIds(
+  swaps: readonly LastingSwap[],
+  context: ConflictContext,
+): Set<string> {
+  return new Set(
+    swaps
+      .filter((swap) => {
+        const next = getExercise(swap.to);
+        return next !== undefined && !isBlocked(checkExerciseFit(next, context));
+      })
+      .map((swap) => swap.from),
+  );
+}
+
+const KEPT_LINE = ', the swap you chose to keep.';
+const AROUND_LINE = ', which you swapped out.';
+
+/**
+ * The "Why this workout" lines for the lifter's kept swaps, read from the workout itself
+ * (Maintenance 22): each entry a kept swap put in says what it stands for. One whose swap was
+ * stopped since, or that the lifter swapped today, has no line.
+ */
+export function swapLines(
+  blocks: readonly WorkoutBlock[],
+  swaps: readonly LastingSwap[],
+): string[] {
+  const byFrom = new Map(swaps.map((swap) => [swap.from, swap]));
+  return allEntries(blocks).flatMap((entry) => {
+    const swap = entry.standsFor ? byFrom.get(entry.standsFor) : undefined;
+    const from = swap ? getExercise(swap.from) : undefined;
+    const exercise = getExercise(entry.exerciseId);
+    if (!swap || !from || !exercise || isStopped(entry) || entry.replacedFrom) return [];
+    const why = swap.to === entry.exerciseId ? KEPT_LINE : AROUND_LINE;
+    return [`${exercise.name} in place of ${from.name}${why}`];
+  });
+}
+
+/**
+ * The reasons with their lines about kept swaps made true of these blocks: stale ones out,
+ * missing ones in, where the lines were or after the lines on the lead lift and what was kept.
+ */
+export function withSwapLines(
+  reasons: readonly string[],
+  blocks: readonly WorkoutBlock[],
+  swaps: readonly LastingSwap[],
+): string[] {
+  const isSwapLine = (line: string) => line.endsWith(KEPT_LINE) || line.endsWith(AROUND_LINE);
+  const others = reasons.filter((line) => !isSwapLine(line));
+  const first = reasons.findIndex(isSwapLine);
+  const lead = others.reduce(
+    (last, line, index) =>
+      line.includes(' leads as the ') || line.startsWith('Kept ') ? index : last,
+    Math.min(others.length, 3) - 1,
+  );
+  const at = first >= 0 ? first : lead + 1;
+  return [...others.slice(0, at), ...swapLines(blocks, swaps), ...others.slice(at)];
+}
+
 export function accessoryPicker(input: {
   profile: UserProfile;
   location: LocationProfile | undefined;
@@ -528,13 +597,17 @@ export function accessoryPicker(input: {
   history: readonly WorkoutRecord[];
   now: string;
   focus?: MuscleId | null;
+  /** The lifter's lasting swaps: an exercise swapped out is never offered. */
+  swaps?: readonly LastingSwap[];
 }): Picker {
+  const context = sessionConflictContext(input.profile, input.location, input.constraints ?? {});
   return {
-    context: sessionConflictContext(input.profile, input.location, input.constraints ?? {}),
+    context,
     preferredIds: preferredIdsOf(input.profile),
     exposure: computeExposure(input.history, input.now),
     loads: muscleLoads(input.history, input.profile, input.now),
     focus: input.focus ?? null,
+    excluded: swappedOutIds(input.swaps ?? [], context),
   };
 }
 
@@ -582,7 +655,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const round5 = (seconds: number) => Math.round(seconds / 5) * 5;
 
 /** A deload week's lighter loads, applied to the target and said in its evidence. */
-function scaleForDeload(
+export function scaleForDeload(
   target: NextTarget,
   adjust: PrescriptionAdjustment | undefined,
   step: number,
@@ -597,7 +670,7 @@ function scaleForDeload(
 }
 
 /** A deload can scale a bar lift under the empty bar; the bar is the floor. */
-function floorTarget(target: NextTarget, floor: number | null): NextTarget {
+export function floorTarget(target: NextTarget, floor: number | null): NextTarget {
   if (floor === null || target.weight === null || target.weight >= floor) return target;
   return { ...target, weight: floor };
 }
@@ -653,7 +726,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
   const completedSets = constraints.completedSets ?? [];
   const compromises: string[] = [];
-  const picker: Picker = { context, preferredIds, exposure, loads, focus };
+  // Swapped out for weeks where the swap-in fits here: out of the whole plan, every slot.
+  const swappedOut = swappedOutIds(constraints.swaps ?? [], context);
+  const picker: Picker = { context, preferredIds, exposure, loads, focus, excluded: swappedOut };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 
   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
@@ -710,21 +785,185 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   };
   const entries: WorkoutEntry[] = [];
   const plannedSets = new Map<string, number>();
+  // Stopped entries that do not fit here were ended again by the caller; the others fit now.
+  const closedNow = new Set(keep.filter((kept) => kept.closed).map((kept) => kept.entry.id));
+  // The lifter's lasting swaps, by the exercise swapped out.
+  const swapOf = new Map((constraints.swaps ?? []).map((swap) => [swap.from, swap]));
+  // Each exercise in for the plan's own pick of its slot (a kept swap's, or the next best), by
+  // that pick. An entry kept from before a rebuild says it itself (`standsFor`).
+  const ownOf = new Map<string, CatalogExercise>();
+  for (const kept of [...[...keptBySlot.values()].flat(), ...keptUnslotted]) {
+    const own = kept.standsFor ? getExercise(kept.standsFor) : undefined;
+    if (own) ownOf.set(kept.exerciseId, own);
+  }
+
+  /**
+   * An exercise's sets as it takes its place after the entries so far: its own target from its
+   * history, the work already done before it today, what this place can load, and the ramps
+   * the session calls for.
+   */
+  const targetedFor = (
+    exercise: CatalogExercise,
+    role: TrainingRole,
+    prescription: Prescription,
+  ) => {
+    // What comes before this exercise today, planned or done, and whether a long break sits
+    // between: the target and the ramps both read it.
+    const earlier = sessionWork(entries, completedSets, exerciseOf);
+    const preceding = precedingWorkToday(exercise, earlier, now);
+    const baseTarget = recommendNextTarget({
+      exercise,
+      role,
+      prescription,
+      history,
+      profile,
+      fatigueLevel: fatigue.level,
+      now,
+      maxes,
+      session: { precedingSets: preceding.sets },
+    });
+    const floor = barWeightFor(exercise, profile.units);
+    // What this place can load: the target lands on a weight that exists here, or holds at
+    // the heaviest one with the reps pushed instead.
+    const loading = loadingFor(
+      location?.loading,
+      constraints.sessionLoading,
+      exercise,
+      profile.units,
+    );
+    const target = capTarget(
+      floorTarget(scaleForDeload(baseTarget, adjust, loading.step), floor),
+      loading,
+      profile.units,
+    );
+    const warmupSets = rampSetsFor(
+      exercise,
+      role,
+      targetMinutes,
+      rampContextFor(exercise, earlier, preceding.afterBreak),
+      { weight: target.weight, step: loading.step, floor },
+    );
+    return {
+      sets: applyProgression(
+        buildSets(prescription, warmupSets),
+        target,
+        loading.step,
+        {},
+        floor,
+        loading,
+      ),
+      warmupSets,
+      progression: summarizeProgression(target),
+    };
+  };
+
+  /**
+   * Back where a stopped exercise fits again, it picks up the sets its slot still owes
+   * (Maintenance 22), unless the lifter chose another exercise for the slot or a stand-in is
+   * under way. A stand-in kept only because it came next, with nothing logged, gives way.
+   * True when the slot was filled this way.
+   */
+  const reopened = (kept: WorkoutEntry[]): boolean => {
+    // Only a stop the place made picks up again; one the lifter or a limit made stays.
+    const fitting = kept.filter(
+      (entry) =>
+        isStopped(entry) && !closedNow.has(entry.id) && (entry.stopped?.why ?? 'place') === 'place',
+    );
+    const target = fitting[fitting.length - 1];
+    if (!target) return false;
+    const others = kept.filter((entry) => entry !== target);
+    if (others.some((entry) => entry.locked || entry.pinned)) return false;
+    if (others.some((entry) => !isStopped(entry) && frozenIds.has(entry.id))) return false;
+    const owed = Math.min(...kept.filter(isStopped).map(owedBy));
+    if (!(owed > 0)) return false;
+    // The stopped entries stay as the history they are; a stand-in that gave way goes.
+    for (const entry of others) {
+      if (isStopped(entry)) continue;
+      const at = chosenExercises.findIndex((chosen) => chosen.id === entry.exerciseId);
+      if (at >= 0) chosenExercises.splice(at, 1);
+    }
+    entries.push(...kept.filter(isStopped));
+    const exercise = exerciseOf(target.exerciseId);
+    const adjusted = adjustPrescription(
+      prescribeFor(exercise, target.role, profile, history),
+      target.role,
+      adjust,
+    );
+    const built = targetedFor(exercise, target.role, {
+      ...adjusted,
+      sets: Math.min(adjusted.sets, owed),
+      restSeconds: target.restSeconds,
+    });
+    const from = Math.max(-1, ...target.sets.map((set) => set.index)) + 1;
+    target.sets = [
+      ...target.sets,
+      ...built.sets.map((set) => ({ ...set, index: set.index + from })),
+    ];
+    target.warmupSets = target.sets.filter((set) => set.kind === 'warmup').length;
+    target.dropSet = target.sets.some((set) => set.kind === 'drop');
+    target.progression = built.progression;
+    delete target.stopped;
+    return true;
+  };
+
+  /** A lasting swap of the lifter's puts the exercise swapped in wherever it fits here. */
+  const swappedIn = (pick: CatalogExercise): CatalogExercise => {
+    const swap = swapOf.get(pick.id);
+    const next = swap ? getExercise(swap.to) : undefined;
+    if (!swap || !next) return pick;
+    if (chosenExercises.some((chosen) => chosen.id === next.id)) return pick;
+    if (isBlocked(checkExerciseFit(next, context))) return pick;
+    if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
+      return pick;
+    }
+    return next;
+  };
+
+  /** Whether an exercise can join the exercises in the plan so far: not in, and no clash. */
+  const fitsWith = (candidate: CatalogExercise): boolean =>
+    !chosenExercises.some((chosen) => chosen.id === candidate.id) &&
+    !blocksCandidate(checkWorkoutConflicts([...chosenExercises, candidate], context), candidate.id);
+
   template.slots.forEach((slotSpec, index) => {
     const kept = keptBySlot.get(index);
     const owed = owedBySlot.get(index);
     if (kept) {
+      if (reopened(kept)) return;
       entries.push(...kept);
       // Work stopped at another place leaves its slot owing sets: a stand-in follows it.
       if (owed === undefined) return;
     }
-    const pick = pickForSlot(slotSpec, chosenExercises, picker);
+    // The plan's own pick first, judged as if no swap were kept; one swapped out gives way to its
+    // swap-in, or to the next best when the swap-in is already in the workout. An own pick a kept
+    // swap already put in an earlier slot gives way to the next best too.
+    // The slot's own kept entries count as themselves: the stand-in for one stopped here is judged
+    // as the slot's own pick would be.
+    const mine = new Set((kept ?? []).map((entry) => entry.exerciseId));
+    const ownPicks = chosenExercises.map((chosen) =>
+      mine.has(chosen.id) ? chosen : (ownOf.get(chosen.id) ?? chosen),
+    );
+    const natural = pickForSlot(slotSpec, ownPicks, { ...picker, excluded: undefined });
+    let pick = natural;
+    if (natural && swappedOut.has(natural.id)) {
+      const next = swappedIn(natural);
+      // With its swap-in unable to join and nothing else fitting, the plan's own pick stays:
+      // a kept swap applies where it fits, and never empties a slot.
+      pick =
+        next !== natural
+          ? next
+          : (pickForSlot(slotSpec, chosenExercises, picker) ??
+            (fitsWith(natural) ? natural : undefined));
+    } else if (natural && !fitsWith(natural)) {
+      // Already in, or clashing with a kept swap's exercise: the next best that fits the plan.
+      pick = pickForSlot(slotSpec, chosenExercises, picker);
+    }
     if (!pick) {
       compromises.push(
         `No ${slotSpec.pattern.replace(/-/g, ' ')} option fits ${location?.name ?? 'this place'} and your limits.`,
       );
       return;
     }
+    if (natural && pick !== natural) ownOf.set(pick.id, natural);
     chosenExercises.push(pick);
     const id = idFor(index);
     const basePrescription = prescribeFor(pick, slotSpec.role, profile, history);
@@ -739,58 +978,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
         owed === undefined ? basePrescription.sets : Math.min(basePrescription.sets, owed),
       );
     }
-    // What comes before this exercise today, planned or done, and whether a long break sits
-    // between: the target and the ramps both read it.
-    const earlier = sessionWork(entries, completedSets, exerciseOf);
-    const preceding = precedingWorkToday(pick, earlier, now);
-    const baseTarget = recommendNextTarget({
-      exercise: pick,
-      role: slotSpec.role,
-      prescription,
-      history,
-      profile,
-      fatigueLevel: fatigue.level,
-      now,
-      maxes,
-      session: { precedingSets: preceding.sets },
-    });
-    const floor = barWeightFor(pick, profile.units);
-    // What this place can load: the target lands on a weight that exists here, or holds at
-    // the heaviest one with the reps pushed instead.
-    const loading = loadingFor(location?.loading, constraints.sessionLoading, pick, profile.units);
-    const target = capTarget(
-      floorTarget(scaleForDeload(baseTarget, adjust, loading.step), floor),
-      loading,
-      profile.units,
-    );
-    const warmupSets = rampSetsFor(
-      pick,
-      slotSpec.role,
-      targetMinutes,
-      rampContextFor(pick, earlier, preceding.afterBreak),
-      { weight: target.weight, step: loading.step, floor },
-    );
+    const built = targetedFor(pick, slotSpec.role, prescription);
     const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
     entries.push({
       id,
       exerciseId: pick.id,
       role: slotSpec.role,
-      sets: applyProgression(
-        buildSets(prescription, warmupSets),
-        target,
-        loading.step,
-        {},
-        floor,
-        loading,
-      ),
-      progression: summarizeProgression(target),
+      sets: built.sets,
+      progression: built.progression,
       restSeconds: prescription.restSeconds,
-      warmupSets,
+      warmupSets: built.warmupSets,
       dropSet: false,
       chosenFor: chosenFor.length > 0 ? chosenFor : [...pick.primaryMuscles],
       locked: false,
       pinned: false,
       slot: index,
+      ...(natural && pick !== natural ? { standsFor: natural.id } : {}),
     });
   });
   entries.push(...keptUnslotted);
@@ -1145,6 +1348,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     reasons.push(
       `Kept ${keep.length} ${keep.length === 1 ? 'exercise' : 'exercises'} in place: logged sets and pinned picks never move.`,
     );
+  reasons.push(...swapLines(blocks, constraints.swaps ?? []));
   if (exposure.sessionsLast14Days === 0)
     reasons.push('No history yet, so weekly volume starts from the plan defaults.');
   if (exposure.sessionsLast14Days > 0) {

@@ -72,8 +72,14 @@ import {
   workoutSequence,
   type SetPosition,
 } from '../../engine/workout/sequence';
-import { allEntries, type DurationChoice, type GeneratedWorkout } from '../../engine/workout/types';
-import { generateWorkout } from '../../engine/workoutGenerator/generate';
+import {
+  allEntries,
+  planOwnExercise,
+  withoutStops,
+  type DurationChoice,
+  type GeneratedWorkout,
+} from '../../engine/workout/types';
+import { generateWorkout, withSwapLines } from '../../engine/workoutGenerator/generate';
 import { normalizeName } from '../backup/legacyImport';
 import {
   COACH_DECLINES_ID,
@@ -95,6 +101,17 @@ import {
   parseCoachFocus,
   type CoachFocus,
 } from '../../engine/planning/focus';
+import {
+  LASTING_SWAPS_ID,
+  lastingSwapsRecord,
+  parseLastingSwaps,
+  swapIsPast,
+  sameSwaps,
+  undoSwaps,
+  withSwap,
+  withoutSwap,
+  type LastingSwap,
+} from '../../engine/planning/lastingSwaps';
 import {
   DELOAD_WEEK_ID,
   inDeloadWindow,
@@ -204,6 +221,7 @@ import {
   type SessionRecovery,
   type SetDraft,
   type WorkoutSession,
+  undoAvailable,
 } from './session';
 import { buildCompletion, buildWorkoutRecord } from './workoutRecordBuilder';
 
@@ -259,6 +277,8 @@ export interface AppState {
   strengthMaxes: StrengthMaxes;
   /** A coach focus for the next session, kept in the meta store and backed up; null when none. */
   coachFocus: CoachFocus | null;
+  /** Exercises the lifter swapped in and chose to keep for a few weeks (Maintenance 22). */
+  lastingSwaps: LastingSwap[];
   /** The optional cloud copy: on only while a token is on this device. */
   cloud: CloudStatus;
 }
@@ -571,6 +591,9 @@ export class AppStore {
   private readonly now: () => string;
   /** Background work (automatic snapshots) that tests and diagnostics can wait for. */
   private pendingWork: Promise<void> = Promise.resolve();
+  private swapsQueue: Promise<unknown> = Promise.resolve();
+  /** Counts the kept-swap changes shown, so a reload that read the list before one keeps it. */
+  private swapsVersion = 0;
   private readonly engine: typeof runRecalibration;
   private readonly minOverlayMs: number;
   private dbPromise: Promise<Database> | null = null;
@@ -623,6 +646,7 @@ export class AppStore {
       deloadWeek: null,
       strengthMaxes: emptyMaxes(),
       coachFocus: null,
+      lastingSwaps: [],
       cloud: CLOUD_OFF,
     };
   }
@@ -653,6 +677,7 @@ export class AppStore {
   }
 
   async hydrate(): Promise<void> {
+    const swapsSeen = this.swapsVersion;
     try {
       const db = await this.getDatabase();
       const [
@@ -668,6 +693,7 @@ export class AppStore {
         deloadRaw,
         maxesRaw,
         focusRaw,
+        swapsRaw,
         deviceRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
@@ -682,6 +708,7 @@ export class AppStore {
         db.get<Identified>('meta', DELOAD_WEEK_ID),
         db.get<Identified>('meta', STRENGTH_MAXES_ID),
         db.get<Identified>('meta', COACH_FOCUS_ID),
+        db.get<Identified>('meta', LASTING_SWAPS_ID),
         db.getAll<Identified>('device'),
       ]);
       const deviceId = ensureDeviceId(this.storage);
@@ -735,6 +762,12 @@ export class AppStore {
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
         strengthMaxes: parseStrengthMaxes(maxesRaw),
         coachFocus: parseCoachFocus(focusRaw, this.now()),
+        // After the custom exercises register, so a custom swap reads back.
+        // A kept-swap change made while this read was under way is newer than what it read.
+        lastingSwaps:
+          this.swapsVersion === swapsSeen
+            ? parseLastingSwaps(swapsRaw, this.now())
+            : this.state.lastingSwaps,
         barcodes: parsePlaceBarcodes(deviceRaw),
         cloud: {
           ...this.state.cloud,
@@ -826,7 +859,7 @@ export class AppStore {
       history: this.state.history,
       now,
       duration: 'default',
-      constraints: { deload, focusMuscle: focus },
+      constraints: { deload, focusMuscle: focus, swaps: this.activeSwaps() },
       maxes: this.state.strengthMaxes,
     });
     const session = createSession(key, workout, now);
@@ -924,6 +957,7 @@ export class AppStore {
       history,
       constraints: session.constraints,
       maxes: this.state.strengthMaxes,
+      swaps: this.activeSwaps(),
       reason: reason ?? described.title,
       timestamp: this.now(),
     };
@@ -1001,15 +1035,32 @@ export class AppStore {
     return result;
   }
 
-  /** Restores the workout and constraints from before the last recalibration. */
-  undoRecalibration(): void {
+  /**
+   * Puts the previous workout back, unless a set is logged since on an exercise it does not have. When the change being undone kept a swap for weeks, the kept
+   * swaps go back to what they were too (saved with the session, so this holds after a reopen or
+   * a change that failed). Resolves once that is saved; rejects, and puts it back, if it cannot be.
+   */
+  undoRecalibration(): Promise<void> {
     const session = this.state.session;
-    if (!session?.previous) return;
+    // A finished workout is saved as it was done: nothing to take back.
+    if (!session?.previous || session.status === 'completed') return Promise.resolve();
+    if (!undoAvailable(session)) {
+      return Promise.reject(new Error('Sets logged since that change would be lost, so it stays.'));
+    }
+    const { swapsBefore, swapsAfter } = session.previous;
     const headline = 'Restored the previous workout.';
     const position = currentPosition(session.previous.workout, this.isDoneFor(session));
+    const restored = session.previous.workout;
     this.setSession({
       ...session,
-      workout: session.previous.workout,
+      // Its lines about kept swaps say what is true now: a swap stopped since has none.
+      workout: {
+        ...restored,
+        explanation: {
+          ...restored.explanation,
+          reasons: withSwapLines(restored.explanation.reasons, restored.blocks, this.activeSwaps()),
+        },
+      },
       constraints: session.previous.constraints,
       duration: session.previous.duration,
       completed: {
@@ -1052,6 +1103,17 @@ export class AppStore {
         ...session.log,
       ].slice(0, CALIBRATION_LOG_LIMIT),
     });
+    if (swapsBefore === undefined) return Promise.resolve();
+    const saving = this.changeSwaps((current) =>
+      undoSwaps(current, swapsBefore, swapsAfter ?? []),
+    ).then((change) => {
+      if (change.saved) return;
+      throw new Error(
+        'The swap is undone, but its four weeks could not be taken back. Stop it on the Plan tab.',
+      );
+    });
+    this.pendingWork = this.pendingWork.then(() => saving.catch(() => undefined));
+    return saving;
   }
 
   dismissSummary(): void {
@@ -1649,11 +1711,18 @@ export class AppStore {
     const session = this.state.session;
     if (!saved || !session || session.status !== 'preview') return;
     const now = this.now();
+    // Made fresh: an exercise stopped on the day it was saved does not come back stopped.
+    const fresh = withoutStops(saved.workout);
     const workout = {
-      ...saved.workout,
+      ...fresh,
       id: `wk-${now.slice(0, 10)}-saved-${saved.id}`,
       generatedAt: now,
       recalibration: { version: 1, lastTrigger: null },
+      // Its lines about kept swaps say what is true now, not when it was saved.
+      explanation: {
+        ...fresh.explanation,
+        reasons: withSwapLines(fresh.explanation.reasons, fresh.blocks, this.activeSwaps()),
+      },
     };
     const headline = `Loaded "${saved.name}".`;
     this.setSession({
@@ -2597,6 +2666,131 @@ export class AppStore {
     await putVerified(db, 'meta', focus, { now: this.now });
     this.setState({ coachFocus: focus });
     this.regeneratePreview();
+  }
+
+  /**
+   * Swaps an exercise in today's workout. With `keep`, the exercise swapped in is used for the next
+   * few weeks wherever the plan would pick the one it replaces (Maintenance 22): the plan's own
+   * pick, which is the exercise this entry was first swapped from if it was swapped today. Keeping
+   * the plan's own pick ends a kept swap of it. Undo on the swap puts the kept swaps back too.
+   */
+  async swapExercise(
+    entryId: string,
+    exerciseId: string,
+    keep = false,
+  ): Promise<RecalibrationResult | null> {
+    const session = this.state.session;
+    const entry = session
+      ? allEntries(session.workout.blocks).find((candidate) => candidate.id === entryId)
+      : undefined;
+    const from = entry && session ? planOwnExercise(session.workout.blocks, entry) : undefined;
+    const result = await this.recalibrate({ type: 'replace', entryId, exerciseId });
+    if (!result?.ok || !keep || !from) return result;
+    // The swap stands while today's workout has the exercise swapped in; Undo takes it away.
+    const stands = () =>
+      allEntries(this.state.session?.workout.blocks ?? []).some(
+        (candidate) => candidate.exerciseId === exerciseId,
+      );
+    const snapshot = this.state.session?.previous ?? null;
+    const change = await this.changeSwaps((current) => {
+      // Undone before its turn: there is nothing to keep.
+      if (!stands()) return current;
+      return from === exerciseId
+        ? withoutSwap(current, from)
+        : withSwap(current, from, exerciseId, this.now());
+    });
+    if (!change.saved) {
+      if (!stands()) return result;
+      throw new Error('The swap is made, but keeping it for four weeks could not be saved.');
+    }
+    const now = this.state.session;
+    if (now && snapshot && now.previous === snapshot) {
+      // Undo of this swap takes the kept part back too.
+      this.setSession({
+        ...now,
+        previous: { ...snapshot, swapsBefore: change.before, swapsAfter: change.after },
+      });
+    } else if (!stands()) {
+      // Undone while it was being saved: the kept part goes too.
+      await this.changeSwaps((current) => undoSwaps(current, change.before, change.after));
+    }
+    return result;
+  }
+
+  /**
+   * Ends a lasting swap. A plan not started yet is built again without it, as the coach focus and
+   * the deload week do; a workout under way keeps what it has.
+   */
+  async stopLastingSwap(from: string): Promise<void> {
+    const change = await this.changeSwaps((current) => withoutSwap(current, from));
+    if (!change.saved) throw new Error('The swap could not be stopped.');
+    this.regeneratePreview();
+  }
+
+  /**
+   * Shows a new kept-swap list, and makes today's lines about kept swaps true of it: a workout
+   * under way keeps its exercises, but a line about a swap stopped or put back follows the list.
+   */
+  private showSwaps(swaps: LastingSwap[]): void {
+    this.swapsVersion += 1;
+    this.setState({ lastingSwaps: swaps });
+    const session = this.state.session;
+    if (!session) return;
+    const { explanation } = session.workout;
+    const reasons = withSwapLines(explanation.reasons, session.workout.blocks, this.activeSwaps());
+    if (reasons.join('\n') === explanation.reasons.join('\n')) return;
+    this.setSession({
+      ...session,
+      workout: { ...session.workout, explanation: { ...explanation, reasons } },
+    });
+  }
+
+  /** The lasting swaps still running. */
+  private activeSwaps(): LastingSwap[] {
+    const now = this.now();
+    return this.state.lastingSwaps.filter((swap) => !swapIsPast(swap, now));
+  }
+
+  /**
+   * Changes the kept swaps one change at a time (Maintenance 22). Each change is worked out from
+   * the list as the change before it left it, saved, and only then shown. When a save fails, the
+   * list shown is read back from what is saved, so the Plan tab and the saved list agree.
+   * `saved`: the change is in the saved list.
+   */
+  private changeSwaps(
+    change: (current: LastingSwap[]) => LastingSwap[],
+  ): Promise<{ before: LastingSwap[]; after: LastingSwap[]; saved: boolean }> {
+    const run = this.swapsQueue.then(async () => {
+      const before = this.activeSwaps();
+      const after = change(before);
+      if (sameSwaps(before, after)) return { before, after, saved: true };
+      try {
+        await this.writeSwaps(after);
+        this.showSwaps(after);
+        return { before, after, saved: true };
+      } catch {
+        const stored = await this.readSwaps().catch(() => null);
+        this.showSwaps(stored ?? before);
+        return { before, after, saved: stored !== null && sameSwaps(stored, after) };
+      }
+    });
+    this.swapsQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  /** The kept swaps as saved. */
+  private async readSwaps(): Promise<LastingSwap[]> {
+    const db = await this.getDatabase();
+    return parseLastingSwaps(await db.get<Identified>('meta', LASTING_SWAPS_ID), this.now());
+  }
+
+  private async writeSwaps(swaps: readonly LastingSwap[]): Promise<void> {
+    const db = await this.getDatabase();
+    if (swaps.length > 0) {
+      await putVerified(db, 'meta', lastingSwapsRecord(swaps), { now: this.now });
+    } else if ((await db.get<Identified>('meta', LASTING_SWAPS_ID)) !== undefined) {
+      await deleteVerified(db, 'meta', LASTING_SWAPS_ID);
+    }
   }
 
   async clearCoachFocus(): Promise<void> {

@@ -1,6 +1,7 @@
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { StrengthMaxes } from '../progression/maxes';
 import type { DeloadWindow } from '../planning/deload';
+import type { LastingSwap } from '../planning/lastingSwaps';
 import type { AutoregulationPlan } from './autoregulate';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import type { LocationProfile } from '../../core/validation/location';
@@ -137,6 +138,8 @@ export interface RecalibrationRequest {
   timestamp: string;
   /** Maxes the lifter entered by hand, for lifts without their own history. */
   maxes?: StrengthMaxes | null;
+  /** The lifter's lasting swaps, which a rebuild honours wherever the exercise swapped in fits. */
+  swaps?: readonly LastingSwap[];
 }
 
 export type ChangeKind = 'added' | 'removed' | 'replaced' | 'adjusted';

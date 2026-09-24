@@ -96,7 +96,7 @@ function stoppedAndNext(handle: TestStoreHandle, smithId: string) {
 
 describe('a Smith machine squat started at the gym, then the place changed', () => {
   it.each(['logged', 'skipped'] as const)(
-    'keeps a Home squat after it through Home, the gym and Home again (warm-up %s)',
+    'keeps the squat sets through Home, the gym and Home again (warm-up %s)',
     async (how) => {
       const { handle, smith } = await startedThenHome(how);
       const { store } = handle;
@@ -111,10 +111,21 @@ describe('a Smith machine squat started at the gym, then the place changed', () 
           new RegExp(`^${headline}`),
         );
         const { stopped, next, list } = stoppedAndNext(handle, smith.id);
-        // The Smith squat stays as the warm-up it had, and says what it still owed.
+        // The warm-up done at the gym stays exactly as it was.
+        expect(stopped?.sets[0]?.kind).toBe('warmup');
+        if (place === 'gym') {
+          // Back at the gym, the Smith machine squat picks up its sets again, and the Home
+          // squat that was only waiting gives way.
+          expect(stopped?.stopped).toBeUndefined();
+          expect(working(stopped)).toBeGreaterThan(0);
+          expect(working(stopped)).toBeLessThanOrEqual(working(smith));
+          expect(list.filter(isSquat).map((entry) => entry.id)).toEqual([smith.id]);
+          continue;
+        }
+        // At Home it stays as the warm-up it had, says what it still owed, and the squat sets
+        // follow it on a squat Home has, and nowhere else.
         expect(stopped?.sets.map((set) => set.kind)).toEqual(['warmup']);
-        expect(stopped?.stopped).toEqual({ owed: working(smith) });
-        // The squat sets follow it, on a squat this place has, and nowhere else.
+        expect(stopped?.stopped).toEqual({ owed: working(smith), why: 'place' });
         expect(next?.exerciseId).toBe('goblet-squat');
         expect(working(next)).toBeGreaterThan(0);
         expect(list.filter(isSquat).map((entry) => entry.id)).toEqual([smith.id, next?.id]);
@@ -146,7 +157,10 @@ describe('a Smith machine squat started at the gym, then the place changed', () 
     const { handle, smith } = await startedThenHome('logged');
     const reopened = createTestStore({ factory: handle.factory, storage: handle.storage });
     await reopened.store.hydrate();
-    expect(stoppedAndNext(reopened, smith.id).stopped?.stopped).toEqual({ owed: working(smith) });
+    expect(stoppedAndNext(reopened, smith.id).stopped?.stopped).toEqual({
+      owed: working(smith),
+      why: 'place',
+    });
     expect(stoppedAndNext(reopened, smith.id).next?.exerciseId).toBe('goblet-squat');
 
     const stored = readSession(handle.storage)!;

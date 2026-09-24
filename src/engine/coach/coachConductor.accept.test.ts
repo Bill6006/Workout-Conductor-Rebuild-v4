@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
-import { emptyCompleted, emptyConstraints } from '../recalibration/recalibrate';
+import { withSwap } from '../planning/lastingSwaps';
+import { emptyCompleted, emptyConstraints, recalibrate } from '../recalibration/recalibrate';
+import type { CompletedWork } from '../recalibration/types';
 import { interpretFatigue } from '../recovery/fatigue';
+import type { StallDiagnosis } from '../strategy/plateau';
 import type { StrategyInsight } from '../strategy/strategy';
-import { allEntries, type WorkoutBlock } from '../workout/types';
+import { allEntries, isStopped, type WorkoutBlock } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
 import { acceptKey, conductCoach, gatherSignals, type CoachInput } from './coachConductor';
 
@@ -142,5 +145,233 @@ describe('where the extra set goes', () => {
     } else {
       expect(action?.kind).toBe('focus');
     }
+  });
+});
+
+describe('the coach and a swap kept for weeks', () => {
+  it('never offers the exercise swapped out', () => {
+    const base = input();
+    const bare = { ...base, workout: { ...base.workout, blocks: base.workout.blocks.slice(0, 1) } };
+    const offered = (coachInput: CoachInput) => {
+      const action = coverageSignal(coachInput)?.action;
+      if (action?.kind !== 'recalibrate' || action.trigger.type !== 'add-exercise') {
+        throw new Error('expected an accessory');
+      }
+      return action.trigger.exerciseId;
+    };
+    expect(offered(bare)).toBe('cable-triceps-pushdown');
+    const swaps = withSwap([], 'cable-triceps-pushdown', 'overhead-triceps-extension', NOW);
+    expect(offered({ ...bare, swaps })).not.toBe('cable-triceps-pushdown');
+  });
+});
+
+describe('the coach and a lift that has stopped', () => {
+  it('offers no change to it: the engine would refuse the tap', () => {
+    const fading: StrategyInsight = {
+      kind: 'rep',
+      recommendation: 'increase-rest',
+      headline: 'Barbell Bench Press fades late in the sets',
+      why: ['Reps fall from 8 to 5 across the sets, three sessions running.'],
+      exerciseId: 'barbell-bench-press',
+      sessions: 3,
+      confidence: 'medium',
+      severity: 1,
+    };
+    const base: CoachInput = { ...input({ strategy: [fading] }), status: 'active' };
+    const bench = allEntries(base.workout.blocks)[0]!;
+    expect(bench.exerciseId).toBe('barbell-bench-press');
+    const aimedAtBench = (coachInput: CoachInput) =>
+      gatherSignals(coachInput).filter(
+        (signal) =>
+          signal.action?.kind === 'recalibrate' &&
+          'entryId' in signal.action.trigger &&
+          signal.action.trigger.entryId === bench.id,
+      );
+    // Before the swap, the note offers the longer rest.
+    expect(aimedAtBench(base).map((signal) => signal.headline)).toContain(fading.headline);
+    const first = bench.sets.findIndex((set) => set.kind === 'working');
+    const completed: CompletedWork = {
+      ...emptyCompleted(),
+      startedAt: NOW,
+      currentEntryId: bench.id,
+      sets: bench.sets.slice(0, first + 1).map((set) => ({
+        entryId: bench.id,
+        exerciseId: bench.exerciseId,
+        setIndex: set.index,
+        kind: set.kind,
+        reps: 8,
+        weight: 95,
+        rir: 2,
+        completedAt: NOW,
+      })),
+    };
+    const swapped = recalibrate({
+      trigger: { type: 'replace', entryId: bench.id, exerciseId: 'dumbbell-bench-press' },
+      workout: base.workout,
+      completed,
+      lockedEntryIds: [],
+      currentEntryId: bench.id,
+      duration: base.workout.duration.choice,
+      profile,
+      location: gym,
+      history: [],
+      constraints: emptyConstraints(),
+      reason: 'test',
+      timestamp: NOW,
+    });
+    if (!swapped.ok) throw new Error(swapped.error);
+    const after: CoachInput = { ...base, workout: swapped.workout, completed };
+    expect(aimedAtBench(after)).toEqual([]);
+  });
+});
+
+// The fourth review of Maintenance 22: each case below failed before its fix.
+describe('the coach aims its offers at lifts still to do', () => {
+  function swapAfter(
+    workout: CoachInput['workout'],
+    entryId: string,
+    exerciseId: string,
+    completed: CompletedWork,
+  ) {
+    const result = recalibrate({
+      trigger: { type: 'replace', entryId, exerciseId },
+      workout,
+      completed,
+      lockedEntryIds: [],
+      currentEntryId: entryId,
+      duration: workout.duration.choice,
+      profile,
+      location: gym,
+      history: [],
+      constraints: emptyConstraints(),
+      reason: 'test',
+      timestamp: NOW,
+    });
+    if (!result.ok) throw new Error(result.error);
+    return result.workout;
+  }
+
+  it('puts the extra set on the exercise that took over, not on the one that stopped', () => {
+    const base: CoachInput = { ...input(), status: 'active' };
+    const pushdown = allEntries(base.workout.blocks).find(
+      (entry) => entry.exerciseId === 'cable-triceps-pushdown',
+    )!;
+    const offer = (coachInput: CoachInput) => {
+      const action = coverageSignal(coachInput)?.action;
+      return action?.kind === 'recalibrate' ? action.label : null;
+    };
+    expect(offer(base)).toBe('Add a set to Cable Triceps Pushdown');
+    const first = pushdown.sets.find((set) => set.kind === 'working')!;
+    const completed: CompletedWork = {
+      ...emptyCompleted(),
+      startedAt: NOW,
+      currentEntryId: pushdown.id,
+      sets: [
+        {
+          entryId: pushdown.id,
+          exerciseId: pushdown.exerciseId,
+          setIndex: first.index,
+          kind: 'working',
+          reps: 0,
+          weight: null,
+          rir: null,
+          completedAt: NOW,
+          skipped: true,
+        },
+      ],
+    };
+    const workout = swapAfter(base.workout, pushdown.id, 'overhead-triceps-extension', completed);
+    expect(isStopped(allEntries(workout.blocks).find((entry) => entry.id === pushdown.id)!)).toBe(
+      true,
+    );
+    expect(offer({ ...base, workout, completed })).toBe('Add a set to Overhead Triceps Extension');
+  });
+
+  it('offers a stalled lift no step once it has stopped', () => {
+    const base: CoachInput = { ...input(), status: 'active', strategy: [] };
+    const bench = allEntries(base.workout.blocks)[0]!;
+    const stall: StallDiagnosis = {
+      exerciseId: 'barbell-bench-press',
+      kind: 'undershooting',
+      exposures: 3,
+      totalExposures: 4,
+      baselineE1rm: 200,
+      latestE1rm: 200,
+      effortMet: 0,
+      effortUnknown: 0,
+      firstDate: NOW,
+      lastDate: NOW,
+      why: ['Three exposures at the same estimated max, the sets ending easy.'],
+    };
+    const aimed = (coachInput: CoachInput) =>
+      gatherSignals({ ...coachInput, stalls: [stall] }).filter(
+        (signal) =>
+          signal.action?.kind === 'recalibrate' &&
+          'entryId' in signal.action.trigger &&
+          signal.action.trigger.entryId === bench.id,
+      );
+    expect(aimed(base)).toHaveLength(1);
+    // Its first working set skipped, then swapped: stopped, with nothing lifted on it.
+    const first = bench.sets.find((set) => set.kind === 'working')!;
+    const completed: CompletedWork = {
+      ...emptyCompleted(),
+      startedAt: NOW,
+      currentEntryId: bench.id,
+      sets: [
+        {
+          entryId: bench.id,
+          exerciseId: bench.exerciseId,
+          setIndex: first.index,
+          kind: 'working',
+          reps: 0,
+          weight: null,
+          rir: null,
+          completedAt: NOW,
+          skipped: true,
+        },
+      ],
+    };
+    const workout = swapAfter(base.workout, bench.id, 'dumbbell-bench-press', completed);
+    expect(isStopped(allEntries(workout.blocks).find((entry) => entry.id === bench.id)!)).toBe(
+      true,
+    );
+    expect(aimed({ ...base, workout, completed })).toEqual([]);
+  });
+
+  it('names a lift still to do on the shoulder card, never one that stopped', () => {
+    const shoulder = {
+      ...profile,
+      limitations: { ...profile.limitations, painAreas: ['shoulder' as const] },
+    };
+    const base: CoachInput = { ...input(), profile: shoulder, status: 'active', strategy: [] };
+    const bench = allEntries(base.workout.blocks)[0]!;
+    const upTo = bench.sets.findIndex((set) => set.kind === 'working');
+    const done: CompletedWork = {
+      ...emptyCompleted(),
+      startedAt: NOW,
+      currentEntryId: bench.id,
+      sets: bench.sets.slice(0, upTo + 1).map((set) => ({
+        entryId: bench.id,
+        exerciseId: bench.exerciseId,
+        setIndex: set.index,
+        kind: set.kind,
+        reps: 8,
+        weight: 95,
+        rir: 2,
+        completedAt: NOW,
+      })),
+    };
+    const workout = swapAfter(base.workout, bench.id, 'dumbbell-bench-press', done);
+    // The bench press's one working set deleted from its row: the stopped lift has a set not done.
+    const completed = { ...done, sets: done.sets.filter((set) => set.kind !== 'working') };
+    const cards = gatherSignals({ ...base, workout, completed }).filter(
+      (signal) => signal.source === 'profile limitations',
+    );
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.headline).not.toMatch(/Barbell Bench Press/);
+    expect(cards[0]!.action).toMatchObject({ kind: 'alternatives' });
+    expect(cards[0]!.action?.kind === 'alternatives' ? cards[0]!.action.entryId : null).not.toBe(
+      bench.id,
+    );
   });
 });

@@ -4,6 +4,7 @@ import { useAppSelector } from '../../core/state/useAppStore';
 import { useNow } from '../../core/time/clock';
 import { conductCoach, type CoachCard } from '../../engine/coach/coachConductor';
 import { coachingPolicy, type CoachingPolicy } from '../../engine/coach/experience';
+import { swapIsPast } from '../../engine/planning/lastingSwaps';
 import { planWeek } from '../../engine/planning/weeklyPlan';
 import { interpretFatigue, type FatigueSignal } from '../../engine/recovery/fatigue';
 import { analyzeStrategy, type StrategyInsight } from '../../engine/strategy/strategy';
@@ -31,6 +32,7 @@ export function useCoach(): CoachContext | null {
   const coachFocus = useAppSelector((state) => state.coachFocus);
   const locations = useAppSelector((state) => state.locations);
   const cloud = useAppSelector((state) => state.cloud);
+  const lastingSwaps = useAppSelector((state) => state.lastingSwaps);
   const nowEpoch = useNow();
 
   return useMemo(() => {
@@ -66,6 +68,7 @@ export function useCoach(): CoachContext | null {
       location,
       upcoming: planWeek(profile, location, history, now),
       focus: coachFocus?.muscle ?? null,
+      swaps: lastingSwaps.filter((swap) => !swapIsPast(swap, now)),
     });
     return { card, fatigue, strategy, policy };
   }, [
@@ -79,6 +82,7 @@ export function useCoach(): CoachContext | null {
     coachFocus,
     locations,
     cloud,
+    lastingSwaps,
     nowEpoch,
   ]);
 }

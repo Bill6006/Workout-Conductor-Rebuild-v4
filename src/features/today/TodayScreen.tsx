@@ -1,17 +1,27 @@
 import { useState } from 'react';
 import { routeHref } from '../../app/navigation';
-import { requireExercise } from '../../catalog/exercises/catalog';
+import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
+import { useToast } from '../../components/Toast/useToast';
 import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
 import { Card } from '../../components/Card/Card';
 import { ExerciseDetailSheet } from '../../components/ExerciseDetail/ExerciseDetailSheet';
 import { FactList } from '../../components/FactList/FactList';
 import { ScreenHeader } from '../../components/Screen/Screen';
+import { undoAvailable } from '../../core/state/session';
 import { useAppState, useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { formatDayLabel, useNow } from '../../core/time/clock';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
 import { buildRankingSignals } from '../../engine/alternatives/signals';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
-import { allEntries, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
+import {
+  allEntries,
+  isStopped,
+  planOwnExercise,
+  stoppedBefore,
+  type WorkoutBlock,
+  type WorkoutEntry,
+} from '../../engine/workout/types';
+import { stoppedNote } from '../../engine/workout/setText';
 import type { CoachAction, CoachSignal } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
 import { GOAL_OPTIONS, labelFor, styleLabel } from '../profile/labels';
@@ -37,6 +47,7 @@ function clockLabel(iso: string | null): string | null {
 export function TodayScreen() {
   const state = useAppState();
   const store = useAppStore();
+  const toast = useToast();
   const now = useNow();
   const today = useTodayWorkout();
   const [selected, setSelected] = useState<Selection | null>(null);
@@ -65,13 +76,25 @@ export function TodayScreen() {
 
   const { profile, location, workout, session, defaultEstimatedMinutes, context } = today;
   const selectedExercise = selected ? requireExercise(selected.entry.exerciseId) : null;
+  const logged: ReadonlySet<string> = new Set(
+    session.completed.sets
+      .filter((set) => !set.skipped)
+      .map((set) => `${set.entryId}:${set.setIndex}`),
+  );
+  // A stopped exercise has nothing left to change: its sheet says so in place of its actions.
+  const selectedStopped = selected !== null && isStopped(selected.entry);
   const alternatives =
-    selected && selectedExercise
+    selected && selectedExercise && !selectedStopped
       ? rankAlternatives({
           current: selectedExercise,
           context,
+          // The exercise a stand-in took over from is offered back; swapping to it picks it up.
           otherExercises: allEntries(workout.blocks)
-            .filter((entry) => entry.id !== selected.entry.id)
+            .filter(
+              (entry) =>
+                entry.id !== selected.entry.id &&
+                !stoppedBefore(workout.blocks, selected.entry).includes(entry),
+            )
             .map((entry) => requireExercise(entry.exerciseId)),
           supersetPartner:
             selected.block.kind === 'superset'
@@ -160,6 +183,7 @@ export function TodayScreen() {
 
       <WorkoutPreviewCard
         workout={workout}
+        logged={logged}
         defaultEstimatedMinutes={defaultEstimatedMinutes}
         location={location}
         onChangeLocation={() => setChoosingPlace(true)}
@@ -167,8 +191,12 @@ export function TodayScreen() {
         onDurationChange={(choice) => void store.setDurationChoice(choice)}
         summary={session.lastSummary}
         changes={session.lastChanges}
-        canUndo={session.previous !== null}
-        onUndo={() => store.undoRecalibration()}
+        canUndo={undoAvailable(session)}
+        onUndo={() => {
+          store.undoRecalibration().catch((error: unknown) => {
+            toast.show(error instanceof Error ? error.message : 'Undo could not finish', 'error');
+          });
+        }}
         onDismissSummary={() => store.dismissSummary()}
         endBy={{
           on: session.constraints.endBy !== null,
@@ -245,8 +273,13 @@ export function TodayScreen() {
         onClose={() => setSelected(null)}
         availableEquipment={context.availableEquipment}
         alternatives={alternatives}
+        stoppedNote={
+          selected && selectedStopped
+            ? stoppedNote(workout.blocks, selected.entry, logged)
+            : undefined
+        }
         sessionActions={
-          selected
+          selected && !selectedStopped
             ? {
                 pinned: selected.entry.pinned,
                 onPin: () =>
@@ -255,8 +288,20 @@ export function TodayScreen() {
                 onUncomfortable: () => act({ type: 'uncomfortable', entryId: selected.entry.id }),
                 onSkip: () => act({ type: 'skip', entryId: selected.entry.id }),
                 onPain: (joint) => act({ type: 'pain', entryId: selected.entry.id, joint }),
-                onUseAlternative: (exerciseId) =>
-                  act({ type: 'replace', entryId: selected.entry.id, exerciseId }),
+                onUseAlternative: (exerciseId, keep) => {
+                  const entryId = selected.entry.id;
+                  setSelected(null);
+                  store.swapExercise(entryId, exerciseId, keep).catch((error: unknown) => {
+                    toast.show(
+                      error instanceof Error ? error.message : 'The swap could not be kept',
+                      'error',
+                    );
+                  });
+                },
+                keepInPlaceOf: (
+                  getExercise(planOwnExercise(workout.blocks, selected.entry)) ??
+                  requireExercise(selected.entry.exerciseId)
+                ).name,
               }
             : undefined
         }

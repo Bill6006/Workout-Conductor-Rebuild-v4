@@ -5,10 +5,12 @@ import { ChipSelect } from '../../components/Form/ChipSelect';
 import { Field } from '../../components/Form/Field';
 import { BandBar } from '../../components/Charts/Bars';
 import { ScreenHeader } from '../../components/Screen/Screen';
+import { getExercise } from '../../catalog/exercises/catalog';
 import { muscleName } from '../../catalog/muscles/muscles';
 import { useNow } from '../../core/time/clock';
 import { durationLabel } from '../../engine/duration/duration';
 import { formatWindow, inDeloadWindow, recommendDeload } from '../../engine/planning/deload';
+import { swapIsPast } from '../../engine/planning/lastingSwaps';
 import { describeFocus, planWeek, recoveryBalance } from '../../engine/planning/weeklyPlan';
 import { interpretFatigue } from '../../engine/recovery/fatigue';
 import { muscleCoverage } from '../../engine/scoring/analytics';
@@ -203,6 +205,38 @@ export function PlanScreen() {
             </button>
           </div>
         ) : null}
+        {state.lastingSwaps.map((swap) => {
+          const from = getExercise(swap.from);
+          const to = getExercise(swap.to);
+          if (!from || !to || swapIsPast(swap, nowIso)) return null;
+          return (
+            <div key={swap.from} className={styles.status} data-testid="lasting-swap">
+              <strong>
+                {to.name} in place of {from.name}
+              </strong>
+              : your swap until{' '}
+              {new Date(swap.until).toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              })}
+              , wherever it fits.{' '}
+              <button
+                type="button"
+                className={styles.smallButton}
+                onClick={() => {
+                  store.stopLastingSwap(swap.from).catch(() => {
+                    toast.show('The swap could not be stopped. Try again.', 'error');
+                  });
+                }}
+                data-testid="lasting-swap-stop"
+                aria-label={`Stop using ${to.name} in place of ${from.name}`}
+              >
+                Stop
+              </button>
+            </div>
+          );
+        })}
         {state.deloadWeek ? (
           <div className={styles.status} data-testid="deload-planned">
             <strong>Deload week planned</strong>: {formatWindow(state.deloadWeek)}

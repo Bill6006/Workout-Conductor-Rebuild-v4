@@ -3,7 +3,7 @@ import { EQUIPMENT } from '../../catalog/equipment/equipment';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { holdById, targetText } from '../workout/setText';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
-import { muscleName } from '../../catalog/muscles/muscles';
+import { muscleName, type MuscleId } from '../../catalog/muscles/muscles';
 import { rankAlternatives } from '../alternatives/rankAlternatives';
 import {
   blocksCandidate,
@@ -32,20 +32,29 @@ import {
   type RampContext,
 } from '../progression/roles';
 import { barWeightFor, hasNoLoad } from '../progression/startingLoad';
+import { interpretFatigue } from '../recovery/fatigue';
 import { precedingWorkToday } from '../recovery/sessionContext';
+import { DELOAD_LOAD_SCALE, DELOAD_RIR_DELTA } from '../planning/deload';
 import {
+  closeAtLogged,
+  floorTarget,
   generateWorkout,
   rampContextFor,
+  scaleForDeload,
   sessionConflictContext,
   sessionWork,
   type GenerationConstraints,
   type KeptEntry,
   type PrescriptionAdjustment,
+  withSwapLines,
 } from '../workoutGenerator/generate';
 import {
   allEntries,
+  isStopped,
+  stoppedBefore,
   workingSets,
   type DurationChoice,
+  type EntryProgression,
   type GeneratedWorkout,
   type SetPrescription,
   type WorkoutBlock,
@@ -169,6 +178,15 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult 
     const workout: GeneratedWorkout = {
       ...outcome.workout,
       id: request.workout.id,
+      // A line about a kept swap says only what is still true of this workout.
+      explanation: {
+        ...outcome.workout.explanation,
+        reasons: withSwapLines(
+          outcome.workout.explanation.reasons,
+          outcome.workout.blocks,
+          request.swaps ?? [],
+        ),
+      },
       recalibration: {
         version: request.workout.recalibration.version + 1,
         lastTrigger: request.trigger.type,
@@ -356,6 +374,7 @@ function rebuild(
     deload: constraints.deload,
     focusMuscle: constraints.focus,
     sessionLoading: request.loading,
+    swaps: request.swaps,
   };
   return generateWorkout({
     profile: request.profile,
@@ -456,17 +475,20 @@ function loadingOf(request: RecalibrationRequest, exercise: CatalogExercise): Lo
 /**
  * Session context for one entry: what the entries before it have done today
  * (all of them, for an entry not yet in the workout), and the ramp it deserves.
+ * `through` counts the entry's own logged sets too, for an exercise picking up again.
  */
 function sessionContextFor(
   request: RecalibrationRequest,
   workout: GeneratedWorkout,
   entryId: string | null,
   exercise: CatalogExercise,
+  through = false,
 ): { precedingSets: number; afterBreak: boolean; ramp: RampContext } {
   const before: WorkoutEntry[] = [];
   for (const entry of allEntries(workout.blocks)) {
-    if (entry.id === entryId) break;
+    if (entry.id === entryId && !through) break;
     before.push(entry);
+    if (entry.id === entryId) break;
   }
   const earlier = sessionWork(before, request.completed.sets, requireExercise);
   const preceding = precedingWorkToday(exercise, earlier, request.timestamp);
@@ -475,6 +497,73 @@ function sessionContextFor(
     afterBreak: preceding.afterBreak,
     ramp: rampContextFor(exercise, earlier, preceding.afterBreak),
   };
+}
+
+/**
+ * Sets for an exercise taking a place in today's workout: its own target from its history, with
+ * the work already done before it today and what this place can load, and the ramps the session
+ * calls for. `working` null takes the prescription's count; set indices start at `from`.
+ */
+function targetedSets(
+  request: RecalibrationRequest,
+  workout: GeneratedWorkout,
+  entryId: string,
+  exercise: CatalogExercise,
+  role: TrainingRole,
+  working: number | null,
+  restSeconds: number,
+  options: { from?: number; through?: boolean } = {},
+): { sets: SetPrescription[]; warmupSets: number; progression: EntryProgression } {
+  // A deload week covering the session lightens it like every exercise the plan picks: one
+  // more rep in reserve and lighter loads; its set count is the one it takes over.
+  const deload = request.constraints.deload !== null;
+  const base = prescribeFor(exercise, role, request.profile, request.history);
+  const prescription = deload ? { ...base, rir: Math.min(4, base.rir + DELOAD_RIR_DELTA) } : base;
+  const context = sessionContextFor(request, workout, entryId, exercise, options.through);
+  const target = recommendNextTarget({
+    exercise,
+    role,
+    prescription,
+    history: request.history,
+    profile: request.profile,
+    fatigueLevel: interpretFatigue(
+      request.history,
+      request.timestamp,
+      request.constraints.readiness,
+    ).level,
+    now: request.timestamp,
+    maxes: request.maxes,
+    session: { precedingSets: context.precedingSets },
+  });
+  const loading = loadingOf(request, exercise);
+  const floor = barWeightFor(exercise, request.profile.units);
+  const fitted = capTarget(
+    floorTarget(
+      scaleForDeload(
+        target,
+        deload ? { sets: 0, rir: 0, restFactor: 1, loadScale: DELOAD_LOAD_SCALE } : undefined,
+        loading.step,
+      ),
+      floor,
+    ),
+    loading,
+    request.profile.units,
+  );
+  const warmupSets = rampSetsFor(exercise, role, workout.duration.targetMinutes, context.ramp, {
+    weight: fitted.weight,
+    step: loading.step,
+    floor,
+  });
+  const from = options.from ?? 0;
+  const sets = applyProgression(
+    buildSets({ ...prescription, sets: working ?? prescription.sets, restSeconds }, warmupSets),
+    fitted,
+    loading.step,
+    {},
+    floor,
+    loading,
+  ).map((set) => ({ ...set, index: set.index + from }));
+  return { sets, warmupSets, progression: summarizeProgression(fitted) };
 }
 
 /**
@@ -523,67 +612,265 @@ function dropSetAt(index: number): SetPrescription {
   };
 }
 
-/** Swaps the exercise of one entry, keeping its role, rest, and any logged sets exactly as they are. */
+/** An entry id the workout does not use yet. */
+function spareEntryId(workout: GeneratedWorkout): string {
+  const numbers = allEntries(workout.blocks).map((entry) =>
+    Number(/^e(\d+)$/.exec(entry.id)?.[1] ?? 0),
+  );
+  return `e${Math.max(0, ...numbers) + 1}`;
+}
+
+/** The muscles an entry was chosen for, as far as the exercise swapped in trains them. */
+function chosenForSwap(chosenFor: readonly MuscleId[], exercise: CatalogExercise): MuscleId[] {
+  const overlap = chosenFor.filter((muscle) => exercise.primaryMuscles.includes(muscle));
+  return overlap.length > 0 ? overlap : [...exercise.primaryMuscles];
+}
+
+function pairedId(kind: WorkoutBlock['kind'], members: readonly WorkoutEntry[]): string {
+  return `${kind === 'circuit' ? 'c' : 's'}-${members.map((member) => member.id).join('-')}`;
+}
+
+function straightFor(member: WorkoutEntry): WorkoutBlock {
+  return {
+    id: `b-${member.id}`,
+    kind: 'straight',
+    label: requireExercise(member.exerciseId).name,
+    entries: [member],
+    rounds: workingSets(member).length,
+    restBetweenRoundsSeconds: member.restSeconds,
+  };
+}
+
+/**
+ * Ends a pairing whose rounds can no longer line up: the entry leaving (and a stand-in after it)
+ * runs its own sets, and the moves left run theirs, still paired when two or more are left.
+ */
+function endPairing(
+  workout: GeneratedWorkout,
+  block: WorkoutBlock,
+  leaving: WorkoutEntry,
+  following: WorkoutEntry[] = [],
+): void {
+  const at = workout.blocks.indexOf(block);
+  const others = block.entries.filter((member) => member !== leaving);
+  const rest: WorkoutBlock[] =
+    others.length >= 2
+      ? [
+          {
+            ...block,
+            kind: others.length === 2 ? 'superset' : 'circuit',
+            id: pairedId(others.length === 2 ? 'superset' : 'circuit', others),
+            entries: others,
+          },
+        ]
+      : others.map(straightFor);
+  for (const paired of rest) {
+    syncRounds(paired);
+    relabel(paired);
+  }
+  workout.blocks.splice(at, 1, straightFor(leaving), ...following.map(straightFor), ...rest);
+}
+
+/**
+ * Puts a stand-in right after the entry it follows. In a pairing whose rounds have not started
+ * it takes the stopped move's place and the pairing goes on. Once rounds are under way the
+ * moves' sets no longer line up round by round, so the pairing ends and each move runs its own
+ * sets from here.
+ */
+function placeStandIn(
+  workout: GeneratedWorkout,
+  entry: WorkoutEntry,
+  block: WorkoutBlock,
+  stand: WorkoutEntry,
+  isDone: SetDonePredicate,
+): void {
+  const at = workout.blocks.indexOf(block);
+  if (block.kind === 'straight') {
+    workout.blocks.splice(at + 1, 0, straightFor(stand));
+    return;
+  }
+  const others = block.entries.filter((member) => member !== entry);
+  const underway = others.some((member) =>
+    member.sets.some((set) => set.kind === 'working' && isDone(member.id, set.index)),
+  );
+  if (!underway) {
+    block.entries = block.entries.map((member) => (member === entry ? stand : member));
+    block.id = pairedId(block.kind, block.entries);
+    syncRounds(block);
+    relabel(block);
+    workout.blocks.splice(at, 0, straightFor(entry));
+    return;
+  }
+  endPairing(workout, block, entry, [stand]);
+}
+
+/**
+ * Swaps the exercise of one entry. An entry not started takes the new exercise whole, keeping
+ * its role and rest. One with sets logged or skipped keeps them under the exercise they were
+ * done on (Maintenance 22): it stops there, and the new exercise follows it for the working sets
+ * still to come, targeted as its own lift after today's work. Before, the entry was renamed and
+ * kept the old exercise's targets (a barbell's weight asked of each dumbbell) and filed the sets
+ * already logged under the new name. Swapping to an exercise stopped earlier today picks that one
+ * up again instead of adding it twice.
+ */
 function applySubstitution(
+  workout: GeneratedWorkout,
   entry: WorkoutEntry,
   block: WorkoutBlock,
   exercise: CatalogExercise,
   request: RecalibrationRequest,
   lock: boolean,
 ): void {
-  const logged = request.completed.sets.some((set) => set.entryId === entry.id);
+  const earlier = stoppedBefore(workout.blocks, entry).find(
+    (candidate) => candidate.exerciseId === exercise.id,
+  );
+  if (earlier) {
+    swapBack(workout, entry, earlier, request, lock);
+    return;
+  }
+  if (request.completed.sets.some((set) => set.entryId === entry.id)) {
+    standIn(workout, entry, block, exercise, request, lock);
+    return;
+  }
   const previousId = entry.exerciseId;
-  if (!logged) {
-    const prescription = prescribeFor(exercise, entry.role, request.profile, request.history);
-    const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
-    const context = sessionContextFor(request, request.workout, entry.id, exercise);
-    const target = recommendNextTarget({
-      exercise,
-      role: entry.role,
-      prescription,
-      history: request.history,
-      profile: request.profile,
-      now: request.timestamp,
-      maxes: request.maxes,
-      session: { precedingSets: context.precedingSets },
-    });
-    const loading = loadingOf(request, exercise);
-    const fitted = capTarget(target, loading, request.profile.units);
-    const warmupSets = rampSetsFor(
-      exercise,
-      entry.role,
-      request.workout.duration.targetMinutes,
-      context.ramp,
-      {
-        weight: fitted.weight,
-        step: loading.step,
-        floor: barWeightFor(exercise, request.profile.units),
-      },
-    );
-    entry.sets = applyProgression(
-      buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
-      fitted,
-      loading.step,
-      {},
-      barWeightFor(exercise, request.profile.units),
-      loading,
-    );
-    entry.progression = summarizeProgression(fitted);
-    entry.warmupSets = warmupSets;
-    if (entry.dropSet) {
-      if (exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
-      else entry.dropSet = false;
-    }
-  } else if (entry.dropSet && !exercise.dropSetSafe) {
-    entry.sets = entry.sets.filter((set) => set.kind !== 'drop');
-    entry.dropSet = false;
+  const working = entry.sets.filter((set) => set.kind === 'working').length;
+  const built = targetedSets(
+    request,
+    workout,
+    entry.id,
+    exercise,
+    entry.role,
+    working || null,
+    entry.restSeconds,
+  );
+  entry.sets = built.sets;
+  entry.progression = built.progression;
+  entry.warmupSets = built.warmupSets;
+  if (entry.dropSet) {
+    if (exercise.dropSetSafe) entry.sets.push(dropSetAt(nextSetIndex(entry)));
+    else entry.dropSet = false;
   }
   entry.exerciseId = exercise.id;
-  entry.replacedFrom = previousId;
+  // Swapped again, it still says what today's plan had; swapped back to that, it says nothing.
+  // What a kept swap put it in for (`standsFor`) stays: the keep switch reads it.
+  const own = entry.replacedFrom ?? previousId;
+  if (own === exercise.id) delete entry.replacedFrom;
+  else entry.replacedFrom = own;
   entry.locked = lock || entry.locked;
-  const overlap = entry.chosenFor.filter((muscle) => exercise.primaryMuscles.includes(muscle));
-  entry.chosenFor = overlap.length > 0 ? overlap : [...exercise.primaryMuscles];
+  entry.chosenFor = chosenForSwap(entry.chosenFor, exercise);
   relabel(block);
+}
+
+/** A started entry stops at its logged sets, and the new exercise follows it for the rest. */
+function standIn(
+  workout: GeneratedWorkout,
+  entry: WorkoutEntry,
+  block: WorkoutBlock,
+  exercise: CatalogExercise,
+  request: RecalibrationRequest,
+  lock: boolean,
+): void {
+  const { isDone } = classify(request);
+  const owed = entry.sets.filter(
+    (set) => set.kind === 'working' && !isDone(entry.id, set.index),
+  ).length;
+  const dropOwed = entry.sets.some((set) => set.kind === 'drop' && !isDone(entry.id, set.index));
+  closeAtLogged(entry, isDone, 'swap');
+  syncRounds(block);
+  relabel(block);
+  if (owed === 0) return;
+  const stand: WorkoutEntry = {
+    id: spareEntryId(workout),
+    exerciseId: exercise.id,
+    role: entry.role,
+    sets: [],
+    restSeconds: entry.restSeconds,
+    warmupSets: 0,
+    dropSet: false,
+    chosenFor: chosenForSwap(entry.chosenFor, exercise),
+    locked: lock || entry.locked,
+    pinned: false,
+    ...(entry.slot === undefined ? {} : { slot: entry.slot }),
+    replacedFrom: entry.exerciseId,
+  };
+  placeStandIn(workout, entry, block, stand, isDone);
+  const built = targetedSets(
+    request,
+    workout,
+    stand.id,
+    exercise,
+    entry.role,
+    owed,
+    entry.restSeconds,
+  );
+  stand.sets = built.sets;
+  stand.warmupSets = built.warmupSets;
+  stand.progression = built.progression;
+  if (dropOwed && exercise.dropSetSafe) {
+    stand.sets.push(dropSetAt(nextSetIndex(stand)));
+    stand.dropSet = true;
+  }
+  const { block: home } = findEntry(workout, stand.id);
+  syncRounds(home);
+  relabel(home);
+  if (stand.warmupSets > 0) workout.warmup.rampEntryIds.push(stand.id);
+}
+
+/**
+ * Swapping to an exercise stopped earlier today picks it up again for the working sets the
+ * swapped entry still owed, instead of adding it twice. The swapped entry stops at its logged
+ * sets, or goes when it has none.
+ */
+function swapBack(
+  workout: GeneratedWorkout,
+  entry: WorkoutEntry,
+  stopped: WorkoutEntry,
+  request: RecalibrationRequest,
+  lock: boolean,
+): void {
+  const { isDone } = classify(request);
+  const owed = entry.sets.filter(
+    (set) => set.kind === 'working' && !isDone(entry.id, set.index),
+  ).length;
+  const dropOwed = entry.sets.some((set) => set.kind === 'drop' && !isDone(entry.id, set.index));
+  if (request.completed.sets.some((set) => set.entryId === entry.id)) {
+    const { block } = findEntry(workout, entry.id);
+    closeAtLogged(entry, isDone, 'swap');
+    // Stopped inside a pairing, it leaves it: the rounds no longer line up.
+    if (block.kind === 'straight') {
+      syncRounds(block);
+      relabel(block);
+    } else {
+      endPairing(workout, block, entry);
+    }
+  } else {
+    removeEntry(workout, entry.id);
+  }
+  if (owed === 0) return;
+  const exercise = requireExercise(stopped.exerciseId);
+  const built = targetedSets(
+    request,
+    workout,
+    stopped.id,
+    exercise,
+    stopped.role,
+    owed,
+    stopped.restSeconds,
+    { from: nextSetIndex(stopped), through: true },
+  );
+  stopped.sets = [...stopped.sets, ...built.sets];
+  if (dropOwed && exercise.dropSetSafe) stopped.sets.push(dropSetAt(nextSetIndex(stopped)));
+  stopped.warmupSets = stopped.sets.filter((set) => set.kind === 'warmup').length;
+  stopped.dropSet = stopped.sets.some((set) => set.kind === 'drop');
+  stopped.progression = built.progression;
+  stopped.locked = lock || stopped.locked;
+  delete stopped.stopped;
+  const { block } = findEntry(workout, stopped.id);
+  syncRounds(block);
+  relabel(block);
+  if (built.warmupSets > 0 && !workout.warmup.rampEntryIds.includes(stopped.id)) {
+    workout.warmup.rampEntryIds.push(stopped.id);
+  }
 }
 
 function removeEntry(workout: GeneratedWorkout, entryId: string): WorkoutEntry {
@@ -608,11 +895,6 @@ function removeEntry(workout: GeneratedWorkout, entryId: string): WorkoutEntry {
   }
   workout.warmup.rampEntryIds = workout.warmup.rampEntryIds.filter((id) => id !== entryId);
   return entry;
-}
-
-function isFullyDone(entry: WorkoutEntry, isDone: SetDonePredicate): boolean {
-  const working = entry.sets.filter((set) => set.kind === 'working');
-  return working.length > 0 && working.every((set) => isDone(entry.id, set.index));
 }
 
 function gentleOn(exercise: CatalogExercise, joint: Joint | undefined): boolean {
@@ -715,7 +997,7 @@ function substituteUnfit(
   let replaced = 0;
   let removed = 0;
   for (const entry of allEntries(workout.blocks)) {
-    if (isFullyDone(entry, isDone)) continue;
+    if (!entry.sets.some((set) => set.kind === 'working' && !isDone(entry.id, set.index))) continue;
     const exercise = requireExercise(entry.exerciseId);
     const blocked = isBlocked(checkExerciseFit(exercise, context));
     const forced = entry.id === options.forceEntryId;
@@ -726,7 +1008,7 @@ function substituteUnfit(
       preferLowStressOn: options.joint,
     });
     if (alternative && (blocked || forced || gentleOn(alternative, options.joint))) {
-      applySubstitution(entry, block, alternative, request, false);
+      applySubstitution(workout, entry, block, alternative, request, false);
       replaced += 1;
     } else if (blocked || forced) {
       removeEntry(workout, entry.id);
@@ -756,8 +1038,28 @@ function readinessAdjustment(readiness: Readiness): PrescriptionAdjustment | und
   return { sets: -1, rir: low ? 1 : 0, restFactor: 1 };
 }
 
+/** Changes that make no sense on an exercise that has stopped: its sets went to a stand-in. */
+const STOPPED_REFUSES: ReadonlySet<string> = new Set([
+  'sets',
+  'add-warmup',
+  'rep-range',
+  'drop-set',
+  'target-weight',
+  'rest-adjust',
+  'pin',
+  'equipment-busy',
+]);
+
 function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outcome {
   const { trigger } = request;
+  if ('entryId' in trigger && STOPPED_REFUSES.has(trigger.type)) {
+    const target = allEntries(request.workout.blocks).find((entry) => entry.id === trigger.entryId);
+    if (target && isStopped(target)) {
+      throw new Error(
+        `${requireExercise(target.exerciseId).name} has stopped: nothing is left to change on it.`,
+      );
+    }
+  }
   const constraints = cloneConstraints(request.constraints);
   const base: Outcome = {
     workout: request.workout,
@@ -817,7 +1119,14 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const fit = checkExerciseFit(next, context);
       const blocked = fit.find((conflict) => conflict.severity === 'block');
       if (blocked) throw new Error(blocked.message);
-      applySubstitution(entry, block, next, request, true);
+      const { isDone } = classify(request);
+      if (
+        request.completed.sets.some((set) => set.entryId === entry.id) &&
+        !entry.sets.some((set) => set.kind === 'working' && !isDone(entry.id, set.index))
+      ) {
+        throw new Error(`${previous.name} is done: nothing is left to swap.`);
+      }
+      applySubstitution(workout, entry, block, next, request, true);
       refresh(workout, request, constraints);
       return {
         ...base,
@@ -875,13 +1184,17 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const workout = cloneWorkout(request.workout);
       const { entry, block } = findEntry(workout, trigger.entryId);
       const previous = requireExercise(entry.exerciseId);
+      const { isDone } = classify(request);
+      if (!entry.sets.some((set) => set.kind === 'working' && !isDone(entry.id, set.index))) {
+        throw new Error(`${previous.name} is done: nothing is left to swap.`);
+      }
       constraints.avoidExerciseIds = [
         ...new Set([...constraints.avoidExerciseIds, entry.exerciseId]),
       ];
       const context = contextFor(request, constraints);
       const alternative = bestAlternative(request, workout, entry, block, context);
       if (alternative) {
-        applySubstitution(entry, block, alternative, request, false);
+        applySubstitution(workout, entry, block, alternative, request, false);
         refresh(workout, request, constraints);
         return {
           ...base,
@@ -913,6 +1226,11 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       constraints.avoidExerciseIds = [
         ...new Set([...constraints.avoidExerciseIds, removed.exerciseId]),
       ];
+      // Skipping an exercise that carried a stopped one's sets skips those sets too: nothing
+      // brings them back at the next rebuild.
+      for (const stopped of stoppedBefore(workout.blocks, removed)) {
+        stopped.stopped = { owed: stopped.stopped?.owed ?? 0, why: 'skip' };
+      }
       refresh(workout, request, constraints);
       const saved = Math.max(0, before - workout.duration.estimatedMinutes);
       return {
@@ -1082,7 +1400,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const { isDone } = classify(request);
       let updated = 0;
       for (const entry of allEntries(workout.blocks)) {
-        if (entry.manual?.weight) continue;
+        if (entry.manual?.weight || isStopped(entry)) continue;
         const logged = request.completed.sets.some(
           (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
         );
@@ -1162,6 +1480,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       let hasHistory = false;
       for (const entry of allEntries(workout.blocks)) {
         const own = entry.exerciseId === trigger.exerciseId;
+        if (isStopped(entry)) continue;
         if (!own && entry.progression?.mode !== 'start') continue;
         const logged = request.completed.sets.some(
           (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,

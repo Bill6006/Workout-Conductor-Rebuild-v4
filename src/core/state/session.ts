@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { LastingSwap } from '../../engine/planning/lastingSwaps';
 import type { SessionLoading } from '../../engine/loading/loading';
 import type { PersonalRecord } from '../../engine/scoring/personalRecords';
 import { PersonalRecordSchema } from '../validation/workoutRecord';
@@ -31,6 +32,19 @@ import { SessionRatingSchema, type SessionRating } from '../validation/workoutRe
  */
 
 export const SESSION_KEY = 'wc.v1.session';
+
+/** Kept swaps as a snapshot holds them; an unreadable list is dropped, never the workout. */
+const SwapListSchema = z
+  .array(
+    z.looseObject({
+      from: z.string(),
+      to: z.string(),
+      setAt: z.string(),
+      until: z.string(),
+    }),
+  )
+  .optional()
+  .catch(undefined);
 export const CALIBRATION_LOG_LIMIT = 8;
 
 export type SessionStatus = 'preview' | 'active' | 'paused' | 'completed';
@@ -49,6 +63,13 @@ export interface SessionSnapshot {
   workout: GeneratedWorkout;
   constraints: SessionConstraints;
   duration: DurationChoice;
+  /**
+   * The lasting swaps as they were before this change kept one (Maintenance 22): Undo puts them
+   * back with the workout. Saved with the session, so Undo works after the app is reopened.
+   */
+  swapsBefore?: LastingSwap[];
+  /** The lasting swaps right after that change, so Undo takes back only what it did. */
+  swapsAfter?: LastingSwap[];
 }
 
 export interface RestState {
@@ -118,6 +139,28 @@ export interface CompletionSummary {
   recoveryNote: string;
   nextTargets: string[];
   nextFocus: string;
+}
+
+/**
+ * Whether Undo can put the previous workout back (Maintenance 22): only while every set logged
+ * so far has its place there, on the same exercise and as the same kind of set, so none is lost
+ * or filed as something else. A set logged on an exercise a swap or the coach brought in, on a
+ * set a change added, or where a new length turned a warm-up into a working set, ends it, and so
+ * does finishing the workout.
+ */
+export function undoAvailable(session: WorkoutSession): boolean {
+  const previous = session.previous;
+  // A finished workout is saved as it was done: nothing takes it back.
+  if (!previous || session.status === 'completed') return false;
+  const byId = new Map(allEntries(previous.workout.blocks).map((entry) => [entry.id, entry]));
+  return session.completed.sets.every((set) => {
+    const entry = byId.get(set.entryId);
+    return (
+      entry !== undefined &&
+      entry.exerciseId === set.exerciseId &&
+      entry.sets.some((planned) => planned.index === set.setIndex && planned.kind === set.kind)
+    );
+  });
 }
 
 export interface WorkoutSession {
@@ -320,6 +363,8 @@ const SessionSchema = z.looseObject({
       workout: GeneratedWorkoutSchema,
       constraints: ConstraintsSchema,
       duration: DurationChoiceSchema,
+      swapsBefore: SwapListSchema,
+      swapsAfter: SwapListSchema,
     })
     .nullable(),
   log: z.array(
