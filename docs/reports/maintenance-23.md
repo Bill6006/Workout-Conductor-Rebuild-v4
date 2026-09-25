@@ -220,7 +220,7 @@ fails when that fix alone is taken back out; two are left (below).
   line promising more reps. They stay, and the line names the load alone.
 - **A drop set still to come stayed on a started lift the weights now push.** It comes off.
 - **Left:** a deload week at a place whose weights make less than asked (Known limits), and the
-  coach's "add an exercise" at such a place, which predates this round (Proposed 35).
+  coach's "add an exercise" at such a place, which predates this round (Agreed 35).
 
 ## Checking the third review's fixes
 
@@ -475,8 +475,9 @@ All 174 reverts are caught.
   Incline Dumbbell Press on the push day at 30 minutes, Chest-Supported Row and Dumbbell Romanian
   Deadlift on the full-body day at 30 and 45. On the pull day at 30 minutes it leaves out
   Chin-Up while two 25-30 rep shrug sets stay, because on short sessions the time fit keeps paired
-  moves first. Default-length sessions keep every exercise and run up to 5 minutes longer. Which
-  exercise gives way is the owner's call: Proposed 33.
+  moves first. Default-length sessions keep every exercise and run up to 5 minutes longer.
+  Agreed 33 changes which exercise gives way: the main lifts stay and an isolation exercise goes
+  first (`docs/research/short-sessions.md`).
 - A plan saved before this update keeps a Dead Bug drop set that was already planned until it is
   refreshed or planned again; a new day's plan never has one. In such a plan, a lift the step rule
   held is pushed if the weights change mid-lift.
@@ -487,7 +488,8 @@ All 174 reverts are caught.
   asked, since the load asked holds while the weights cannot make it. It returns once the lift is
   trained where they do; at the gym, the next session.
 - Unchanged from before: a change of place or length rebuilds the rest of the workout without
-  "Make it harder" (Proposed 34); and the "Last:" line shows a session's heaviest weight beside
+  "Make it harder" (Agreed 34, `docs/research/effort-setting.md`); and the "Last:" line shows a
+  session's heaviest weight beside
   every set's reps, so a lift whose weight moved mid-session reads as if every set was at it.
 - Unchanged from before, found by the fourth review: a miss at the gym and then a short miss at
   home deloads from the home weight (60 lb to 45 lb, 25% at the gym, not 10%); the fatigue read
@@ -511,7 +513,7 @@ All 174 reverts are caught.
   then shows the heaviest weight there, with the reps that reach the effort.
 - The coach's load offers ("Take 25 lb today", a deload) and rep-range routes, like its "add an
   exercise", do not look at the weights at the place or a deload week (older than this round;
-  Proposed 35). A weight the coach sets now follows the push's rule.
+  Agreed 35). A weight the coach sets now follows the push's rule.
 - Unchanged from before: when reps are set by hand for the set in front, its reps dial keeps the
   number it showed until that set is logged or its card opens again; the target under the dial
   shows the new range at once.
@@ -526,8 +528,8 @@ All 174 reverts are caught.
   suite (309 passed, 14 skipped by design, none failed).
 - Every fix was also taken out on its own to watch its test fail: all 174 reverts are caught (The
   complete revert run, above).
-- Build `db22916` was deployed by Deploy Pages run 36078688657. The live bundle carries the build and the
-  new text.
+- Build `db22916` was deployed by Deploy Pages run 36078688657. The live bundle carries the build
+  and the new text.
 - The browser suite against the live URL: 306 passed, 14 skipped by design. One cloud-recovery
   test (desktop) timed out once waiting for Sync now's result and passed in 3 of 3 reruns; the 2
   installed-app tests it held back then passed on their own. Nothing in this round touches
