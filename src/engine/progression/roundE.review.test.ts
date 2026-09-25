@@ -454,26 +454,34 @@ describe('the history notes', () => {
 
 describe('a set pushed to its effort', () => {
   it('takes no drop set in the plan', () => {
-    const allowed = { ...profile, programStyle: 'hypertrophy-focus' as ProgramStyle };
-    allowed.techniques = { ...allowed.techniques, dropSets: true };
     let pushedEntries = 0;
-    for (const templateId of ['push-arms', 'pull-arms', 'upper', 'full-body', 'lower']) {
-      for (const duration of [15, 30, 45, 'default'] as const) {
-        const plan = generateWorkout({
-          profile: allowed,
-          location: lightHome,
-          history: [],
-          now: NOW,
-          duration,
-          constraints: { templateId },
-        });
-        for (const entry of allEntries(plan.blocks)) {
-          if (entryPushedToEffort(entry)) pushedEntries += 1;
-          if (entry.dropSet)
-            expect([entry.exerciseId, entryPushedToEffort(entry)]).toEqual([
-              entry.exerciseId,
-              false,
-            ]);
+    // An advanced lifter too: since Maintenance 24 short sessions leave the isolation moves out
+    // first, and at 30 minutes the advanced pull day keeps a pushed shrug in the drop set's place.
+    for (const experience of [profile.experience, 'advanced'] as const) {
+      const allowed = {
+        ...profile,
+        experience,
+        programStyle: 'hypertrophy-focus' as ProgramStyle,
+      };
+      allowed.techniques = { ...allowed.techniques, dropSets: true };
+      for (const templateId of ['push-arms', 'pull-arms', 'upper', 'full-body', 'lower']) {
+        for (const duration of [15, 30, 45, 'default'] as const) {
+          const plan = generateWorkout({
+            profile: allowed,
+            location: lightHome,
+            history: [],
+            now: NOW,
+            duration,
+            constraints: { templateId },
+          });
+          for (const entry of allEntries(plan.blocks)) {
+            if (entryPushedToEffort(entry)) pushedEntries += 1;
+            if (entry.dropSet)
+              expect([entry.exerciseId, entryPushedToEffort(entry)]).toEqual([
+                entry.exerciseId,
+                false,
+              ]);
+          }
         }
       }
     }

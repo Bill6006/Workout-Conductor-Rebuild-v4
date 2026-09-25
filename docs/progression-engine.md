@@ -80,6 +80,44 @@ Actions map to existing systems: recalibration triggers (target weight, rep rang
 adjust, drop set, duration, add exercise), the rest timer, the readiness check-in, the
 alternatives sheet, a backup export, or a coach focus for the next session.
 
+Since Maintenance 24 a weight the coach offers is one ordinary step, onto a weight the place makes
+today, missing plates counted (`heavierHere`, `lighterHere`). "Take N today" is one step up (5 lb
+for dumbbells and bars, 10 lb for a stack) from the weight last lifted (`progression.from`), fitted
+onto the weights there, so a weight off the step grid takes one step, not a step and a half (the
+plan's own step rounds onto the grid: `stepUp`). A micro-deload is the plan's (`microDeload`: a
+tenth off, at least one step) from today's target or the weight last lifted, whichever is heavier,
+fitted the same way; a cut bigger than about a tenth (at a light weight, or onto the weights here)
+says how big ("15 lb, 25% lighter, rebuilds the reps before adding load again"). A set the weights
+here push (it shows less than the plan asks, `asked`) is offered no step up, and comes down from the
+weight it shows. On a lighter day the plan chose, read from its own reasons and never from the
+weights alone (a mode of `return`, `estimate`, `deload` or `regress`, or a step down for the work
+before the lift today or the lifter's habit, which the target records as `nudged`), no step up is
+offered and a micro-deload card is left out: its own note says why. A plan saved before targets
+recorded `nudged`, one kept from the day this update lands, is read by its own lines
+(`stepsOfSessionLine`, `stepsOfHabitLine`). A weight set by hand under the one last lifted, the
+coach's own deload taken among them, is a lighter day too. A weight the place only rounded down
+(52.5 typed where a gym's dumbbells go by 5, shown as 50) is not a lighter day; at a place whose
+dumbbells are listed, the plan pushes such a set to its effort instead, and a pushed set is offered
+no step up. Where the place makes no such weight (the heaviest weight there, a gap in the dumbbells,
+a plate missing, nothing lighter), the card is left out, the lift under way or not, rather than
+shown with a step the app cannot take; at a gap the plan holds the load and raises the reps (see the
+report's known limits). Where today's target already has the step (the plan's own, or one for the
+session) or is already a tenth or more lighter (its deload, a reset, a return after a break), the
+card is left out too, and the coach never offers a second step on top of it. That holds for a
+stalled lift's deload step, which is then left out that day rather than passed over. When the place
+moves the step onto a nearer weight, the card's reason names that weight. A stalled lift's route
+step the weights here cannot give is passed over, and the card offers the next step: a new rep range
+on sets the weights hold well short of the load they stand in for (it could not be loaded at the
+same effort), or a deload with nothing lighter here. The weights alone decide it, and the button
+waits for a lift not yet begun. Taking the next step moves the route on, so it never stops at a step
+this place cannot give; the route line marks the step "(passed over)" while this place cannot give
+it, once the next step is taken it is not offered again, and a route done with steps passed over
+says so rather than that every step was tried. A set the weights hold only a little short shifts
+from the range it stands in for. A route step that changes the plan (`takeCoachChange`) is in place
+while the change runs, so its card never offers it again once the overlay goes, is saved once the
+change lands, and is taken back when it fails; one that opens a sheet (a variation, a different
+exercise) is recorded as the sheet opens.
+
 Every card ends in a tap or a must-know. Cards that only restated a target or a fact are gone:
 the superset readout lives on the superset card, the logging tip sits under the first working
 set until a weight is logged, and a coverage note with nothing to tap never reaches the card.
@@ -131,7 +169,8 @@ Deloads, resets, extra-set offers, safety, recovery, coverage, and stalls speak 
 - A stall is the newest N exposures with no estimated max more than 1 percent above the oldest
   of them, at the prescribed effort (average RIR within half a rep of the target). Sets ending
   1.5 reps or more above the target RIR in at least half the exposures are diagnosed as
-  undershooting instead, and the next load step is offered. Two or more exposures under the rep
+  undershooting instead, and the plan's next load step is offered where the place makes it
+  (Maintenance 24). Two or more exposures under the rep
   floor are left to the deload rules, and a latest exposure at the top of the range is left to
   progression.
 - A stalled lift opens a route: shift the rep range (strength range to hypertrophy range or
@@ -238,12 +277,22 @@ elevated, and high keep their meaning.
 ## Deload week (`src/engine/planning/deload.ts`)
 
 A deload week is recommended on the Plan tab when the last fortnight held six or more sessions,
-fatigue is elevated or high, and at least one sign says the body is not keeping up: maxes
-slipping, sets running closer to failure than planned, hard ratings, or poor check-ins. "Plan
-it" saves the week (the next available training day plus seven days) in the meta store. While it
-runs, every generated session carries one set fewer per exercise, one more rep in reserve, and
-loads ten percent lighter, and "Why this workout" says so. Cancel removes it. A planned week that
-has passed is dropped on load.
+fatigue is elevated or high, and at least one sign says the body is not keeping up: maxes slipping,
+sets running closer to failure than planned, hard ratings, or poor check-ins. "Plan it" saves the
+week (the next available training day plus seven days) in the meta store. While it runs, every
+generated session carries one set fewer per exercise, one more rep in reserve, and loads ten percent
+lighter where the place makes a lighter weight; "Why this workout" names the lighter loads only
+while a lift has them (Maintenance 24). Cancel removes it. A planned week that has passed is dropped
+on load.
+
+The deload week is the week's change, so the coach says nothing during it that pushes for more
+(Maintenance 24, `pushesForMore`): no plateau card (a stall, a route step, a load insight, a rep
+insight other than a longer rest, rotating the rep ranges), no weekly-coverage card or volume
+insight, no heaviest-weight card, and no offer of an extra set, a new rep range or a drop set. Its
+lighter loads and extra rep in reserve are the answer to a stalled lift and a muscle behind its
+week. Safety, saving, recovery, the note on a lowered load, a longer rest while the workout is
+on, and style cards still speak. A lift whose load a tenth off rounds back to the same weight keeps
+it, and no longer says "loads 10% lighter".
 
 ## What the place can load (`src/engine/loading/loading.ts`, Maintenance 12)
 
@@ -515,8 +564,8 @@ max can be entered or updated from the exercise's Options at any time.
   behind. Setting reps by hand rewrites the note by the target at once, as a refit does. Such a set
   is not one the app ran to its effort (`pushedToEffort` is false for reps set by hand): at the
   heaviest weight it keeps that weight's slower tempo and time, and a drop set it has stays. "The
-  next sets go up", and a weight the coach sets ("Take 25 lb today", a deload), change a pushed set
-  the same way: moved up, at or past the load asked it takes the range asked and stands in for
+  next sets go up", and a weight the coach sets (a micro-deload, a route's deload), change a pushed
+  set the same way: moved up, at or past the load asked it takes the range asked and stands in for
   nothing, and still under it, it takes the reps the push gives at its new weight (`repush`; reps
   set by hand stay); moved down, it keeps its reps and is easier. Every lift a change of weights or
   of place keeps is fitted again there (`refitEntry`): one with any set done or skipped, or with

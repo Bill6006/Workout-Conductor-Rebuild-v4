@@ -119,13 +119,84 @@ back (`undoAvailable`, the same rule the engine applies to every change); otherw
 workout back would lose or misfile a set. The coach aims its offers only at entries still to do,
 never at a stopped one.
 
+## The day's settings (Maintenance 24)
+
+A check-in's own adjustment and "Make it harder" or "easier" (the `intensity` trigger) are the day's
+settings (`dayAdjust`, `docs/research/effort-setting.md`). A low check-in takes a set and adds a rep
+in reserve; harder adds a working set and asks one rep less in reserve, easier the reverse, and the
+check-in goes on top, so harder and a low check-in together leave both as planned. No screen sends
+the `intensity` trigger yet: the check-in is the setting a lifter sees. Every rebuild of the rest of
+the workout applies them (length, place, equipment, techniques, profile, a check-in, coming back
+after a long break, the trigger itself), within the reserve an exercise allows (a core stability
+move keeps its 2), and the fit to time still comes last. Before, only the check-in or the trigger
+that set them applied them, and every later rebuild went back to normal difficulty without saying
+so. A check-in that takes back an earlier one's adjustment (low, then fine) rebuilds the rest with
+the planned sets. Its words say what changed on the lifts still to come (`dayChange`), both ways:
+"Planned sets and effort back", "Planned effort back" where the sets were at their fewest either
+way, "Planned sets back" after a sore-only check-in; a low one says "fewer sets", "an extra rep in
+reserve", or both, as they happened; a sore check-in after a low one says "the planned effort back"
+with the sets still cut. Sets are named only where the day's settings moved them that way, since the
+rebuild also fits the time (the minutes left once started, a new length for time pressure), which is
+no part of the check-in; the reserve moves with the settings alone. A lift stopped here (for a sore
+joint or the place) gave its sets to a stand-in, which is no cut. A sore joint is named ("easier on
+your knee") only where a lift it rules out, with sets still to come, left the plan or stopped for
+it: high stress on it, or a movement it rules out (`PAIN_FLAGS`, shared with the conflict engine).
+Moderate stress only warns, so a lift with it that left went for the time. A length set for time
+pressure and a sore joint stay as they were. With nothing left to bring back (every lift done but
+the one under way, which keeps its sets) it says "Feeling good: nothing left to change."; a check-in
+that changes nothing says "Checked in: no changes needed.", and one that only sets the length
+"Adjusted for today (fitted to 45 min for time pressure): no changes needed." Before, it said
+"Feeling good: full workout kept." and left the cut sets, which the next rebuild then put back
+without a word. Lifts the rebuild keeps with nothing of them logged yet take a change of the day's
+settings like every lift not begun, keeping their exercise and place (`settleKept`): the lift in
+front, one you pinned, and one you swapped in. Their sets go to the plan's own count under the new
+settings (`prescriptionForDay`, the generator's rule), never above the sets they have on a cut,
+since the fit to time may have trimmed them already, nor under them on a restore, with the new
+settings' effort and load and the ramps they have (`targetedSets`'s `warmups`, so a ramp added by
+hand stays; ramps past the room under the working weight come first with no weight, as a ramp added
+by hand does), and the rebuild then fits them to the time like any lift not begun
+(`KeptEntry.trimmable`), so a short session keeps its floors and its length. One the coach added,
+one standing in for a stopped lift, one whose sets, reps or weight were set by hand, and a lift
+under way keep their sets, effort included. A plan not started yet that is built again from today's
+inputs (a coach focus set or cleared, a deload week planned or cancelled that covers today, a kept
+swap stopped) keeps today's choices: the length, the check-in, the plates missing today, and what
+was set aside for today (skips, sore joints, busy equipment, an end time still ahead), applied by
+the engine to the new plan, in turn with any change in flight. If the engine cannot build it, the
+previous plan stays, the change (a coach focus, a deload week) goes with it and with the plan Undo
+brings back, and the overlay adds "The setting itself is saved." Before, it went back to a plain
+Default plan. A plan still on the screen from an earlier day (`fromEarlierDay`: its base key's day
+is not today's) holds nothing chosen for that day (`leaveEarlierDay`): built again, changed,
+started, undone, given an exact end time, or saved around (a place renamed, the units), it starts
+from today's plan, and a change to one of its exercises or pairings, or an exercise added to it, has
+nothing left to change and returns without one. A saved workout loaded on it is today's plan. The
+day is the UTC day, as the base key has always used (see the report's known limits). After a change
+the plan's deload line in "Why this workout" names lighter loads only while a lift has them
+(`deloadReason`, kept current by `refresh` and by every rebuild, an entered max included). A lift
+under way keeps the deload line it had when new weights or a new place refit its sets, and a target
+weight set by hand or the step between sets does not refresh the plan's line (see the report's known
+limits).
+
+A lift re-targeted on its own keeps the effort it carries: new weights at the place (`loading`, a
+lift kept through a change of place), a max, a swap, a stand-in, and a lift picked up again
+(`effortShift`, `shifted`). The effort is the reserve of its first working set still to come
+against its plain target today, and it counts only as far as the day's settings reach: a deload
+week is in the plain target already, so a lift planned before it cannot cancel it, and a setting
+since taken back does not stay on. A reserve held at its limit (4, or the exercise's floor) shows
+the day's settings as much as any, so a swap still carries them to an exercise with room for them,
+even from a lift at 4 that was under way before the check-in.
+The exercise the coach adds (`add-exercise`) is fitted like a pick of the plan: the weights at the
+place, today's fatigue and the day's settings, with the sets the coach offered (and a deload week,
+though the coach offers none then).
+
 ## Time rules
 
 When the length changes mid-workout: elapsed time is subtracted, the time of the remaining locked
-work is estimated, completed work is preserved, the current exercise stays, and only future rows
-and sets are recalculated. If even the leanest plan runs over, the summary says so and the card
-offers **End by exact time**, a hard cap that may trim remaining sets of locked entries and
-drop future rows until the plan fits. It never pretends impossible volume fits.
+work is estimated, completed work is preserved, the current exercise stays, and only future rows and
+sets are recalculated. If even the leanest plan runs over, the summary says so and the card offers
+**End by exact time**, a hard cap that may trim remaining sets of locked entries and drop future
+rows until the plan fits. It never pretends impossible volume fits. A change to one lift (a set, a
+rep range, a max) runs no fit, so the plan then says only how far over it runs: "Runs about 15 min
+over 60 min." (Maintenance 24).
 
 ## Change summary
 

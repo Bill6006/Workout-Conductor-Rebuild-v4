@@ -68,3 +68,18 @@ describe('deload week in the store', () => {
     ).rejects.toThrow('No deload week is recommended');
   });
 });
+
+describe('a deload week that starts after today (Maintenance 24)', () => {
+  it("leaves today's plan as it is, planned or cancelled", async () => {
+    const handle = await seeded();
+    const before = handle.store.getSnapshot().session!;
+    await handle.store.planDeloadWeek({
+      recommended: true,
+      window: { startsAt: '2026-09-05T00:00:00.000Z', endsAt: '2026-09-12T00:00:00.000Z' },
+      reasons: ['8 sessions in the last 14 days.'],
+    });
+    expect(handle.store.getSnapshot().session).toBe(before);
+    await handle.store.cancelDeloadWeek();
+    expect(handle.store.getSnapshot().session).toBe(before);
+  });
+});

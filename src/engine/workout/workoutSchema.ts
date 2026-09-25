@@ -64,6 +64,8 @@ export const WorkoutEntrySchema = z.looseObject({
         .catch(undefined),
       // The weight the target moved from (Maintenance 23), for the step rule in a refit.
       from: z.number().optional().catch(undefined),
+      // Steps the session or the lifter's habit moved the target (Maintenance 24), for the coach.
+      nudged: z.number().int().optional().catch(undefined),
       // A lift done at bodyweight that fell short of its floor (Maintenance 21).
       short: z
         .looseObject({

@@ -314,6 +314,8 @@ export function describeRoute(route: Pick<CoachRoute, 'step' | 'applied' | 'exha
     if (route.applied.some((entry) => entry.step === index) && index !== route.step) {
       return `${label} (done)`;
     }
+    // A step the route moved past without taking: the place could not give it (Maintenance 24).
+    if (index < route.step) return `${label} (passed over)`;
     if (index === route.step) {
       const applied = route.applied.some((entry) => entry.step === index);
       return `${label} (${route.exhausted ? 'tried' : applied ? 'applied' : 'now'})`;

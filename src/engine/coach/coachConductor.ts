@@ -1,11 +1,12 @@
 import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
-import { isHold, type Joint } from '../../catalog/exercises/exerciseSchema';
+import { isHold, type CatalogExercise, type Joint } from '../../catalog/exercises/exerciseSchema';
 import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 import { UNFINISHED_STALE_HOURS } from '../../core/alerts/cues';
 import type { LocationProfile } from '../../core/validation/location';
 import type { ProgramStyle, UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { remainingMinutes } from '../duration/duration';
+import { fitWeight, loadingFor, type SessionLoading } from '../loading/loading';
 import { weightStep } from '../plateMath/plateMath';
 import type {
   CompletedWork,
@@ -16,6 +17,8 @@ import type { LastingSwap } from '../planning/lastingSwaps';
 import type { PlannedSession } from '../planning/weeklyPlan';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { lastPainReport, painSourceLine } from '../recovery/painReport';
+import { stepsOfSessionLine } from '../recovery/sessionContext';
+import { stepsOfHabitLine } from '../progression/overrides';
 import {
   ROUTE_STEPS,
   describeRoute,
@@ -35,8 +38,14 @@ import {
   computeWeeklyVolume,
 } from '../volume/weeklyVolume';
 import { checkExerciseFit } from '../conflicts/conflictEngine';
-import { startRatio } from '../progression/startingLoad';
-import { EFFORT_REPS_CEILING, entryPushedToEffort } from '../progression/progression';
+import { barWeightFor, startRatio } from '../progression/startingLoad';
+import {
+  EFFORT_REPS_CEILING,
+  WELL_SHORT,
+  entryPushedToEffort,
+  microDeload,
+  stepUp,
+} from '../progression/progression';
 import { MAX_WORKING_SETS } from '../recalibration/recalibrate';
 import {
   accessoryPicker,
@@ -49,6 +58,7 @@ import {
   isStopped,
   workingSets,
   type DurationChoice,
+  type EntryProgression,
   type GeneratedWorkout,
   type WorkoutEntry,
 } from '../workout/types';
@@ -243,6 +253,8 @@ export interface CoachInput {
   declines?: CoachDeclines;
   /** The place today trains at, so the coverage action can pick an exercise that fits. */
   location?: LocationProfile;
+  /** Plates missing today, so a load offer names only a weight the place makes (Maintenance 24). */
+  loading?: SessionLoading;
   /** The sessions the generator would produce this week; coverage stays quiet when one reaches the muscle. */
   upcoming?: readonly PlannedSession[];
   /** The current coach focus, so it is never offered twice. */
@@ -276,6 +288,149 @@ function liveEntryFor(input: CoachInput, exerciseId: string): WorkoutEntry | und
 
 function started(input: CoachInput, entry: WorkoutEntry): boolean {
   return input.completed.sets.some((set) => set.entryId === entry.id && !set.skipped);
+}
+
+/** A deload week covers today (Maintenance 24): see pushesForMore. */
+function inDeloadWeek(input: CoachInput): boolean {
+  return input.constraints.deload !== null;
+}
+
+/**
+ * A deload week is the week's change (Maintenance 24): its lighter loads and extra rep in reserve
+ * answer a lift that stalled and a muscle behind its week. Meanwhile the coach says nothing that
+ * pushes for more: no plateau or weekly-coverage card, nothing at the heaviest weight here, and no
+ * offer of an extra set, a new rep range or a drop set. A longer rest still speaks.
+ */
+function pushesForMore(signal: CoachSignal): boolean {
+  const trigger = signal.action?.kind === 'recalibrate' ? signal.action.trigger : null;
+  // A longer rest pushes for nothing.
+  if (trigger?.type === 'rest-adjust') return false;
+  if (signal.domain === 'plateau' || signal.domain === 'coverage' || signal.source === 'capped') {
+    return true;
+  }
+  return (
+    (trigger?.type === 'sets' && trigger.workingDelta > 0) ||
+    trigger?.type === 'rep-range' ||
+    (trigger?.type === 'drop-set' && trigger.on)
+  );
+}
+
+/**
+ * A load step at the place (Maintenance 24): the weight it lands on, the step it was fitted from
+ * and the weight that step goes from, and whether today's target has it already: the plan took it
+ * itself (its own step, one for the session, a deload, a return after a break).
+ */
+interface PlaceStep {
+  weight: number;
+  step: number;
+  base: number;
+  taken: boolean;
+}
+
+/** Modes whose target is lighter by the plan's own rule. */
+const LIGHTER_MODES: ReadonlySet<EntryProgression['mode']> = new Set([
+  'return',
+  'estimate',
+  'deload',
+  'regress',
+]);
+
+/**
+ * The steps the session or the lifter's habit moved a target (Maintenance 24). A plan saved before
+ * targets recorded them, one kept from the day this update lands, is read by its own lines.
+ */
+function nudgedOf(progression: EntryProgression): number {
+  return (
+    progression.nudged ??
+    progression.evidence.reduce(
+      (total, line) => total + stepsOfSessionLine(line) + stepsOfHabitLine(line),
+      0,
+    )
+  );
+}
+
+/**
+ * A lighter day (Maintenance 24): one the plan chose itself (back after a break, a new rep range,
+ * a deload or a reset, or a step down for the work before the lift today or the lifter's own
+ * habit), or a weight set by hand under the one last lifted, the coach's own deload among them. No
+ * step up is offered on it, and its own lighter load stands for a micro-deload.
+ */
+function lighterDay(entry: WorkoutEntry, loads: { from: number; asked: number }): boolean {
+  const progression = entry.progression;
+  if (!progression) return false;
+  return (
+    LIGHTER_MODES.has(progression.mode) ||
+    nudgedOf(progression) < 0 ||
+    (entry.manual?.weight === true && loads.asked < loads.from - 1e-6)
+  );
+}
+
+/**
+ * A lift's loads today (Maintenance 24): the weight last lifted, today's target as the plan asks
+ * it, and the weight its sets show. A set the weights here push shows less than the plan asks.
+ */
+function loadsOf(entry: WorkoutEntry): { from: number; asked: number; shown: number } | null {
+  const first = workingSets(entry).find((set) => set.kind === 'working');
+  const shown = first?.targetWeight ?? null;
+  if (shown === null) return null;
+  const asked = first?.asked?.weight ?? shown;
+  return { from: entry.progression?.from ?? asked, asked, shown };
+}
+
+/**
+ * The next load step for a lift: one ordinary step up from the weight last lifted, onto a weight
+ * the place makes today, missing plates counted (Maintenance 24). Taken when today's target has a
+ * step up already. None on a lighter day the plan chose (back after a break, a new rep range, a
+ * step down for the session), for a set the weights here push already, or where the step lands
+ * back on today's target (the heaviest weight here, a gap in the dumbbells, a plate missing): the
+ * plan then holds the load and raises the reps.
+ */
+function heavierHere(
+  input: CoachInput,
+  exercise: CatalogExercise,
+  entry: WorkoutEntry,
+): PlaceStep | null {
+  const loads = loadsOf(entry);
+  if (!loads) return null;
+  const { from, asked, shown } = loads;
+  const units = input.profile.units;
+  const increment = weightStep(exercise, units);
+  const step = from + increment;
+  // The plan took its step: its own, or one for the session.
+  if (asked >= Math.min(stepUp(from, increment), step) - 1e-6) {
+    return { weight: asked, step, base: from, taken: true };
+  }
+  if (lighterDay(entry, loads) || asked > shown + 1e-6) return null;
+  const loading = loadingFor(input.location?.loading, input.loading, exercise, units);
+  const weight = fitWeight(step, loading, barWeightFor(exercise, units));
+  return weight > asked + 1e-6 ? { weight, step, base: from, taken: false } : null;
+}
+
+/**
+ * The plan's micro-deload for a lift, onto a weight the place makes today (Maintenance 24): a
+ * tenth off and at least one step, from today's target or the weight last lifted, whichever is
+ * heavier, or from the weight a set the weights here push shows. Taken when today's target is that
+ * far down already (the plan's deload, a reset, a return after a break). None when nothing
+ * lighter is made here.
+ */
+function lighterHere(
+  input: CoachInput,
+  exercise: CatalogExercise,
+  entry: WorkoutEntry,
+): PlaceStep | null {
+  const loads = loadsOf(entry);
+  if (!loads) return null;
+  const { from, asked, shown } = loads;
+  const units = input.profile.units;
+  const increment = weightStep(exercise, units);
+  const base = asked > shown + 1e-6 ? shown : Math.max(from, asked);
+  const step = microDeload(base, increment);
+  if (lighterDay(entry, loads) || asked <= microDeload(from, increment) + 1e-6) {
+    return { weight: shown, step, base, taken: true };
+  }
+  const loading = loadingFor(input.location?.loading, input.loading, exercise, units);
+  const weight = fitWeight(step, loading, barWeightFor(exercise, units));
+  return weight < base - 1e-6 ? { weight, step, base, taken: false } : null;
 }
 
 function jointLabel(joint: Joint): string {
@@ -499,32 +654,25 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
   const untouched = entry !== undefined && !started(input, entry) && !finished;
   const exercise = insight.exerciseId ? requireExercise(insight.exerciseId) : null;
   switch (insight.recommendation) {
-    case 'add-weight': {
-      if (!entry || !untouched || !exercise) return null;
-      const current =
-        workingSets(entry).find((set) => set.kind === 'working')?.targetWeight ?? null;
-      const last = current;
-      if (last === null) return null;
-      const step = weightStep(exercise, input.profile.units);
-      return {
-        kind: 'recalibrate',
-        trigger: { type: 'target-weight', entryId: entry.id, weight: last + step },
-        label: `Take ${last + step} ${input.profile.units} today`,
-      };
-    }
+    case 'add-weight':
     case 'micro-deload': {
-      if (!entry || !untouched || !exercise) return null;
-      const current =
-        workingSets(entry).find((set) => set.kind === 'working')?.targetWeight ?? null;
-      if (current === null) return null;
-      const step = weightStep(exercise, input.profile.units);
-      const lighter = Math.max(step, Math.round((current * 0.9) / step) * step);
-      return {
-        kind: 'recalibrate',
-        trigger: { type: 'target-weight', entryId: entry.id, weight: lighter },
-        label: `Micro-deload to ${lighter} ${input.profile.units}`,
-        major: true,
-      };
+      // A weight the place makes, never one it does not (Maintenance 24).
+      const step = loadOfferStep(input, insight);
+      if (!entry || !untouched || !step) return null;
+      const { weight } = step;
+      const units = input.profile.units;
+      return insight.recommendation === 'add-weight'
+        ? {
+            kind: 'recalibrate',
+            trigger: { type: 'target-weight', entryId: entry.id, weight },
+            label: `Take ${weight} ${units} today`,
+          }
+        : {
+            kind: 'recalibrate',
+            trigger: { type: 'target-weight', entryId: entry.id, weight },
+            label: `Micro-deload to ${weight} ${units}`,
+            major: true,
+          };
     }
     case 'add-reps': {
       if (!entry || !untouched || (exercise && isHold(exercise))) return null;
@@ -660,10 +808,16 @@ function strategySignals(input: CoachInput): CoachSignal[] {
           : 'plateau';
   return (
     input.strategy
+      // A step the place cannot make, or one the plan took itself, leaves the card out: the
+      // plan's own note says what it did (Maintenance 24).
+      .filter((insight) => {
+        const step = loadOfferStep(input, insight);
+        return step !== null && step?.taken !== true;
+      })
       .map((insight): CoachSignal => ({
         domain: domainOf(insight),
         headline: insight.headline,
-        why: insight.why,
+        why: loadWhy(input, insight),
         action: actionForInsight(input, insight),
         confidence: insight.confidence,
         severity: insight.severity,
@@ -674,6 +828,47 @@ function strategySignals(input: CoachInput): CoachSignal[] {
       // A coverage note with nothing to tap is the conductor's job, not a card.
       .filter((signal) => !(signal.domain === 'coverage' && signal.action === null))
   );
+}
+
+/**
+ * The weight a load insight names at the place today (Maintenance 24): the plan's next step up or
+ * its micro-deload, onto a weight made there. Null when the place makes none, and then the card is
+ * left out, the lift under way or not, rather than shown with a step the app cannot take here;
+ * undefined for any other insight, or a lift with no weight today.
+ */
+function loadOfferStep(input: CoachInput, insight: StrategyInsight): PlaceStep | null | undefined {
+  const load = insight.recommendation === 'add-weight' || insight.recommendation === 'micro-deload';
+  const entry = load && insight.exerciseId ? liveEntryFor(input, insight.exerciseId) : undefined;
+  if (!entry || !loadsOf(entry)) return undefined;
+  const exercise = requireExercise(entry.exerciseId);
+  return insight.recommendation === 'add-weight'
+    ? heavierHere(input, exercise, entry)
+    : lighterHere(input, exercise, entry);
+}
+
+/**
+ * A load card's why (Maintenance 24): where the place moves the plan's step onto a weight it makes,
+ * the step names that weight, so the reason and the button agree.
+ */
+function loadWhy(input: CoachInput, insight: StrategyInsight): string[] {
+  const offer = loadOfferStep(input, insight);
+  if (!offer || offer.taken) return insight.why;
+  const units = input.profile.units;
+  if (insight.recommendation === 'add-weight') {
+    if (Math.abs(offer.weight - offer.step) < 1e-6) return insight.why;
+    return [
+      ...insight.why.slice(0, -1),
+      `Next step: ${offer.weight} ${units}, the nearest weight here, then work back up the range.`,
+    ];
+  }
+  // The card's own line names a tenth off; a bigger cut, at a light weight or onto the weights
+  // here, says how big.
+  const cut = Math.round((1 - offer.weight / offer.base) * 100);
+  if (cut <= 12) return insight.why;
+  return [
+    ...insight.why.slice(0, -1),
+    `${offer.weight} ${units}, ${cut}% lighter, rebuilds the reps before adding load again.`,
+  ];
 }
 
 /** Where the fewer-reps offer comes from; a decline is remembered per lift. */
@@ -1053,11 +1248,18 @@ function tipSignals(input: CoachInput): CoachSignal[] {
   return signals;
 }
 
+/** Whether a route passed over a step it could not give (Maintenance 24). */
+function passedOver(route: CoachRoute): boolean {
+  return ROUTE_STEPS.some(
+    (_, index) => index < route.step && !route.applied.some((entry) => entry.step === index),
+  );
+}
+
 function routeAction(
   input: CoachInput,
   entry: WorkoutEntry | undefined,
   route: CoachRoute,
-): { action: CoachAction | null; explain: string } {
+): { action: CoachAction | null; explain: string; blocked?: boolean; taken?: boolean } {
   const exercise = requireExercise(route.exerciseId);
   const units = input.profile.units;
   const ref = { exerciseId: route.exerciseId, step: route.step, baselineE1rm: route.baselineE1rm };
@@ -1083,14 +1285,29 @@ function routeAction(
               route: ref,
             }
           : null,
-      explain:
-        'Every step was tried without the max moving: change the exercise for this pattern for a block.',
+      explain: passedOver(route)
+        ? 'The steps taken did not move the max, and the others were passed over where the weights could not give them: change the exercise for this pattern for a block.'
+        : 'Every step was tried without the max moving: change the exercise for this pattern for a block.',
     };
   }
   const step = ROUTE_STEPS[route.step];
   switch (step) {
     case 'rep-range': {
-      const current = first?.targetReps ?? exercise.repRanges.hypertrophy;
+      // Weights well short of the load the sets stand in for cannot follow a new rep range: the
+      // step is passed over here (Maintenance 24).
+      if (
+        first?.asked !== undefined &&
+        first.targetWeight !== null &&
+        first.targetWeight < first.asked.weight * WELL_SHORT
+      ) {
+        return {
+          action: null,
+          explain: 'Step 1, a new rep range, needs weights this place does not make.',
+          blocked: true,
+        };
+      }
+      // A set a little short of its load reads the range it stands in for, not its extra reps.
+      const current = first?.asked?.reps ?? first?.targetReps ?? exercise.repRanges.hypertrophy;
       const strengthRange = exercise.repRanges.strength ?? exercise.repRanges.hypertrophy;
       const target: [number, number] =
         current[0] === strengthRange[0] && current[1] === strengthRange[1]
@@ -1122,18 +1339,24 @@ function routeAction(
       };
     case 'deload': {
       const current = first?.targetWeight ?? null;
-      const stepSize = weightStep(exercise, units);
-      const lighter =
-        current === null
-          ? null
-          : Math.max(stepSize, Math.round((current * 0.9) / stepSize) * stepSize);
+      // A weight the place makes; with nothing lighter here the step is passed over, and a deload
+      // the plan took itself this week leaves the card out (Maintenance 24).
+      const lighter = current === null || !entry ? null : lighterHere(input, exercise, entry);
+      if (current !== null && lighter === null) {
+        return {
+          action: null,
+          explain: 'Step 3, a short deload, needs a lighter weight than this place makes.',
+          blocked: true,
+        };
+      }
+      if (lighter?.taken) return { action: null, explain: '', taken: true };
       return {
         action:
-          entry && usable && lighter !== null
+          entry && usable && lighter
             ? {
                 kind: 'recalibrate',
-                trigger: { type: 'target-weight', entryId: entry.id, weight: lighter },
-                label: `Deload to ${lighter} ${units} this week`,
+                trigger: { type: 'target-weight', entryId: entry.id, weight: lighter.weight },
+                label: `Deload to ${lighter.weight} ${units} this week`,
                 major: true,
                 route: ref,
               }
@@ -1168,17 +1391,21 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
     if (stall.kind === 'undershooting') {
       const first = entry ? workingSets(entry).find((set) => set.kind === 'working') : undefined;
       const current = first?.targetWeight ?? null;
-      const stepSize = weightStep(exercise, input.profile.units);
+      const open = entry !== undefined && !started(input, entry) && input.status !== 'completed';
+      // The plan's next step at the place; where it makes none, no step to offer, the lift under
+      // way or not, and where the plan took it itself, its own note says so (Maintenance 24).
+      const heavier = current === null || !entry ? null : heavierHere(input, exercise, entry);
+      if (current !== null && (heavier === null || heavier.taken)) continue;
       signals.push({
         domain: 'plateau',
         headline: `${exercise.name}: ${stall.exposures} exposures without progress, sets ending too easy`,
         why: [...stall.why, 'Work to the prescribed effort, or take the next load step now.'],
         action:
-          entry && !started(input, entry) && current !== null && input.status !== 'completed'
+          entry && open && heavier
             ? {
                 kind: 'recalibrate',
-                trigger: { type: 'target-weight', entryId: entry.id, weight: current + stepSize },
-                label: `Take ${current + stepSize} ${input.profile.units} today`,
+                trigger: { type: 'target-weight', entryId: entry.id, weight: heavier.weight },
+                label: `Take ${heavier.weight} ${input.profile.units} today`,
               }
             : null,
         confidence: 'medium',
@@ -1196,16 +1423,27 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
       applied: [],
       exhausted: false,
     };
-    const { action, explain } = routeAction(input, entry, route);
+    // A step the weights here cannot give (only a new rep range or a deload can be one) is passed
+    // over: the next step is offered, and taking it moves the route on (Maintenance 24).
+    let shown = route;
+    let offer = routeAction(input, entry, route);
+    if (offer.blocked) {
+      shown = { ...route, step: route.step + 1 };
+      const next = routeAction(input, entry, shown);
+      offer = { action: next.action, explain: `${offer.explain} ${next.explain}` };
+    }
+    if (offer.taken) continue;
     signals.push({
       domain: 'plateau',
       headline: route.exhausted
-        ? `${exercise.name}: every route step tried, still stalled`
+        ? passedOver(route)
+          ? `${exercise.name}: the route is done, still stalled`
+          : `${exercise.name}: every route step tried, still stalled`
         : `${exercise.name} has stalled for ${stall.exposures} exposures${
             stall.effortUnknown < stall.exposures ? ' at the prescribed effort' : ''
           }`,
-      why: [stall.why[0] as string, `Route: ${describeRoute(route)}.`, explain],
-      action,
+      why: [stall.why[0] as string, `Route: ${describeRoute(shown)}.`, offer.explain],
+      action: offer.action,
       confidence: stall.effortUnknown === 0 ? 'high' : 'medium',
       severity: route.exhausted ? 3 : 2,
       source: 'stall: route',
@@ -1281,7 +1519,7 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
     ...rawInput,
     stalls: rawInput.stalls ?? detectStalls(rawInput.history, rawInput.profile, policy),
   };
-  return [
+  const signals = [
     ...safetySignals(input),
     ...unfinishedSignals(input),
     ...saveSignals(input),
@@ -1294,6 +1532,7 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
     ...coverageSignals(input),
     ...tipSignals(input),
   ];
+  return inDeloadWeek(input) ? signals.filter((signal) => !pushesForMore(signal)) : signals;
 }
 
 const CONFIDENCE_RANK = { high: 3, medium: 2, low: 1 } as const;

@@ -38,3 +38,25 @@ describe('the coach and the kept swaps', () => {
     ]);
   });
 });
+
+/** Maintenance 24: a load the coach offers is one the place makes today, missing plates and all. */
+describe('the coach and the weights today', () => {
+  it('passes the plates missing today to the coach', async () => {
+    const handle = createTestStore();
+    const { store } = handle;
+    await store.hydrate();
+    await store.completeOnboarding(
+      { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
+      createDefaultLocations({ gymAccess: true }, TEST_NOW),
+    );
+    await store.setCurrentLocation('gym');
+    await store.setMissingPlates([2.5]);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Providers store={store}>{children}</Providers>
+    );
+    renderHook(() => useCoach(), { wrapper });
+    const conduct = vi.mocked(conductor.conductCoach);
+    await waitFor(() => expect(conduct).toHaveBeenCalled());
+    expect(conduct.mock.calls.at(-1)?.[0].loading).toEqual({ missingPlates: [2.5] });
+  });
+});

@@ -116,8 +116,14 @@ async function enterThroughOffer(store: AppStore, lift: WorkoutEntry, max: strin
   await user.click(screen.getByRole('radio', { name: 'I know my max' }));
   await user.type(screen.getByTestId('max-value'), max);
   const preview = screen.getByTestId('max-preview').textContent ?? '';
+  // A change before the max left a summary of its own: wait for the max's, not that one.
+  const earlier = store.getSnapshot().session?.lastSummary ?? null;
   await user.click(screen.getByTestId('max-save'));
-  await waitFor(() => expect(store.getSnapshot().session?.lastSummary).not.toBeNull());
+  await waitFor(() => {
+    const summary = store.getSnapshot().session?.lastSummary ?? null;
+    expect(summary).not.toBeNull();
+    expect(summary).not.toBe(earlier);
+  });
   const after = allEntries(store.getSnapshot().session?.workout.blocks ?? []).find(
     (entry) => entry.id === lift.id,
   );

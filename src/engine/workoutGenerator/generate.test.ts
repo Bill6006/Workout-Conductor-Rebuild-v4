@@ -140,17 +140,26 @@ describe('generateWorkout: 15 / 30 / 45 / Default', () => {
     expect(fifteen!.warmup.generalMinutes).toBeLessThan(full!.warmup.generalMinutes);
   });
 
-  it('fills a 15-minute version with the main lift and the best move that honestly fits', () => {
+  it('fills a 15-minute version with the main lifts, the isolation moves left out first', () => {
     const workout = generate({}, 15);
-    // A pair of isolation moves after the main lift runs past 15 minutes once every rest the
-    // timer shows is counted, so the pair goes and its best member stays on its own.
-    expect(workout.blocks.map((block) => block.kind)).toEqual(['straight', 'straight']);
+    // Maintenance 24 (docs/research/short-sessions.md): both isolation pairs go before a press.
+    expect(names(workout)).toEqual(['Barbell Bench Press', 'Incline Dumbbell Press']);
     expect(workout.blocks[0]?.entries[0]?.role).toBe('primary-strength');
-    expect(workout.explanation.fittingSteps.join(' ')).toMatch(
-      /Kept .+ on its own: the minutes left fit it\./,
-    );
+    expect(workout.explanation.fittingSteps.filter((step) => step.startsWith('Left out'))).toEqual([
+      'Left out A1 Cable Fly + A2 Cable Triceps Pushdown to fit 15 min.',
+      'Left out A1 Lateral Raise + A2 EZ-Bar Curl to fit 15 min.',
+      'Left out Dumbbell Shoulder Press so the session fits 15 min.',
+    ]);
     expect(workout.duration.estimatedMinutes).toBeGreaterThanOrEqual(12);
     expect(workout.duration.estimatedMinutes).toBeLessThanOrEqual(16);
+  });
+
+  it('brings a move back on its own when the minutes a pair left behind fit it', () => {
+    const workout = generate({}, 30);
+    expect(workout.explanation.fittingSteps).toContain(
+      'Kept Cable Triceps Pushdown on its own: the minutes left fit it.',
+    );
+    expect(workout.duration.estimatedMinutes).toBeLessThanOrEqual(31);
   });
 
   it('keeps its supersets once there is room for them', () => {
@@ -255,7 +264,16 @@ describe('generateWorkout: profile and history', () => {
 
   it('runs isolation work as a circuit only when circuits fit the goal and the length', () => {
     const circuits = { supersets: true, dropSets: true, circuits: true };
-    const short = generate({ techniques: circuits }, 30);
+    // The pull day: its circuit carries the day's only triceps work, so it stays at 30 minutes
+    // (Maintenance 24).
+    const short = generateWorkout({
+      profile: profile({ techniques: circuits }),
+      location: gym,
+      history: [],
+      now: NOW,
+      duration: 30,
+      constraints: { templateId: 'pull-arms' },
+    });
     expect(short.blocks.some((block) => block.kind === 'circuit')).toBe(true);
     const circuit = short.blocks.find((block) => block.kind === 'circuit')!;
     expect(circuit.entries.length).toBeGreaterThanOrEqual(3);

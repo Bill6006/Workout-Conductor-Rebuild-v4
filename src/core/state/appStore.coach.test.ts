@@ -58,14 +58,24 @@ describe('coach routes in the store', () => {
     const route = handle.store.getSnapshot().coachRoutes.routes[BENCH];
     expect(route).toMatchObject({ exerciseId: BENCH, step: 0, applied: [], exhausted: false });
 
+    // A change is recorded only once it has landed (`takeCoachChange`), never on the tap itself
+    // (Maintenance 24).
     await handle.store.noteCoachAction({
       kind: 'recalibrate',
       trigger: { type: 'rep-range', entryId: 'x', reps: [6, 10] },
       label: 'Shift',
       route: { exerciseId: BENCH, step: 0, baselineE1rm: route!.baselineE1rm },
     });
+    expect(handle.store.getSnapshot().coachRoutes.routes[BENCH]?.applied).toEqual([]);
+    // A step that opens a sheet is recorded as the sheet opens.
+    await handle.store.noteCoachAction({
+      kind: 'alternatives',
+      entryId: 'x',
+      label: 'Swap for a variation',
+      route: { exerciseId: BENCH, step: 1, baselineE1rm: route!.baselineE1rm },
+    });
     expect(handle.store.getSnapshot().coachRoutes.routes[BENCH]?.applied).toEqual([
-      { step: 0, at: TEST_NOW },
+      { step: 1, at: TEST_NOW },
     ]);
     // Actions without a route reference change nothing.
     await handle.store.noteCoachAction({ kind: 'backup', label: 'Export' });

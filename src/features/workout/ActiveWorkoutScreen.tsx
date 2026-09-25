@@ -321,10 +321,13 @@ export function ActiveWorkoutScreen() {
     void store.noteCoachAction(action);
     switch (action.kind) {
       case 'recalibrate':
-        // Once the change lands the offer is marked as taken, so the same button never comes back.
-        void store.recalibrate(action.trigger).then((result) => {
-          // A route step keeps its own record (it reads as applied); everything else is marked here.
-          if (result?.ok && !action.route) store.acceptCoachSignal(signal);
+        // Once the change lands its route step is recorded, or its offer marked as taken, so the
+        // same button never comes back.
+        store.takeCoachChange(action, signal).catch((error: unknown) => {
+          toast.show(
+            error instanceof Error ? error.message : 'The change could not finish',
+            'error',
+          );
         });
         break;
       case 'rest':

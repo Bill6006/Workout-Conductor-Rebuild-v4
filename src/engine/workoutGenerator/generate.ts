@@ -22,7 +22,7 @@ import {
   type MuscleId,
 } from '../../catalog/muscles/muscles';
 import type { LocationProfile } from '../../core/validation/location';
-import type { UserProfile } from '../../core/validation/profile';
+import type { UnitSystem, UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import {
   blocksCandidate,
@@ -52,7 +52,7 @@ import {
 } from '../progression/roles';
 import { allowsFailure, isAutoStyle, resolveStyle } from '../planning/styleAdvice';
 import { styleInfo } from '../planning/styles';
-import { loadingFor, type SessionLoading } from '../loading/loading';
+import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
 import {
   applyProgression,
@@ -75,10 +75,12 @@ import {
 import {
   allEntries,
   isStopped,
+  roundsRun,
   workingSets,
   type DurationChoice,
   type GeneratedWorkout,
   type MusclePriority,
+  type SetPrescription,
   type TimeBreakdown,
   type WorkoutBlock,
   type WorkoutEntry,
@@ -109,6 +111,11 @@ export interface KeptEntry {
    * the working sets still owed.
    */
   closed?: boolean;
+  /**
+   * Kept in its place, but fitted to the time like a lift not begun (Maintenance 24): a lift with
+   * nothing logged whose sets a change of the day's settings rebuilt.
+   */
+  trimmable?: boolean;
 }
 
 /**
@@ -624,6 +631,21 @@ function entryValue(
   return ROLE_RANK[entry.role] + muscleWeight * 10 + (preferredIds.has(entry.exerciseId) ? 5 : 0);
 }
 
+/**
+ * How long an exercise stays when a session too long for its length must leave something out
+ * (Maintenance 24, docs/research/short-sessions.md); higher stays longer. A main lift stays
+ * longest, then lower-back work, then the day's only work for a muscle, core work included; an
+ * isolation exercise whose muscles the day's main lifts train goes first.
+ */
+export function leaveOutRank(exercise: CatalogExercise, trained: ReadonlySet<MuscleId>): number {
+  if (exercise.compound) return 3;
+  if (exercise.primaryMuscles.includes('lower-back')) return 2;
+  const covered =
+    !exercise.movementPattern.startsWith('core-') &&
+    exercise.primaryMuscles.every((muscle) => trained.has(muscle));
+  return covered ? 0 : 1;
+}
+
 export function cloneEntry(entry: WorkoutEntry): WorkoutEntry {
   return {
     ...entry,
@@ -664,17 +686,89 @@ export function scaleForDeload(
 ): NextTarget {
   const scale = adjust?.loadScale;
   if (!scale || scale === 1 || target.weight === null) return target;
-  return {
-    ...target,
-    weight: Math.max(step, Math.round((target.weight * scale) / step) * step),
-    evidence: [...target.evidence, `Deload week: loads ${Math.round((1 - scale) * 100)}% lighter.`],
-  };
+  const weight = Math.max(step, Math.round((target.weight * scale) / step) * step);
+  // A light load a tenth off can round back to itself: the line only where the load is lighter.
+  if (weight >= target.weight) return target;
+  return { ...target, weight, evidence: [...target.evidence, deloadLine(scale)] };
+}
+
+function deloadLine(scale: number): string {
+  return `Deload week: loads ${Math.round((1 - scale) * 100)}% lighter.`;
+}
+
+/**
+ * The plan's deload line in "Why this workout" (Maintenance 24): lighter loads named only while a
+ * lift has them, as the lifts' own lines say; the rebuild keeps it current after any change.
+ */
+export function deloadReason(blocks: readonly WorkoutBlock[], deload: DeloadWindow): string {
+  const lighter = allEntries(blocks).some((entry) =>
+    entry.progression?.evidence.includes(deloadLine(DELOAD_LOAD_SCALE)),
+  );
+  const loads = lighter ? `, loads ${Math.round((1 - DELOAD_LOAD_SCALE) * 100)}% lighter` : '';
+  return `Deload week (${formatWindow(deload)}): one set fewer per exercise, one more rep in reserve${loads}.`;
+}
+
+/**
+ * A target on the weights here: lighter in a deload week, never under the bar, and held at the
+ * heaviest weight made here. The deload's line stays only where the load it lands on is lighter
+ * than the plain target's would be (Maintenance 24): held at the heaviest weight here, both are.
+ */
+export function targetAtPlace(
+  target: NextTarget,
+  adjust: PrescriptionAdjustment | undefined,
+  loading: Loading,
+  floor: number | null,
+  units: UnitSystem,
+  role: TrainingRole,
+): NextTarget {
+  const fitted = capTarget(
+    floorTarget(scaleForDeload(target, adjust, loading.step), floor),
+    loading,
+    units,
+    role,
+  );
+  const scale = adjust?.loadScale;
+  if (!scale || scale === 1 || fitted.weight === null) return fitted;
+  const plain = capTarget(floorTarget(target, floor), loading, units, role).weight;
+  // Judged on the weights the place shows: two loads that land on the same one are not lighter.
+  const shown = (weight: number) => fitWeight(weight, loading, floor);
+  if (plain === null || shown(fitted.weight) < shown(plain) - 1e-6) return fitted;
+  return { ...fitted, evidence: fitted.evidence.filter((line) => line !== deloadLine(scale)) };
 }
 
 /** A deload can scale a bar lift under the empty bar; the bar is the floor. */
 export function floorTarget(target: NextTarget, floor: number | null): NextTarget {
   if (floor === null || target.weight === null || target.weight >= floor) return target;
   return { ...target, weight: floor };
+}
+
+/**
+ * The day's settings and a deload week on a prescription, as the plan applies them to every pick
+ * (Maintenance 24). The rebuild reads a lift's planned sets and effort from the same rule.
+ */
+export function prescriptionForDay(
+  prescription: Prescription,
+  role: TrainingRole,
+  day: PrescriptionAdjustment | undefined,
+  deload: DeloadWindow | null,
+  minRir = 0,
+): Prescription {
+  return adjustPrescription(prescription, role, withDeload(day, deload), minRir);
+}
+
+/** The day's settings with a deload week's own on top: a set fewer, a rep more, lighter loads. */
+function withDeload(
+  day: PrescriptionAdjustment | undefined,
+  deload: DeloadWindow | null,
+): PrescriptionAdjustment | undefined {
+  return deload
+    ? {
+        sets: (day?.sets ?? 0) + DELOAD_SETS_DELTA,
+        rir: (day?.rir ?? 0) + DELOAD_RIR_DELTA,
+        restFactor: day?.restFactor ?? 1,
+        loadScale: DELOAD_LOAD_SCALE,
+      }
+    : day;
 }
 
 function adjustPrescription(
@@ -715,14 +809,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       ? TEMPLATES.find((candidate) => candidate.id === constraints.templateId)
       : undefined) ?? chooseTemplate(profile, priorities, exposure, loads, focus);
   const deload = constraints.deload ?? null;
-  const adjust: PrescriptionAdjustment | undefined = deload
-    ? {
-        sets: (constraints.adjust?.sets ?? 0) + DELOAD_SETS_DELTA,
-        rir: (constraints.adjust?.rir ?? 0) + DELOAD_RIR_DELTA,
-        restFactor: constraints.adjust?.restFactor ?? 1,
-        loadScale: DELOAD_LOAD_SCALE,
-      }
-    : constraints.adjust;
+  const adjust = withDeload(constraints.adjust, deload);
   const defaultMinutes = profile.schedule.typicalDurationMinutes;
   const targetMinutes =
     constraints.targetMinutesOverride ?? resolveTargetMinutes(duration, defaultMinutes);
@@ -739,6 +826,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   // selections, and accepted alternatives stay in their slots.
   const keep = constraints.keep ?? [];
   const keptIds = new Set(keep.map((kept) => kept.entry.id));
+  const trimmableKept = new Set(keep.filter((kept) => kept.trimmable).map((kept) => kept.entry.id));
   const frozenIds = new Set(keep.filter((kept) => kept.frozen).map((kept) => kept.entry.id));
   // Ended at their logged sets, here or at an earlier place: nothing left to pair.
   const closedIds = new Set(
@@ -835,12 +923,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       exercise,
       profile.units,
     );
-    const target = capTarget(
-      floorTarget(scaleForDeload(baseTarget, adjust, loading.step), floor),
-      loading,
-      profile.units,
-      role,
-    );
+    const target = targetAtPlace(baseTarget, adjust, loading, floor, profile.units, role);
     const warmupSets = rampSetsFor(
       exercise,
       role,
@@ -1039,10 +1122,29 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
 
   const untouchable = (entry: WorkoutEntry) =>
     entry.id === anchorId || entry.pinned || entry.locked || keptIds.has(entry.id);
-  const lowestValueBlock = (): WorkoutBlock | undefined => {
+  // What a session too long for its length leaves out first (Maintenance 24,
+  // docs/research/short-sessions.md): the main lifts stay, and an isolation exercise goes first,
+  // by leaveOutRank against the main lifts still in the plan. Within a rank, and among the main
+  // lifts when those must go too, the lowest value first, as before. A block ranks as its
+  // highest-ranked exercise.
+  const trainedByMainLifts = (): ReadonlySet<MuscleId> =>
+    new Set(
+      allEntries(blocks)
+        .map((entry) => exerciseOf(entry.exerciseId))
+        .filter((exercise) => exercise.compound)
+        .flatMap((exercise) => [...exercise.primaryMuscles, ...exercise.secondaryMuscles]),
+    );
+  const leaveOutTier = (entries: readonly WorkoutEntry[], trained: ReadonlySet<MuscleId>) =>
+    Math.max(...entries.map((entry) => leaveOutRank(exerciseOf(entry.exerciseId), trained)));
+  const nextToLeaveOut = (): WorkoutBlock | undefined => {
     const candidates = blocks.filter((block) => !block.entries.some(untouchable));
     if (candidates.length === 0) return undefined;
-    return [...candidates].sort((a, b) => blockValue(a) - blockValue(b))[0];
+    const trained = trainedByMainLifts();
+    return [...candidates].sort(
+      (a, b) =>
+        leaveOutTier(a.entries, trained) - leaveOutTier(b.entries, trained) ||
+        blockValue(a) - blockValue(b),
+    )[0];
   };
   // Paired blocks save time, so they outrank their weakest member when something must go,
   // and time efficiency matters even more on short sessions.
@@ -1051,11 +1153,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     Math.min(...block.entries.map((entry) => entryValue(entry, weightOf, preferredIds))) +
     (block.kind === 'straight' ? 0 : pairedBonus);
 
-  // Blocks the time fit had to leave out, in the order they went; the fill-back pass reads them.
-  const leftOutForTime: WorkoutBlock[] = [];
-  const dropBlock = (block: WorkoutBlock, why: string, forTime = false) => {
+  // Blocks the row cap and the time fit left out, in the order they went; the fill-back pass
+  // reads them (the row cap's too since Maintenance 24).
+  const leftOut: WorkoutBlock[] = [];
+  const dropBlock = (block: WorkoutBlock, why: string) => {
     blocks = blocks.filter((candidate) => candidate.id !== block.id);
-    if (forTime) leftOutForTime.push(block);
+    leftOut.push(block);
     fittingSteps.push(`Left out ${block.label} ${why}.`);
   };
 
@@ -1149,7 +1252,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   // 3. Cap the number of list rows for the chosen length; paired rows count once.
   const cap = capFor(targetMinutes);
   while (blocks.length > cap) {
-    const lowest = lowestValueBlock();
+    const lowest = nextToLeaveOut();
     if (!lowest) break;
     dropBlock(lowest, `to fit ${targetMinutes} min`);
   }
@@ -1183,11 +1286,34 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     entry.sets.filter((set) => set.kind === 'working' && !isDone(entry.id, set.index));
   const trimmable = (entry: WorkoutEntry): boolean => {
     // Locked and logged entries keep their sets unless the user asked for an exact end.
-    if (!hardCap && (keptIds.has(entry.id) || entry.locked || entry.pinned)) return false;
+    if (
+      !hardCap &&
+      !trimmableKept.has(entry.id) &&
+      (keptIds.has(entry.id) || entry.locked || entry.pinned)
+    ) {
+      return false;
+    }
     const floor = entry.id === anchorId ? (hardCap ? 2 : 3) : hardCap ? 1 : 2;
     const planned = hardCap ? 0 : (plannedSets.get(entry.id) ?? 0);
     return remainingWorking(entry).length > Math.max(floor, planned);
   };
+  const syncRoundsOf = (target: WorkoutEntry) => {
+    for (const block of blocks) {
+      if (block.kind !== 'straight' && block.entries.includes(target)) {
+        block.rounds = Math.min(...block.entries.map((entry) => workingSets(entry).length));
+        // A circuit runs its longest member's rounds, and its label names them (Maintenance 24).
+        if (block.kind === 'circuit') {
+          block.rounds = roundsRun(block);
+          block.label = block.label.replace(/^Circuit ×\d+/, `Circuit ×${block.rounds}`);
+        }
+      }
+      if (block.kind === 'straight' && block.entries[0] === target)
+        block.rounds = workingSets(target).length;
+    }
+  };
+  // The sets trimmed, latest last, each with where it sat: a lift left on its own takes them back
+  // (Maintenance 24).
+  const trimmed: { entry: WorkoutEntry; set: SetPrescription; at: number }[] = [];
   const trimSets = (): boolean => {
     const ordered = allEntries(blocks)
       .filter(trimmable)
@@ -1198,14 +1324,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     if (!target) return false;
     const lastWorking = [...remainingWorking(target)].pop();
     if (!lastWorking) return false;
+    trimmed.push({ entry: target, set: lastWorking, at: target.sets.indexOf(lastWorking) });
     target.sets = target.sets.filter((set) => set !== lastWorking);
-    for (const block of blocks) {
-      if (block.kind !== 'straight' && block.entries.includes(target)) {
-        block.rounds = Math.min(...block.entries.map((entry) => workingSets(entry).length));
-      }
-      if (block.kind === 'straight' && block.entries[0] === target)
-        block.rounds = workingSets(target).length;
-    }
+    syncRoundsOf(target);
     fittingSteps.push(`Trimmed one set from ${exerciseOf(target.exerciseId).name}.`);
     return true;
   };
@@ -1213,42 +1334,118 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   let guard = 0;
   let restsExhausted = false;
   const limit = hardCap ? targetMinutes : targetMinutes + 1;
+  // The moves left out, the one the leave-out order keeps longest first (Maintenance 24): the
+  // day's only work for a muscle before a move the main lifts cover, then the best.
+  const keptLongestFirst = (entries: readonly WorkoutEntry[]): WorkoutEntry[] => {
+    const trained = trainedByMainLifts();
+    return [...entries].sort(
+      (a, b) =>
+        leaveOutTier([b], trained) - leaveOutTier([a], trained) ||
+        entryValue(b, weightOf, preferredIds) - entryValue(a, weightOf, preferredIds),
+    );
+  };
+  const onItsOwn = (entry: WorkoutEntry, move: WorkoutEntry) => {
+    const count = (candidate: WorkoutEntry) =>
+      candidate.sets.filter((set) => set.kind === 'working').length;
+    const sets = count(move);
+    const fewer = sets < count(entry) ? ` at ${sets} ${sets === 1 ? 'set' : 'sets'}` : '';
+    fittingSteps.push(
+      `Kept ${exerciseOf(entry.exerciseId).name} on its own${fewer}: the minutes left fit it.`,
+    );
+  };
+  // A move brought back on its own is tried as the plan would run it by now (Maintenance 24): its
+  // rest shortened as far as the fit shortens rests, at its sets, then one fewer at a time down to
+  // two (one for an exact end), never under the sets the plan had before harder added one. The row
+  // cap leaves rows out before any rest is shortened or set trimmed.
+  const tryInPlace = (entry: WorkoutEntry): WorkoutEntry | null => {
+    const move = cloneEntry(entry);
+    move.restSeconds = Math.min(move.restSeconds, floorFor(move));
+    for (const set of move.sets) if (set.kind === 'working') set.restSeconds = move.restSeconds;
+    const block = straightBlock(move, exerciseOf);
+    blocks.push(block);
+    const least = hardCap ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);
+    for (;;) {
+      if (estimate().totalMinutes <= limit) return move;
+      const working = move.sets.filter((set) => set.kind === 'working');
+      if (working.length <= least) break;
+      move.sets = move.sets.filter((set) => set !== working[working.length - 1]);
+      block.rounds = working.length - 1;
+    }
+    blocks = blocks.filter((candidate) => candidate !== block);
+    return null;
+  };
+  // With nothing that fits in the row's place, the lifts left take back the sets the fit trimmed,
+  // the last trimmed first, each where it sat, while the minutes fit them (Maintenance 24): the
+  // time is theirs.
+  const giveBackTrimmed = () => {
+    const left = allEntries(blocks);
+    for (const { entry, set, at } of [...trimmed].reverse()) {
+      if (!left.includes(entry)) continue;
+      const sets = entry.sets;
+      entry.sets = [...sets.slice(0, at), set, ...sets.slice(at)];
+      syncRoundsOf(entry);
+      if (estimate().totalMinutes <= limit) {
+        fittingSteps.push(
+          `Gave ${exerciseOf(entry.exerciseId).name} back a set: the minutes left fit it.`,
+        );
+        continue;
+      }
+      entry.sets = sets;
+      syncRoundsOf(entry);
+    }
+  };
+  // Down to two exercises, a row that still does not fit goes, and a move left out that fits in
+  // its place comes in (Maintenance 24): a main lift gives way this way once no isolation move is
+  // left (docs/research/short-sessions.md, point 3). With none that fits, the row goes all the
+  // same: the main lift stays, never a row to leave out, at its fewest sets by now, and the time
+  // is that lift's.
+  const swapForFit = (row: WorkoutBlock): void => {
+    blocks = blocks.filter((candidate) => candidate !== row);
+    let placed: { entry: WorkoutEntry; move: WorkoutEntry } | undefined;
+    for (const entry of keptLongestFirst(leftOut.flatMap((block) => block.entries))) {
+      const move = tryInPlace(entry);
+      if (move) {
+        placed = { entry, move };
+        break;
+      }
+    }
+    leftOut.push(row);
+    fittingSteps.push(`Left out ${row.label} so the session fits ${targetMinutes} min.`);
+    if (placed) onItsOwn(placed.entry, placed.move);
+    else giveBackTrimmed();
+  };
   while (estimate().totalMinutes > limit && guard < 40) {
     guard += 1;
     if (!restsExhausted && shortenRests()) continue;
     restsExhausted = true;
     if (trimSets()) continue;
-    const lowest = lowestValueBlock();
-    if (lowest && (hardCap || allEntries(blocks).length > 2)) {
-      dropBlock(lowest, `so the session fits ${targetMinutes} min`, true);
+    const lowest = nextToLeaveOut();
+    if (!lowest) break;
+    if (hardCap || allEntries(blocks).length > 2) {
+      dropBlock(lowest, `so the session fits ${targetMinutes} min`);
       continue;
     }
-    break;
+    swapForFit(lowest);
   }
 
   // 4b. Use the minutes a dropped block left behind. Blocks go whole, so the last one out can
-  // leave a gap far bigger than the overrun it cured; one move from it, on its own at the sets
-  // already trimmed, often fits where the pair did not. Best of what went out first.
+  // leave a gap far bigger than the overrun it cured; a move from it, on its own, often fits where
+  // the pair did not. Moves come back while they fit, the one the leave-out order keeps longest
+  // first, each tried in place (Maintenance 24).
   if (estimate().totalMinutes <= limit) {
-    const candidates = [...leftOutForTime]
-      .reverse()
-      .flatMap((block) => block.entries)
-      .sort(
-        (a, b) => entryValue(b, weightOf, preferredIds) - entryValue(a, weightOf, preferredIds),
-      );
-    for (const entry of candidates) {
+    for (const entry of keptLongestFirst(
+      [...leftOut].reverse().flatMap((block) => block.entries),
+    )) {
       if (blocks.length >= cap) break;
-      const block = straightBlock(entry, exerciseOf);
-      blocks.push(block);
-      if (estimate().totalMinutes > limit) {
-        blocks = blocks.filter((candidate) => candidate !== block);
-        continue;
-      }
-      fittingSteps.push(
-        `Kept ${exerciseOf(entry.exerciseId).name} on its own: the minutes left fit it.`,
-      );
+      // A move the fit already brought back stays once.
+      if (allEntries(blocks).some((candidate) => candidate.id === entry.id)) continue;
+      const move = tryInPlace(entry);
+      if (move) onItsOwn(entry, move);
     }
   }
+  // With an exact end time the rows went one by one to fit it: the lifts left take back the sets
+  // the fit trimmed from them while the time still fits them (Maintenance 24).
+  if (hardCap) giveBackTrimmed();
 
   // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
   // to failure, so a style that takes nothing to failure plans none.
@@ -1394,11 +1591,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       `${muscleName(focus)} ${muscleVerb(focus, 'leads', 'lead')} today: your coach focus.`,
     );
   }
-  if (deload) {
-    reasons.push(
-      `Deload week (${formatWindow(deload)}): one set fewer per exercise, one more rep in reserve, loads ${Math.round((1 - DELOAD_LOAD_SCALE) * 100)}% lighter.`,
-    );
-  }
+  if (deload) reasons.push(deloadReason(blocks, deload));
   reasons.push(
     `${profile.restStyle.charAt(0).toUpperCase() + profile.restStyle.slice(1)} rests; supersets ${profile.techniques.supersets ? 'on' : 'off'}, drop sets ${profile.techniques.dropSets ? 'on' : 'off'}, circuits ${profile.techniques.circuits ? 'on' : 'off'}.`,
   );

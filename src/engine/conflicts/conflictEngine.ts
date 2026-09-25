@@ -76,6 +76,12 @@ export function blocksCandidate(conflicts: readonly Conflict[], candidateId: str
   );
 }
 
+/** The movement a sore joint rules out outright. */
+export const PAIN_FLAGS: Readonly<Partial<Record<Joint, LimitationFlag>>> = {
+  knee: 'deep-knee-flexion',
+  'lower-back': 'spinal-loading',
+};
+
 /** Flags the profile forbids outright. */
 export function blockedFlags(limitations: UserProfile['limitations']): Set<LimitationFlag> {
   const blocked = new Set<LimitationFlag>();
@@ -84,8 +90,10 @@ export function blockedFlags(limitations: UserProfile['limitations']): Set<Limit
   if (limitations.shoulder.includes('avoid-behind-neck')) blocked.add('behind-neck');
   if (limitations.shoulder.includes('avoid-dips')) blocked.add('dip');
   if (limitations.shoulder.includes('avoid-wide-grip-pressing')) blocked.add('wide-grip');
-  if (limitations.painAreas.includes('knee')) blocked.add('deep-knee-flexion');
-  if (limitations.painAreas.includes('lower-back')) blocked.add('spinal-loading');
+  for (const joint of limitations.painAreas) {
+    const flag = PAIN_FLAGS[joint];
+    if (flag) blocked.add(flag);
+  }
   return blocked;
 }
 

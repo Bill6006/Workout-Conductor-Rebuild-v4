@@ -168,7 +168,12 @@ describe('coaching by experience', () => {
     expect(card?.signal.action?.kind).toBe('alternatives');
     expect(card?.signal.action?.route?.step).toBe(1);
 
-    const deload = { ...routes, routes: { [BENCH]: { ...routes.routes[BENCH]!, step: 2 } } };
+    // A route moves on only from a step taken, so every step before the one on offer was taken.
+    const taken = (through: number) =>
+      [0, 1, 2, 3]
+        .slice(0, through + 1)
+        .reduce((all, step) => applyRouteStep(all, BENCH, step, 215.8, NOW), emptyRoutes());
+    const deload = { ...routes, routes: { [BENCH]: { ...taken(1).routes[BENCH]!, step: 2 } } };
     const third = conductCoach(withBench(input('advanced', history, { routes: deload })));
     expect(third?.signal.action?.kind).toBe('recalibrate');
     if (third?.signal.action?.kind === 'recalibrate') {
@@ -178,7 +183,7 @@ describe('coaching by experience', () => {
 
     const exhausted = {
       ...routes,
-      routes: { [BENCH]: { ...routes.routes[BENCH]!, step: 3, exhausted: true } },
+      routes: { [BENCH]: { ...taken(3).routes[BENCH]!, step: 3, exhausted: true } },
     };
     const last = conductCoach(withBench(input('advanced', history, { routes: exhausted })));
     expect(last?.signal.headline).toBe(

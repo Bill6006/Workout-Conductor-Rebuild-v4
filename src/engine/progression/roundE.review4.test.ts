@@ -463,7 +463,7 @@ describe('a weight the coach sets on a lift the light dumbbells pushed', () => {
     plain(daysAgo, incline, [8, 8, 8], 30, [6, 10], 3),
   );
 
-  it('takes the reps its push gives at the new weight, and keeps what it stands in for', () => {
+  it('gets no offer of a weight the light dumbbells do not make (Maintenance 24)', () => {
     const workout = plan(lightHome, history);
     const fatigue = interpretFatigue(history, NOW, null);
     const input: CoachInput = {
@@ -481,10 +481,25 @@ describe('a weight the coach sets on a lift the light dumbbells pushed', () => {
       workoutCount: history.length,
       location: lightHome,
     };
-    const take = gatherSignals(input).find((signal) => signal.source === 'stall: undershooting');
-    expect(take?.action).toMatchObject({ kind: 'recalibrate', label: 'Take 25 lb today' });
-    if (take?.action?.kind !== 'recalibrate') throw new Error('no action');
-    const after = act(lightHome, workout, none, take.action.trigger, { history });
+    // The lift is already at the heaviest dumbbells here, 20 lb: no step up to take today.
+    expect(working(workout, incline).map((set) => set.targetWeight)).toEqual([20, 20, 20]);
+    const signals = gatherSignals(input);
+    expect(signals.find((signal) => signal.source === 'stall: undershooting')).toBeUndefined();
+    expect(
+      signals.filter((signal) => signal.action?.label.startsWith('Take')).map((s) => s.headline),
+    ).toEqual([]);
+  });
+
+  it('takes the reps its push gives at a weight set on it, and keeps what it stands in for', () => {
+    const workout = plan(lightHome, history);
+    const lift = entryFor(workout, incline);
+    const after = act(
+      lightHome,
+      workout,
+      none,
+      { type: 'target-weight', entryId: lift.id, weight: 25 },
+      { history },
+    );
     // 25-29 reps were the effort at 20 lb for 30 lb × 6-10; at 25 lb that effort is 14-18.
     for (const set of working(after, incline)) {
       expect([set.targetWeight, set.targetReps, set.asked]).toEqual([

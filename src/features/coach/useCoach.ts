@@ -66,6 +66,7 @@ export function useCoach(): CoachContext | null {
       routes: coachRoutes,
       declines: coachDeclines,
       location,
+      loading: session.loading,
       upcoming: planWeek(profile, location, history, now),
       focus: coachFocus?.muscle ?? null,
       swaps: lastingSwaps.filter((swap) => !swapIsPast(swap, now)),

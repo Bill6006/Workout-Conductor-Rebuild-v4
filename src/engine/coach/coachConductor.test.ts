@@ -88,9 +88,9 @@ describe('coach conductor', () => {
   it('lets a safety signal beat a plateau, and a plateau beat a tip', () => {
     const history = [
       record(2, 'barbell-bench-press', [
-        [6, 185, 2],
-        [6, 185, 2],
-        [6, 185, 1],
+        [6, 185, 0],
+        [6, 185, 0],
+        [6, 185, 0],
       ]),
       record(5, 'barbell-bench-press', [
         [6, 185, 2],
@@ -105,6 +105,8 @@ describe('coach conductor', () => {
     ];
     // The load nudge is obvious past beginner level; a beginner still gets it as a plateau card,
     // on a day whose workout has the bench press (the coach talks about today's workout only).
+    // The last session left nothing in reserve, so the plan holds the load and the step is the
+    // coach's to offer: a step the plan took itself leaves the card out (Maintenance 24).
     const beginner = { policy: coachingPolicy('beginner') };
     const plateau = conductCoach(input(history, beginner, 'push-arms'));
     expect(plateau?.signal.domain).toBe('plateau');

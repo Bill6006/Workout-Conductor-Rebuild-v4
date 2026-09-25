@@ -102,6 +102,11 @@ export interface NextTarget {
   capped?: { at: number };
   /** The weight the target moved from: the last one lifted, when there is one. */
   from?: number | null;
+  /**
+   * Steps the work before the lift today or the lifter's own habit moved the target, down when
+   * negative (Maintenance 24).
+   */
+  nudged?: number;
   /** The weights here could not make the load asked for; the line says what they make instead. */
   rack?: RackNote;
   /** A hold: `reps` is [today's seconds, the top of the range], and loads never move the seconds. */
@@ -370,6 +375,23 @@ function roundToStep(value: number, step: number): number {
   return Math.max(step, Math.round(value / step) * step);
 }
 
+/**
+ * The plan's next load step: one ordinary step up, rounded onto the step grid. The coach steps
+ * from the weight last lifted without the rounding, so an off-grid weight takes one step
+ * (Maintenance 24); it reads this one to know when the plan took its step itself.
+ */
+export function stepUp(weight: number, step: number): number {
+  return roundToStep(weight + step, step);
+}
+
+/**
+ * A micro-deload: a tenth off, and at least one ordinary step down. The coach offers the same
+ * (Maintenance 24).
+ */
+export function microDeload(weight: number, step: number): number {
+  return Math.min(roundToStep(weight * 0.9, step), Math.max(step, weight - step));
+}
+
 function shortDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
@@ -465,6 +487,7 @@ function withSessionFatigue(target: NextTarget, input: NextTargetInput): NextTar
       ...target,
       weight: roundToStep(target.weight + steps * target.increment, target.increment),
       evidence: [...target.evidence, line],
+      nudged: (target.nudged ?? 0) + steps,
     },
     input,
   );
@@ -654,6 +677,7 @@ function recommendBiasedTarget(input: NextTargetInput): NextTarget {
       ...target,
       weight: roundToStep(target.weight + bias.steps * target.increment, target.increment),
       evidence: [...target.evidence, bias.evidence],
+      nudged: (target.nudged ?? 0) + bias.steps,
     },
     input,
   );
@@ -1097,7 +1121,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   if (weight !== null && consecutiveUnder >= 2) {
     return result(
       'deload',
-      Math.min(roundToStep(missedFrom * 0.9, step), Math.max(step, missedFrom - step)),
+      microDeload(missedFrom, step),
       'Missed the floor twice in a row: micro-deload 10% and win the reps back.',
     );
   }
@@ -1146,7 +1170,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       if (consecutiveClean >= policy.cleanSessionsToProgress) {
         return result(
           'weight',
-          roundToStep(weight + step, step),
+          stepUp(weight, step),
           policy.cleanSessionsToProgress > 1
             ? `${consecutiveClean} clean sessions in a row, every set past the floor with reps in reserve: add ${step} ${units}.`
             : `Every set cleared the floor with reps in reserve: add ${step} ${units}.`,
@@ -1175,7 +1199,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     if (consecutiveTop >= policy.topSessionsToProgress) {
       return result(
         'weight',
-        roundToStep(weight + step, step),
+        stepUp(weight, step),
         policy.topSessionsToProgress > 1
           ? `Top of the range on every set ${consecutiveTop} sessions running: add ${step} ${units} and work back up the range.`
           : `Top of the range on every set: add ${step} ${units} and work back up the range.`,
@@ -1307,6 +1331,7 @@ export function summarizeProgression(target: NextTarget): EntryProgression {
     ...(target.rack ? { rack: target.rack } : {}),
     ...(target.short ? { short: target.short } : {}),
     ...(typeof target.from === 'number' ? { from: target.from } : {}),
+    ...(target.nudged ? { nudged: target.nudged } : {}),
   };
 }
 

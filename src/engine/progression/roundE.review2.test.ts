@@ -443,11 +443,20 @@ describe('the record of what a set stands in for, through the workout', () => {
 });
 
 describe('a rebuild in a deload week', () => {
-  const deloaded = (entry: WorkoutEntry) => {
+  /**
+   * The deload holds: a rep more in reserve, and a lighter load stood in for than the same rebuild
+   * outside the week. At the light dumbbells the load itself holds at 20 lb either way, so no line
+   * says it is lighter (Maintenance 24).
+   */
+  const deloaded = (entry: WorkoutEntry, plain: WorkoutEntry) => {
     for (const set of entry.sets.filter((candidate) => candidate.kind === 'working')) {
       expect(set.targetRir).toBe(rx.rir + DELOAD_RIR_DELTA);
     }
-    expect(entry.progression?.evidence).toContain('Deload week: loads 10% lighter.');
+    const first = (lift: WorkoutEntry) => lift.sets.find((set) => set.kind === 'working')!;
+    expect(first(entry).targetWeight).toBe(20);
+    expect(first(plain).targetWeight).toBe(20);
+    expect(first(entry).asked!.weight).toBeLessThan(first(plain).asked!.weight);
+    expect(entry.progression?.evidence).not.toContain('Deload week: loads 10% lighter.');
   };
 
   it('keeps the deload when the weights change', () => {
@@ -456,6 +465,7 @@ describe('a rebuild in a deload week', () => {
     const lift = allEntries(workout.blocks).find((entry) => entry.exerciseId === incline.id)!;
     deloaded(
       entryOf(act(lightHome, workout, none, { type: 'loading' }, { deload: true }), lift.id),
+      entryOf(act(lightHome, workout, none, { type: 'loading' }), lift.id),
     );
   });
 
@@ -464,20 +474,10 @@ describe('a rebuild in a deload week', () => {
     const none = emptyCompleted();
     const lift = allEntries(workout.blocks).find((entry) => entry.exerciseId === incline.id)!;
     const maxes = recordMax(emptyMaxes(), incline.id, { kind: 'max', e1rm: 45 }, 'lb', NOW);
+    const trigger: RecalibrationTrigger = { type: 'max', exerciseId: incline.id };
     deloaded(
-      entryOf(
-        act(
-          lightHome,
-          workout,
-          none,
-          { type: 'max', exerciseId: incline.id },
-          {
-            deload: true,
-            maxes,
-          },
-        ),
-        lift.id,
-      ),
+      entryOf(act(lightHome, workout, none, trigger, { deload: true, maxes }), lift.id),
+      entryOf(act(lightHome, workout, none, trigger, { maxes }), lift.id),
     );
   });
 });

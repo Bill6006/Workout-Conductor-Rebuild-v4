@@ -8,6 +8,7 @@ import {
   overlapWeight,
   precedingWorkInRecord,
   precedingWorkToday,
+  stepsOfSessionLine,
   type EarlierWork,
 } from './sessionContext';
 
@@ -138,5 +139,17 @@ describe('what the difference is worth', () => {
     expect(fatigueSteps(0, 4, true).line).toMatch(/fresher, so up a step/);
     expect(fatigueSteps(0, 4, false).steps).toBe(0);
     expect(fatigueSteps(0, 4, false).line).toBeNull();
+  });
+
+  it('each line reads back as the steps it took, for a plan saved before they were recorded', () => {
+    for (const [today, reference, clean] of [
+      [10, 4, false],
+      [7, 4, false],
+      [0, 4, true],
+    ] as const) {
+      const { steps, line } = fatigueSteps(today, reference, clean);
+      expect(stepsOfSessionLine(line as string)).toBe(steps);
+    }
+    expect(stepsOfSessionLine('From your last sessions: down a step.')).toBe(0);
   });
 });

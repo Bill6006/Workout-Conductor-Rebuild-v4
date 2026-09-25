@@ -4,7 +4,7 @@ import { createDefaultProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { RECORD_NOW, record } from '../../test/records';
 import { overlapWeight } from '../recovery/sessionContext';
-import { recommendNextTarget, type NextTargetInput } from './progression';
+import { recommendNextTarget, summarizeProgression, type NextTargetInput } from './progression';
 import { prescribe } from './roles';
 
 const bench = requireExercise('barbell-bench-press');
@@ -72,6 +72,7 @@ describe('session fatigue against the reference day', () => {
     expect(usual.weight).toBe(plain.weight);
     expect(usual.evidence).toEqual(plain.evidence);
     expect(usual.from).toBe(60);
+    expect(usual.nudged).toBeUndefined();
     expect(usual.reference).toMatchObject({ exerciseId: 'incline-dumbbell-press', clean: true });
   });
 
@@ -83,6 +84,9 @@ describe('session fatigue against the reference day', () => {
     expect(heavier.evidence.at(-1)).toMatch(/on the day the target was set: down a step\.$/);
     const muchHeavier = target(BENCH_SETS * w + 6);
     expect(muchHeavier.weight).toBe(plain.weight - 2 * plain.increment);
+    // The steps as data too (Maintenance 24): the coach reads a step down as a lighter day.
+    expect([heavier.nudged, muchHeavier.nudged]).toEqual([-1, -2]);
+    expect(summarizeProgression(muchHeavier).nudged).toBe(-2);
   });
 
   it('goes up a step when today is fresher than a clean reference day', () => {
@@ -91,5 +95,6 @@ describe('session fatigue against the reference day', () => {
     const fresher = target(0);
     expect(fresher.weight).toBe(plain.weight + plain.increment);
     expect(fresher.evidence.at(-1)).toMatch(/fresher, so up a step\.$/);
+    expect(fresher.nudged).toBe(1);
   });
 });

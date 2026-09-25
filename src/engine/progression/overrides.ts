@@ -19,6 +19,17 @@ export interface OverrideBias {
 export const OVERRIDE_WINDOW = 4;
 export const OVERRIDE_MAJORITY = 3;
 
+const STEPS_UP = ': the target steps up to meet you.';
+const STEPS_DOWN = ': the target steps down to meet you.';
+
+/**
+ * The steps a line of `overrideBias` stands for (Maintenance 24): a plan saved before targets
+ * recorded their steps (`nudged`) is read by its own lines.
+ */
+export function stepsOfHabitLine(line: string): number {
+  return line.endsWith(STEPS_DOWN) ? -1 : line.endsWith(STEPS_UP) ? 1 : 0;
+}
+
 export function overrideBias(
   history: readonly WorkoutRecord[],
   exerciseId: string,
@@ -45,7 +56,7 @@ export function overrideBias(
       above,
       below,
       compared,
-      evidence: `You lifted above the suggested load in ${above} of the last ${compared} sessions: the target steps up to meet you.`,
+      evidence: `You lifted above the suggested load in ${above} of the last ${compared} sessions${STEPS_UP}`,
     };
   }
   if (below >= OVERRIDE_MAJORITY) {
@@ -54,7 +65,7 @@ export function overrideBias(
       above,
       below,
       compared,
-      evidence: `You chose less than the suggested load in ${below} of the last ${compared} sessions: the target steps down to meet you.`,
+      evidence: `You chose less than the suggested load in ${below} of the last ${compared} sessions${STEPS_DOWN}`,
     };
   }
   return { steps: 0, above, below, compared, evidence: null };

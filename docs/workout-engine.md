@@ -26,10 +26,22 @@ The Default session is built first from the template. For any target the engine 
 
 1. forms a circuit when circuits are on, the template is not strength-priority, and the target is 30 min or less;
 2. pairs isolation moves into two-move superset blocks (at most two pairs) when supersets are on and the conflict engine allows the pair;
-3. caps the number of list rows (15 min: 3, 30 min: 5, 45 min: 6, Default: 8), dropping the lowest-value row first; paired rows are worth more than their weakest member because they save time, and the main lift is never dropped;
-4. while the estimate exceeds the target by more than a minute: shortens rests toward the floors (strength 120 s, hypertrophy 60 s, isolation 45 s), trims one set from the lowest-value exercise (main lift keeps at least three working sets), then drops the lowest-value row;
-   then, when a dropped row left minutes unused, keeps its best move on its own at the sets already trimmed if that fits (rows go whole, so the last one out can leave a gap far bigger than the overrun it cured); asked to make the session harder, the fit may take back an added set but never one the plan already had;
+3. caps the number of list rows (15 min: 3, 30 min: 5, 45 min: 6, Default: 8), leaving rows out in the order below; the main lift is never dropped;
+4. while the estimate exceeds the target by more than a minute: shortens rests toward the floors (strength 120 s, hypertrophy 60 s, isolation 45 s), trims one set from the lowest-value exercise (main lift keeps at least three working sets, two with an exact end time), then leaves out a row in the order below while more than two exercises are left (a pair left out can take it to one). Down to two exercises, a row that still does not fit goes, and a move left out that fits in its place comes in, the one the order below keeps longest first (Maintenance 24): this is how a main lift gives way once no isolation move is left. With none that fits, the row goes all the same: the main lift, never a row to leave out, stays, and the lifts left take back the sets the fit trimmed, each where it sat, while the minutes fit them ("Gave X back a set"), their rests staying at their shortest; with an exact end time the rows go one by one, and the lifts left take back their trimmed sets the same way once the plan fits. A lift the rebuild keeps is fitted like a lift not begun when a change of the day's settings rebuilt its sets (`KeptEntry.trimmable`), and a circuit's rounds, and the count in its label, are the rounds it runs: its longest member's. A row with the main lift in it (a superset) is never left out, so such a session can still run over, and says so. With an exact end time, rows keep going until the plan fits;
+   then, when rows left out (by the row cap or for time) left minutes unused, their moves come back on their own while they fit and the row cap allows (rows go whole, so the last one out can leave a gap far bigger than the overrun it cured), the move the order below keeps longest first, then the best. A move brought back, here or in a row's place, is tried as the plan would run it by now: its rest cut as far as the fit cuts rests (never longer than its own, so a short-rest setting keeps its shorter rest), at its sets, then one fewer at a time down to two (one with an exact end time), and its line says so ("Kept X on its own at 2 sets"). Asked to make the session harder, the fit, and a move brought back, may take back an added set but never one the plan already had, except with an exact end time;
 5. adds one drop set on the last drop-set-safe isolation move when drop sets are on and either the session is shorter than Default or that muscle is under half its weekly target, unless it would break the time target. A move with no load (bodyweight, a band, Bench Dip, Step-Up) or a core stability move is never drop-set safe, and a set the weights here pushed to its effort takes none (Maintenance 23).
+
+The order rows are left out in (Maintenance 24, `docs/research/short-sessions.md`, `leaveOutRank` in
+the generator): an isolation exercise whose muscles the main lifts still in the plan train, as
+primary or secondary muscles, goes first; then the day's only work for a muscle, core work always
+counting as that; then lower-back work (only an exercise the lifter made can be one: the catalog's
+only lift with the lower back as a primary muscle is the deadlift, a main lift); and a main
+(multi-joint) lift only once no isolation row is left. A row ranks as its highest-ranked exercise.
+Within a rank the lowest value goes first, where paired rows are worth more than their weakest
+member because they save time. A fresh plan at a default length of 60 or 75 minutes fits every
+exercise in all 600 the report checked; one that does not, most likely with light dumbbells, follows
+the order. A 45-minute default is a 45-minute session and follows it, as does any rebuild that must
+leave something out.
 
 Every step is recorded in `explanation.fittingSteps` and shown under "Why this workout". When
 even the leanest plan runs over, `duration.overByMinutes` is set and the card says the session

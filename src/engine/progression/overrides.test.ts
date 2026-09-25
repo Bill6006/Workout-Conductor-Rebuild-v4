@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { record } from '../../test/records';
-import { overrideBias } from './overrides';
+import { overrideBias, stepsOfHabitLine } from './overrides';
 
 const BENCH = 'barbell-bench-press';
 
@@ -29,6 +29,8 @@ describe('learning from overrides', () => {
     expect(bias.evidence).toBe(
       'You lifted above the suggested load in 3 of the last 4 sessions: the target steps up to meet you.',
     );
+    // Read back as its step, for a plan saved before targets recorded their steps.
+    expect(stepsOfHabitLine(bias.evidence as string)).toBe(1);
   });
 
   it('steps the target down when the lifter chose less three times, and stays put otherwise', () => {
@@ -39,6 +41,8 @@ describe('learning from overrides', () => {
       session(11, 185, 185),
     ];
     expect(overrideBias(down, BENCH, 5)).toMatchObject({ steps: -1, below: 3 });
+    expect(stepsOfHabitLine(overrideBias(down, BENCH, 5).evidence as string)).toBe(-1);
+    expect(stepsOfHabitLine('From your last sessions.')).toBe(0);
     const mixed = [
       session(2, 185, 190),
       session(5, 185, 180),

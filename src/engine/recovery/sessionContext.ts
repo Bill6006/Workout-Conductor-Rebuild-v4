@@ -143,6 +143,11 @@ export interface FatigueSteps {
   line: string | null;
 }
 
+const SESSION_LINE = 'Before this today: ';
+const DOWN_TWO = ': down two steps.';
+const DOWN_ONE = ': down a step.';
+const UP_ONE = ', and that day was clean: fresher, so up a step.';
+
 function fmt(sets: number): string {
   return Number.isInteger(sets) ? String(sets) : sets.toFixed(1);
 }
@@ -159,12 +164,26 @@ export function fatigueSteps(
   referenceClean: boolean,
 ): FatigueSteps {
   const diff = today - reference;
-  const stem = `Before this today: about ${fmt(today)} sets on these muscles, against ${fmt(
+  const stem = `${SESSION_LINE}about ${fmt(today)} sets on these muscles, against ${fmt(
     reference,
   )} on the day the target was set`;
-  if (diff >= 6) return { steps: -2, line: `${stem}: down two steps.` };
-  if (diff >= 3) return { steps: -1, line: `${stem}: down a step.` };
-  if (diff <= -3 && referenceClean)
-    return { steps: 1, line: `${stem}, and that day was clean: fresher, so up a step.` };
+  if (diff >= 6) return { steps: -2, line: `${stem}${DOWN_TWO}` };
+  if (diff >= 3) return { steps: -1, line: `${stem}${DOWN_ONE}` };
+  if (diff <= -3 && referenceClean) return { steps: 1, line: `${stem}${UP_ONE}` };
   return { steps: 0, line: null };
+}
+
+/**
+ * The steps a line of `fatigueSteps` stands for (Maintenance 24): a plan saved before targets
+ * recorded their steps (`nudged`) is read by its own lines.
+ */
+export function stepsOfSessionLine(line: string): number {
+  if (!line.startsWith(SESSION_LINE)) return 0;
+  return line.endsWith(DOWN_TWO)
+    ? -2
+    : line.endsWith(DOWN_ONE)
+      ? -1
+      : line.endsWith(UP_ONE)
+        ? 1
+        : 0;
 }

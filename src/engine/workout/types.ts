@@ -56,6 +56,11 @@ export interface EntryProgression {
    * step rule from it, as the plan did.
    */
   from?: number;
+  /**
+   * Steps the target moved for the work before it today or the lifter's own habit, down when
+   * negative (Maintenance 24): the coach reads a step down as a lighter day the plan chose.
+   */
+  nudged?: number;
 }
 
 /** Sessions in a row a lift done at bodyweight ended under the bottom of its range, and that floor. */
@@ -216,6 +221,14 @@ export function allEntries(blocks: readonly WorkoutBlock[]): WorkoutEntry[] {
 
 export function workingSets(entry: WorkoutEntry): SetPrescription[] {
   return entry.sets.filter((set) => set.kind !== 'warmup');
+}
+
+/** The rounds a paired block runs: its longest member's working sets (Maintenance 24). */
+export function roundsRun(block: WorkoutBlock): number {
+  return Math.max(
+    0,
+    ...block.entries.map((entry) => entry.sets.filter((set) => set.kind === 'working').length),
+  );
 }
 
 /**

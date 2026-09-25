@@ -232,6 +232,8 @@ export interface SummaryInput {
   prefix?: string;
   /** A complete headline that replaces the count-based one. */
   headline?: string;
+  /** The headline when nothing changed, in place of "no changes needed" after the prefix. */
+  unchanged?: string;
   previous: GeneratedWorkout;
   next: GeneratedWorkout;
   changes: readonly EntryChange[];
@@ -246,7 +248,9 @@ export function composeSummary(input: SummaryInput): ChangeSummary {
   const parts = describeCounts(counts);
   return {
     headline:
-      parts.length > 0 ? `${prefix}: ${parts.join(', ')}.` : `${prefix}: no changes needed.`,
+      parts.length > 0
+        ? `${prefix}: ${parts.join(', ')}.`
+        : (input.unchanged ?? `${prefix}: no changes needed.`),
     details,
     counts,
   };

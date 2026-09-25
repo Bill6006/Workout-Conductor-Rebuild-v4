@@ -358,6 +358,17 @@ function parseCoachDeclines(raw: unknown): CoachDeclines {
   return emptyDeclines();
 }
 
+/** The routes with one lift's route as it was in `before`: a step taken back, and nothing else. */
+function withRouteOf(routes: CoachRoutes, before: CoachRoutes, exerciseId: string): CoachRoutes {
+  const was = before.routes[exerciseId];
+  if (routes.routes[exerciseId] === was) return routes;
+  const others = Object.entries(routes.routes).filter(([id]) => id !== exerciseId);
+  return {
+    ...routes,
+    routes: Object.fromEntries(was ? [...others, [exerciseId, was]] : others),
+  };
+}
+
 function parseCoachRoutes(raw: unknown): CoachRoutes {
   if (raw && typeof raw === 'object') {
     const routes = (raw as { routes?: unknown }).routes;
@@ -876,8 +887,27 @@ export class AppStore {
     if (this.state.status === 'ready') this.ensureSession();
   }
 
+  /**
+   * A plan previewed on an earlier day and still on the screen (Maintenance 24): nothing chosen
+   * for that day is a choice for today.
+   */
+  private fromEarlierDay(session: WorkoutSession): boolean {
+    return (
+      session.status === 'preview' && !session.baseKey.startsWith(`${this.now().slice(0, 10)}|`)
+    );
+  }
+
+  /** Puts today's plan in place of one from an earlier day; true when it did. */
+  private leaveEarlierDay(): boolean {
+    const session = this.state.session;
+    if (!session || !this.fromEarlierDay(session)) return false;
+    this.ensureSession();
+    return true;
+  }
+
   /** Keeps the session after a save that needs no recalibration (units, notes). */
   private syncSessionKey(): void {
+    if (this.leaveEarlierDay()) return;
     const key = this.baseKey();
     const { session } = this.state;
     if (key && session && session.baseKey !== key) this.setSession({ ...session, baseKey: key });
@@ -924,6 +954,15 @@ export class AppStore {
     trigger: RecalibrationTrigger,
     reason: string | undefined,
   ): Promise<RecalibrationResult | null> {
+    // A plan left open from an earlier day gives way to today's first, so nothing chosen for that
+    // day carries into today; a change to one of its exercises or pairings, or an exercise added to
+    // it, then has nothing to change.
+    if (
+      this.leaveEarlierDay() &&
+      ('entryId' in trigger || 'blockId' in trigger || trigger.type === 'add-exercise')
+    ) {
+      return null;
+    }
     const session = this.state.session;
     const { profile, history } = this.state;
     if (!session || !profile || session.status === 'completed') return null;
@@ -1041,6 +1080,8 @@ export class AppStore {
    * a change that failed). Resolves once that is saved; rejects, and puts it back, if it cannot be.
    */
   undoRecalibration(): Promise<void> {
+    // A plan from an earlier day has nothing to take back today (Maintenance 24).
+    if (this.leaveEarlierDay()) return Promise.resolve();
     const session = this.state.session;
     // A finished workout is saved as it was done: nothing to take back.
     if (!session?.previous || session.status === 'completed') return Promise.resolve();
@@ -1133,6 +1174,7 @@ export class AppStore {
 
   /** End by exact time: a hard cap at the chosen length, counted from now. */
   setEndBy(on: boolean): Promise<RecalibrationResult | null> {
+    this.leaveEarlierDay();
     const { session, profile } = this.state;
     if (!session || !profile) return Promise.resolve(null);
     const minutes = resolveTargetMinutes(session.duration, profile.schedule.typicalDurationMinutes);
@@ -1143,6 +1185,7 @@ export class AppStore {
   // ---------------------------------------------------------------- active workout
 
   startWorkout(): void {
+    this.leaveEarlierDay();
     const session = this.requireSession();
     if (session.status !== 'preview') return;
     const now = this.now();
@@ -1726,7 +1769,7 @@ export class AppStore {
     };
     const headline = `Loaded "${saved.name}".`;
     this.setSession({
-      ...createSession(session.baseKey, workout, now),
+      ...createSession(this.baseKey() ?? session.baseKey, workout, now),
       duration: saved.duration,
       lastSummary: {
         headline,
@@ -2351,26 +2394,124 @@ export class AppStore {
     const db = await this.getDatabase();
     await putVerified(db, 'meta', week, { now: this.now });
     this.setState({ deloadWeek: week });
-    this.regeneratePreview();
+    // Today's plan changes only when the week covers today.
+    if (inDeloadWindow(week, this.now())) await this.regeneratePreview();
     return week;
   }
 
   async cancelDeloadWeek(): Promise<void> {
+    const week = this.state.deloadWeek;
     const db = await this.getDatabase();
     if ((await db.get<Identified>('meta', DELOAD_WEEK_ID)) !== undefined) {
       await deleteVerified(db, 'meta', DELOAD_WEEK_ID);
     }
     this.setState({ deloadWeek: null });
-    this.regeneratePreview();
+    // Today's plan changes only when the week covered today.
+    if (week && inDeloadWindow(week, this.now())) await this.regeneratePreview();
   }
 
-  /** A previewed (not started) session is rebuilt from today's inputs. */
-  private regeneratePreview(): void {
+  /**
+   * A previewed (not started) session is rebuilt from today's inputs, in turn with every other
+   * change. Today's choices hold through it (Maintenance 24): the length, a check-in, the plates
+   * missing today, and what was set aside for today (skips, sore joints, busy equipment, an end time
+   * still ahead) are applied to the new plan by the engine, as every rebuild applies them.
+   */
+  private regeneratePreview(): Promise<void> {
+    const run = this.calibrationQueue.then(() => this.rebuildPreview());
+    this.calibrationQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  private rebuildPreview(): void {
     const session = this.state.session;
     if (!session || session.status !== 'preview') return;
     clearSession(this.storage);
     this.setState({ session: null });
     this.ensureSession();
+    const fresh = this.state.session;
+    const { profile, history } = this.state;
+    if (!fresh || !profile || this.fromEarlierDay(session)) return;
+    // An end time already past is no longer a choice for today.
+    const endBy =
+      session.constraints.endBy !== null &&
+      Date.parse(session.constraints.endBy) > Date.parse(this.now())
+        ? session.constraints.endBy
+        : null;
+    const today = { ...session.constraints, endBy };
+    const chosen =
+      session.duration !== fresh.duration ||
+      today.readiness !== null ||
+      today.intensity !== 0 ||
+      today.endBy !== null ||
+      today.avoidExerciseIds.length > 0 ||
+      today.busyEquipment.length > 0 ||
+      today.painJoints.length > 0 ||
+      session.loading.missingPlates.length > 0;
+    if (!chosen) return;
+    let result: RecalibrationResult;
+    try {
+      result = this.engine({
+        trigger: { type: 'duration', choice: session.duration },
+        workout: fresh.workout,
+        completed: fresh.completed,
+        lockedEntryIds: [],
+        currentEntryId: null,
+        duration: session.duration,
+        profile,
+        location: this.currentLocation(),
+        loading: session.loading,
+        history,
+        constraints: { ...today, deload: fresh.constraints.deload, focus: fresh.constraints.focus },
+        maxes: this.state.strengthMaxes,
+        swaps: this.activeSwaps(),
+        reason: "Today's choices kept",
+        timestamp: this.now(),
+      });
+    } catch (error) {
+      result = {
+        ok: false,
+        scope: 'full',
+        error: error instanceof Error ? error.message : 'The plan could not be built again.',
+        workout: fresh.workout,
+        durationMs: 0,
+      };
+    }
+    if (!result.ok) {
+      // As with any change that fails, the previous plan stays as it was, and says so. The change
+      // itself is saved: its focus and deload week go with the plan, so the next rebuild has them.
+      const setting = { deload: fresh.constraints.deload, focus: fresh.constraints.focus };
+      this.setSession({
+        ...session,
+        constraints: { ...session.constraints, ...setting },
+        previous: session.previous
+          ? {
+              ...session.previous,
+              constraints: { ...session.previous.constraints, ...setting },
+            }
+          : session.previous,
+      });
+      this.setState({
+        calibration: {
+          status: 'error',
+          title: "Today's plan",
+          label: "Keeping today's choices",
+          evaluating: [],
+          error: `${result.error} The setting itself is saved.`,
+        },
+      });
+      return;
+    }
+    this.setSession({
+      ...fresh,
+      duration: result.duration,
+      workout: result.workout,
+      constraints: result.constraints,
+      loading: session.loading,
+      defaultEstimatedMinutes:
+        result.duration === 'default'
+          ? result.workout.duration.estimatedMinutes
+          : fresh.defaultEstimatedMinutes,
+    });
   }
 
   // ---------------------------------------------------------------- cloud copy
@@ -2669,7 +2810,7 @@ export class AppStore {
     const db = await this.getDatabase();
     await putVerified(db, 'meta', focus, { now: this.now });
     this.setState({ coachFocus: focus });
-    this.regeneratePreview();
+    await this.regeneratePreview();
   }
 
   /**
@@ -2728,7 +2869,7 @@ export class AppStore {
   async stopLastingSwap(from: string): Promise<void> {
     const change = await this.changeSwaps((current) => withoutSwap(current, from));
     if (!change.saved) throw new Error('The swap could not be stopped.');
-    this.regeneratePreview();
+    await this.regeneratePreview();
   }
 
   /**
@@ -2803,7 +2944,7 @@ export class AppStore {
       await deleteVerified(db, 'meta', COACH_FOCUS_ID);
     }
     this.setState({ coachFocus: null });
-    this.regeneratePreview();
+    await this.regeneratePreview();
   }
 
   /** A saved session that trained the focus muscle clears the focus. */
@@ -2872,20 +3013,83 @@ export class AppStore {
     this.setSession({ ...session, coachAccepted: [...session.coachAccepted, key] });
   }
 
-  /** Records that the lifter took a coach route step; the step itself is applied elsewhere. */
+  /**
+   * A coach card's change, tapped (Maintenance 24). A route step is in place while the change runs,
+   * so its card never offers the step again once the overlay goes, and it is saved once the change
+   * has landed, onto the routes as they are then (a sync may have reloaded them); a change that
+   * fails, or has nothing left to change, takes back that step alone. Any other offer is marked as
+   * taken once its change has landed. A step that cannot be saved stays for now, and the error
+   * says the coach may offer it again.
+   */
+  async takeCoachChange(
+    action: Extract<CoachAction, { kind: 'recalibrate' }>,
+    signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'headline'>,
+  ): Promise<RecalibrationResult | null> {
+    const route = action.route;
+    const before = this.state.coachRoutes;
+    const stepped = route ? this.routeStepped(route) : before;
+    const stepping = stepped !== before;
+    if (stepping) this.setState({ coachRoutes: stepped });
+    const takeBack = () => {
+      if (route && stepping)
+        this.setState({
+          coachRoutes: withRouteOf(this.state.coachRoutes, before, route.exerciseId),
+        });
+    };
+    let result: RecalibrationResult | null;
+    try {
+      result = await this.recalibrate(action.trigger);
+    } catch (error) {
+      takeBack();
+      throw error;
+    }
+    if (!result?.ok) {
+      takeBack();
+      return result;
+    }
+    if (!route) {
+      this.acceptCoachSignal(signal);
+      return result;
+    }
+    const landed = this.routeStepped(route);
+    // Put in place and saved by an earlier tap of the same step.
+    if (!stepping && landed === this.state.coachRoutes) return result;
+    if (landed !== this.state.coachRoutes) this.setState({ coachRoutes: landed });
+    try {
+      await this.saveRoutes(landed);
+    } catch {
+      throw new Error(
+        'The change is made, but this step could not be saved: the coach may offer it again.',
+      );
+    }
+    return result;
+  }
+
+  /**
+   * A coach tap: a route step that opens a sheet (a variation, a different exercise) is recorded
+   * as the sheet opens. A change is recorded only once it has landed (`takeCoachChange`).
+   */
   async noteCoachAction(action: CoachAction): Promise<void> {
-    if (!action.route) return;
-    const next = applyRouteStep(
+    if (!action.route || action.kind === 'recalibrate') return;
+    const next = this.routeStepped(action.route);
+    if (next === this.state.coachRoutes) return;
+    await this.saveRoutes(next);
+    this.setState({ coachRoutes: next });
+  }
+
+  private routeStepped(route: NonNullable<CoachAction['route']>): CoachRoutes {
+    return applyRouteStep(
       this.state.coachRoutes,
-      action.route.exerciseId,
-      action.route.step,
-      action.route.baselineE1rm,
+      route.exerciseId,
+      route.step,
+      route.baselineE1rm,
       this.now(),
     );
-    if (next === this.state.coachRoutes) return;
+  }
+
+  private async saveRoutes(routes: CoachRoutes): Promise<void> {
     const db = await this.getDatabase();
-    await putVerified(db, 'meta', next, { now: this.now });
-    this.setState({ coachRoutes: next });
+    await putVerified(db, 'meta', routes, { now: this.now });
   }
 
   /** After a saved workout: open routes for new stalls, advance applied steps, close moved lifts. */

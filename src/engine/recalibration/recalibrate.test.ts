@@ -475,8 +475,10 @@ describe('recalibration: techniques and effort', () => {
     );
     expect(rushed.duration).toBe(45);
     expect(rushed.constraints.painJoints).toEqual(['knee']);
+    // No lift on this day loads the knee, so nothing is claimed for it (Maintenance 24), and the
+    // new length, not the check-in, trimmed the sets.
     expect(rushed.summary.headline).toMatch(
-      /easier on your knee, fitted to 45 min for time pressure/,
+      /^Adjusted for today \(fitted to 45 min for time pressure\): /,
     );
   });
 

@@ -1,10 +1,11 @@
 import type { SetDonePredicate } from '../duration/duration';
-import type {
-  GeneratedWorkout,
-  SetKind,
-  SetPrescription,
-  WorkoutBlock,
-  WorkoutEntry,
+import {
+  roundsRun,
+  type GeneratedWorkout,
+  type SetKind,
+  type SetPrescription,
+  type WorkoutBlock,
+  type WorkoutEntry,
 } from './types';
 
 /**
@@ -68,9 +69,7 @@ export function blockSequence(block: WorkoutBlock): SetPosition[] {
       if (set.kind === 'warmup') sequence.push(position(block, entry, set, 0));
     }
   }
-  const rounds = Math.max(
-    ...block.entries.map((entry) => entry.sets.filter((set) => set.kind === 'working').length),
-  );
+  const rounds = roundsRun(block);
   for (let round = 0; round < rounds; round += 1) {
     for (const entry of block.entries) {
       const set = entry.sets.filter((candidate) => candidate.kind === 'working')[round];
