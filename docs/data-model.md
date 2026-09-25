@@ -66,6 +66,11 @@ That is what lets a backup written by a newer app version pass through an older 
   at every level. See `docs/backup-and-restore.md`.
 - `CustomExercise` (`id` starts with `custom-`), `CustomInstruction` (keyed by exercise id), and
   `CustomMedia` (`source: "user"`, data URL, at most 3 MB).
+- `WorkoutRecord` logged sets and the stored plan's sets carry an optional `asked` (Maintenance
+  23): the load and rep range a set stood in for when the weights at the place made less. The
+  history judges the set against the reps it showed and counts it toward the load and range
+  asked; an unreadable `asked` is dropped, never the set. The stored plan's progression note
+  may carry `from` (the weight a target moved from, for the step rule), dropped when unreadable.
 
 ## Save safety
 

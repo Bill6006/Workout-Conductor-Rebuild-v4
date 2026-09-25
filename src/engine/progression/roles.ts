@@ -1,8 +1,10 @@
 import type { CatalogExercise, TrainingRole } from '../../catalog/exercises/exerciseSchema';
+import { isCoreStability } from '../../catalog/movementPatterns/movementPatterns';
 import type { StyleId, UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { resolveStyle } from '../planning/styleAdvice';
 import type { SetPrescription } from '../workout/types';
+import { hasNoLoad } from './startingLoad';
 
 /**
  * Progression roles turn an exercise and its role in the session into a
@@ -211,17 +213,48 @@ export function prescribe(
 
   return {
     ...base,
+    rir: Math.max(base.rir, rirFloor(exercise)),
     restSeconds: Math.round((base.restSeconds * factor) / 5) * 5,
   };
 }
 
-export function buildSets(prescription: Prescription, warmupSets: number): SetPrescription[] {
+/** The reps in reserve a core stability move always keeps (Maintenance 23). */
+export const CORE_STABILITY_RIR = 2;
+
+/**
+ * The fewest reps in reserve an exercise is ever asked for: a core stability move stops well short
+ * of failure, whatever the style, the role, or "make it harder" asks; anything else, none.
+ */
+export function rirFloor(exercise: Pick<CatalogExercise, 'movementPattern'>): number {
+  return isCoreStability(exercise.movementPattern) ? CORE_STABILITY_RIR : 0;
+}
+
+/**
+ * A warm-up at bodyweight (Maintenance 23, docs/research/bodyweight-warm-ups.md): nothing comes off
+ * the load, so it is a few easy reps, about a third to a half of the bottom of the working range
+ * (2-3 before sets of 6-12, 1 before sets of 3-6), always fewer than the working sets ask.
+ */
+export function easyWarmupReps(working: readonly [number, number]): [number, number] {
+  const bottom = Math.max(1, working[0]);
+  const low = Math.max(1, Math.round(bottom / 3));
+  return [low, Math.max(low, Math.floor(bottom / 2))];
+}
+
+/** The sets for a prescription, ramps first; a lift with no load gets easy ones (`easyWarmupReps`). */
+export function buildSets(
+  prescription: Prescription,
+  warmupSets: number,
+  exercise?: CatalogExercise,
+): SetPrescription[] {
   const sets: SetPrescription[] = [];
+  const easy = exercise !== undefined && hasNoLoad(exercise);
   for (let index = 0; index < warmupSets; index += 1) {
     sets.push({
       index: sets.length,
       kind: 'warmup',
-      targetReps: [Math.max(3, prescription.reps[0]), Math.max(5, prescription.reps[1])],
+      targetReps: easy
+        ? easyWarmupReps(prescription.reps)
+        : [Math.max(3, prescription.reps[0]), Math.max(5, prescription.reps[1])],
       targetRir: 5,
       targetWeight: null,
       restSeconds: 45,
@@ -317,6 +350,8 @@ export function rampSetsFor(
     }
   }
   if (load && load.weight !== null) count = Math.min(count, rampRoom(load));
+  // At bodyweight one easy set rehearses the move; a second would only tire it (Maintenance 23).
+  if (hasNoLoad(exercise)) count = Math.min(count, 1);
   return count;
 }
 

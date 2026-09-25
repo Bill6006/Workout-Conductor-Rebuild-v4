@@ -50,6 +50,8 @@ export interface EditActions {
   canReorder: boolean;
   inSuperset: boolean;
   hasWarmup: boolean;
+  /** False for a lift with no load that has its one warm-up set already. */
+  canAddRamp: boolean;
   onAddSet: () => void;
   onRemoveSet: () => void;
   onAddRamp: () => void;
@@ -337,9 +339,11 @@ export function ExerciseDetailSheet({
             <button type="button" className={styles.actionButton} onClick={editActions.onRemoveSet}>
               − Working set
             </button>
-            <button type="button" className={styles.actionButton} onClick={editActions.onAddRamp}>
-              + Ramp set
-            </button>
+            {editActions.canAddRamp ? (
+              <button type="button" className={styles.actionButton} onClick={editActions.onAddRamp}>
+                + Ramp set
+              </button>
+            ) : null}
             {editActions.hasWarmup ? (
               <button
                 type="button"

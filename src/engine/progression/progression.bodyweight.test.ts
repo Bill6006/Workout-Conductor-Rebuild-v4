@@ -247,3 +247,136 @@ describe('the history notes about a lift done at bodyweight', () => {
     expect(benchNotes.some((note) => note.recommendation === 'micro-deload')).toBe(true);
   });
 });
+
+/**
+ * Maintenance 23, the owner's item 24: a lift done at bodyweight has no estimated max to take
+ * 10% off after a break. Three weeks or more away, the first session back starts at the bottom of
+ * the range with more in reserve, and misses from before the break stop counting.
+ */
+describe('coming back to a lift done at bodyweight after a break', () => {
+  const REACHED: SetSpec[] = [
+    [8, null, 1],
+    [8, null, 1],
+    [7, null, 1],
+  ];
+  /** The first session back, logged at the bottom of the range it was given. */
+  const back = (daysAgo: number, sets: SetSpec[]) =>
+    record(daysAgo, 'chin-up', sets, [6, 8], chinRx.rir + 1);
+
+  it('starts at the bottom of the range with a rep more in reserve after three weeks', () => {
+    const target = next(chinUp, chinUps([25], REACHED));
+    expect(target).toMatchObject({
+      mode: 'return',
+      weight: null,
+      reps: [6, 8],
+      rir: chinRx.rir + 1,
+    });
+    expect(target.evidence).toContain(
+      '25 days since the last session: start at the bottom of the range, 6-8 reps, with a rep more in reserve.',
+    );
+    expect(target.short).toBeUndefined();
+  });
+
+  it('keeps two reps more in reserve after six weeks', () => {
+    const target = next(chinUp, chinUps([45], REACHED));
+    expect(target).toMatchObject({
+      mode: 'return',
+      reps: [6, 8],
+      rir: Math.min(4, chinRx.rir + 2),
+    });
+    expect(target.evidence).toContain(
+      '45 days since the last session: start at the bottom of the range, 6-8 reps, with two reps more in reserve.',
+    );
+  });
+
+  it('counts three weeks to the day', () => {
+    expect(next(chinUp, chinUps([21], REACHED)).mode).toBe('return');
+    const twenty = next(chinUp, chinUps([20], REACHED));
+    expect(twenty.mode).not.toBe('return');
+    expect(twenty.reps).toEqual(chinRx.reps);
+  });
+
+  it('comes back the same way after misses, which no longer count', () => {
+    const target = next(chinUp, chinUps([30, 26], SHORT));
+    expect(target.mode).toBe('return');
+    expect(target.reps).toEqual([6, 8]);
+    expect(target.short).toBeUndefined();
+    expect(target.evidence.join(' ')).not.toMatch(/fewer reps|twice in a row|Missed the floor/);
+  });
+
+  it('reads the session back as today’s range, and its top as today’s top', () => {
+    // Back two days ago at 6-8 and at the top of it: 8 reps is not the top of 6-12.
+    const target = next(chinUp, [
+      back(2, [
+        [8, null, 2],
+        [8, null, 2],
+        [8, null, 2],
+      ]),
+      ...chinUps([26], SHORT),
+    ]);
+    expect(target).toMatchObject({ mode: 'maintain', weight: null, reps: chinRx.reps });
+    expect(target.rir).toBe(chinRx.rir);
+    expect(target.evidence[0]).toMatch(/^Last: bodyweight × 8, 8, 8/);
+    expect(target.evidence).toContain('Bodyweight inside the range: keep building reps.');
+    // Hitting today's top on the way back still counts as the top.
+    const top = next(chinUp, [
+      back(2, [
+        [12, null, 2],
+        [12, null, 2],
+      ]),
+      ...chinUps([26], REACHED),
+    ]);
+    expect(top.evidence).toContain(
+      'Bodyweight at the top of the range: add reps or load the movement.',
+    );
+  });
+
+  it('forgets misses from before the break once back', () => {
+    // Short twice before the break, and short again on the way back: one miss, not three.
+    const once = next(chinUp, [back(2, SHORT), ...chinUps([26, 30], SHORT)]);
+    expect(once.short).toBeUndefined();
+    expect(once.evidence).toContain(
+      'Missed the floor last time; one session is not a trend, so the same target again.',
+    );
+    // Two short sessions since the break are a run of two.
+    const twice = next(chinUp, [...chinUps([2], SHORT), back(5, SHORT), ...chinUps([29], SHORT)]);
+    expect(twice.short).toEqual({ sessions: 2, floor: 6 });
+    expect(twice.evidence).toContain(
+      'Short of 6 reps twice in a row: try fewer reps over more sets.',
+    );
+  });
+
+  it('forgets a loaded lift’s misses from before a break too', () => {
+    const short = (daysAgo: number) =>
+      record(daysAgo, 'barbell-bench-press', [
+        [3, 185, 1],
+        [3, 185, 0],
+      ]);
+    // Short on the way back and short before a 28-day break: one miss, so the load holds.
+    const target = next(bench, [short(2), short(30)], 'primary-strength');
+    expect(target.mode).toBe('maintain');
+    expect(target.weight).toBe(185);
+    expect(target.evidence).toContain(
+      'Missed the floor last time; one session is not a trend, so repeat the load.',
+    );
+    // Without a break between them, two misses still take 10% off.
+    expect(next(bench, [short(2), short(6)], 'primary-strength').mode).toBe('deload');
+  });
+
+  it('leaves a lift with a weight to take off to its own return', () => {
+    const benchBack = next(
+      bench,
+      [
+        record(25, 'barbell-bench-press', [
+          [5, 185, 2],
+          [5, 185, 2],
+        ]),
+      ],
+      'primary-strength',
+    );
+    expect(benchBack.mode).toBe('return');
+    expect(benchBack.weight).not.toBeNull();
+    expect(benchBack.evidence.join(' ')).toMatch(/back at 90% of the estimated max/);
+    expect(benchBack.evidence.join(' ')).not.toMatch(/bottom of the range/);
+  });
+});

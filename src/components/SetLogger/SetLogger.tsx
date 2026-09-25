@@ -52,6 +52,8 @@ interface SetLoggerProps {
   note?: string | null;
   /** A held exercise: the reps dial counts seconds, and there is no RIR. */
   hold?: boolean;
+  /** A lift with no load: its warm-up is a few easy reps, and the hints say so plainly. */
+  noLoad?: boolean;
   /** Seconds a finished countdown filled in; a new nonce fills again without losing the weight. */
   filled?: { reps: number; nonce: string } | null;
   /** The hold's countdown, shown above the button. */
@@ -91,6 +93,7 @@ export function SetLogger({
   onWeightHintTap,
   note = null,
   hold = false,
+  noLoad = false,
   filled = null,
   timer = null,
 }: SetLoggerProps) {
@@ -220,11 +223,15 @@ export function SetLogger({
     values.weight < target.weight - 1e-6;
   // Short enough to fit under a dial on a phone: the head ("Ramp 1 of 2"), the weight line and
   // the button already say a ramp is a warm-up, and the head says a drop set is one.
+  // A warm-up at bodyweight is a few easy reps, said plainly (Maintenance 23).
+  const easyWarmup = noLoad && target.kind === 'warmup';
   const repsHint = hold
     ? `Target ${low} s`
-    : target.kind === 'drop'
-      ? `Aim ${low}-${high}`
-      : `Target ${low}-${high}`;
+    : easyWarmup
+      ? 'A few easy reps'
+      : target.kind === 'drop'
+        ? `Aim ${low}-${high}`
+        : `Target ${low}-${high}`;
 
   const dial = (
     field: Field,
@@ -356,11 +363,13 @@ export function SetLogger({
               'in reserve',
               () => nudgeRir(1),
               () => nudgeRir(-1),
-              target.kind === 'warmup'
-                ? `Easy, RIR ${target.rir}`
-                : target.kind === 'drop'
-                  ? 'Last clean rep'
-                  : `Target RIR ${target.rir}`,
+              easyWarmup
+                ? 'Stop well short'
+                : target.kind === 'warmup'
+                  ? `Easy, RIR ${target.rir}`
+                  : target.kind === 'drop'
+                    ? 'Last clean rep'
+                    : `Target RIR ${target.rir}`,
             )}
       </div>
       {note ? (

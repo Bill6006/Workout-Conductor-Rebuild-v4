@@ -36,6 +36,7 @@ import {
 } from '../volume/weeklyVolume';
 import { checkExerciseFit } from '../conflicts/conflictEngine';
 import { startRatio } from '../progression/startingLoad';
+import { EFFORT_REPS_CEILING, entryPushedToEffort } from '../progression/progression';
 import { MAX_WORKING_SETS } from '../recalibration/recalibrate';
 import {
   accessoryPicker,
@@ -830,8 +831,10 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       !isHold(exercise)
     ) {
       const top = workingSets(entry).find((set) => set.kind === 'working')?.targetReps[1] ?? 0;
-      // An exercise whose sets were already changed today is not offered another one.
-      const repsAtCeiling = top >= 20 && !entry.manual?.sets;
+      // The reps stop at twenty, or at thirty on a set run to its effort (Maintenance 23). An
+      // exercise whose sets were already changed today is not offered another one.
+      const ceiling = entryPushedToEffort(entry) ? EFFORT_REPS_CEILING : 20;
+      const repsAtCeiling = top >= ceiling && !entry.manual?.sets;
       const capped: CoachSignal = {
         domain: 'progression',
         headline: `${exercise.name}: at the heaviest weight here (${progression.capped.at} ${units})`,
@@ -1018,6 +1021,7 @@ function tipSignals(input: CoachInput): CoachSignal[] {
           return (
             exercise.dropSetSafe &&
             (entry.role === 'isolation' || entry.role === 'finisher') &&
+            !entryPushedToEffort(entry) &&
             !started(input, entry) &&
             muscle !== undefined &&
             muscle.weeklyTarget > 0 &&

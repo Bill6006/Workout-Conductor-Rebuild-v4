@@ -1,5 +1,6 @@
 import { isCompoundPattern, type MovementPatternId } from '../movementPatterns/movementPatterns';
 import type { MuscleId } from '../muscles/muscles';
+import { dropSetSuits } from '../../engine/progression/startingLoad';
 import {
   ExerciseSchema,
   type CatalogExercise,
@@ -259,7 +260,9 @@ export function defineExercise(input: ExerciseInput): CatalogExercise {
     station: input.station ?? defaultStation(input.equipment),
     repRanges: defaultReps(input, compound),
     measure: input.measure ?? 'reps',
-    dropSetSafe: input.dropSetSafe ?? !(heavyBarbell || (spinal && load !== 'stack')),
+    dropSetSafe:
+      (input.dropSetSafe ?? !(heavyBarbell || (spinal && load !== 'stack'))) &&
+      dropSetSuits({ id: input.id, load, movementPattern: input.pattern }),
     supersetFriendly: input.supersetFriendly ?? !(compound && input.strength === 3),
     stabilityDemand:
       input.stability ??

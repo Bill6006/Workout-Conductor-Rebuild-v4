@@ -3,7 +3,12 @@ import { muscleName, type MuscleId, MUSCLE_IDS } from '../../catalog/muscles/mus
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { weightStep } from '../plateMath/plateMath';
-import { performanceHistory, type PerformancePoint } from '../progression/progression';
+import {
+  RETURN_AFTER_DAYS,
+  judgedSet,
+  performanceHistory,
+  type PerformancePoint,
+} from '../progression/progression';
 import { amountText, holdById } from '../workout/setText';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { computeWeeklyVolume, goalWeights, weeklyTargets } from '../volume/weeklyVolume';
@@ -69,6 +74,24 @@ function firstToLastDrop(point: PerformancePoint): number {
   return first && last ? first.reps - last.reps : 0;
 }
 
+/**
+ * The sessions a note may compare (Maintenance 23): newest first, back to the last break of three
+ * weeks or more, and stopping at a session the weights at a place pushed (lighter, more reps),
+ * which says nothing about the load or the rest.
+ */
+function sinceLastBreak(points: readonly PerformancePoint[]): PerformancePoint[] {
+  const run: PerformancePoint[] = [];
+  for (const point of points) {
+    if (point.light) break;
+    const newer = run[run.length - 1];
+    if (newer && Date.parse(newer.date) - Date.parse(point.date) >= RETURN_AFTER_DAYS * DAY_MS) {
+      break;
+    }
+    run.push(point);
+  }
+  return run;
+}
+
 function exerciseInsights(
   input: StrategyInput,
   sessions: readonly WorkoutRecord[],
@@ -85,7 +108,9 @@ function exerciseInsights(
     const exercise = getExercise(exerciseId);
     // Load, fade and flat-rep insights read reps; a hold's seconds have their own progression.
     if (!exercise || exercise.measure === 'seconds') continue;
-    const points = performanceHistory(sessions, exercise, 4).filter((point) => !point.viaFamily);
+    const points = sinceLastBreak(
+      performanceHistory(sessions, exercise, 4).filter((point) => !point.viaFamily),
+    );
     if (points.length < 3) continue;
     const [a, b, c] = points as [PerformancePoint, PerformancePoint, PerformancePoint];
     const step = weightStep(exercise, input.profile.units);
@@ -329,6 +354,20 @@ export function analyzeStrategy(input: StrategyInput): StrategyInsight[] {
   ].sort((a, b) => b.severity - a.severity || a.headline.localeCompare(b.headline));
 }
 
+/**
+ * Whether a set beats an estimated max. A set the weights at a place pushed counts every rep, as
+ * the rules read it, and so does the session it is compared with (Maintenance 23).
+ */
+function beaten(
+  set: { weight: number | null; reps: number; asked?: { weight: number } },
+  max: number | null,
+): boolean {
+  if (max === null || set.weight === null) return false;
+  const light = set.asked !== undefined && set.weight > 0 && set.weight < set.asked.weight;
+  const estimate = set.weight * (1 + (light ? set.reps : Math.min(set.reps, 12)) / 30);
+  return estimate > max * 1.02;
+}
+
 /** Plain-language feedback on a just-saved session, exercise by exercise, then overall. */
 export function sessionFeedback(
   record: WorkoutRecord,
@@ -349,7 +388,11 @@ export function sessionFeedback(
     const best = [...sets].sort(
       (a, b) => (b.weight ?? 0) * b.reps - (a.weight ?? 0) * a.reps || b.reps - a.reps,
     )[0] as (typeof sets)[number];
-    const floor = sets.every((set) => !set.targetReps || set.reps >= set.targetReps[0]);
+    // Graded as the rules read each set: a pushed set answers to what it showed (Maintenance 23).
+    const floor = sets.every((set) => {
+      const judged = judgedSet(set);
+      return !judged.targetReps || judged.reps >= judged.targetReps[0];
+    });
     const planned = entry.plannedSets ?? sets.length;
     const hold = exercise.measure === 'seconds';
     const bestLine =
@@ -369,13 +412,7 @@ export function sessionFeedback(
           ? amountText(previous.bestReps, true)
           : `${previous.bestWeight} × ${amountText(previous.bestReps, true)}`;
       lines.push(`${exercise.name}: progressed, ${before} became ${bestLine}.`);
-    } else if (
-      !hold &&
-      previous &&
-      previous.e1rm !== null &&
-      best.weight !== null &&
-      best.weight * (1 + Math.min(best.reps, 12) / 30) > previous.e1rm * 1.02
-    ) {
+    } else if (!hold && previous && beaten(best, previous.asked?.e1rm ?? previous.e1rm)) {
       progressed += 1;
       lines.push(
         `${exercise.name}: progressed, ${previous.bestWeight ?? 'bodyweight'} × ${previous.bestReps} became ${bestLine}.`,

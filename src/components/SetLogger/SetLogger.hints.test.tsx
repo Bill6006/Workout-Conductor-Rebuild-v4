@@ -82,3 +82,43 @@ describe('SetLogger hints short enough for a phone', () => {
     expect(screen.getByTestId('reps-hint')).toHaveTextContent(/^Target 20 s$/);
   });
 });
+
+describe('SetLogger at bodyweight', () => {
+  it('says a warm-up is a few easy reps, stopping well short; the working sets keep their target', () => {
+    // Maintenance 23, the owner's item 22: not "Target 6-12, Easy, RIR 5".
+    const { rerender } = render(
+      <SetLogger
+        {...base}
+        noLoad
+        target={{ kind: 'warmup', reps: [2, 3], rir: 5, weight: null, label: 'Ramp 1 of 1' }}
+        initial={{ weight: null, reps: 3, rir: 5 }}
+        weightHint="Bodyweight"
+      />,
+    );
+    expect(screen.getByTestId('reps-hint')).toHaveTextContent(/^A few easy reps$/);
+    expect(screen.getByTestId('rir-hint')).toHaveTextContent(/^Stop well short$/);
+
+    rerender(
+      <SetLogger
+        {...base}
+        noLoad
+        target={{ kind: 'working', reps: [6, 12], rir: 1, weight: null, label: 'Set 1 of 3' }}
+        initial={{ weight: null, reps: 12, rir: 1 }}
+        weightHint="Bodyweight"
+      />,
+    );
+    expect(screen.getByTestId('reps-hint')).toHaveTextContent(/^Target 6-12$/);
+    expect(screen.getByTestId('rir-hint')).toHaveTextContent(/^Target RIR 1$/);
+
+    // A loaded lift's ramp keeps its numbers.
+    rerender(
+      <SetLogger
+        {...base}
+        target={{ kind: 'warmup', reps: [4, 6], rir: 5, weight: 80, label: 'Ramp 1 of 2' }}
+        initial={{ weight: 80, reps: 6, rir: 5 }}
+      />,
+    );
+    expect(screen.getByTestId('reps-hint')).toHaveTextContent(/^Target 4-6$/);
+    expect(screen.getByTestId('rir-hint')).toHaveTextContent(/^Easy, RIR 5$/);
+  });
+});

@@ -296,17 +296,18 @@ export function ActiveWorkoutScreen() {
       .map((pr) => pr.label)
       .join(' · ') || null;
 
-  // The one-time max offer: a lift without its own history, nothing logged yet, not declined.
+  // The one-time max offer: a lift without its own history, nothing done yet, not declined.
   const knowMaxFor = (entry: WorkoutEntry, block: WorkoutBlock) => {
     const mode = entry.progression?.mode;
     if (mode !== 'start' && mode !== 'estimate' && mode !== 'return') return undefined;
     const exercise = requireExercise(entry.exerciseId);
     // A max is read from reps; a hold's seconds say nothing about one.
     if (startRatio(exercise) === null || isHold(exercise)) return undefined;
-    const logged = session.completed.sets.some(
-      (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
-    );
-    if (logged) return undefined;
+    // With a set done or skipped, its ramp included, or a weight set for today, the lift keeps
+    // its sets and a max counts from the next session (Maintenance 23): there is no first target
+    // left to offer.
+    const touched = session.completed.sets.some((set) => set.entryId === entry.id);
+    if (touched || entry.manual?.weight) return undefined;
     if (maxPromptHidden(strengthMaxes, entry.exerciseId, new Date().toISOString())) {
       return undefined;
     }
@@ -481,6 +482,7 @@ export function ActiveWorkoutScreen() {
             initial={loggedValues(session, entry.id, editingSet.index)}
             mode="edit"
             hold={hold}
+            noLoad={hasNoLoad(exercise)}
             weightStep={step}
             onCommit={(values) => commitEdit(entry.id, editingSet.index, values)}
             onCancel={() => setEditing(null)}
@@ -544,6 +546,7 @@ export function ActiveWorkoutScreen() {
               onCommit={(values) => commitLog(entry, currentHere.set, values)}
               disabled={calibrating}
               helper={helper}
+              noLoad={hasNoLoad(exercise)}
               weightHint={
                 currentHere.set.targetWeight === null && hasNoLoad(exercise)
                   ? exercise.load === 'band'
@@ -568,7 +571,10 @@ export function ActiveWorkoutScreen() {
                 <span className={styles.panelNote}>Ramp sets never count as working sets.</span>
               </div>
             ) : null}
-            {currentHere.kind === 'working' && !anyWeights && workoutCount > 0 ? (
+            {currentHere.kind === 'working' &&
+            !anyWeights &&
+            workoutCount > 0 &&
+            !hasNoLoad(exercise) ? (
               <p className={styles.panelNote} data-testid="logging-note">
                 No weights logged yet. Targets follow your last logged load.
               </p>
@@ -712,6 +718,20 @@ export function ActiveWorkoutScreen() {
           inSuperset: selected.block.kind !== 'straight' && !selectedStarted,
           hasWarmup: selected.entry.sets.some(
             (set) => set.kind === 'warmup' && !isDone(selected.entry.id, set.index),
+          ),
+          // A lift with no load keeps one warm-up set; one skipped was never done.
+          canAddRamp: !(
+            hasNoLoad(requireExercise(selected.entry.exerciseId)) &&
+            selected.entry.sets.some(
+              (set) =>
+                set.kind === 'warmup' &&
+                !session.completed.sets.some(
+                  (done) =>
+                    done.entryId === selected.entry.id &&
+                    done.setIndex === set.index &&
+                    done.skipped,
+                ),
+            )
           ),
           onAddSet: () => act({ type: 'sets', entryId: selected.entry.id, workingDelta: 1 }),
           onRemoveSet: () => act({ type: 'sets', entryId: selected.entry.id, workingDelta: -1 }),

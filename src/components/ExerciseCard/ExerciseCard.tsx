@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
+import { isCoreStability } from '../../catalog/movementPatterns/movementPatterns';
 import type { RestStyle, UnitSystem } from '../../core/validation/profile';
+import { entryPushedToEffort } from '../../engine/progression/progression';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
 import { workingSets, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
@@ -86,8 +88,9 @@ export function ExerciseCard({
   const doneWorking = logged.filter((set) => set.kind === 'working' && !set.skipped).length;
   const target = position?.set ?? working[0] ?? entry.sets[0];
   const rest = block.kind === 'straight' ? entry.restSeconds : block.restBetweenRoundsSeconds;
+  // At the heaviest weight a slower tempo adds the effort; a set run to its effort has it already.
   const tempo = tempoCue(entry.role, target?.kind ?? 'working', exercise, {
-    capped: Boolean(entry.progression?.capped),
+    capped: Boolean(entry.progression?.capped) && !entryPushedToEffort(entry),
   });
   // A hold has no rep tempo: the card says how long, and the details keep the cue, effort and rest.
   const hold = isHold(exercise);
@@ -96,6 +99,7 @@ export function ExerciseCard({
     target?.targetRir ?? entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
     entry.role,
     hold,
+    isCoreStability(exercise.movementPattern),
   );
   const restNote = restGuidance(entry.role, rest);
   const research = evidenceLines(
@@ -209,7 +213,6 @@ export function ExerciseCard({
                 <dt>Tempo</dt>
                 <dd>
                   <strong>{tempo.tempo}</strong> · {tempo.why}
-                  {tempo.tempo.includes('X') ? '; X is as fast as you can' : ''}
                 </dd>
               </div>
             )}

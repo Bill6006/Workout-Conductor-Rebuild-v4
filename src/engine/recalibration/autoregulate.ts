@@ -104,16 +104,24 @@ export function autoregulate(input: AutoregulationInput): AutoregulationPlan {
   };
 }
 
-/** The prescription part of a logged set, from the workout's set list. */
+/**
+ * The prescription part of a logged set, from the workout's set list. A set the weights at a
+ * place pushed, lifted at the load it stood in for or heavier, answers to the range asked, as
+ * the history reads it: nothing was pushed (Maintenance 23).
+ */
 export function outcomeFor(
-  prescription: Pick<SetPrescription, 'targetReps' | 'targetRir'>,
+  prescription: Pick<SetPrescription, 'targetReps' | 'targetRir'> &
+    Partial<Pick<SetPrescription, 'asked'>>,
   actual: { reps: number; rir: number | null; weight: number | null },
 ): LoggedSetOutcome {
+  const asked = prescription.asked;
+  const atAsked =
+    asked !== undefined && actual.weight !== null && actual.weight >= asked.weight - 1e-6;
   return {
     reps: actual.reps,
     rir: actual.rir,
     weight: actual.weight,
-    targetReps: prescription.targetReps,
+    targetReps: atAsked ? [asked.reps[0], asked.reps[1]] : prescription.targetReps,
     targetRir: prescription.targetRir,
   };
 }

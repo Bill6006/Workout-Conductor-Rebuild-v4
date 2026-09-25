@@ -65,15 +65,21 @@ describe('a lift done at bodyweight, in the store', () => {
     expect(workout.duration.estimatedMinutes).toBe(Math.round(fresh.totalMinutes));
   });
 
-  it('keeps its ramp within the new range, so a warm-up never asks for more than the work', async () => {
+  it('keeps its ramp a few easy reps under the working range, before and after the range moves', async () => {
     const { handle, entryId } = await withChinUp();
-    // A ramp at the old range: 6-12 at RIR 5, before the tap.
+    // A ramp is a few easy reps under the working floor (Maintenance 23), not the working range.
     await handle.store.recalibrate({ type: 'add-warmup', entryId });
     const ramps = () => entryOf(handle, entryId).sets.filter((set) => set.kind === 'warmup');
+    const floor = () =>
+      entryOf(handle, entryId).sets.find((set) => set.kind === 'working')!.targetReps[0];
     expect(ramps().length).toBeGreaterThan(0);
-    expect(ramps().every((set) => set.targetReps[1] > 5)).toBe(true);
+    expect(floor()).toBeGreaterThanOrEqual(3);
+    const easy = [Math.max(1, Math.round(floor() / 3)), Math.max(1, Math.floor(floor() / 2))];
+    expect(ramps().map((set) => set.targetReps)).toEqual(ramps().map(() => easy));
+    expect(ramps().every((set) => set.targetReps[1] < floor())).toBe(true);
+    // Fewer reps over more sets: the ramps follow the new range down, and stay under it.
     await handle.store.recalibrate({ type: 'rep-range', entryId, reps: [3, 5], workingDelta: 1 });
-    expect(ramps().every((set) => set.targetReps[0] === 3 && set.targetReps[1] === 5)).toBe(true);
+    expect(ramps().map((set) => set.targetReps)).toEqual(ramps().map(() => [1, 1]));
   });
 
   it('adds a ramp after the tap at the working range, never the usual 3-5 floor', async () => {
@@ -86,7 +92,7 @@ describe('a lift done at bodyweight, in the store', () => {
     expect(ramps.every((set) => set.targetReps[1] <= 2)).toBe(true);
   });
 
-  it('adds a ramp mid-exercise at the range of the sets still to come', async () => {
+  it('adds a ramp mid-exercise under the range of the sets still to come', async () => {
     const { handle, entryId } = await withChinUp();
     const { store } = handle;
     store.startWorkout();
@@ -96,7 +102,7 @@ describe('a lift done at bodyweight, in the store', () => {
     const at = currentPosition(session.workout, (id, index) => keys.has(`${id}:${index}`))!;
     expect(at.entryId).toBe(entryId);
     await store.logSet(entryId, at.setIndex, { weight: null, reps: 3, rir: 1 });
-    // The rest lowered by hand, then a ramp: it asks for no more than those sets.
+    // The rest lowered by hand, then a ramp: a few easy reps under those sets.
     await store.recalibrate({ type: 'rep-range', entryId, reps: [2, 4] });
     await store.recalibrate({ type: 'add-warmup', entryId });
     const added = entryOf(handle, entryId).sets.find(
@@ -104,7 +110,7 @@ describe('a lift done at bodyweight, in the store', () => {
         set.kind === 'warmup' &&
         !doneKeys(store.getSnapshot().session!.completed).has(`${entryId}:${set.index}`),
     );
-    expect(added?.targetReps).toEqual([2, 4]);
+    expect(added?.targetReps).toEqual([1, 1]);
   });
 
   it('keeps a 0 logged on a chin-up as the bodyweight, and asks for no weight next time', async () => {

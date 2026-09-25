@@ -1,4 +1,5 @@
 import { isHold, type CatalogExercise } from '../../catalog/exercises/exerciseSchema';
+import { pushedToEffort } from '../progression/progression';
 import { restCategory } from '../progression/roles';
 import { blockSequence, isPairedSwitch, restBetween } from '../workout/sequence';
 import type {
@@ -77,8 +78,9 @@ const NOTHING_DONE: SetDonePredicate = () => false;
  * A hold's range is seconds, and it runs for today's target: the first number.
  */
 export function workSecondsFor(
-  entry: Pick<WorkoutEntry, 'role' | 'progression'>,
-  set: Pick<SetPrescription, 'kind' | 'targetReps'>,
+  entry: Pick<WorkoutEntry, 'role' | 'progression'> & Partial<Pick<WorkoutEntry, 'manual'>>,
+  set: Pick<SetPrescription, 'kind' | 'targetReps'> &
+    Partial<Pick<SetPrescription, 'targetWeight' | 'asked'>>,
   hold = false,
 ): number {
   const reps = (set.targetReps[0] + set.targetReps[1]) / 2;
@@ -88,7 +90,10 @@ export function workSecondsFor(
     category === 'strength' ? SET_OVERHEAD_SECONDS.strength : SET_OVERHEAD_SECONDS.other;
   if (hold) return set.targetReps[0] + overhead;
   if (set.kind === 'warmup') return reps * REP_SECONDS.warmup + overhead;
-  const perRep = entry.progression?.capped ? REP_SECONDS.capped : REP_SECONDS[category];
+  const perRep =
+    entry.progression?.capped && !pushedToEffort(set, entry.role, entry.manual?.reps === true)
+      ? REP_SECONDS.capped
+      : REP_SECONDS[category];
   return reps * perRep + overhead;
 }
 

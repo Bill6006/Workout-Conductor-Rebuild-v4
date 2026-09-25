@@ -42,7 +42,7 @@ describe('a max entered on a lift that already has logged sets', () => {
     const lifted = target(maxes);
     expect(lifted.weight).toBe(plain.weight + ENTERED_MAX_STEPS * plain.increment);
     expect(lifted.evidence.at(-1)).toBe(
-      'Your max of 275 lb, entered after your last session, says more than your logged sets: up 2 steps toward it. Your next logged session takes over.',
+      'Your max of 275 lb, entered after you began this lift last time, says more than your logged sets: up 2 steps toward it. Your next logged session takes over.',
     );
   });
 

@@ -50,6 +50,10 @@ export interface PerformanceSet {
   rir: number | null;
   targetReps: [number, number] | null;
   targetRir: number | null;
+  /** What a set the weights at the place pushed stood in for (Maintenance 23). */
+  asked?: { weight: number; reps: [number, number] };
+  /** The weight the plan showed for a pushed set, beside `asked`. */
+  shownWeight?: number | null;
 }
 
 export interface PerformancePoint {
@@ -71,6 +75,15 @@ export interface PerformancePoint {
   /** Estimated one-rep max of the best set (Epley), null without a weight. */
   e1rm: number | null;
   plannedSets: number;
+  /**
+   * The sets the weights at the place pushed, lighter with more reps, read as the sets they stood
+   * in for (Maintenance 23). The rules read this; the lines the lifter sees read the point itself.
+   */
+  asked?: PerformancePoint;
+  /** In `asked`: a push stopped short of the effort asked, so it cannot show the load was beaten. */
+  pushedShort?: boolean;
+  /** Some set was lifted under the load asked: a session the weights at a place pushed. */
+  light?: boolean;
 }
 
 export interface NextTarget {
@@ -97,6 +110,8 @@ export interface NextTarget {
   short?: ShortRun;
   /** The logged session the target was read from, and whether that day met its reps and reserve. */
   reference?: { recordId: string; exerciseId: string; clean: boolean };
+  /** The weights here made less than asked: the load and range its sets stand in for. */
+  asked?: SetPrescription['asked'];
 }
 
 export function estimateOneRepMax(weight: number, reps: number): number {
@@ -116,37 +131,183 @@ function completedWorking(record: WorkoutRecord, exerciseId: string) {
           rir: set.rir,
           targetReps: set.targetReps ?? null,
           targetRir: typeof set.targetRir === 'number' ? set.targetRir : null,
+          ...(set.asked ? { asked: set.asked, shownWeight: set.targetWeight ?? null } : {}),
           planned: entry.plannedSets ?? 0,
         })),
     );
 }
+
+/** Reps at `target` that match `reps` at `weight`: the same estimated max (Epley). */
+function repsAt(target: number, weight: number, reps: number): number {
+  return Math.max(0, Math.round(30 * (weight / target) * (1 + reps / 30) - 30));
+}
+
+/** Whether a pushed set was lifted at the weight the plan showed for it. */
+function asShown(set: PerformanceSet): boolean {
+  return (
+    typeof set.shownWeight === 'number' &&
+    set.weight !== null &&
+    Math.abs(set.weight - set.shownWeight) < 1e-6
+  );
+}
+
+/** The reps the push added to a set, as shown: the same at both ends of its range. */
+function pushedBy(set: PerformanceSet): number {
+  if (!set.asked || !set.targetReps) return 0;
+  return Math.max(0, set.targetReps[0] - set.asked.reps[0]);
+}
+
+/** Whether a set was lifted under the load its plan asked for (Maintenance 23). */
+function liftedLight(set: PerformanceSet): boolean {
+  return (
+    set.asked !== undefined &&
+    set.weight !== null &&
+    set.weight > 0 &&
+    set.weight < set.asked.weight - 1e-6
+  );
+}
+
+/**
+ * A set judged against what it showed (Maintenance 23). Lifted light at the weight shown, it is
+ * judged as logged, against the reps shown. Lifted light at another weight, its reps are read at
+ * the weight shown by the same effort (Epley). Lifted at the load asked or heavier, nothing was
+ * pushed: it answers to the range asked. Any other set reads as logged.
+ */
+function asJudged(set: PerformanceSet): PerformanceSet {
+  const asked = set.asked;
+  if (!asked || set.weight === null || set.weight <= 0) return set;
+  if (!liftedLight(set)) return { ...set, targetReps: asked.reps };
+  const shown = set.shownWeight;
+  if (asShown(set) || typeof shown !== 'number' || shown <= 0) return set;
+  return { ...set, reps: repsAt(shown, set.weight, set.reps) };
+}
+
+/**
+ * A logged set's reps and range as the rules read them (Maintenance 23), so the finish summary
+ * grades a set the way the next target does.
+ */
+export function judgedSet(set: {
+  reps: number;
+  weight: number | null;
+  targetReps?: [number, number] | null;
+  targetWeight?: number | null;
+  asked?: { weight: number; reps: [number, number] };
+}): { reps: number; targetReps: [number, number] | null } {
+  const judged = asJudged({
+    reps: set.reps,
+    weight: set.weight,
+    rir: null,
+    targetReps: set.targetReps ?? null,
+    targetRir: null,
+    ...(set.asked ? { asked: set.asked, shownWeight: set.targetWeight ?? null } : {}),
+  });
+  return { reps: judged.reps, targetReps: judged.targetReps };
+}
+
+/**
+ * Whether a push stopped short of the effort asked: a strength set, a small push, or one held at
+ * thirty reps shows fewer reps than the same effort takes at its weight, so meeting them shows
+ * the reps were met, not that the load asked was.
+ */
+function pushedShort(set: PerformanceSet): boolean {
+  const asked = set.asked;
+  if (!asked || !liftedLight(set)) return false;
+  const shown =
+    typeof set.shownWeight === 'number' && set.shownWeight > 0
+      ? set.shownWeight
+      : (set.weight as number);
+  if (shown >= asked.weight - 1e-6) return false;
+  const middle = (asked.reps[0] + asked.reps[1]) / 2;
+  const effort = Math.max(
+    1,
+    Math.round(30 * (asked.weight / shown) * (1 + middle / 30) - 30 - middle),
+  );
+  return pushedBy(set) < effort;
+}
+
+/**
+ * The estimated max a pushed session shows: a set lifted light counts every rep, as its push
+ * counted them; any other set as usual. Only the rules read it: Progress keeps the one it names.
+ */
+function pushedMax(sets: readonly PerformanceSet[], exerciseId: string): number | null {
+  if (isHold(getExercise(exerciseId))) return null;
+  const maxes = sets.flatMap((set) => {
+    if (set.weight === null) return [];
+    return [
+      liftedLight(set)
+        ? Math.round(set.weight * (1 + set.reps / 30) * 10) / 10
+        : estimateOneRepMax(set.weight, set.reps),
+    ];
+  });
+  return maxes.length > 0 ? Math.max(...maxes) : null;
+}
+
+type PointMeta = Pick<
+  PerformancePoint,
+  'date' | 'recordId' | 'exerciseId' | 'viaFamily' | 'plannedSets'
+>;
 
 function toPoint(
   record: WorkoutRecord,
   exerciseId: string,
   viaFamily: boolean,
 ): PerformancePoint | null {
-  const sets = completedWorking(record, exerciseId);
-  if (sets.length === 0) return null;
-  const weights = sets.map((set) => set.weight).filter((w): w is number => w !== null);
-  const bestWeight = weights.length > 0 ? Math.max(...weights) : null;
-  const best = [...sets].sort(
-    (a, b) => (b.weight ?? 0) * b.reps - (a.weight ?? 0) * a.reps || b.reps - a.reps,
-  )[0] as (typeof sets)[number];
-  const withTarget = sets.filter((set) => set.targetReps !== null);
-  const rirs = sets.map((set) => set.rir).filter((r): r is number => r !== null);
-  return {
+  const logged = completedWorking(record, exerciseId);
+  if (logged.length === 0) return null;
+  const meta: PointMeta = {
     date: record.completedAt ?? record.startedAt,
     recordId: record.id,
     exerciseId,
     viaFamily,
-    sets: sets.map(({ reps, weight, rir, targetReps, targetRir }) => ({
+    plannedSets: logged[0]?.planned ?? 0,
+  };
+  const sets: PerformanceSet[] = logged.map(
+    ({ reps, weight, rir, targetReps, targetRir, asked, shownWeight }) => ({
       reps,
       weight,
       rir,
       targetReps,
       targetRir,
-    })),
+      ...(asked ? { asked, shownWeight: shownWeight ?? null } : {}),
+    }),
+  );
+  const point = summarize(meta, sets);
+  if (!sets.some((set) => set.asked)) return point;
+  const light = sets.some(liftedLight);
+  const short = sets.some(pushedShort);
+  const judged = summarize(meta, sets.map(asJudged));
+  // The load the session stands for: what was asked of a set lifted light.
+  const stands = sets.flatMap((set) =>
+    set.weight === null ? [] : [set.asked && liftedLight(set) ? set.asked.weight : set.weight],
+  );
+  return {
+    ...point,
+    ...(light ? { light: true } : {}),
+    asked: {
+      ...judged,
+      bestWeight: stands.length > 0 ? Math.max(...stands) : judged.bestWeight,
+      topAll: judged.topAll,
+      e1rm: pushedMax(sets, exerciseId),
+      ...(light ? { light: true } : {}),
+      ...(short ? { pushedShort: true } : {}),
+    },
+  };
+}
+
+function summarize(meta: PointMeta, sets: PerformanceSet[]): PerformancePoint {
+  const weights = sets.map((set) => set.weight).filter((w): w is number => w !== null);
+  const bestWeight = weights.length > 0 ? Math.max(...weights) : null;
+  const best = [...sets].sort(
+    (a, b) => (b.weight ?? 0) * b.reps - (a.weight ?? 0) * a.reps || b.reps - a.reps,
+  )[0] as PerformanceSet;
+  const withTarget = sets.filter((set) => set.targetReps !== null);
+  const rirs = sets.map((set) => set.rir).filter((r): r is number => r !== null);
+  return {
+    date: meta.date,
+    recordId: meta.recordId,
+    exerciseId: meta.exerciseId,
+    viaFamily: meta.viaFamily,
+    sets,
     bestWeight,
     bestReps: best.reps,
     topAll:
@@ -162,10 +323,10 @@ function toPoint(
         : null,
     // A hold's reps are seconds: no strength estimate reads from them.
     e1rm:
-      best.weight !== null && !isHold(getExercise(exerciseId))
+      best.weight !== null && !isHold(getExercise(meta.exerciseId))
         ? estimateOneRepMax(best.weight, best.reps)
         : null,
-    plannedSets: sets[0]?.planned ?? 0,
+    plannedSets: meta.plannedSets,
   };
 }
 
@@ -236,6 +397,29 @@ const DAY_MS = 86_400_000;
 export const RETURN_AFTER_DAYS = 21;
 export const LONG_BREAK_DAYS = 42;
 
+/**
+ * Whether a break of RETURN_AFTER_DAYS or more, with no session of the lift at any rep range,
+ * falls between two sessions (Maintenance 23). A lift that rotates its ranges weekly meets each
+ * range three weeks apart; the sessions between are not a break.
+ */
+function breakBetween(
+  newer: PerformancePoint,
+  older: PerformancePoint | undefined,
+  sessions: readonly PerformancePoint[],
+): boolean {
+  if (!older) return false;
+  const from = Date.parse(older.date);
+  const to = Date.parse(newer.date);
+  const dates = sessions
+    .map((session) => Date.parse(session.date))
+    .filter((date) => date >= from && date <= to)
+    .sort((a, b) => b - a);
+  return dates.some(
+    (date, at) =>
+      at + 1 < dates.length && date - (dates[at + 1] as number) >= RETURN_AFTER_DAYS * DAY_MS,
+  );
+}
+
 /** Load for a rep target at a given reserve from an estimated one-rep max (Epley, inverted). */
 export function loadFromEstimate(
   e1rm: number,
@@ -305,6 +489,21 @@ export const ENTERED_WITH_HISTORY_FRACTION = 0.95;
  * again. A lift without its own history takes its first target from the max
  * in `recommendBaseTarget`, as before.
  */
+/**
+ * When a saved session began a lift: its first set logged, of any kind (Maintenance 23). A max
+ * entered after it could not set that session's target, since a lift under way keeps its sets,
+ * so it counts from the next. A record whose sets carry no time falls back to its end.
+ */
+function liftBegan(history: readonly WorkoutRecord[], point: PerformancePoint): string {
+  const record = history.find((one) => one.id === point.recordId);
+  const times = (record?.entries ?? [])
+    .filter((entry) => entry.exerciseId === point.exerciseId)
+    .flatMap((entry) => entry.sets.flatMap((set) => (set.loggedAt ? [set.loggedAt] : [])));
+  return times.length > 0
+    ? times.reduce((a, b) => (Date.parse(b) < Date.parse(a) ? b : a))
+    : point.date;
+}
+
 function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget {
   const maxes = input.maxes ?? null;
   if (!maxes || target.weight === null || !FATIGUE_MODES.has(target.mode)) return target;
@@ -312,7 +511,7 @@ function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget 
   if (!entry) return target;
   const last = performanceHistory(input.history, input.exercise, 1)[0];
   if (!last || last.viaFamily || last.e1rm === null) return target;
-  if (!(Date.parse(entry.enteredAt) > Date.parse(last.date))) return target;
+  if (!(Date.parse(entry.enteredAt) > Date.parse(liftBegan(input.history, last)))) return target;
   const units = input.profile.units;
   const entered = enteredMaxFor(maxes, input.exercise.id, units);
   if (entered === null || entered < last.e1rm * ENTERED_MAX_MARGIN) return target;
@@ -333,7 +532,7 @@ function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget 
       weight: lifted,
       evidence: [
         ...target.evidence,
-        `Your max of ${Math.round(entered)} ${units}, entered after your last session, says more than your logged sets: up ${
+        `Your max of ${Math.round(entered)} ${units}, entered after you began this lift last time, says more than your logged sets: up ${
           steps === 1 ? 'a step' : `${steps} steps`
         } toward it. Your next logged session takes over.`,
       ],
@@ -480,8 +679,10 @@ export const ZONE_FRACTION = 0.95;
 
 /** The top of the rep range a logged session was run at, when the log says. */
 function zoneTop(point: PerformancePoint): number | null {
-  const target = point.sets.find((set) => set.targetReps !== null)?.targetReps ?? null;
-  return target ? target[1] : null;
+  // A set the weights at a place pushed belongs to the range it stood in for (Maintenance 23).
+  const set = point.sets.find((candidate) => candidate.targetReps !== null);
+  const range = set?.asked?.reps ?? set?.targetReps ?? null;
+  return range ? range[1] : null;
 }
 
 /**
@@ -505,6 +706,23 @@ function sameZone(point: PerformancePoint, reps: [number, number]): boolean {
   return top === null || Math.abs(top - reps[1]) <= SAME_ZONE_REPS;
 }
 
+/**
+ * At bodyweight the first session back from a break runs at the bottom of the range
+ * (Maintenance 23). A session done at bodyweight from today's floor to a lower top is read as
+ * today's range: its floor is today's, and the top it reached is judged against today's top.
+ * Null for any other session.
+ */
+function bottomOfToday(point: PerformancePoint, reps: [number, number]): PerformancePoint | null {
+  const target = point.sets.find((set) => set.targetReps !== null)?.targetReps ?? null;
+  if (point.bestWeight !== null || !target || target[0] !== reps[0] || target[1] >= reps[1]) {
+    return null;
+  }
+  return {
+    ...point,
+    topAll: point.sets.every((set) => set.targetReps === null || set.reps >= reps[1]),
+  };
+}
+
 function recommendBaseTarget(input: NextTargetInput): NextTarget {
   const { exercise, role, prescription, history, profile } = input;
   const units = profile.units;
@@ -512,10 +730,20 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   // A weight belongs to the rep range it was lifted at. When the range moves (an undulating
   // day, a new style, the same lift in a different role) the sessions run at today's range
   // are the reference, and without one the latest estimated max sets the load.
-  const recent = performanceHistory(history, exercise, 12);
+  // A set the weights at a place pushed reads as the set it stood in for (Maintenance 23); the
+  // "Last:" line still shows what was lifted.
+  const logged = performanceHistory(history, exercise, 12);
+  const recent = logged.map((point) => point.asked ?? point);
   const latest = recent[0];
   const zoned = latest && !latest.viaFamily;
-  const inZone = zoned ? recent.filter((point) => sameZone(point, prescription.reps)) : recent;
+  const noLoad = hasNoLoad(exercise);
+  const inZone = zoned
+    ? recent.flatMap((point) => {
+        if (sameZone(point, prescription.reps)) return [point];
+        const today = noLoad ? bottomOfToday(point, prescription.reps) : null;
+        return today ? [today] : [];
+      })
+    : recent;
   const zoneFresh =
     zoned &&
     inZone[0] !== undefined &&
@@ -627,28 +855,75 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   if (!last) return firstTarget();
 
   const strength = restCategory(role) === 'strength';
-  const lastLine = `Last${last.viaFamily ? ` (${getExercise(last.exerciseId)?.name ?? 'same family'})` : ''}: ${
-    last.bestWeight === null ? 'bodyweight' : `${last.bestWeight} ${units}`
-  } × ${last.sets.map((set) => set.reps).join(', ')}${
-    last.avgRir === null ? '' : ` @ RIR ${last.avgRir}`
-  } (${shortDate(last.date)})`;
+  const shown =
+    logged.find(
+      (point) => point.recordId === last.recordId && point.exerciseId === last.exerciseId,
+    ) ?? last;
+  const lastLine = `Last${shown.viaFamily ? ` (${getExercise(shown.exerciseId)?.name ?? 'same family'})` : ''}: ${
+    shown.bestWeight === null ? 'bodyweight' : `${shown.bestWeight} ${units}`
+  } × ${shown.sets.map((set) => set.reps).join(', ')}${
+    shown.avgRir === null ? '' : ` @ RIR ${shown.avgRir}`
+  } (${shortDate(shown.date)})`;
   const evidence: string[] = [lastLine];
+  // What a session the weights at a place pushed stood in for (Maintenance 23).
+  if (
+    !last.pushedShort &&
+    !last.under &&
+    shown.bestWeight !== null &&
+    last.bestWeight !== null &&
+    Math.abs(last.bestWeight - shown.bestWeight) > 1e-6
+  ) {
+    evidence.push(
+      `At ${shown.bestWeight} ${units}, those reps stood in for ${last.bestWeight} ${units}.`,
+    );
+  }
+  // Misses from before a break of three weeks or more no longer count (Maintenance 23). A push
+  // short of the effort that met its reps says nothing either way about the load asked, so the
+  // run passes over it between misses of that same load, lifted where the weights made it. Next
+  // to a miss of the set it showed, it met that set; standing in for less, the deload those
+  // misses earned was served: either way the run ends there. A push that missed is a miss.
+  const sameLoad = (a: PerformancePoint, b: PerformancePoint) =>
+    a.bestWeight !== null && b.bestWeight !== null && Math.abs(a.bestWeight - b.bestWeight) < 1e-6;
+  const passesOver = (at: number): boolean => {
+    const point = points[at] as PerformancePoint;
+    let next = at + 1;
+    while (
+      points[next]?.pushedShort &&
+      !points[next]?.under &&
+      sameLoad(points[next] as PerformancePoint, point)
+    ) {
+      next += 1;
+    }
+    const behind = points[next];
+    return behind !== undefined && behind.under && !behind.pushedShort && sameLoad(behind, point);
+  };
   let consecutiveUnder = 0;
-  for (const point of points) {
+  for (const [at, point] of points.entries()) {
+    if (point.pushedShort && !point.under) {
+      if (!passesOver(at) || breakBetween(point, points[at + 1], recent)) break;
+      continue;
+    }
     if (!point.under) break;
     consecutiveUnder += 1;
+    if (breakBetween(point, points[at + 1], recent)) break;
   }
+  // A push short of the effort says nothing either way about the load asked, so the runs that
+  // move the load pass over it rather than end at it (Maintenance 23).
   let consecutiveTop = 0;
   for (const point of points) {
+    if (point.pushedShort) continue;
     if (!point.topAll) break;
     consecutiveTop += 1;
   }
   const policy = coachingPolicy(profile.experience);
+  // A push short of the effort shows its reps were met, never that the load asked was.
   const clean = (point: PerformancePoint) =>
+    !point.pushedShort &&
     point.floorAll &&
     (point.avgRir === null || point.avgRir >= prescription.rir - policy.reserveTolerance);
   let consecutiveClean = 0;
   for (const point of points) {
+    if (point.pushedShort) continue;
     if (!clean(point)) break;
     consecutiveClean += 1;
   }
@@ -716,7 +991,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     daysSince >= RETURN_AFTER_DAYS &&
     maxes &&
     enteredRecord &&
-    enteredRecord.enteredAt > last.date
+    Date.parse(enteredRecord.enteredAt) > Date.parse(liftBegan(input.history, last))
   ) {
     const fresh = enteredMaxFor(maxes, exercise.id, units);
     if (fresh !== null) {
@@ -734,6 +1009,26 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       loadFromEstimate(last.e1rm, prescription.reps[1], prescription.rir, fraction, step),
       `${daysSince} days since the last session: back at ${Math.round(fraction * 100)}% of the estimated max (${last.e1rm} ${units}) and rebuilding from there.`,
     );
+  }
+  // At bodyweight nothing comes off after a break (Maintenance 23): the first session back starts
+  // at the bottom of the range with more in reserve, as a weighted lift starts lighter.
+  if (daysSince >= RETURN_AFTER_DAYS && weight === null && hasNoLoad(exercise)) {
+    const more = daysSince >= LONG_BREAK_DAYS ? 2 : 1;
+    const [low, high] = prescription.reps;
+    const reps: [number, number] = [low, Math.min(high, low + 2)];
+    // Reserve tops out at 4: the line names only what is added.
+    const rir = Math.min(4, prescription.rir + more);
+    const added = rir - prescription.rir;
+    const start =
+      reps[1] < high
+        ? `start at the bottom of the range, ${reps[0]}-${reps[1]} reps`
+        : `start at ${reps[0]}-${reps[1]} reps`;
+    const reserve =
+      added === 0 ? '' : `, with ${added === 1 ? 'a rep' : 'two reps'} more in reserve`;
+    return result('return', null, `${daysSince} days since the last session: ${start}${reserve}.`, {
+      reps,
+      rir,
+    });
   }
   if (newToZone && last.e1rm !== null) {
     const range = last.sets.find((set) => set.targetReps !== null)?.targetReps ?? null;
@@ -760,10 +1055,13 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     }
     // The run is counted against today's floor: a session that missed a higher floor of its own
     // (after "Aim one rep higher", or one raised mid-session) but reached today's was not short.
+    // A break of three weeks or more ends the run: misses from before it no longer count
+    // (Maintenance 23).
     let sessions = 0;
-    for (const point of points) {
+    for (const [at, point] of points.entries()) {
       if (!point.sets.some((set) => set.reps < floor)) break;
       sessions += 1;
+      if (breakBetween(point, points[at + 1], recent)) break;
     }
     if (sessions >= 2) {
       const short: ShortRun = { sessions, floor };
@@ -785,17 +1083,21 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     }
     // Today's floor was reached after all: the ordinary rules below say what comes next.
   }
+  // A push short of the effort missed at the weights shown comes down from what was lifted, as
+  // any lift does (Maintenance 23): lowering only the load asked would show the same set again.
+  const missedFrom =
+    last.pushedShort && last.under && shown.bestWeight !== null ? shown.bestWeight : (weight ?? 0);
   if (weight !== null && consecutiveUnder >= 3) {
     return result(
       'regress',
-      Math.min(roundToStep(weight * 0.85, step), Math.max(step, weight - step)),
+      Math.min(roundToStep(missedFrom * 0.85, step), Math.max(step, missedFrom - step)),
       'Below the rep floor three sessions running: reset 15% and rebuild; an alternative may fit better.',
     );
   }
   if (weight !== null && consecutiveUnder >= 2) {
     return result(
       'deload',
-      Math.min(roundToStep(weight * 0.9, step), Math.max(step, weight - step)),
+      Math.min(roundToStep(missedFrom * 0.9, step), Math.max(step, missedFrom - step)),
       'Missed the floor twice in a row: micro-deload 10% and win the reps back.',
     );
   }
@@ -804,6 +1106,15 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       'maintain',
       weight,
       'Missed the floor last time; one session is not a trend, so repeat the load.',
+    );
+  }
+  // A push short of the effort asked (a strength set, a small push, thirty reps at most) met its
+  // reps at a lighter load: the load asked holds until the weights make it (Maintenance 23).
+  if (weight !== null && last.pushedShort) {
+    return result(
+      'maintain',
+      weight,
+      `The weights last time made less than ${weight} ${units}: the same target again.`,
     );
   }
   if (input.fatigueLevel === 'high') {
@@ -896,7 +1207,15 @@ export function rampWeights(
   floor: number | null = null,
 ): (number | null)[] {
   if (working === null || count <= 0) return Array.from({ length: Math.max(0, count) }, () => null);
-  const fractions = count === 1 ? [0.6] : count === 2 ? [0.5, 0.75] : [0.4, 0.6, 0.8];
+  // Past three (ramps added by hand), evenly from 40% to 80%: every ramp gets a weight.
+  const fractions =
+    count === 1
+      ? [0.6]
+      : count === 2
+        ? [0.5, 0.75]
+        : count === 3
+          ? [0.4, 0.6, 0.8]
+          : Array.from({ length: count }, (_, index) => 0.4 + (0.4 * index) / (count - 1));
   const start = floor ?? step;
   // A ramp never sits at the working weight: at least a step under it, never under the bar,
   // and each one heavier than the last.
@@ -957,12 +1276,22 @@ export function applyProgression(
             : clamp(roundToStep(target.weight * 0.8, step)),
       };
     }
-    return {
+    const next: SetPrescription = {
       ...set,
       targetWeight: manual.weight ? set.targetWeight : clamp(target.weight),
       targetReps: manual.reps ? set.targetReps : [target.reps[0], target.reps[1]],
       targetRir: manual.reps ? set.targetRir : target.rir,
     };
+    // A set pushed by the weights here remembers what it stands in for; one set by hand does not.
+    if (target.asked && !manual.weight && !manual.reps) {
+      next.asked = {
+        weight: target.asked.weight,
+        reps: [target.asked.reps[0], target.asked.reps[1]],
+      };
+    } else {
+      delete next.asked;
+    }
+    return next;
   });
 }
 
@@ -977,19 +1306,100 @@ export function summarizeProgression(target: NextTarget): EntryProgression {
     capped: target.capped,
     ...(target.rack ? { rack: target.rack } : {}),
     ...(target.short ? { short: target.short } : {}),
+    ...(typeof target.from === 'number' ? { from: target.from } : {}),
   };
 }
 
 const EXTRA_WORDS = ['', 'one extra rep', 'two extra reps', 'three extra reps'] as const;
 
 /**
- * Reps that keep the effort the same at a lighter load: the estimated max stays where it was
- * (Epley). One to three more, and never past twenty.
+ * A load this far under the one asked for is well short (Maintenance 23): a muscle-building set
+ * then runs to its reps in reserve rather than stopping three reps on (docs/research/lighter-loads.md).
  */
-function extraRepsFor(asked: number, loaded: number, reps: readonly [number, number]): number {
+export const WELL_SHORT = 0.9;
+/** The most reps a set run to its reserve is asked for. */
+export const EFFORT_REPS_CEILING = 30;
+
+/** Whether a muscle-building set at this load runs to its reserve (see `WELL_SHORT`). */
+function toReserve(asked: number, loaded: number, reserve: number | null): boolean {
+  return reserve !== null && loaded < asked * WELL_SHORT;
+}
+
+/**
+ * Reps that keep the effort the same at a lighter load: the estimated max stays where it was
+ * (Epley). One to three more, and never past twenty; a muscle-building set well short of its
+ * load takes as many as the effort needs, up to thirty.
+ */
+export function extraRepsFor(
+  asked: number,
+  loaded: number,
+  reps: readonly [number, number],
+  reserve: number | null = null,
+): number {
   const middle = (reps[0] + reps[1]) / 2;
   const matched = 30 * (asked / loaded) * (1 + middle / 30) - 30;
-  return Math.min(3, Math.max(1, Math.round(matched - middle)), Math.max(0, 20 - reps[1]));
+  const effort = toReserve(asked, loaded, reserve);
+  return Math.min(
+    effort ? Number.POSITIVE_INFINITY : 3,
+    Math.max(1, Math.round(matched - middle)),
+    Math.max(0, (effort ? EFFORT_REPS_CEILING : 20) - reps[1]),
+  );
+}
+
+/** Whether reaching the reserve would take a set past the most it is asked for (thirty reps). */
+function pastCeiling(
+  asked: number,
+  loaded: number,
+  reps: readonly [number, number],
+  reserve: number | null,
+): boolean {
+  if (!toReserve(asked, loaded, reserve)) return false;
+  const middle = (reps[0] + reps[1]) / 2;
+  const matched = 30 * (asked / loaded) * (1 + middle / 30) - 30;
+  return Math.round(matched - middle) > Math.max(0, EFFORT_REPS_CEILING - reps[1]);
+}
+
+/**
+ * The words for extra reps that run a set to its reserve: "about 8 more reps, to 2 in reserve".
+ * Stopped at thirty reps, the set ends short of its reserve, so the line promises none.
+ */
+function reserveWords(extra: number, reserve: number, ceiling: boolean): string {
+  if (extra === 0) return 'the reps are already at the top';
+  const more = `about ${extra} more ${extra === 1 ? 'rep' : 'reps'}`;
+  if (ceiling) return `${more}, up to ${EFFORT_REPS_CEILING}`;
+  const to = reserve === 0 ? 'to the last clean rep' : `to ${reserve} in reserve`;
+  return `${more}, ${to}`;
+}
+
+/**
+ * A set the weights at the place pushed to its planned effort (Maintenance 23): well short of the
+ * load asked, on a muscle-building role. Its reps bring the effort, so it takes neither the slower
+ * tempo of the heaviest weight nor a drop set. Reps the lifter set by hand (`own`) are not such
+ * a push.
+ */
+export function pushedToEffort(
+  set: Pick<SetPrescription, 'kind'> & Partial<Pick<SetPrescription, 'asked' | 'targetWeight'>>,
+  role: TrainingRole,
+  own = false,
+): boolean {
+  return (
+    !own &&
+    set.kind === 'working' &&
+    set.asked !== undefined &&
+    typeof set.targetWeight === 'number' &&
+    restCategory(role) !== 'strength' &&
+    set.targetWeight < set.asked.weight * WELL_SHORT
+  );
+}
+
+/** An entry whose working sets the weights at the place pushed to their effort. */
+export function entryPushedToEffort(entry: {
+  role: TrainingRole;
+  sets: readonly SetPrescription[];
+  manual?: { reps?: boolean };
+}): boolean {
+  const own = entry.manual?.reps === true;
+  return entry.sets.some((set) => pushedToEffort(set, entry.role, own));
 }
 
 function plateNames(plates: readonly number[]): string {
@@ -1011,13 +1421,21 @@ export function rackFit(
   units: string,
   /** A hold's seconds stay as they are: only the load comes down. */
   hold = false,
+  /** A muscle-building set's reps in reserve: well short, it runs to them. Null: a strength set. */
+  reserve: number | null = null,
 ): (RackNote & { missing: boolean }) | null {
   const available = loading.available;
   if (available === null || available.length === 0) return null;
   const loaded = snapDown(asked, available);
   if (loaded >= asked - 1e-6) return null;
-  const extra = hold ? 0 : extraRepsFor(asked, loaded, reps);
-  const what = hold ? '' : extra === 0 ? 'the reps are already at the top' : EXTRA_WORDS[extra];
+  const extra = hold ? 0 : extraRepsFor(asked, loaded, reps, reserve);
+  const what = hold
+    ? ''
+    : reserve !== null && toReserve(asked, loaded, reserve)
+      ? reserveWords(extra, reserve, pastCeiling(asked, loaded, reps, reserve))
+      : extra === 0
+        ? 'the reps are already at the top'
+        : EXTRA_WORDS[extra];
   const missingToday = loading.missingToday ?? [];
   const usually = (loading.usual ?? []).some((weight) => Math.abs(weight - asked) < 1e-6);
   if (missingToday.length > 0 && usually && loading.perSide !== null) {
@@ -1049,8 +1467,16 @@ export function rackFit(
  * instead, saying so. The next levers, a harder variation and an extra set,
  * are the coach's to offer, never applied here.
  */
-export function capTarget(target: NextTarget, loading: Loading | null, units: string): NextTarget {
-  return settleHold(fitToPlace(target, loading, units), units);
+export function capTarget(
+  target: NextTarget,
+  loading: Loading | null,
+  units: string,
+  /** The entry's role: a muscle-building set well short of its load runs to its reserve. */
+  role?: TrainingRole,
+): NextTarget {
+  const reserve =
+    role === undefined || restCategory(role) === 'strength' || target.hold ? null : target.rir;
+  return settleHold(fitToPlace(target, loading, units, reserve), units);
 }
 
 /**
@@ -1075,11 +1501,29 @@ function settleHold(target: NextTarget, units: string): NextTarget {
   };
 }
 
-function fitToPlace(target: NextTarget, loading: Loading | null, units: string): NextTarget {
+function fitToPlace(
+  target: NextTarget,
+  loading: Loading | null,
+  units: string,
+  reserve: number | null = null,
+): NextTarget {
   if (!loading || target.weight === null) return target;
   const [low, high] = target.reps;
-  // A hold's seconds are its own target; the load alone answers to the weights here.
-  const shift = target.hold ? 0 : Math.min(2, Math.max(0, 20 - high));
+  // What the sets stand in for when the weights here make less (a hold's seconds never move).
+  const asked = target.hold
+    ? {}
+    : { asked: { weight: target.weight, reps: [low, high] as [number, number] } };
+  // A hold's seconds are its own target; the load alone answers to the weights here. At the
+  // heaviest weight here, a muscle-building set well short of its load runs to its reserve.
+  const capShort =
+    loading.cap !== null &&
+    target.weight > loading.cap + 1e-6 &&
+    toReserve(target.weight, loading.cap, reserve);
+  const shift = target.hold
+    ? 0
+    : capShort && loading.cap !== null
+      ? extraRepsFor(target.weight, loading.cap, target.reps, reserve)
+      : Math.min(2, Math.max(0, 20 - high));
   const holdAndPushReps = (weight: number, line: string, capped?: { at: number }): NextTarget => ({
     ...target,
     ...(capped ? { capped } : {}),
@@ -1088,17 +1532,26 @@ function fitToPlace(target: NextTarget, loading: Loading | null, units: string):
     evidence: [...target.evidence, line],
   });
   if (loading.cap !== null && target.weight > loading.cap + 1e-6) {
-    return holdAndPushReps(
-      loading.cap,
-      target.hold
-        ? `Held at the heaviest weight here (${loading.cap} ${units}).`
-        : `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
-            shift === 0 ? ', and they are already at the top' : ''
-          }.`,
-      { at: loading.cap },
-    );
+    return {
+      ...holdAndPushReps(
+        loading.cap,
+        target.hold
+          ? `Held at the heaviest weight here (${loading.cap} ${units}).`
+          : capShort && reserve !== null
+            ? `Held at the heaviest weight here (${loading.cap} ${units}): ${reserveWords(
+                shift,
+                reserve,
+                pastCeiling(target.weight, loading.cap, target.reps, reserve),
+              )}.`
+            : `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
+                shift === 0 ? ', and they are already at the top' : ''
+              }.`,
+        { at: loading.cap },
+      ),
+      ...asked,
+    };
   }
-  const fit = rackFit(target.weight, target.reps, loading, units, target.hold === true);
+  const fit = rackFit(target.weight, target.reps, loading, units, target.hold === true, reserve);
   if (!fit) return target;
   const { missing, ...note } = fit;
   // A step the place cannot make: snapped onto the weights here, the target would land on or
@@ -1107,7 +1560,12 @@ function fitToPlace(target: NextTarget, loading: Loading | null, units: string):
   // missing today says so instead: that is the reason, not the step.
   const from = target.from ?? null;
   const next = loading.available?.find((weight) => from !== null && weight > from + 1e-6);
-  if (!missing && from !== null && target.weight > from + 1e-6 && fit.loaded <= from + 1e-6) {
+  if (
+    !missing &&
+    from !== null &&
+    target.weight > from + 1e-6 &&
+    Math.abs(fit.loaded - from) < 1e-6
+  ) {
     // A hold has no reps to earn the step with: it takes the next real weight, from the bottom.
     if (next !== undefined && target.hold) {
       return {
@@ -1134,5 +1592,6 @@ function fitToPlace(target: NextTarget, loading: Loading | null, units: string):
     reps: [low + fit.extra, high + fit.extra],
     evidence: [...target.evidence, fit.line],
     rack: note,
+    ...asked,
   };
 }

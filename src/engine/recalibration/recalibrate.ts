@@ -19,16 +19,21 @@ import { weightStep } from '../plateMath/plateMath';
 import {
   applyProgression,
   capTarget,
-  rackFit,
+  entryPushedToEffort,
+  extraRepsFor,
   rampWeights,
   recommendNextTarget,
   summarizeProgression,
+  type NextTarget,
 } from '../progression/progression';
 import {
   buildSets,
+  easyWarmupReps,
   prescribeFor,
   rampRoom,
   rampSetsFor,
+  restCategory,
+  type Prescription,
   type RampContext,
 } from '../progression/roles';
 import { barWeightFor, hasNoLoad } from '../progression/startingLoad';
@@ -56,6 +61,8 @@ import {
   type DurationChoice,
   type EntryProgression,
   type GeneratedWorkout,
+  type ProgressionMode,
+  type RackNote,
   type SetPrescription,
   type WorkoutBlock,
   type WorkoutEntry,
@@ -117,6 +124,8 @@ const PARTIAL_TRIGGERS = new Set<TriggerType>([
   'end-by',
 ]);
 const LONG_INTERRUPTION_SECONDS = 20 * 60;
+/** Targets whose load is read from an estimate for a rep range, not from the lift's own sets. */
+const ESTIMATED_MODES: ReadonlySet<ProgressionMode> = new Set(['start', 'estimate', 'return']);
 /** One exercise never carries more working sets than this in a session, however the sets are added. */
 export const MAX_WORKING_SETS = 8;
 const MIN_REMAINING_MINUTES = 5;
@@ -407,10 +416,195 @@ function relabel(block: WorkoutBlock): void {
 }
 
 /**
+ * Today's prescription: a deload week covering the session adds a rep in reserve, as for every
+ * exercise the plan picks; every rebuild keeps it (Maintenance 23).
+ */
+function prescriptionToday(
+  request: RecalibrationRequest,
+  exercise: CatalogExercise,
+  role: TrainingRole,
+): Prescription {
+  const base = prescribeFor(exercise, role, request.profile, request.history);
+  return request.constraints.deload !== null
+    ? { ...base, rir: Math.min(4, base.rir + DELOAD_RIR_DELTA) }
+    : base;
+}
+
+/** A target on the weights here: lighter in a deload week, and never under the bar. */
+function fitToday(
+  request: RecalibrationRequest,
+  target: NextTarget,
+  loading: Loading,
+  exercise: CatalogExercise,
+  role: TrainingRole,
+): NextTarget {
+  const deload = request.constraints.deload !== null;
+  return capTarget(
+    floorTarget(
+      scaleForDeload(
+        target,
+        deload ? { sets: 0, rir: 0, restFactor: 1, loadScale: DELOAD_LOAD_SCALE } : undefined,
+        loading.step,
+      ),
+      barWeightFor(exercise, request.profile.units),
+    ),
+    loading,
+    request.profile.units,
+    role,
+  );
+}
+
+/**
+ * A pushed set autoregulation or the coach moved up (Maintenance 23): at the load asked or
+ * heavier it takes the range asked and stands in for nothing; still under it, it takes the reps
+ * the push gives at its new weight. Reps set by hand (`own`) stay as the lifter set them.
+ */
+function repush(set: SetPrescription, role: TrainingRole, own = false): void {
+  const asked = set.asked;
+  if (!asked || set.targetWeight === null) return;
+  if (set.targetWeight >= asked.weight - 1e-6) {
+    if (!own) set.targetReps = [asked.reps[0], asked.reps[1]];
+    delete set.asked;
+    return;
+  }
+  if (own) return;
+  const reserve = restCategory(role) === 'strength' ? null : set.targetRir;
+  const extra = extraRepsFor(asked.weight, set.targetWeight, asked.reps, reserve);
+  set.targetReps = [asked.reps[0] + extra, asked.reps[1] + extra];
+}
+
+/** Reps set by hand on a working set, and whether the set was already pushed when they were. */
+interface HandReps {
+  reps: [number, number];
+  rir: number;
+  /** The range the set already stands in for, when it has a record. */
+  record?: [number, number];
+}
+
+/** The reps and reserve of an entry's working sets, in order, when the lifter set them by hand. */
+function ownReps(entry: WorkoutEntry): HandReps[] {
+  if (entry.manual?.reps !== true) return [];
+  return entry.sets
+    .filter((set) => set.kind === 'working')
+    .map((set) => ({
+      reps: [set.targetReps[0], set.targetReps[1]],
+      rir: set.targetRir,
+      ...(set.asked ? { record: [set.asked.reps[0], set.asked.reps[1]] as [number, number] } : {}),
+    }));
+}
+
+/**
+ * Rebuilt working sets take back the reps the lifter set by hand, in order, and the record of
+ * what they stand in for where the weights here make less (Maintenance 23).
+ */
+function withReps(
+  sets: SetPrescription[],
+  hand: readonly HandReps[],
+  asked: SetPrescription['asked'],
+): SetPrescription[] {
+  let at = 0;
+  return sets.map((set) => {
+    if (set.kind !== 'working') return set;
+    const kept = hand[at];
+    at += 1;
+    const next = kept
+      ? {
+          ...set,
+          targetReps: [kept.reps[0], kept.reps[1]] as [number, number],
+          targetRir: kept.rir,
+        }
+      : { ...set };
+    // What they stand in for: the load asked, at the range the set already stood in for (the
+    // plan's, where the reps were set on a set already pushed), or at the reps set where they
+    // were set at the load (Maintenance 23), as a refit of a started lift records them.
+    if (asked) {
+      const reps = kept ? (kept.record ?? kept.reps) : asked.reps;
+      next.asked = { weight: asked.weight, reps: [reps[0], reps[1]] };
+    }
+    return next;
+  });
+}
+
+/**
+ * Reps set by hand back on sets rebuilt from an entered max (Maintenance 23), with the record of
+ * what they stand in for where the weights here make less: the load asked as the plan fits it,
+ * so where the step rule holds the load they stand in for nothing, as when the reps are set after
+ * the max. A lift with no load warms up with a few easy reps under them.
+ */
+function restoreHandReps(
+  entry: WorkoutEntry,
+  hand: readonly HandReps[],
+  request: RecalibrationRequest,
+  target: NextTarget,
+  loading: Loading,
+  exercise: CatalogExercise,
+): void {
+  const stands = fitToday(request, target, loading, exercise, entry.role).asked;
+  entry.sets = withReps(entry.sets, hand, stands);
+  const lead = hand[0];
+  if (lead && hasNoLoad(exercise)) {
+    entry.sets = entry.sets.map((set) =>
+      set.kind === 'warmup' ? { ...set, targetReps: easyWarmupReps(lead.reps) } : set,
+    );
+  }
+}
+
+/**
+ * A target fitted without moving the reps: reps set by hand stay, so the line names the load
+ * alone and no set stands in for anything (Maintenance 23).
+ */
+function ownTarget(target: NextTarget): NextTarget {
+  return { ...target, hold: true, from: null };
+}
+
+/** The target a pushed set stands in for (Maintenance 23), to fit again to the weights here. */
+function standInTarget(
+  asked: NonNullable<SetPrescription['asked']>,
+  rir: number,
+  hold: boolean,
+  from: number | null = null,
+): NextTarget {
+  return {
+    weight: asked.weight,
+    reps: [asked.reps[0], asked.reps[1]],
+    rir,
+    mode: 'maintain',
+    increment: 0,
+    sessions: 0,
+    viaFamily: false,
+    confidence: 'low',
+    evidence: [],
+    setsAdvice: 0,
+    from,
+    ...(hold ? { hold: true } : {}),
+  };
+}
+
+function sameAsked(a: SetPrescription['asked'], b: SetPrescription['asked']): boolean {
+  if (!a || !b) return a === b;
+  return a.weight === b.weight && a.reps[0] === b.reps[0] && a.reps[1] === b.reps[1];
+}
+
+/** The line of the note an entry carries by its target: a rack note's, or its cap's. */
+function noteLine(progression: EntryProgression | undefined): string | undefined {
+  if (!progression) return undefined;
+  if (progression.rack) return progression.rack.line;
+  if (!progression.capped) return undefined;
+  return progression.evidence.find((line) => line.startsWith('Held at the heaviest weight here ('));
+}
+
+/** The line and note a refit leaves on the entry: a plate or weight it could not make, or its cap. */
+interface RefitNote {
+  line: string;
+  rack?: RackNote;
+  capped?: { at: number };
+}
+
+/**
  * A started exercise under new weights: the sets it has logged stay as they are, and the ones
  * still to come land on what the weights here make, with the reps that keep the effort. A load
- * the weights changed goes back to the one asked for once they make it again. True when a set
- * moved.
+ * the weights changed goes back to the one asked for once they make it again; reps set by hand
+ * stay. True when a set moved.
  */
 function refitStarted(
   entry: WorkoutEntry,
@@ -421,8 +615,22 @@ function refitStarted(
   const units = request.profile.units;
   const floor = barWeightFor(requireExercise(entry.exerciseId), units);
   const before = entry.progression?.rack;
-  let note: ReturnType<typeof rackFit> = null;
+  // The load the weights here last fitted the lift to, when they made less than asked.
+  const planned = before?.loaded ?? entry.progression?.capped?.at ?? null;
+  const hold = holdById(entry.exerciseId);
+  // Reps set by hand are the lifter's: they stay, and only the load is fitted (Maintenance 23).
+  const own = entry.manual?.reps === true;
+  // The first working weight still to come, before the refit: ramps follow it only if it moves.
+  const leadBefore =
+    entry.sets.find(
+      (set) => set.kind === 'working' && !isDone(entry.id, set.index) && set.targetWeight !== null,
+    )?.targetWeight ?? null;
+  let note: RefitNote | null = null;
   let moved = false;
+  let changed = false;
+  let toCome = false;
+  // Whether every set still to come says what it stands in for, so the note can be rewritten.
+  let known = true;
   entry.sets = entry.sets.map((set) => {
     if (isDone(entry.id, set.index) || set.targetWeight === null) return set;
     if (set.kind !== 'working') {
@@ -431,40 +639,285 @@ function refitStarted(
       moved = true;
       return { ...set, targetWeight: weight };
     }
-    // What the plan asked for, before any weights changed it.
-    const changedBefore = before !== undefined && Math.abs(set.targetWeight - before.loaded) < 1e-6;
-    const asked = changedBefore ? before.asked : set.targetWeight;
-    const reps: [number, number] = changedBefore
-      ? [set.targetReps[0] - before.extra, set.targetReps[1] - before.extra]
-      : [set.targetReps[0], set.targetReps[1]];
-    const fit = rackFit(asked, reps, loading, units, holdById(entry.exerciseId));
-    note = note ?? fit;
-    const weight = fit ? fit.loaded : asked;
-    const targetReps: [number, number] = fit ? [reps[0] + fit.extra, reps[1] + fit.extra] : reps;
+    toCome = true;
+    // What the plan asked for, before any weights changed it: the set says so (Maintenance 23),
+    // and a plan saved before then says so through its rack note.
+    const changedBefore =
+      !set.asked && before !== undefined && Math.abs(set.targetWeight - before.loaded) < 1e-6;
+    // Reps set by hand are fitted from the weight they were set at (Maintenance 23): the load a
+    // refit recorded them standing in for, at their own range, so it comes back where the weights
+    // make it again; otherwise the weight they show.
+    const setAt =
+      own &&
+      set.asked &&
+      set.asked.reps[0] === set.targetReps[0] &&
+      set.asked.reps[1] === set.targetReps[1]
+        ? set.asked.weight
+        : set.targetWeight;
+    const base: NonNullable<SetPrescription['asked']> = (!own && set.asked) || {
+      weight: changedBefore && !own ? before.asked : setAt,
+      reps:
+        changedBefore && !own
+          ? [set.targetReps[0] - before.extra, set.targetReps[1] - before.extra]
+          : [set.targetReps[0], set.targetReps[1]],
+    };
+    // Fitted again as the plan fits a target, the heaviest weight here included: the weights
+    // coming back give the load back, and a muscle-building set well short runs to its reserve.
+    // It fits from the weight the lift's target moved from, so the step rule holds where the
+    // plan's did (Maintenance 23); reps set by hand take no step.
+    const from = own ? null : (entry.progression?.from ?? null);
+    const fitted = capTarget(
+      standInTarget(base, set.targetRir, hold || own, from),
+      loading,
+      units,
+      entry.role,
+    );
+    const weight = fitted.weight ?? base.weight;
+    const targetReps: [number, number] = [fitted.reps[0], fitted.reps[1]];
+    // Reps set by hand, fitted under the load they were set at, stand in for it, and back at the
+    // load they stand in for nothing (Maintenance 23).
+    const asked = own
+      ? set.asked && weight >= set.asked.weight - 1e-6
+        ? undefined
+        : (set.asked ??
+          (!hold && weight < base.weight - 1e-6
+            ? { weight: base.weight, reps: [base.reps[0], base.reps[1]] as [number, number] }
+            : undefined))
+      : fitted.asked;
+    // The note by the target comes from what the set stands in for; for reps set by hand it
+    // names the load alone.
+    const askedFit =
+      own && asked
+        ? capTarget(standInTarget(asked, set.targetRir, true), loading, units, entry.role)
+        : null;
+    const noteFit =
+      askedFit?.weight !== null &&
+      askedFit?.weight !== undefined &&
+      Math.abs(askedFit.weight - weight) < 1e-6
+        ? askedFit
+        : fitted;
+    if (!(own ? asked : set.asked || changedBefore)) known = false;
+    if (!note && (noteFit.rack || noteFit.capped)) {
+      note = {
+        line: noteFit.evidence.at(-1) ?? '',
+        ...(noteFit.rack ? { rack: noteFit.rack } : {}),
+        ...(noteFit.capped ? { capped: noteFit.capped } : {}),
+      };
+    }
+    // A pushed set, or one with reps set by hand, stays as it is where the change leaves its lift
+    // alone, the fit standing in for what the set does: at the same weight as before, reps a rule
+    // moved included, or where the lift's own fit is unchanged and the set sits at a weight
+    // autoregulation moved it to that the weights here still make.
     if (
-      weight === set.targetWeight &&
-      targetReps[0] === set.targetReps[0] &&
-      targetReps[1] === set.targetReps[1]
+      set.asked &&
+      sameAsked(own ? asked : fitted.asked, set.asked) &&
+      (Math.abs(weight - set.targetWeight) < 1e-6 ||
+        (planned !== null &&
+          Math.abs(weight - planned) < 1e-6 &&
+          Math.abs(fitWeight(set.targetWeight, loading, floor) - set.targetWeight) < 1e-6))
     ) {
       return set;
     }
-    moved = true;
-    return { ...set, targetWeight: weight, targetReps };
+    const same =
+      weight === set.targetWeight &&
+      targetReps[0] === set.targetReps[0] &&
+      targetReps[1] === set.targetReps[1];
+    if (same && sameAsked(asked, set.asked)) return set;
+    changed = true;
+    if (!same) moved = true;
+    const next: SetPrescription = { ...set, targetWeight: weight, targetReps };
+    if (asked) next.asked = asked;
+    else delete next.asked;
+    return next;
   });
-  if (entry.progression) {
+  // Ramps still to come follow a working weight that moved (Maintenance 23): the rest of the
+  // ramp the plan makes for the new weight, each heavier than the ramp before it and lighter than
+  // the working weight, and gone where there is no room. Only the ramps after the last working
+  // set done lead into it. The plan's own ramps sit under its working sets' numbers; a ramp put in
+  // since (put back after a long break, or on a lift picked up again) has a later number and
+  // climbs on its own, whatever was lifted before the break. A working weight that did not move
+  // leaves them as they are.
+  const lead =
+    entry.sets.find(
+      (set) => set.kind === 'working' && !isDone(entry.id, set.index) && set.targetWeight !== null,
+    )?.targetWeight ?? null;
+  if (lead !== null && leadBefore !== null && Math.abs(lead - leadBefore) > 1e-6) {
+    const firstNumber = Math.min(
+      ...entry.sets.filter((set) => set.kind === 'working').map((set) => set.index),
+    );
+    let lastDone = -1;
+    entry.sets.forEach((set, at) => {
+      if (set.kind === 'working' && isDone(entry.id, set.index)) lastDone = at;
+    });
+    const leading = entry.sets.filter((set, at) => set.kind === 'warmup' && at > lastDone);
+    const liftedOf = (sets: SetPrescription[]) =>
+      sets.flatMap((set) => {
+        const logged = request.completed.sets.find(
+          (one) => one.entryId === entry.id && one.setIndex === set.index,
+        );
+        const weight = logged && !logged.skipped ? logged.weight : null;
+        return weight === null || weight === undefined ? [] : [weight];
+      });
+    const gone: SetPrescription[] = [];
+    const climb = (group: SetPrescription[], lifted: number[]) => {
+      const done = group.filter((set) => isDone(entry.id, set.index));
+      const pending = group.filter(
+        (set) => !isDone(entry.id, set.index) && set.targetWeight !== null,
+      );
+      if (pending.length === 0) return;
+      let below = lifted.length > 0 ? Math.max(...lifted) : null;
+      const loads = rampWeights(lead, done.length + pending.length, loading.step, floor).slice(
+        done.length,
+      );
+      pending.forEach((set, index) => {
+        const load = loads[index];
+        const weight = load === null || load === undefined ? null : fitWeight(load, loading, floor);
+        if (
+          weight === null ||
+          weight >= lead - 1e-6 ||
+          (below !== null && weight <= below + 1e-6)
+        ) {
+          gone.push(set);
+          return;
+        }
+        below = weight;
+        if (weight !== set.targetWeight) {
+          set.targetWeight = weight;
+          moved = true;
+        }
+      });
+    };
+    const since = leading.filter((set) => set.index > firstNumber);
+    climb(
+      leading.filter((set) => set.index < firstNumber),
+      liftedOf(leading.filter((set) => isDone(entry.id, set.index))),
+    );
+    climb(since, liftedOf(since.filter((set) => isDone(entry.id, set.index))));
+    if (gone.length > 0) {
+      entry.sets = entry.sets.filter((set) => !gone.includes(set));
+      entry.warmupSets = Math.max(0, entry.warmupSets - gone.length);
+      moved = true;
+    }
+  }
+  // A drop set still to come leaves a lift now pushed to its effort (Maintenance 23).
+  if (
+    entry.dropSet &&
+    entryPushedToEffort(entry) &&
+    !entry.sets.some((set) => set.kind === 'drop' && isDone(entry.id, set.index))
+  ) {
+    entry.sets = entry.sets.filter((set) => set.kind !== 'drop');
+    entry.dropSet = false;
+    moved = true;
+  }
+  // The lines change with the sets: a lift the change did not touch keeps what it said, and a
+  // finished one keeps the lines it was done with. Where the sets say what they stand in for, a
+  // note that no longer fits is rewritten: no "Held at the heaviest weight here (20 lb)" where
+  // 50 lb is made, or where a pair of 40s makes it a gap instead.
+  // Reps set by hand on a lift the step rule held: its note goes where the weights now make the
+  // load it held back from (Maintenance 23).
+  const gapClosed =
+    own &&
+    before !== undefined &&
+    Math.abs(fitWeight(before.asked, loading, floor) - before.asked) < 1e-6;
+  const stale =
+    toCome &&
+    (known || gapClosed) &&
+    (note as RefitNote | null)?.line !== noteLine(entry.progression);
+  if (entry.progression && (changed || stale)) {
     const rest = { ...entry.progression };
     delete rest.rack;
-    const evidence = rest.evidence.filter((line) => line !== before?.line);
-    const fit = note as ReturnType<typeof rackFit>;
-    entry.progression = fit
+    delete rest.capped;
+    const evidence = rest.evidence.filter(
+      (line) => line !== before?.line && !line.startsWith('Held at the heaviest weight here ('),
+    );
+    const found = note as RefitNote | null;
+    entry.progression = found
       ? {
           ...rest,
-          evidence: [...evidence, fit.line],
-          rack: { asked: fit.asked, loaded: fit.loaded, extra: fit.extra, line: fit.line },
+          evidence: [...evidence, found.line],
+          ...(found.rack ? { rack: found.rack } : {}),
+          ...(found.capped ? { capped: found.capped } : {}),
         }
       : { ...rest, evidence };
   }
   return moved;
+}
+
+/**
+ * One entry's sets still to come, fitted to the weights at the request's place, after a change
+ * of weights or, since Maintenance 23, of place: a lift under way or with reps set by hand from
+ * what its sets stand in for, one not started from a fresh target there. Logged sets, weights set
+ * by hand and a stopped entry stay as they are. True when the entry was fitted again.
+ */
+function refitEntry(
+  entry: WorkoutEntry,
+  workout: GeneratedWorkout,
+  request: RecalibrationRequest,
+  isDone: SetDonePredicate,
+): boolean {
+  if (entry.manual?.weight || isStopped(entry)) return false;
+  // A lift with any set done or skipped is fitted in place, so those sets keep their kind and
+  // their number (Maintenance 23), and so is one with reps set by hand: they are fitted from the
+  // weight they were set at, as on a lift under way. Only a lift untouched takes a fresh target.
+  const touched = request.completed.sets.some((set) => set.entryId === entry.id);
+  if (touched || entry.manual?.reps === true) {
+    return refitStarted(
+      entry,
+      loadingOf(request, requireExercise(entry.exerciseId)),
+      request,
+      isDone,
+    );
+  }
+  const exercise = requireExercise(entry.exerciseId);
+  const prescription = prescriptionToday(request, exercise, entry.role);
+  const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
+  const context = sessionContextFor(request, workout, entry.id, exercise);
+  const target = recommendNextTarget({
+    exercise,
+    role: entry.role,
+    prescription,
+    history: request.history,
+    profile: request.profile,
+    fatigueLevel: interpretFatigue(
+      request.history,
+      request.timestamp,
+      request.constraints.readiness,
+    ).level,
+    now: request.timestamp,
+    maxes: request.maxes,
+    session: { precedingSets: context.precedingSets },
+  });
+  const loading = loadingOf(request, exercise);
+  const fitted = fitToday(request, target, loading, exercise, entry.role);
+  const warmupSets = rampSetsFor(
+    exercise,
+    entry.role,
+    workout.duration.targetMinutes,
+    context.ramp,
+    {
+      weight: fitted.weight,
+      step: loading.step,
+      floor: barWeightFor(exercise, request.profile.units),
+    },
+  );
+  entry.warmupSets = warmupSets;
+  entry.sets = applyProgression(
+    buildSets(
+      { ...prescription, sets: working, restSeconds: entry.restSeconds },
+      warmupSets,
+      exercise,
+    ),
+    fitted,
+    loading.step,
+    entry.manual ?? {},
+    barWeightFor(exercise, request.profile.units),
+    loading,
+  );
+  // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).
+  entry.dropSet = entry.dropSet && exercise.dropSetSafe && !entryPushedToEffort(entry);
+  if (entry.dropSet) entry.sets.push(dropSetAt(entry.sets.length));
+  entry.progression = summarizeProgression(fitted);
+  return true;
 }
 
 /** What this exercise can be loaded to at the request's place today. */
@@ -516,9 +969,7 @@ function targetedSets(
 ): { sets: SetPrescription[]; warmupSets: number; progression: EntryProgression } {
   // A deload week covering the session lightens it like every exercise the plan picks: one
   // more rep in reserve and lighter loads; its set count is the one it takes over.
-  const deload = request.constraints.deload !== null;
-  const base = prescribeFor(exercise, role, request.profile, request.history);
-  const prescription = deload ? { ...base, rir: Math.min(4, base.rir + DELOAD_RIR_DELTA) } : base;
+  const prescription = prescriptionToday(request, exercise, role);
   const context = sessionContextFor(request, workout, entryId, exercise, options.through);
   const target = recommendNextTarget({
     exercise,
@@ -537,18 +988,7 @@ function targetedSets(
   });
   const loading = loadingOf(request, exercise);
   const floor = barWeightFor(exercise, request.profile.units);
-  const fitted = capTarget(
-    floorTarget(
-      scaleForDeload(
-        target,
-        deload ? { sets: 0, rir: 0, restFactor: 1, loadScale: DELOAD_LOAD_SCALE } : undefined,
-        loading.step,
-      ),
-      floor,
-    ),
-    loading,
-    request.profile.units,
-  );
+  const fitted = fitToday(request, target, loading, exercise, role);
   const warmupSets = rampSetsFor(exercise, role, workout.duration.targetMinutes, context.ramp, {
     weight: fitted.weight,
     step: loading.step,
@@ -556,7 +996,11 @@ function targetedSets(
   });
   const from = options.from ?? 0;
   const sets = applyProgression(
-    buildSets({ ...prescription, sets: working ?? prescription.sets, restSeconds }, warmupSets),
+    buildSets(
+      { ...prescription, sets: working ?? prescription.sets, restSeconds },
+      warmupSets,
+      exercise,
+    ),
     fitted,
     loading.step,
     {},
@@ -568,7 +1012,8 @@ function targetedSets(
 
 /**
  * After a long break the entry in front of the lifter gets one light ramp
- * set back before its remaining working sets, at three fifths of the load.
+ * set back before its remaining working sets, at three fifths of the load; a lift with no load
+ * takes a few easy reps with no weight (Maintenance 23).
  * Nothing changes when its sets are all logged or a ramp is already waiting.
  */
 function rampBack(workout: GeneratedWorkout, request: RecalibrationRequest): string | null {
@@ -588,12 +1033,18 @@ function rampBack(workout: GeneratedWorkout, request: RecalibrationRequest): str
   const room = rampRoom({ weight: next.targetWeight, step: loading.step, floor });
   if (room < 1) return null;
   const [weight] = rampWeights(next.targetWeight, 1, loading.step, floor);
+  // A pushed set's ramp reads the range it stands in for, never the push's extra reps.
+  const reps = next.asked?.reps ?? next.targetReps;
   found.sets.splice(nextIndex, 0, {
     index: nextSetIndex(found),
     kind: 'warmup',
-    targetReps: [Math.max(3, next.targetReps[0]), Math.max(5, next.targetReps[1])],
+    targetReps: hasNoLoad(exercise)
+      ? easyWarmupReps(reps)
+      : [Math.max(3, reps[0]), Math.max(5, reps[1])],
     targetRir: 5,
-    targetWeight: weight === undefined ? null : fitWeight(weight ?? 0, loading, floor),
+    // No working weight, no ramp weight: never a made-up one.
+    targetWeight:
+      weight === undefined || weight === null ? null : fitWeight(weight, loading, floor),
     restSeconds: 45,
   });
   found.warmupSets += 1;
@@ -746,9 +1197,11 @@ function applySubstitution(
   entry.sets = built.sets;
   entry.progression = built.progression;
   entry.warmupSets = built.warmupSets;
+  withoutHandTargets(entry);
   if (entry.dropSet) {
-    if (exercise.dropSetSafe) entry.sets.push(dropSetAt(nextSetIndex(entry)));
-    else entry.dropSet = false;
+    if (exercise.dropSetSafe && !entryPushedToEffort(entry)) {
+      entry.sets.push(dropSetAt(nextSetIndex(entry)));
+    } else entry.dropSet = false;
   }
   entry.exerciseId = exercise.id;
   // Swapped again, it still says what today's plan had; swapped back to that, it says nothing.
@@ -759,6 +1212,18 @@ function applySubstitution(
   entry.locked = lock || entry.locked;
   entry.chosenFor = chosenForSwap(entry.chosenFor, exercise);
   relabel(block);
+}
+
+/**
+ * An entry whose sets to come are built afresh (a swap, a swap back): the reps or the weight set
+ * by hand were for the sets it had, and no longer apply (Maintenance 23).
+ */
+function withoutHandTargets(entry: WorkoutEntry): void {
+  if (!entry.manual?.reps && !entry.manual?.weight) return;
+  const manual = { ...entry.manual };
+  delete manual.reps;
+  delete manual.weight;
+  entry.manual = manual;
 }
 
 /** A started entry stops at its logged sets, and the new exercise follows it for the rest. */
@@ -806,7 +1271,7 @@ function standIn(
   stand.sets = built.sets;
   stand.warmupSets = built.warmupSets;
   stand.progression = built.progression;
-  if (dropOwed && exercise.dropSetSafe) {
+  if (dropOwed && exercise.dropSetSafe && !entryPushedToEffort(stand)) {
     stand.sets.push(dropSetAt(nextSetIndex(stand)));
     stand.dropSet = true;
   }
@@ -859,7 +1324,10 @@ function swapBack(
     { from: nextSetIndex(stopped), through: true },
   );
   stopped.sets = [...stopped.sets, ...built.sets];
-  if (dropOwed && exercise.dropSetSafe) stopped.sets.push(dropSetAt(nextSetIndex(stopped)));
+  withoutHandTargets(stopped);
+  if (dropOwed && exercise.dropSetSafe && !entryPushedToEffort(stopped)) {
+    stopped.sets.push(dropSetAt(nextSetIndex(stopped)));
+  }
   stopped.warmupSets = stopped.sets.filter((set) => set.kind === 'warmup').length;
   stopped.dropSet = stopped.sets.some((set) => set.kind === 'drop');
   stopped.progression = built.progression;
@@ -1085,12 +1553,33 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
               : `Recalibrated to ${trigger.choice} min`,
       };
     }
-    case 'location':
+    case 'location': {
+      // Every lift the rebuild keeps goes on at the weights at the new place, as when the weights
+      // change (Maintenance 23): one under way or with reps set by hand from what its sets stand
+      // in for, one kept but not started (the lift in front, a pinned one) from a fresh target
+      // there. They are fitted
+      // first, so the session is fitted to time with the sets they will have; the lifts the
+      // rebuild picks are fitted there already.
+      let from = request;
+      if (scope !== 'full') {
+        const classified = classify(request);
+        const refitted = cloneWorkout(request.workout);
+        const kept = new Set(
+          keptEntries(request, classified, contextFor(request, constraints))
+            .filter((item) => !item.closed)
+            .map((item) => item.entry.id),
+        );
+        for (const entry of allEntries(refitted.blocks)) {
+          if (kept.has(entry.id)) refitEntry(entry, refitted, request, classified.isDone);
+        }
+        from = { ...request, workout: refitted };
+      }
       return {
         ...base,
-        workout: rebuild(request, scope, { choice: request.duration, constraints }),
+        workout: rebuild(from, scope, { choice: request.duration, constraints }),
         prefix: `Rebuilt for ${place}`,
       };
+    }
     case 'equipment':
       return {
         ...base,
@@ -1285,7 +1774,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
               loading.available !== null
                 ? nudge(current, plan.delta > 0 ? 1 : -1, loading.available, stepSize)
                 : Math.round((current + plan.delta) / stepSize) * stepSize;
-            set.targetWeight = Math.max(stepSize, floor, moved);
+            const next = Math.max(stepSize, floor, moved);
+            // Only a set that really moves changes: at the heaviest weight "up" stays where it is.
+            // A pushed set moved up takes the reps its push gives there; moved down, it keeps
+            // them and is easier (Maintenance 23).
+            if (next !== set.targetWeight) {
+              const up = set.targetWeight !== null && next > set.targetWeight;
+              set.targetWeight = next;
+              if (up) repush(set, entry.role, entry.manual?.reps === true);
+            }
           }
         }
         return { ...base, workout, headline: `${name}: ${plan.reason}` };
@@ -1400,62 +1897,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const { isDone } = classify(request);
       let updated = 0;
       for (const entry of allEntries(workout.blocks)) {
-        if (entry.manual?.weight || isStopped(entry)) continue;
-        const logged = request.completed.sets.some(
-          (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
-        );
-        if (logged) {
-          if (
-            refitStarted(
-              entry,
-              loadingOf(request, requireExercise(entry.exerciseId)),
-              request,
-              isDone,
-            )
-          )
-            updated += 1;
-          continue;
-        }
-        const exercise = requireExercise(entry.exerciseId);
-        const prescription = prescribeFor(exercise, entry.role, request.profile, request.history);
-        const working =
-          entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
-        const context = sessionContextFor(request, workout, entry.id, exercise);
-        const target = recommendNextTarget({
-          exercise,
-          role: entry.role,
-          prescription,
-          history: request.history,
-          profile: request.profile,
-          now: request.timestamp,
-          maxes: request.maxes,
-          session: { precedingSets: context.precedingSets },
-        });
-        const loading = loadingOf(request, exercise);
-        const fitted = capTarget(target, loading, request.profile.units);
-        const rampLogged = request.completed.sets.some(
-          (set) => set.entryId === entry.id && set.kind === 'warmup',
-        );
-        const warmupSets = rampLogged
-          ? entry.warmupSets
-          : rampSetsFor(exercise, entry.role, workout.duration.targetMinutes, context.ramp, {
-              weight: fitted.weight,
-              step: loading.step,
-              floor: barWeightFor(exercise, request.profile.units),
-            });
-        entry.warmupSets = warmupSets;
-        entry.sets = applyProgression(
-          buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
-          fitted,
-          loading.step,
-          entry.manual ?? {},
-          barWeightFor(exercise, request.profile.units),
-          loading,
-        );
-        if (entry.dropSet && exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
-        entry.progression = summarizeProgression(fitted);
-        updated += 1;
+        if (refitEntry(entry, workout, request, isDone)) updated += 1;
       }
+      // The session's length follows the sets as they now stand (Maintenance 23).
+      if (updated > 0) refresh(workout, request, constraints);
       const place = request.location?.name ?? 'this place';
       return {
         ...base,
@@ -1482,47 +1927,76 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         const own = entry.exerciseId === trigger.exerciseId;
         if (isStopped(entry)) continue;
         if (!own && entry.progression?.mode !== 'start') continue;
-        const logged = request.completed.sets.some(
-          (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,
-        );
-        if (logged || entry.manual?.weight) continue;
+        // A lift with any set done or skipped, its ramp included, keeps its sets and their
+        // numbers: its max counts from the next session (Maintenance 23).
+        const touched = request.completed.sets.some((set) => set.entryId === entry.id);
+        if (touched || entry.manual?.weight) continue;
         const exercise = requireExercise(entry.exerciseId);
-        const prescription = prescribeFor(exercise, entry.role, request.profile, request.history);
+        const prescription = prescriptionToday(request, exercise, entry.role);
         const working =
           entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
         const context = sessionContextFor(request, workout, entry.id, exercise);
-        const target = recommendNextTarget({
-          exercise,
-          role: entry.role,
-          prescription,
-          history: request.history,
-          profile: request.profile,
-          now: request.timestamp,
-          maxes: request.maxes,
-          session: { precedingSets: context.precedingSets },
-        });
+        const byHand = entry.manual?.reps === true;
+        const handReps = ownReps(entry);
+        const targetFor = (asked: Prescription) =>
+          recommendNextTarget({
+            exercise,
+            role: entry.role,
+            prescription: asked,
+            history: request.history,
+            profile: request.profile,
+            fatigueLevel: interpretFatigue(
+              request.history,
+              request.timestamp,
+              request.constraints.readiness,
+            ).level,
+            now: request.timestamp,
+            maxes: request.maxes,
+            session: { precedingSets: context.precedingSets },
+          });
+        let target = targetFor(prescription);
+        // A load read from an estimate for a rep range, with reps set by hand: the load for those
+        // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
+        const hand = handReps[0];
+        if (byHand && hand && ESTIMATED_MODES.has(target.mode)) {
+          target = targetFor({ ...prescription, reps: hand.reps, rir: hand.rir });
+        }
         const loading = loadingOf(request, exercise);
-        const fitted = capTarget(target, loading, request.profile.units);
-        const rampLogged = request.completed.sets.some(
-          (set) => set.entryId === entry.id && set.kind === 'warmup',
+        const fitted = fitToday(
+          request,
+          byHand ? ownTarget(target) : target,
+          loading,
+          exercise,
+          entry.role,
         );
-        const warmupSets = rampLogged
-          ? entry.warmupSets
-          : rampSetsFor(exercise, entry.role, workout.duration.targetMinutes, context.ramp, {
-              weight: fitted.weight,
-              step: loading.step,
-              floor: barWeightFor(exercise, request.profile.units),
-            });
+        const warmupSets = rampSetsFor(
+          exercise,
+          entry.role,
+          workout.duration.targetMinutes,
+          context.ramp,
+          {
+            weight: fitted.weight,
+            step: loading.step,
+            floor: barWeightFor(exercise, request.profile.units),
+          },
+        );
         entry.warmupSets = warmupSets;
         entry.sets = applyProgression(
-          buildSets({ ...prescription, sets: working, restSeconds: entry.restSeconds }, warmupSets),
+          buildSets(
+            { ...prescription, sets: working, restSeconds: entry.restSeconds },
+            warmupSets,
+            exercise,
+          ),
           fitted,
           loading.step,
           {},
           barWeightFor(exercise, request.profile.units),
           loading,
         );
-        if (entry.dropSet && exercise.dropSetSafe) entry.sets.push(dropSetAt(entry.sets.length));
+        if (byHand) restoreHandReps(entry, handReps, request, target, loading, exercise);
+        // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).
+        entry.dropSet = entry.dropSet && exercise.dropSetSafe && !entryPushedToEffort(entry);
+        if (entry.dropSet) entry.sets.push(dropSetAt(entry.sets.length));
         entry.progression = summarizeProgression(fitted);
         if (own) {
           updated += 1;
@@ -1539,7 +2013,12 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         workout,
         headline:
           updated === 0
-            ? `${named.name} already has logged sets today; your max counts from the next session.`
+            ? request.completed.sets.some((set) => set.exerciseId === named.id && !set.skipped)
+              ? `${named.name} already has logged sets today; your max counts from the next session.`
+              : request.completed.sets.some((set) => set.exerciseId === named.id)
+                ? `${named.name} is already under way today; your max counts from the next session.`
+                : // Nothing of it done: its weight was set for today (Maintenance 23).
+                  `Max saved. ${named.name} keeps the weight set for today.`
             : !hasHistory
               ? `First target for ${named.name} set from your max.`
               : raised > 0
@@ -1560,8 +2039,17 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const { isDone } = classify(request);
       const name = requireExercise(entry.exerciseId).name;
       for (const set of entry.sets) {
-        if (set.kind !== 'warmup' && !isDone(entry.id, set.index))
+        if (set.kind !== 'warmup' && !isDone(entry.id, set.index)) {
+          // A pushed set moved up takes the reps its push gives at the new weight, or the range
+          // asked at the load asked; moved down it keeps its reps and is easier (Maintenance 23).
+          const up =
+            trigger.weight !== null &&
+            set.targetWeight !== null &&
+            trigger.weight > set.targetWeight;
           set.targetWeight = trigger.weight;
+          if (trigger.weight === null) delete set.asked;
+          else if (up) repush(set, entry.role, entry.manual?.reps === true);
+        }
       }
       // The ramps still to come follow the weight you set: under it, never under the bar, and
       // gone when nothing lighter than the bar exists.
@@ -1705,6 +2193,14 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           targetRir: last?.targetRir ?? prescription.rir,
           targetWeight: last?.targetWeight ?? null,
           restSeconds: entry.restSeconds,
+          ...(last?.asked
+            ? {
+                asked: {
+                  weight: last.asked.weight,
+                  reps: [last.asked.reps[0], last.asked.reps[1]] as [number, number],
+                },
+              }
+            : {}),
         };
         const dropAt = entry.sets.findIndex((set) => set.kind === 'drop');
         if (dropAt >= 0) entry.sets.splice(dropAt, 0, added);
@@ -1735,17 +2231,27 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const { entry } = findEntry(workout, trigger.entryId);
       const name = requireExercise(entry.exerciseId).name;
       const { isDone } = classify(request);
-      // The ramp leads into the working sets still to come, so it reads their range.
+      // The ramp leads into the working sets still to come, so it reads their range: a pushed
+      // set's, the one it stands in for, never the push's extra reps (Maintenance 23).
       const first =
         entry.sets.find((set) => set.kind === 'working' && !isDone(entry.id, set.index)) ??
         entry.sets.find((set) => set.kind === 'working');
-      const reps = first?.targetReps ?? [8, 10];
-      // A lift with no load ramps by reps: its ramp never asks for more than the working sets.
+      const reps = first?.asked?.reps ?? first?.targetReps ?? [8, 10];
+      // A lift with no load warms up with one set of a few easy reps (Maintenance 23), well under
+      // the working sets: a second would only tire it. One skipped was never done.
       const noLoad = hasNoLoad(requireExercise(entry.exerciseId));
+      const skipped = new Set(
+        request.completed.sets
+          .filter((set) => set.entryId === entry.id && set.skipped)
+          .map((set) => set.setIndex),
+      );
+      if (noLoad && entry.sets.some((set) => set.kind === 'warmup' && !skipped.has(set.index))) {
+        throw new Error(`${name} already has its warm-up set.`);
+      }
       entry.sets.unshift({
         index: nextSetIndex(entry),
         kind: 'warmup',
-        targetReps: noLoad ? [reps[0], reps[1]] : [Math.max(3, reps[0]), Math.max(5, reps[1])],
+        targetReps: noLoad ? easyWarmupReps(reps) : [Math.max(3, reps[0]), Math.max(5, reps[1])],
         targetRir: 5,
         targetWeight: null,
         restSeconds: 45,
@@ -1784,13 +2290,18 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         }
       }
       if (changed > 0) entry.manual = { ...entry.manual, reps: true };
-      // A lift with no load ramps by reps, not weight: its ramps never ask for more reps than the
-      // working sets now do.
+      // A lift with no load warms up with a few easy reps: they follow the working range down or
+      // up, and stay well under it (Maintenance 23).
       if (changed > 0 && hasNoLoad(requireExercise(entry.exerciseId))) {
         for (const set of entry.sets) {
-          if (set.kind === 'warmup' && !isDone(entry.id, set.index)) set.targetReps = [low, high];
+          if (set.kind === 'warmup' && !isDone(entry.id, set.index)) {
+            set.targetReps = easyWarmupReps([low, high]);
+          }
         }
       }
+      // The note by the target names the load alone once the reps are the lifter's, as after a
+      // change of weights: no push's extra reps beside them (Maintenance 23).
+      if (changed > 0) refitEntry(entry, workout, request, isDone);
       // Fewer reps over more sets: the work moves into one more set at the new range.
       const workingNow = entry.sets.filter((set) => set.kind === 'working').length;
       const addSet = trigger.workingDelta === 1 && changed > 0 && workingNow < MAX_WORKING_SETS;
@@ -1803,6 +2314,14 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
           targetRir: last?.targetRir ?? 2,
           targetWeight: last?.targetWeight ?? null,
           restSeconds: entry.restSeconds,
+          ...(last?.asked
+            ? {
+                asked: {
+                  weight: last.asked.weight,
+                  reps: [last.asked.reps[0], last.asked.reps[1]] as [number, number],
+                },
+              }
+            : {}),
         };
         const dropAt = entry.sets.findIndex((set) => set.kind === 'drop');
         if (dropAt >= 0) entry.sets.splice(dropAt, 0, added);

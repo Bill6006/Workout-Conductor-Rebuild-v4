@@ -7,6 +7,7 @@ import {
   STRESS_LEVELS,
   type CatalogExercise,
 } from '../../catalog/exercises/exerciseSchema';
+import { dropSetSuits } from '../../engine/progression/startingLoad';
 import {
   isCompoundPattern,
   MOVEMENT_PATTERN_IDS,
@@ -126,6 +127,7 @@ export function loadFromEquipment(
 /** Presents a custom exercise to the engines exactly like a catalog exercise. */
 export function customToCatalogExercise(custom: CustomExercise): CatalogExercise {
   const compound = isCompoundPattern(custom.movementPattern);
+  const load = custom.load ?? loadFromEquipment(custom.equipment);
   return {
     id: custom.id,
     name: custom.name,
@@ -145,7 +147,9 @@ export function customToCatalogExercise(custom: CustomExercise): CatalogExercise
     station: 'open',
     repRanges: compound ? { hypertrophy: [6, 10] } : { hypertrophy: [10, 15] },
     measure: 'reps',
-    dropSetSafe: custom.dropSetSafe,
+    dropSetSafe:
+      custom.dropSetSafe &&
+      dropSetSuits({ id: custom.id, load, movementPattern: custom.movementPattern }),
     supersetFriendly: custom.supersetFriendly,
     stabilityDemand: 'medium',
     gripDemand: custom.gripDemand,
@@ -172,7 +176,7 @@ export function customToCatalogExercise(custom: CustomExercise): CatalogExercise
     difficulty: 'intermediate',
     progressionFamily: custom.id,
     warmup: compound ? 'short' : 'none',
-    load: custom.load ?? loadFromEquipment(custom.equipment),
+    load,
     mediaId: custom.mediaId ?? custom.id,
     productionEnabled: false,
   };

@@ -80,6 +80,14 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
               targetWeight: set.targetWeight,
               targetRir: set.targetRir,
               loggedAt: done.completedAt,
+              ...(set.asked
+                ? {
+                    asked: {
+                      weight: set.asked.weight,
+                      reps: [set.asked.reps[0], set.asked.reps[1]] as [number, number],
+                    },
+                  }
+                : {}),
             };
           }),
       };

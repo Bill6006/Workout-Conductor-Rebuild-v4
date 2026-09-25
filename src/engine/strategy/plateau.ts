@@ -111,9 +111,11 @@ export function exactExposures(
 ): PerformancePoint[] {
   const exercise = getExercise(exerciseId);
   if (!exercise) return [];
-  return performanceHistory(history, exercise, limit).filter(
-    (point) => !point.viaFamily && point.e1rm !== null,
-  );
+  // A session the weights at a place pushed says little about a stall at the load asked, and
+  // the stall's remedies move a load the place cannot make: it is left out (Maintenance 23).
+  return performanceHistory(history, exercise, limit)
+    .map((point) => point.asked ?? point)
+    .filter((point) => !point.viaFamily && point.e1rm !== null && !point.light);
 }
 
 function diagnose(

@@ -21,6 +21,17 @@ export const LoggedSetSchema = z.looseObject({
   targetWeight: z.number().min(0).nullable().optional(),
   targetRir: z.number().min(0).max(10).optional(),
   loggedAt: z.iso.datetime().optional(),
+  /**
+   * The load and range the plan asked when the weights at the place made less (Maintenance 23):
+   * the set is read back as the one it stood in for. An unreadable one is dropped, never the set.
+   */
+  asked: z
+    .object({
+      weight: z.number().min(0),
+      reps: z.tuple([z.number().int().min(0), z.number().int().min(0)]),
+    })
+    .optional()
+    .catch(undefined),
 });
 
 export const LoggedExerciseSchema = z.looseObject({

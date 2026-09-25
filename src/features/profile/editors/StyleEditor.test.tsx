@@ -104,6 +104,19 @@ describe('the Programming style control', () => {
   });
 });
 
+describe('the Allow drop sets switch', () => {
+  it('says what it plans, and that Lean-down and Foundation plan none', () => {
+    // Maintenance 23, the owner's item 5: it said "never automatic", and a drop set is planned.
+    setup();
+    expect(
+      screen.getByText(
+        'At most one a workout, on an isolation move that suits it. Lean-down and Foundation plan none.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/never automatic/)).not.toBeInTheDocument();
+  });
+});
+
 describe('style labels', () => {
   it('names Auto with what it came to, and a picked style by its own name', () => {
     const profile = createDraft(NOW).profile;

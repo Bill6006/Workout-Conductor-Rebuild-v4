@@ -46,6 +46,8 @@ export function effortGuidance(
   role: TrainingRole,
   /** A hold counts seconds, not reps, so there are no reps to keep in reserve. */
   hold = false,
+  /** A core stability move is never taken to failure (Maintenance 23). */
+  coreStability = false,
 ): Guidance {
   if (hold) {
     return {
@@ -66,6 +68,13 @@ export function effortGuidance(
       label: 'last clean rep',
       why: 'lighter load, run to the last rep you can do with good form',
       evidence: [EFFORT_EVIDENCE.drop, EFFORT_EVIDENCE.scale],
+    };
+  }
+  if (coreStability) {
+    return {
+      label: `RIR ${targetRir}`,
+      why: `stop ${targetRir} clean ${targetRir === 1 ? 'rep' : 'reps'} short, before your form slips`,
+      evidence: [EFFORT_EVIDENCE.scale],
     };
   }
   switch (restCategory(role)) {

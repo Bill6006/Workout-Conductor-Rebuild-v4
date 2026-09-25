@@ -39,6 +39,15 @@ describe('tempo cues', () => {
   });
 });
 
+describe('the reason given for a slow lowering', () => {
+  it('is control, not a growth claim the research does not back', () => {
+    // Maintenance 23, the owner's item 26 (Amdi and King 2025 found no clear growth benefit).
+    const why = tempoCue('primary-hypertrophy', 'working', bench).why;
+    expect(why).toBe('lower for 3 under control, no pause, up smoothly');
+    expect(why).not.toMatch(/stretch/);
+  });
+});
+
 describe('tempo at the heaviest weight the place has', () => {
   it('slows the lowering and adds a pause on a working set, and leaves ramps alone', () => {
     const capped = tempoCue('primary-hypertrophy', 'working', bench, { capped: true });
@@ -95,6 +104,19 @@ describe('the length estimate runs at the pace the tempo bar shows', () => {
     );
     expect(tempoCue('isolation', 'working', bench, { capped: true }).totalSeconds).toBe(
       REP_SECONDS.capped,
+    );
+  });
+});
+
+describe('a warm-up at bodyweight', () => {
+  it('is a few easy reps, with no load to call easy', () => {
+    // Maintenance 23, the owner's item 22.
+    const chinUp = requireExercise('chin-up');
+    expect(tempoCue('primary-hypertrophy', 'warmup', chinUp).why).toBe(
+      'ramp set: a few easy reps, rehearse the working tempo',
+    );
+    expect(tempoCue('primary-strength', 'warmup', bench).why).toBe(
+      'ramp set: easy load, rehearse the working tempo',
     );
   });
 });

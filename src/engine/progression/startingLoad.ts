@@ -1,5 +1,8 @@
 import type { CatalogExercise, LoadType } from '../../catalog/exercises/exerciseSchema';
-import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
+import {
+  isCoreStability,
+  type MovementPatternId,
+} from '../../catalog/movementPatterns/movementPatterns';
 import type { UnitSystem, UserProfile } from '../../core/validation/profile';
 
 /**
@@ -150,6 +153,15 @@ export function startRatio(exercise: StartExercise): number | null {
  */
 export function hasNoLoad(exercise: StartExercise): boolean {
   return startRatio(exercise) === null;
+}
+
+/**
+ * Whether a drop set can suit an exercise at all (Maintenance 23): with no load (`hasNoLoad`, so
+ * Bench Dip and Step-Up too) there is no weight to take off, and a core stability move is never
+ * taken to failure.
+ */
+export function dropSetSuits(exercise: StartExercise): boolean {
+  return !hasNoLoad(exercise) && !isCoreStability(exercise.movementPattern);
 }
 
 /**

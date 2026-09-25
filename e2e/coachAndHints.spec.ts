@@ -268,6 +268,8 @@ test.describe('a strength set at the heaviest weight a place has', () => {
     await card.getByTestId('tempo-line').click();
     const detail = card.getByTestId('tempo-detail');
     await expect(detail).toContainText('drive up as fast as you can');
+    // Said once, in the reason itself (Maintenance 23, the owner's item 27).
+    await expect(detail).not.toContainText('X is as fast as you can');
     await detail.getByTestId('tempo-why').locator('summary').click();
     await expect(detail.getByTestId('tempo-why')).toContainText('Amdi and King, 2025');
     await expect(detail.getByTestId('tempo-why')).not.toContainText('Roig');

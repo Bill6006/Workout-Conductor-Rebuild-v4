@@ -95,7 +95,7 @@ export function StyleEditor({ draft, onChange }: EditorProps) {
           />
           <Toggle
             label="Allow drop sets"
-            description="A time-efficient hypertrophy tool, never automatic."
+            description="At most one a workout, on an isolation move that suits it. Lean-down and Foundation plan none."
             checked={profile.techniques.dropSets}
             onChange={(value) => setTechnique('dropSets', value)}
           />

@@ -29,7 +29,7 @@ The Default session is built first from the template. For any target the engine 
 3. caps the number of list rows (15 min: 3, 30 min: 5, 45 min: 6, Default: 8), dropping the lowest-value row first; paired rows are worth more than their weakest member because they save time, and the main lift is never dropped;
 4. while the estimate exceeds the target by more than a minute: shortens rests toward the floors (strength 120 s, hypertrophy 60 s, isolation 45 s), trims one set from the lowest-value exercise (main lift keeps at least three working sets), then drops the lowest-value row;
    then, when a dropped row left minutes unused, keeps its best move on its own at the sets already trimmed if that fits (rows go whole, so the last one out can leave a gap far bigger than the overrun it cured); asked to make the session harder, the fit may take back an added set but never one the plan already had;
-5. adds one drop set on the last drop-set-safe isolation move when drop sets are on and either the session is shorter than Default or that muscle is under half its weekly target, unless it would break the time target.
+5. adds one drop set on the last drop-set-safe isolation move when drop sets are on and either the session is shorter than Default or that muscle is under half its weekly target, unless it would break the time target. A move with no load (bodyweight, a band, Bench Dip, Step-Up) or a core stability move is never drop-set safe, and a set the weights here pushed to its effort takes none (Maintenance 23).
 
 Every step is recorded in `explanation.fittingSteps` and shown under "Why this workout". When
 even the leanest plan runs over, `duration.overByMinutes` is set and the card says the session

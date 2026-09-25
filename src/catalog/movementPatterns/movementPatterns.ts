@@ -126,3 +126,11 @@ export function movementPatternName(id: MovementPatternId): string {
 export function isCompoundPattern(id: MovementPatternId): boolean {
   return BY_ID.get(id)?.compound ?? false;
 }
+
+/**
+ * Holding the trunk still against a lever or a pull (Maintenance 23). Its failure is the form
+ * giving way (the lower back lifting off the floor on a dead bug), so it is never trained to it.
+ */
+export function isCoreStability(id: MovementPatternId): boolean {
+  return id === 'core-anti-extension' || id === 'core-anti-rotation';
+}

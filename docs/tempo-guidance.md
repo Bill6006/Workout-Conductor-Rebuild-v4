@@ -12,12 +12,12 @@ second on the bar).
 | Set                                             | Tempo   | Why                                                                          |
 | ----------------------------------------------- | ------- | ---------------------------------------------------------------------------- |
 | Strength role (main lift)                       | 2-1-X-0 | Lower for 2, pause 1 at the bottom, drive up with intent                     |
-| Hypertrophy role                                | 3-0-1-0 | Lower for 3 to load the stretch, no pause, up under control                  |
+| Hypertrophy role                                | 3-0-1-0 | Lower for 3 under control, no pause, up smoothly                             |
 | Isolation, finisher                             | 2-0-2-1 | Lower for 2, up for 2, squeeze the muscle for 1 at the top                   |
 | Ramp (warm-up) set                              | 2-0-1-0 | Easy load, rehearse the working tempo                                        |
 | Drop set                                        | 2-0-1-0 | Clean reps while the load comes down                                         |
 | At the heaviest weight a place has, strength    | 3-1-X-0 | Lower for 3 and pause 1 so the same weight works harder; still drive up fast |
-| At the heaviest weight a place has, other roles | 3-1-1-0 | Lower for 3, pause 1, make every rep count                                   |
+| At the heaviest weight a place has, other roles | 3-1-1-0 | Lower for 3, pause 1, make every rep count (not a set run to its effort)     |
 
 - **Rep duration.** Rep durations from about 0.5 to 8 s produce similar hypertrophy; very slow
   reps (over 10 s) are inferior. Schoenfeld BJ, Ogborn DI, Krieger JW. Effect of repetition
@@ -127,10 +127,23 @@ is fitted to less time, rests shorten toward the floors before sets are trimmed 
   where the bar would be, and its detail keeps the cue, the effort ("Good form: hold the position
   for the seconds, and stop when it slips") and the rest (Maintenance 20).
 
+## Wording checked against the research (Maintenance 23)
+
+A 3-second lowering builds muscle about as well as a faster one: reps lasting from about half a
+second to 8 seconds build muscle about equally (Schoenfeld, Ogborn and Krieger, 2015), and the
+meta-analysis of lowering speed found no clear difference (Amdi and King, 2025). The hypertrophy
+reason therefore gives control, not a growth payoff: "lower for 3 under control, no pause, up
+smoothly". The tempo itself is unchanged, so the time estimates are too. A muscle-building set
+that the weights at a place pushed to its effort (more reps at a lighter load) keeps this tempo,
+not the slower one of the heaviest weight: its reps bring the effort. A warm-up at bodyweight
+reads "a few easy reps, rehearse the working tempo". The strength reason
+already says what an X means ("drive up as fast as you can"), so the tempo row no longer adds "; X
+is as fast as you can".
+
 ## The skimmable detail (Maintenance 8)
 
 The tap on the tempo chip opens four labelled rows, each one line: Tempo (the notation and the
-phase cue, with "X is as fast as you can" only when the tempo has an X), Cue (the form cue),
+phase cue, which says what an X means: "drive up as fast as you can"), Cue (the form cue),
 Effort (the RIR label and what it means for this set), and Rest (the length and why). The
 research sits behind one "Why: the research" disclosure, closed by default. Its lines come from
 `src/features/workout/evidence.ts`: each carries a two-word lead in bold, the duplicate ramp-set

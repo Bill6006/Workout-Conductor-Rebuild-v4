@@ -70,3 +70,16 @@ describe('effort and rest guidance', () => {
     }
   });
 });
+
+describe('a core stability move', () => {
+  it('stops short before the form slips, with no claim that it can go closer to failure', () => {
+    // Maintenance 23: a Dead Bug keeps two reps in reserve; failure there is the back arching.
+    const core = effortGuidance('working', 2, 'finisher', false, true);
+    expect(core).toEqual({
+      label: 'RIR 2',
+      why: 'stop 2 clean reps short, before your form slips',
+      evidence: [EFFORT_EVIDENCE.scale],
+    });
+    expect(effortGuidance('working', 2, 'finisher').why).toMatch(/closer to failure/);
+  });
+});

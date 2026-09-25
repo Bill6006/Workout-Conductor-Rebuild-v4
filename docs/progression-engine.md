@@ -286,7 +286,8 @@ away in silence.
 
 Maintenance 19: a target the weights here cannot make is never passed through. `rackFit` takes it
 down to the weight under it that they make and adds the reps that keep the effort, the estimated
-max held where it was (Epley; one to three reps, never past twenty), and `capTarget` writes the
+max held where it was (Epley; one to three reps, never past twenty; a muscle-building set well
+short of its load runs to its reserve instead, see Maintenance 23 below), and `capTarget` writes the
 line into the evidence and `NextTarget.rack` (copied to `EntryProgression.rack`): "No 2.5s today:
 95 instead of 100, two extra reps." when a plate missing today is the reason, naming the plates
 whose return would make it, or "The plates here make 95, not 100 lb: two extra reps." when the
@@ -431,6 +432,157 @@ max can be entered or updated from the exercise's Options at any time.
 - The accessory picker treats the joint as a pain joint, and `rankAlternatives` leaves out high
   stress on it and ranks moderate stress 12 lower, with the reason in words.
 
+## Bodyweight lifts and effort (Maintenance 23, round E)
+
+- **Drop sets only where there is weight to drop.** `dropSetSuits(exercise)` (beside `hasNoLoad`
+  in `startingLoad.ts`) is false for a lift with no load (`hasNoLoad`: bodyweight, a band, and
+  Bench Dip and Step-Up, which list only a bench) and for a core stability move
+  (`isCoreStability`: anti-extension and anti-rotation). The catalog (`define.ts`) and a custom
+  exercise (`customToCatalogExercise`, whatever its switch says) apply it, so the planner, the
+  coach's offer and the drop-set trigger all refuse such a move ("Dead Bug is not safe for a drop
+  set."). A refresh of a plan saved earlier ("loading", "max") drops a drop set the exercise no
+  longer suits, and its badge with it.
+- **No failure on a core stability move.** `rirFloor(exercise)` is `CORE_STABILITY_RIR` (2) for a
+  core stability move and 0 otherwise. `prescribe` never goes under it, and neither does
+  `adjustPrescription` ("make it harder"), at every caller in the generator, including an
+  exercise picked up again after a place change. A Dead Bug keeps two reps in reserve under
+  every style and role, and its effort row reads "stop 2 clean reps short, before your form
+  slips", with no claim that it can go closer to failure.
+- **Sets well short of their load (the owner's item 21, docs/research/lighter-loads.md).** When
+  the weights here make less than 90% of the load asked for (`WELL_SHORT`), a muscle-building set
+  (any role whose rest category is not strength; not a hold) runs to its planned reps in
+  reserve: `extraRepsFor` keeps the estimated-max match without the three-rep cap, never past 30
+  reps, and the line says so: "The weights here make 40, not 50 lb: about 10 more reps, to 2 in
+  reserve." At the heaviest weight a place has: "Held at the heaviest weight here (40 lb): about
+  10 more reps, to 2 in reserve." At no reps in reserve it reads "to the last clean rep"; where
+  the reserve would take more than 30 reps the set stops short of it, and the line promises
+  none: "about 20 more reps, up to 30". A strength set, and a set 10% light or less, keep one to
+  three extra reps. `capTarget` takes the role; the generator, a swap, "weights changed" and
+  "max" pass it. A set run to its effort keeps its role's tempo and time (the slower tempo of
+  the heaviest weight stays for strength sets and small pushes), takes no drop set from the
+  plan or the coach, and the coach's heaviest-weight card offers "Add a set" only once its reps
+  reach 30.
+- **A pushed set remembers what it stood in for.** Whenever the weights here make less than
+  asked (the heaviest weight or a gap, never a hold), each working set records `asked`: the load
+  and range it stands in for (optional in the stored plan and in the logged set, dropped when
+  unreadable, never the set). The history judges such a set against what it showed, as logged
+  (`asJudged`): lifted light at the weight shown, its reps answer to the reps shown; lifted light
+  at another weight, its reps are read at the weight shown by the same effort (Epley); lifted at
+  the load asked or heavier, nothing was pushed and it answers to the range asked. The session
+  belongs to the range asked (`zoneTop`), and the load it carries forward is the load asked, so a
+  push that met its reps keeps the lifter at 30 lb for 6-10 (without the record, it fell to 20 lb
+  for 6-10).
+  The "Last:" line shows what was lifted, and for a push that matched the effort and met its
+  floor a second line says what it stood in for: "At 20 lb, those reps stood in for 30 lb." The
+  finish summary grades each set the same way (`judgedSet`), so "short" and "on target" there
+  never disagree with the next target.
+- **A push short of the effort holds the load asked.** A strength set, a small push and a set held
+  at 30 reps add fewer reps than the same effort takes (`pushedShort`), so meeting them shows the
+  reps were met, not that the load asked was: the next target keeps the load asked ("The weights
+  last time made less than 35 lb: the same target again."), and such a session never counts as the
+  top of its range or as a clean session. Missing the reps shown is a miss like any other, and a
+  deload or a reset then comes down from the weight lifted (`missedFrom`): taking 10% off the load
+  asked alone would show the same set again. One that met its reps says nothing either way about the
+  load asked, so the runs that move the load pass over it (sessions at the top, clean strength
+  sessions): a lifter who trains at the gym and at a light home in turn still banks the gym
+  sessions. The run of misses passes over it only between misses of that same load, lifted where the
+  weights made it, so such a lifter still deloads after two misses at the gym; next to a miss of the
+  set it showed, or standing in for less (the deload those misses earned, already served), it ends
+  the run.
+- **Light sessions stay out of stalls and notes.** A session with a set lifted under the load asked
+  (`light`) says little about a stall at that load, and a stall's remedies move a load the place
+  cannot make, so `detectStalls` leaves it out and the history notes stop at it. The rules read
+  the estimated max of a set lifted light from every rep, as its push counted them (20 lb × 30 is
+  about 40 lb); Progress keeps the estimate it names, reps capped at 12. The finish summary calls
+  a lift progressed only past the fuller of the two estimates, so a gym session at 30 lb × 8 is
+  not "progress" over 20 lb × 29 at home.
+- **The record goes where the set goes.** A set added ("+ Working set", or a new range that adds
+  one) copies it; a range set by hand keeps it, and those reps stay when the weights change or the
+  place does, before or during the lift: the lift is fitted in place (`refitStarted`, with `hold`),
+  from the weight the reps were set at, the same before it starts as under way, claims no reps of
+  its own, and keeps what the sets stand in for, or records it when they are fitted under that
+  weight. That record remembers the weight: where the weights make it again (the gym, then home,
+  then the gym), the load comes back and the set stands in for nothing; a change that leaves the
+  lift's own fit where it was keeps a weight autoregulation gave it. Reps set on a set the weights
+  had already pushed keep the plan's range in the record, so the session stays in the range asked;
+  reps set at the load, before any push, are the range the record keeps. A set with reps set by hand
+  keeps the record it has through every change. An entered max fits the load alone from its new
+  target (`ownTarget`) and writes a record from the load it asks as the plan fits it
+  (`restoreHandReps`): where the step rule holds the load, none, as when the reps are set after the
+  max. A load the max reads from an estimate for a rep range (a first target, a return) is read for
+  the reps set by hand, never the plan's heavier one. A swap before the lift starts, or a swap back,
+  builds the sets to come afresh and leaves what was set by hand for the old ones, reps or weight,
+  behind. Setting reps by hand rewrites the note by the target at once, as a refit does. Such a set
+  is not one the app ran to its effort (`pushedToEffort` is false for reps set by hand): at the
+  heaviest weight it keeps that weight's slower tempo and time, and a drop set it has stays. "The
+  next sets go up", and a weight the coach sets ("Take 25 lb today", a deload), change a pushed set
+  the same way: moved up, at or past the load asked it takes the range asked and stands in for
+  nothing, and still under it, it takes the reps the push gives at its new weight (`repush`; reps
+  set by hand stay); moved down, it keeps its reps and is easier. Every lift a change of weights or
+  of place keeps is fitted again there (`refitEntry`): one with any set done or skipped, or with
+  reps set by hand, in place, from what its sets stood in for (`refitStarted`, with the plan's own
+  `capTarget`), so the sets done keep their kind and number; any other (the lift in front, a pinned
+  one) from a fresh target with the day's fatigue. More weights give the load back and fewer push it
+  again. A change of place fits the lifts it keeps before the session is fitted to time; a change of
+  weights counts the session's time again. A pushed set stays as it is where the fit at its weight
+  stands in for the same load and range, reps a rule moved included; a change that leaves the lift's
+  own fit where it was (`planned`, from its rack or heaviest-weight note) leaves a set where
+  autoregulation put it, while the weights still make it; a lift the change did not touch keeps its
+  lines. Where the sets say what they stand in for, a note that no longer fits is rewritten or goes
+  with its line: no "Held at the heaviest weight here (20 lb)" where 50 lb is made, or where a pair
+  of 40s makes it a gap; where they do not (a hold), the note stays; for reps set by hand it names
+  the weight the set shows, and a step rule's note goes where the weights now make the load it held
+  back from. Ramps still to come move only with a working weight that moved, and only those after
+  the last working set done lead into it: the rest of the ramp the plan makes for it, each heavier
+  than the ramp before it and lighter than the working weight, and gone where there is no room
+  (`rampWeights` gives any number of ramps a weight: past three, evenly from 40% to 80%). The plan's
+  own ramps carry numbers under its working sets'; a ramp put in since (put back after a long break,
+  or on a lift picked up again) carries a later one and climbs on its own, whatever was lifted
+  before the break: one put back is three fifths of the working weight. A ramp added by hand or put
+  back reads the range its set stands in for, never a push's extra reps. An entered max leaves a
+  lift with any set done or skipped, a ramp included, or a weight set for today, as it is, and says
+  which; one entered once a lift has begun (after its first set that day, of any kind) counts from
+  the next session (`liftBegan`), and one that set the day's target is not counted again; the
+  one-time "Know your max?" offer shows only while a max can still set the first target. Every
+  rebuild keeps a deload week (`prescriptionToday`, `fitToday`: the "weights changed" and "max"
+  refreshes too), and a drop set still to come comes off a lift pushed to its effort wherever a
+  rebuild would keep one (weights changed, before or during the lift, a max, a swap, a stand-in, a
+  swap back).
+- **A step the weights cannot make.** The step rule (hold the load, two more reps, "the reps go up
+  first") applies only where the weights make exactly the last load. Where they make less (after
+  30 lb, dumbbells to 25 and then 40), the load comes down to what they make and the set follows
+  the rules above, so a muscle-building set still runs to its effort. The lift keeps the weight
+  its target moved from (`progression.from`, optional in the stored plan), so every refit, after
+  a change of weights or of place and back, applies the step rule where the plan did rather than
+  pushing the set.
+- **Warm-ups at bodyweight (the owner's item 22, docs/research/bodyweight-warm-ups.md).** A lift
+  with no load (`hasNoLoad`) gets at most one warm-up set (`rampSetsFor`), of a few easy reps:
+  `easyWarmupReps(working)` is a third to a half of the bottom of the working range (2-3 before
+  6-12, 1 before 3-6), never more than the working floor. `buildSets(prescription, count, exercise)`
+  uses it for the plan and every rebuild; "add-warmup" uses it and refuses a second warm-up
+  ("Chin-Up already has its warm-up set.") unless the first was skipped; a rep-range edit moves
+  unfinished warm-ups with it, and a change of weights or place keeps them under reps set by hand.
+  After twenty minutes away, the lift in front warms up again with a few easy reps and no weight.
+  The logger's hints read "A few easy reps" and "Stop well short", when a logged one is corrected
+  too, and the exercise sheet hides "+ Ramp set" while the lift has its warm-up.
+- **Coming back after a break at bodyweight (the owner's item 24).** After `RETURN_AFTER_DAYS`
+  (21) or more, a lift with no load and no weight logged has no estimated max to take 10% off, so
+  the first session back starts at the bottom of its range, `[low, min(high, low + 2)]`, with one
+  more rep in reserve (two after `LONG_BREAK_DAYS`, 42): "25 days since the last session: start at
+  the bottom of the range, 6-8 reps, with a rep more in reserve." The line names only the reserve
+  it adds (none once the reserve is 4) and calls a range it does not narrow what it is ("start
+  at 4-6 reps"). That session is read as today's range afterwards (`bottomOfToday`: same floor,
+  lower top, its top judged against today's), so 8 reps is not "the top of the range".
+- **Misses from before a break.** A break is 21 days or more with no session of the lift at any
+  rep range (`breakBetween`); a lift rotating its ranges weekly meets each range three weeks
+  apart without one. Misses from before a break stop counting, in the fewer-reps run and in
+  `consecutiveUnder` for every lift, so a loaded lift's deload no longer counts a miss from before
+  the break. The history notes compare only the sessions since the last break, and leave out a
+  session a place pushed, which says nothing about the load or the rest.
+- **Wording.** The "No weights logged yet" note is not shown under a lift with no load; the
+  "Allow drop sets" switch reads "At most one a workout, on an isolation move that suits it.
+  Lean-down and Foundation plan none."; the tempo wording is in docs/tempo-guidance.md.
+
 ## Lifts done at bodyweight (Maintenance 21)
 
 - **Short of the floor.** A lift done at bodyweight has no weight to take off, so two or more
@@ -450,9 +602,9 @@ max can be entered or updated from the exercise's Options at any time.
   card "Chin-Up: short of 6 reps twice in a row" offers `N+1 sets of (floor-3)-(floor-1) today`:
   a `rep-range` recalibration with `workingDelta: 1`, which sets the remaining sets' reps, adds
   one working set at that range and re-estimates the session (a plain rep-range edit now
-  re-estimates it too). Unfinished ramps of a lift with no load take the same range, and a ramp
-  added later ("add-warmup") takes the range of the working sets still to come as it is, so a
-  warm-up never asks for more reps than the working sets. Its Why adds "or swap in Lat Pulldown for a few weeks" only when
+  re-estimates it too). Unfinished ramps of a lift with no load follow the new range as a few
+  easy reps (Maintenance 23, below), so a warm-up never asks for more reps than the working sets.
+  Its Why adds "or swap in Lat Pulldown for a few weeks" only when
   the first listed substitution with a load fits the place and is not already in today's
   workout. It is made only when the floor that was missed is today's floor. Holds and lifts with
   a floor under 3 are never offered it.

@@ -46,6 +46,7 @@ import {
   prescribeFor,
   rampSetsFor,
   restCategory,
+  rirFloor,
   type Prescription,
   type RampContext,
 } from '../progression/roles';
@@ -56,6 +57,7 @@ import type { StrengthMaxes } from '../progression/maxes';
 import {
   applyProgression,
   capTarget,
+  entryPushedToEffort,
   recommendNextTarget,
   summarizeProgression,
   type NextTarget,
@@ -679,13 +681,15 @@ function adjustPrescription(
   prescription: Prescription,
   role: TrainingRole,
   adjust: PrescriptionAdjustment | undefined,
+  /** The exercise's `rirFloor`: harder never takes it under this. */
+  minRir = 0,
 ): Prescription {
   if (!adjust) return prescription;
   const floor = role === 'primary-strength' ? 3 : 2;
   return {
     ...prescription,
     sets: clamp(prescription.sets + adjust.sets, floor, 5),
-    rir: clamp(prescription.rir + adjust.rir, 0, 4),
+    rir: clamp(prescription.rir + adjust.rir, minRir, 4),
     restSeconds: Math.max(
       MIN_REST_SECONDS[restCategory(role)],
       round5(prescription.restSeconds * adjust.restFactor),
@@ -835,6 +839,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       floorTarget(scaleForDeload(baseTarget, adjust, loading.step), floor),
       loading,
       profile.units,
+      role,
     );
     const warmupSets = rampSetsFor(
       exercise,
@@ -845,7 +850,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     );
     return {
       sets: applyProgression(
-        buildSets(prescription, warmupSets),
+        buildSets(prescription, warmupSets, exercise),
         target,
         loading.step,
         {},
@@ -888,6 +893,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       prescribeFor(exercise, target.role, profile, history),
       target.role,
       adjust,
+      rirFloor(exercise),
     );
     const built = targetedFor(exercise, target.role, {
       ...adjusted,
@@ -967,7 +973,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     chosenExercises.push(pick);
     const id = idFor(index);
     const basePrescription = prescribeFor(pick, slotSpec.role, profile, history);
-    const adjusted = adjustPrescription(basePrescription, slotSpec.role, adjust);
+    const adjusted = adjustPrescription(basePrescription, slotSpec.role, adjust, rirFloor(pick));
     // A replacement carries only the working sets its slot still owes.
     const prescription =
       owed === undefined ? adjusted : { ...adjusted, sets: Math.min(adjusted.sets, owed) };
@@ -1258,19 +1264,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     const alreadyPlanned = allEntries(blocks).some((entry) => entry.dropSet);
     const target = alreadyPlanned
       ? undefined
-      : [...allEntries(blocks)]
-          .reverse()
-          .find(
-            (entry) =>
-              restCategory(entry.role) === 'isolation' &&
-              !keptIds.has(entry.id) &&
-              exerciseOf(entry.exerciseId).dropSetSafe &&
-              !blocks.some(
-                (block) => block.kind === 'superset' && block.entries[0]?.id === entry.id,
-              ) &&
-              (targetMinutes < defaultMinutes ||
-                entry.chosenFor.some((muscle) => deficitMuscles.has(muscle))),
-          );
+      : [...allEntries(blocks)].reverse().find(
+          (entry) =>
+            restCategory(entry.role) === 'isolation' &&
+            !keptIds.has(entry.id) &&
+            exerciseOf(entry.exerciseId).dropSetSafe &&
+            // A set the weights here pushed to its effort at a light load takes no drop set.
+            !entryPushedToEffort(entry) &&
+            !blocks.some(
+              (block) => block.kind === 'superset' && block.entries[0]?.id === entry.id,
+            ) &&
+            (targetMinutes < defaultMinutes ||
+              entry.chosenFor.some((muscle) => deficitMuscles.has(muscle))),
+        );
     if (target) {
       const before = estimate().totalMinutes;
       target.dropSet = true;

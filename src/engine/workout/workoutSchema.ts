@@ -17,6 +17,15 @@ export const SetPrescriptionSchema = z.looseObject({
   targetRir: z.number().min(0).max(10),
   targetWeight: z.number().min(0).nullable(),
   restSeconds: z.number().min(0),
+  // What a set the weights at the place pushed stands in for (Maintenance 23); advisory, so an
+  // unreadable one is dropped, never the workout.
+  asked: z
+    .object({
+      weight: z.number().min(0),
+      reps: z.tuple([z.number().int().min(0), z.number().int().min(0)]),
+    })
+    .optional()
+    .catch(undefined),
 });
 
 export const WorkoutEntrySchema = z.looseObject({
@@ -53,6 +62,8 @@ export const WorkoutEntrySchema = z.looseObject({
         })
         .optional()
         .catch(undefined),
+      // The weight the target moved from (Maintenance 23), for the step rule in a refit.
+      from: z.number().optional().catch(undefined),
       // A lift done at bodyweight that fell short of its floor (Maintenance 21).
       short: z
         .looseObject({

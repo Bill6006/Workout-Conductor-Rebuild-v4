@@ -46,7 +46,7 @@ the overlay shows while the engine works.
 | intensity       | partial       | Harder or easier for the remaining work.                                                                                                                                                                                                                                   |
 | end-by          | partial       | Exact end time: a hard cap with no tolerance.                                                                                                                                                                                                                              |
 | sets            | local         | Adds or removes one working set of an exercise (never a logged one).                                                                                                                                                                                                       |
-| add-warmup      | local         | Adds a light ramp set; ramp sets never count as working sets.                                                                                                                                                                                                              |
+| add-warmup      | local         | Adds a light ramp set; ramp sets never count as working sets. A lift with no load takes one set of a few easy reps and refuses a second unless the first was skipped (Maintenance 23); after twenty minutes away its re-warm is a few easy reps with no weight.            |
 | rep-range       | local         | Sets the rep target on the remaining working sets.                                                                                                                                                                                                                         |
 | reorder         | local         | Moves an unstarted row up or down; started work keeps its place.                                                                                                                                                                                                           |
 | split-superset  | local         | Turns an unstarted superset into straight sets.                                                                                                                                                                                                                            |
@@ -168,3 +168,23 @@ its reps in reserve, and the earlier sets of the same exercise this session:
 The store turns the decision into a `performance` recalibration of that exercise's remaining
 sets only, and the summary line says which set and why ("Set 1: 6 reps with 4 in reserve
 against a target of 2: the next 3 sets go up 5 lb."). Done sets never change.
+
+A set the weights at a place pushed (Maintenance 23, `asked` on the set) changes only when its
+weight really moves, so at the heaviest weight here "go up" leaves it as it is. Moved up to or
+past the load it stood in for, it takes that load's range and stands in for nothing; still under
+it, it takes the reps its push gives at the new weight; moved down, it keeps its reps and is
+easier. Reps autoregulation moves keep the record. A later change of weights that leaves the
+lift's own fit where it was (a plate marked missing for a barbell, say) leaves such a set where
+autoregulation put it, while the weights still make it; a change to the lift's own weights fits
+it again from what it stood in for. A weight the coach sets (`target-weight`: "Take 25 lb today",
+a deload) changes a pushed set by the same rule; reps set by hand stay through both. A change of
+place fits every lift the rebuild keeps (under way, the lift in front, a pinned one) to the
+weights at the new place as a change of weights does, before the session is fitted to time: at
+the gym, 20 lb × 25-29 standing in for 30 lb × 6-10 goes on at 30 lb × 6-10, and back at home it
+is pushed again. A weight carried on the dial that the new place cannot make is dropped first.
+A lift with reps set by hand is fitted in place even before it starts, from the weight they were
+set at, so its record is the same whether a ramp was done or not, and setting them rewrites the
+note by the target at once; a swap before it starts, or a swap back, leaves what was set by hand,
+reps or weight, with the sets it replaced. A ramp put back after a long break, or on a lift picked
+up again, climbs to the next working set on its own (one put back is three fifths of it); a ramp
+added by hand or put back asks the range a pushed set stands in for, never the push's extra reps.

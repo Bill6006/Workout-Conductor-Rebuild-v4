@@ -59,6 +59,13 @@ export function MaxSheet({
   const [error, setError] = useState<string | null>(null);
 
   const working = entry.sets.find((set) => set.kind === 'working');
+  // The range the first target is for: reps set by hand as they are, else the range a pushed set
+  // stands in for, never the push's extra reps (Maintenance 23).
+  const range = working
+    ? entry.manual?.reps
+      ? working.targetReps
+      : (working.asked?.reps ?? working.targetReps)
+    : null;
   const perHand = loadClass(exercise.load) === 'each' ? ' per hand' : '';
   const input: MaxInput | null =
     mode === 'set'
@@ -75,11 +82,11 @@ export function MaxSheet({
         ? input.e1rm
         : maxFromSet(input.weight, input.reps);
   const firstTarget =
-    e1rm !== null && working
+    e1rm !== null && working && range
       ? floorToBar(
           loadFromEstimate(
             e1rm,
-            working.targetReps[1],
+            range[1],
             working.targetRir,
             // A lift with logged history is asked for a little more of what the max implies.
             !offer && entry.progression && entry.progression.mode !== 'start'
@@ -227,8 +234,8 @@ export function MaxSheet({
         </div>
       )}
       <p className={styles.preview} data-testid="max-preview" aria-live="polite">
-        {e1rm !== null && working && firstTarget !== null
-          ? `${mode === 'set' ? `Estimated max about ${Math.round(e1rm)} ${units}${perHand} from that set` : `Max ${Math.round(e1rm)} ${units}${perHand}`}. ${offer ? 'First target' : 'On its own it puts the target at'}: ${firstTarget} ${units} × ${working.targetReps[0]}-${working.targetReps[1]} reps at RIR ${working.targetRir}.`
+        {e1rm !== null && working && range && firstTarget !== null
+          ? `${mode === 'set' ? `Estimated max about ${Math.round(e1rm)} ${units}${perHand} from that set` : `Max ${Math.round(e1rm)} ${units}${perHand}`}. ${offer ? 'First target' : 'On its own it puts the target at'}: ${firstTarget} ${units} × ${range[0]}-${range[1]} reps at RIR ${working.targetRir}.`
           : mode === 'set'
             ? 'Type a set you did, for example 135 for 8, and the first target appears here.'
             : 'Type your max and the first target appears here.'}

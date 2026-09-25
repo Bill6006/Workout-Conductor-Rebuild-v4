@@ -51,6 +51,11 @@ export interface EntryProgression {
   rack?: RackNote;
   /** A lift done at bodyweight fell short of its floor this many sessions running (Maintenance 21). */
   short?: ShortRun;
+  /**
+   * The weight the target moved from, the last one lifted (Maintenance 23): a refit applies the
+   * step rule from it, as the plan did.
+   */
+  from?: number;
 }
 
 /** Sessions in a row a lift done at bodyweight ended under the bottom of its range, and that floor. */
@@ -85,6 +90,11 @@ export interface SetPrescription {
   /** Load targets arrive with the progression engine (Phase 6). */
   targetWeight: number | null;
   restSeconds: number;
+  /**
+   * The weights at the place made less than the plan asked, so this set is lighter with more
+   * reps: the load and range it stands in for (Maintenance 23). Absent on any other set.
+   */
+  asked?: { weight: number; reps: [number, number] };
 }
 
 export interface WorkoutEntry {

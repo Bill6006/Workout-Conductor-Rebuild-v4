@@ -1,5 +1,6 @@
 import type { CatalogExercise, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import { restCategory } from '../../engine/progression/roles';
+import { hasNoLoad } from '../../engine/progression/startingLoad';
 import type { SetKind } from '../../engine/workout/types';
 
 /**
@@ -94,7 +95,9 @@ export function tempoCue(
   if (kind === 'warmup') {
     return build(
       [lower(2), hold(0), lift(1), squeeze(0)],
-      'ramp set: easy load, rehearse the working tempo',
+      hasNoLoad(exercise)
+        ? 'ramp set: a few easy reps, rehearse the working tempo'
+        : 'ramp set: easy load, rehearse the working tempo',
       [TEMPO_EVIDENCE.ramp, TEMPO_EVIDENCE.duration],
       cue,
     );
@@ -136,7 +139,7 @@ export function tempoCue(
     case 'hypertrophy':
       return build(
         [lower(3), hold(0), lift(1), squeeze(0)],
-        'lower for 3 to load the stretch, no pause, up under control',
+        'lower for 3 under control, no pause, up smoothly',
         [TEMPO_EVIDENCE.eccentric, TEMPO_EVIDENCE.duration],
         cue,
       );

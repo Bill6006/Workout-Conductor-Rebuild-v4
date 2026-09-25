@@ -1866,8 +1866,12 @@ export class AppStore {
       return receipt;
     }
     const trigger = previous ? profileTrigger(previous, next) : null;
-    if (trigger && this.state.session.status !== 'completed') await this.recalibrate(trigger);
-    else this.syncSessionKey();
+    if (trigger && this.state.session.status !== 'completed') {
+      // A new place: a weight carried on the dial that it cannot make goes before the rebuild,
+      // as with a change of weights (Maintenance 23).
+      if (trigger.type === 'location') this.dropUnloadableDrafts();
+      await this.recalibrate(trigger);
+    } else this.syncSessionKey();
     return receipt;
   }
 

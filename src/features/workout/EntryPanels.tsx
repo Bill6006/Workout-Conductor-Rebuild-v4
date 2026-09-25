@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
+import { isCoreStability } from '../../catalog/movementPatterns/movementPatterns';
 import { ExerciseDemo } from '../../components/ExerciseDetail/ExerciseMedia';
 import type { CustomInstruction } from '../../core/validation/customExercise';
 import type { UnitSystem } from '../../core/validation/profile';
@@ -168,6 +169,7 @@ export function EntryPanels({
                 entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
                 entry.role,
                 exercise.measure === 'seconds',
+                isCoreStability(exercise.movementPattern),
               ).evidence,
               ...restGuidance(entry.role, entry.restSeconds).evidence,
             ].map((line) => (
