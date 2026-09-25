@@ -155,9 +155,18 @@ describe('generateWorkout: 15 / 30 / 45 / Default', () => {
   });
 
   it('brings a move back on its own when the minutes a pair left behind fit it', () => {
-    const workout = generate({}, 30);
+    // The pull day: the pair of the rear-delt fly and a curl goes, and the fly, whose rear delts
+    // the rows train only at half a set, comes back.
+    const workout = generateWorkout({
+      profile: profile({ bodyweight: 185 }),
+      location: gym,
+      history: [],
+      now: NOW,
+      duration: 30,
+      constraints: { templateId: 'pull-arms' },
+    });
     expect(workout.explanation.fittingSteps).toContain(
-      'Kept Cable Triceps Pushdown on its own: the minutes left fit it.',
+      'Kept Rear Delt Fly on its own: the minutes left fit it.',
     );
     expect(workout.duration.estimatedMinutes).toBeLessThanOrEqual(31);
   });

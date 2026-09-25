@@ -10,13 +10,20 @@ import {
   roundsRun,
   type DurationChoice,
   type GeneratedWorkout,
+  type SetKind,
   type WorkoutEntry,
 } from '../workout/types';
 import type { RecalibrationTrigger } from '../recalibration/types';
 import { emptyCompleted, emptyConstraints, recalibrate } from '../recalibration/recalibrate';
 import { emptyMaxes, recordMax } from '../progression/maxes';
 import type { NextTarget } from '../progression/progression';
-import { generateWorkout, leaveOutRank, scaleForDeload, targetAtPlace } from './generate';
+import {
+  generateWorkout,
+  leaveOutRank,
+  mainLiftSets,
+  scaleForDeload,
+  targetAtPlace,
+} from './generate';
 
 /**
  * Maintenance 24, the owner's item 33 (docs/research/short-sessions.md). When a session too long
@@ -60,13 +67,15 @@ const leftOut = (workout: GeneratedWorkout) =>
 
 describe('a session too long for its length', () => {
   it('keeps Chin-Up on a 30-minute pull day with light dumbbells, the isolation moves out first', () => {
-    // The owner's case: the old order left Chin-Up out and kept two sets of shrugs.
+    // The owner's case: the old order left Chin-Up out and kept two sets of shrugs. The rear-delt
+    // fly and curl pair goes: the chin-ups train the biceps in full and the rows half, the rows give
+    // the rear delts half a set a set, and the hammer curl's forearms get the least, half a set for
+    // each chin-up set.
     const workout = plan(lightHome, 'pull-arms', 30);
     expect(names(workout)).toEqual(
-      expect.arrayContaining(['Chest-Supported Row', 'Chin-Up', 'Dumbbell Shrug']),
+      expect.arrayContaining(['Chest-Supported Row', 'Chin-Up', 'Hammer Curl', 'Dumbbell Shrug']),
     );
     expect(leftOut(workout)).toEqual([
-      'Left out Hammer Curl so the session fits 30 min.',
       'Left out A1 Rear Delt Fly + A2 Dumbbell Curl so the session fits 30 min.',
     ]);
     expect(workout.duration.estimatedMinutes).toBeLessThanOrEqual(31);
@@ -87,17 +96,34 @@ describe('a session too long for its length', () => {
     ]);
   });
 
-  it("counts a main lift's secondary muscles as trained", () => {
-    // Rows and chin-ups train the rear delts and biceps; nothing on the pull day trains triceps
-    // or traps, so the pushdown and the shrugs stay.
+  it("counts a main lift's secondary muscles at half a set", () => {
+    // Chin-ups train the biceps in full and rows half; rows give the rear delts half a set a set;
+    // nothing on the pull day trains triceps or traps, so the pushdown and the shrugs stay, and the
+    // rear-delt fly comes back before a curl. Counted as nothing, the rear delts would keep the fly
+    // in its pair and bring back the pushdown alone.
     const workout = plan(gym, 'pull-arms', 30);
     expect(leftOut(workout)).toEqual([
       'Left out Dumbbell Curl so the session fits 30 min.',
       'Left out A1 Rear Delt Fly + A2 EZ-Bar Curl so the session fits 30 min.',
     ]);
+    expect(workout.explanation.fittingSteps).toContain(
+      'Kept Rear Delt Fly on its own: the minutes left fit it.',
+    );
     expect(names(workout)).toEqual(
       expect.arrayContaining(['Cable Triceps Pushdown', 'Barbell Shrug']),
     );
+  });
+
+  it('keeps the leg curl over the leg extension, the hamstrings counted as their lifts train them', () => {
+    // The squat and the split squat train the quads in full. The hamstrings get the hinge's sets
+    // in full, the split squat's at half, and nothing from the squat. Counted in full, they would
+    // look better trained than the quads, and the leg extension would stay instead.
+    const workout = plan(gym, 'lower', 30, {
+      ...strength,
+      techniques: { supersets: true, dropSets: true, circuits: false },
+    });
+    expect(names(workout)).toContain('Leg Curl');
+    expect(names(workout)).not.toContain('Leg Extension');
   });
 
   it("keeps core work as the day's only work for the core, though squats brace it", () => {
@@ -106,9 +132,10 @@ describe('a session too long for its length', () => {
       techniques: { supersets: false, dropSets: false, circuits: false },
     });
     expect(names(workout)).toContain('Ab Wheel Rollout');
+    // The quads get more from the squats than the hamstrings from the hinge: the extension first.
     expect(leftOut(workout)).toEqual([
-      'Left out Leg Curl to fit 30 min.',
       'Left out Leg Extension to fit 30 min.',
+      'Left out Leg Curl to fit 30 min.',
     ]);
   });
 
@@ -198,17 +225,17 @@ describe('a session too long for its length', () => {
   });
 
   it('brings a move back at its own rest where the lifter runs shorter ones', () => {
-    // Short rests give a finisher 35 s; brought back at 45 it would not fit the 30 minutes.
-    const upTo15: LocationProfile = {
-      ...home,
-      loading: { [DUMBBELLS_KEY]: { kind: 'dumbbells', ranges: [{ from: 5, to: 15, step: 5 }] } },
-    };
-    const workout = plan(upTo15, 'pull-arms', 30, { restStyle: 'short' });
+    // Short rests give a finisher 35 s; brought back, it keeps them rather than the fit's 45.
+    const workout = plan(home, 'pull-arms', 30, {
+      restStyle: 'short',
+      programStyle: 'high-rep',
+      techniques: { supersets: false, dropSets: false, circuits: false },
+    });
     const curl = allEntries(workout.blocks).find((entry) => entry.exerciseId === 'hammer-curl');
-    expect(curl?.restSeconds).toBe(35);
     expect(workout.explanation.fittingSteps).toContain(
       'Kept Hammer Curl on its own: the minutes left fit it.',
     );
+    expect(curl?.restSeconds).toBe(35);
     expect(workout.duration.overByMinutes).toBeLessThanOrEqual(1);
   });
 
@@ -260,7 +287,19 @@ describe('a session too long for its length', () => {
 });
 
 describe('leaveOutRank', () => {
-  const trained = new Set<MuscleId>(['chest', 'triceps', 'front-delts', 'abs', 'quads']);
+  /** The main lifts' work on each muscle, in sets. */
+  const sets =
+    (work: Partial<Record<MuscleId, number>>) =>
+    (muscle: MuscleId): number =>
+      work[muscle] ?? 0;
+  const trained = sets({
+    chest: 4,
+    triceps: 8,
+    'front-delts': 5,
+    'side-delts': 1,
+    abs: 2,
+    quads: 7,
+  });
   const custom = (overrides: Partial<CatalogExercise>): CatalogExercise => ({
     ...requireExercise('leg-extension'),
     id: 'custom-test',
@@ -277,17 +316,169 @@ describe('leaveOutRank', () => {
       ),
     ).toBe(2);
     expect(leaveOutRank(requireExercise('ez-bar-curl'), trained)).toBe(1);
-    expect(leaveOutRank(requireExercise('cable-triceps-pushdown'), trained)).toBe(0);
   });
 
   it('ranks core work as the only work for the core, however the main lifts brace it', () => {
     expect(leaveOutRank(requireExercise('ab-wheel-rollout'), trained)).toBe(1);
   });
 
-  it('ranks a move covered only when every muscle it trains is trained', () => {
-    expect(leaveOutRank(requireExercise('leg-extension'), trained)).toBe(0);
-    expect(leaveOutRank(requireExercise('leg-extension'), new Set<MuscleId>())).toBe(1);
+  it('lets a move go the sooner, the more the main lifts train its muscle', () => {
+    const pushdown = leaveOutRank(requireExercise('cable-triceps-pushdown'), trained);
+    const fly = leaveOutRank(requireExercise('cable-fly'), trained);
+    const raise = leaveOutRank(requireExercise('lateral-raise'), trained);
+    expect(pushdown).toBeCloseTo(1 / 9);
+    expect(fly).toBeCloseTo(1 / 5);
+    expect(raise).toBeCloseTo(1 / 2);
+    expect(pushdown).toBeLessThan(fly);
+    expect(fly).toBeLessThan(raise);
+    expect(raise).toBeLessThan(1);
+  });
+
+  it('ranks a move by the muscle it trains that the main lifts train least', () => {
+    expect(leaveOutRank(requireExercise('leg-extension'), trained)).toBeCloseTo(1 / 8);
+    expect(leaveOutRank(requireExercise('leg-extension'), sets({}))).toBe(1);
     expect(leaveOutRank(custom({ primaryMuscles: ['quads', 'glutes'] }), trained)).toBe(1);
+  });
+});
+
+describe("the main lifts' work on a muscle", () => {
+  const entry = (exerciseId: string, working: number, extra: SetKind[] = []): WorkoutEntry => ({
+    id: `e-${exerciseId}`,
+    exerciseId,
+    role: 'primary-strength',
+    sets: [
+      ...extra.filter((kind) => kind === 'warmup'),
+      ...Array.from({ length: working }, () => 'working' as const),
+      ...extra.filter((kind) => kind !== 'warmup'),
+    ].map((kind, index) => ({
+      index,
+      kind,
+      targetReps: [6, 10] as [number, number],
+      targetRir: 2,
+      targetWeight: null,
+      restSeconds: 90,
+    })),
+    restSeconds: 90,
+    warmupSets: extra.filter((kind) => kind === 'warmup').length,
+    dropSet: extra.includes('drop'),
+    chosenFor: [],
+    locked: false,
+    pinned: false,
+  });
+  const work = (...entries: WorkoutEntry[]) => mainLiftSets(entries, requireExercise);
+
+  it('counts a set in full for the muscles a lift trains most, and half for the others', () => {
+    // A barbell row: the upper back and lats in full, the biceps, lower back and rear delts at half.
+    const row = work(entry('barbell-row', 4));
+    expect(
+      (['upper-back', 'lats', 'biceps', 'rear-delts', 'triceps'] as MuscleId[]).map(row),
+    ).toEqual([4, 4, 2, 2, 0]);
+    // The chin-up trains the biceps in full: the two add up.
+    expect(work(entry('barbell-row', 4), entry('chin-up', 3))('biceps')).toBe(5);
+  });
+
+  it('counts working sets only, and only the main lifts', () => {
+    expect(work(entry('barbell-bench-press', 3, ['warmup', 'warmup']))('chest')).toBe(3);
+    expect(work(entry('cable-fly', 3))('chest')).toBe(0);
+  });
+
+  it('counts nothing for the hamstrings from a squat or a hip thrust, and half from a lunge', () => {
+    // Squats and hip thrusts grew the hamstrings little or not at all in controlled trials (Kubo
+    // et al. 2019; Plotkin et al. 2023); split squats have no such trial, so they count half.
+    expect(work(entry('back-squat', 4))('hamstrings')).toBe(0);
+    expect(work(entry('back-squat', 4))('lower-back')).toBe(2);
+    expect(work(entry('leg-press', 3))('hamstrings')).toBe(0);
+    expect(work(entry('hip-thrust', 3))('hamstrings')).toBe(0);
+    expect(work(entry('bulgarian-split-squat', 3))('hamstrings')).toBe(1.5);
+  });
+});
+
+describe('a circuit too long for the session', () => {
+  const circuits = { supersets: true, dropSets: true, circuits: true };
+
+  it('gives up a move at a time, the one the main lifts train most first', () => {
+    // The presses train the triceps most, the chest next, and the side delts only at half a set
+    // from the shoulder press: the pushdown goes, then the pair, and the lateral raise stays.
+    const workout = plan(gym, 'push-arms', 30, { techniques: circuits });
+    const steps = workout.explanation.fittingSteps;
+    expect(steps).toContain('Ran 3 isolation moves as a 3-round circuit.');
+    expect(steps.filter((step) => /^(Left out|Kept)/.test(step))).toEqual([
+      'Left out Cable Triceps Pushdown from the circuit so the session fits 30 min.',
+      'Left out A1 Cable Fly + A2 Lateral Raise so the session fits 30 min.',
+      'Kept Lateral Raise on its own: the minutes left fit it.',
+    ]);
+  });
+
+  it("stays whole while it holds the day's only work for a muscle", () => {
+    // The home pull day's circuit carries the overhead triceps extension, the day's only triceps
+    // work: a block ranks as its best-kept move, so the circuit stays and the hammer curl goes.
+    const workout = plan(home, 'pull-arms', 30, { techniques: circuits });
+    const circuit = workout.blocks.find((block) => block.kind === 'circuit');
+    expect(circuit?.entries.map((entry) => entry.exerciseId)).toEqual([
+      'rear-delt-fly',
+      'dumbbell-curl',
+      'overhead-triceps-extension',
+    ]);
+    expect(names(workout)).not.toContain('Hammer Curl');
+  });
+
+  it('keeps the pair it shrinks to where the time fits it', () => {
+    // Ending in 25 minutes: the whole circuit went before, and one move came back at most.
+    const profile = {
+      ...base,
+      bodyweight: 185,
+      programStyle: 'high-rep' as const,
+      techniques: circuits,
+    };
+    const workout = generateWorkout({
+      profile,
+      location: gym,
+      history: [],
+      now: NOW,
+      duration: 'default',
+      constraints: { templateId: 'push-arms' },
+    });
+    const result = recalibrate({
+      trigger: { type: 'end-by', time: '2026-09-03T14:25:00.000Z' },
+      workout,
+      completed: emptyCompleted(),
+      lockedEntryIds: [],
+      currentEntryId: null,
+      duration: 'default',
+      profile,
+      location: gym,
+      history: [],
+      constraints: emptyConstraints(),
+      reason: 'test',
+      timestamp: NOW,
+    });
+    if (!result.ok) throw new Error(result.error);
+    expect(result.workout.explanation.fittingSteps).toContain(
+      'Left out Cable Triceps Pushdown from the circuit so the session fits 25 min.',
+    );
+    const pair = result.workout.blocks.find(
+      (block) => block.label === 'A1 Cable Fly + A2 Lateral Raise',
+    );
+    expect(pair?.kind).toBe('superset');
+    expect(pair?.id).toBe(`s-${pair?.entries.map((each) => each.id).join('-')}`);
+    // A pair runs as many rounds as its shorter move.
+    const working = (entry: WorkoutEntry) =>
+      entry.sets.filter((set) => set.kind === 'working').length;
+    expect(pair?.rounds).toBe(Math.min(...(pair?.entries ?? []).map(working)));
+    expect(result.workout.duration.overByMinutes).toBe(0);
+  });
+
+  it('can bring back on its own a move it gave up', () => {
+    // At 15 minutes with short rests the chin-up gives way in the end, and the curl the circuit
+    // gave up takes its place.
+    const workout = plan(gym, 'pull-arms', 15, {
+      restStyle: 'short',
+      programStyle: 'high-rep',
+      techniques: circuits,
+    });
+    const steps = workout.explanation.fittingSteps;
+    expect(steps).toContain('Left out EZ-Bar Curl from the circuit so the session fits 15 min.');
+    expect(steps).toContain('Kept EZ-Bar Curl on its own: the minutes left fit it.');
   });
 });
 

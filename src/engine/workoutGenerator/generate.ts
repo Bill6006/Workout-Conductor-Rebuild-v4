@@ -67,6 +67,7 @@ import type { Readiness } from '../recalibration/types';
 import { interpretFatigue } from '../recovery/fatigue';
 import { precedingWorkToday, type EarlierWork } from '../recovery/sessionContext';
 import {
+  INDIRECT_SET_WEIGHT,
   computeExposure,
   computeMusclePriorities,
   computeWeeklyVolume,
@@ -632,18 +633,60 @@ function entryValue(
 }
 
 /**
+ * Secondary muscles that do not grow from a movement in controlled trials count for nothing from
+ * it: the hamstrings in a squat or a hip thrust (Kubo et al. 2019, PMID 31230110; Plotkin et al.
+ * 2023, PMID 37877099).
+ */
+const NO_INDIRECT_GROWTH: Partial<Record<MovementPatternId, readonly MuscleId[]>> = {
+  squat: ['hamstrings'],
+  'hip-extension': ['hamstrings'],
+};
+
+/** A main lift's set as work for one of its secondary muscles (`INDIRECT_SET_WEIGHT`). */
+function indirectShare(exercise: CatalogExercise, muscle: MuscleId): number {
+  return NO_INDIRECT_GROWTH[exercise.movementPattern]?.includes(muscle) ? 0 : INDIRECT_SET_WEIGHT;
+}
+
+/**
+ * Each muscle's work from the main lifts among these entries, in sets: a set counts in full for a
+ * lift's primary muscles and half for its secondary ones (`indirectShare`), as the weekly volume
+ * counts them (Maintenance 24).
+ */
+export function mainLiftSets(
+  entries: readonly WorkoutEntry[],
+  exerciseOf: (id: string) => CatalogExercise,
+): (muscle: MuscleId) => number {
+  const sets = new Map<MuscleId, number>();
+  const add = (muscle: MuscleId, amount: number) =>
+    sets.set(muscle, (sets.get(muscle) ?? 0) + amount);
+  for (const entry of entries) {
+    const exercise = exerciseOf(entry.exerciseId);
+    if (!exercise.compound) continue;
+    const count = entry.sets.filter((set) => set.kind === 'working').length;
+    for (const muscle of exercise.primaryMuscles) add(muscle, count);
+    for (const muscle of exercise.secondaryMuscles)
+      add(muscle, count * indirectShare(exercise, muscle));
+  }
+  return (muscle) => sets.get(muscle) ?? 0;
+}
+
+/**
  * How long an exercise stays when a session too long for its length must leave something out
  * (Maintenance 24, docs/research/short-sessions.md); higher stays longer. A main lift stays
- * longest, then lower-back work, then the day's only work for a muscle, core work included; an
- * isolation exercise whose muscles the day's main lifts train goes first.
+ * longest (3), then lower-back work (2), then core work (1). An isolation exercise stays the
+ * longer the less work its least-trained muscle gets from the day's main lifts (`trained`, in
+ * sets): the day's only work for a muscle stays as long as core work, and one the main lifts
+ * already train most goes first, since more sets bring less the more a muscle already has
+ * (Pelland et al. 2026).
  */
-export function leaveOutRank(exercise: CatalogExercise, trained: ReadonlySet<MuscleId>): number {
+export function leaveOutRank(
+  exercise: CatalogExercise,
+  trained: (muscle: MuscleId) => number,
+): number {
   if (exercise.compound) return 3;
   if (exercise.primaryMuscles.includes('lower-back')) return 2;
-  const covered =
-    !exercise.movementPattern.startsWith('core-') &&
-    exercise.primaryMuscles.every((muscle) => trained.has(muscle));
-  return covered ? 0 : 1;
+  if (exercise.movementPattern.startsWith('core-')) return 1;
+  return 1 / (1 + Math.min(...exercise.primaryMuscles.map(trained)));
 }
 
 export function cloneEntry(entry: WorkoutEntry): WorkoutEntry {
@@ -1127,14 +1170,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   // by leaveOutRank against the main lifts still in the plan. Within a rank, and among the main
   // lifts when those must go too, the lowest value first, as before. A block ranks as its
   // highest-ranked exercise.
-  const trainedByMainLifts = (): ReadonlySet<MuscleId> =>
-    new Set(
-      allEntries(blocks)
-        .map((entry) => exerciseOf(entry.exerciseId))
-        .filter((exercise) => exercise.compound)
-        .flatMap((exercise) => [...exercise.primaryMuscles, ...exercise.secondaryMuscles]),
-    );
-  const leaveOutTier = (entries: readonly WorkoutEntry[], trained: ReadonlySet<MuscleId>) =>
+  const trainedByMainLifts = () => mainLiftSets(allEntries(blocks), exerciseOf);
+  const leaveOutTier = (entries: readonly WorkoutEntry[], trained: (muscle: MuscleId) => number) =>
     Math.max(...entries.map((entry) => leaveOutRank(exerciseOf(entry.exerciseId), trained)));
   const nextToLeaveOut = (): WorkoutBlock | undefined => {
     const candidates = blocks.filter((block) => !block.entries.some(untouchable));
@@ -1160,6 +1197,29 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     blocks = blocks.filter((candidate) => candidate.id !== block.id);
     leftOut.push(block);
     fittingSteps.push(`Left out ${block.label} ${why}.`);
+  };
+  // A circuit's three moves shrink to a pair before the circuit goes whole (Maintenance 24): a
+  // pair is the least that still alternates moves, and paired moves keep their volume in less
+  // time (Zhang et al. 2025). The move the order leaves out first goes, and can come back on its
+  // own.
+  const shrinkCircuit = (block: WorkoutBlock, why: string): boolean => {
+    if (block.kind !== 'circuit' || block.entries.length !== 3) return false;
+    const trained = trainedByMainLifts();
+    const [gone] = [...block.entries].sort(
+      (a, b) =>
+        leaveOutTier([a], trained) - leaveOutTier([b], trained) ||
+        entryValue(a, weightOf, preferredIds) - entryValue(b, weightOf, preferredIds),
+    );
+    if (!gone) return false;
+    block.entries = block.entries.filter((entry) => entry !== gone);
+    const names = block.entries.map((entry) => exerciseOf(entry.exerciseId).name);
+    block.kind = 'superset';
+    block.id = `s-${block.entries.map((entry) => entry.id).join('-')}`;
+    block.label = `A1 ${names[0]} + A2 ${names[1]}`;
+    block.rounds = Math.min(...block.entries.map((entry) => workingSets(entry).length));
+    leftOut.push(straightBlock(gone, exerciseOf));
+    fittingSteps.push(`Left out ${exerciseOf(gone.exerciseId).name} from the circuit ${why}.`);
+    return true;
   };
 
   // 2. Circuits (only when they suit the goal), then smart supersets, among new entries only.
@@ -1421,6 +1481,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     if (trimSets()) continue;
     const lowest = nextToLeaveOut();
     if (!lowest) break;
+    if (shrinkCircuit(lowest, `so the session fits ${targetMinutes} min`)) continue;
     if (hardCap || allEntries(blocks).length > 2) {
       dropBlock(lowest, `so the session fits ${targetMinutes} min`);
       continue;

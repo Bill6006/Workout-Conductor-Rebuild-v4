@@ -22,10 +22,15 @@ PMID 27677913), though it can matter for a muscle the main lifts barely train (M
 
 **Delivered:**
 
-- The main lifts stay, and an isolation exercise gives way first. Among isolation exercises, one
-  whose muscles the main lifts still in the plan train goes first (a curl on a day with rows and
-  chin-ups); the day's only work for a muscle goes later, core work counting as that, and
-  lower-back work last. A main lift gives way only once no isolation exercise is left.
+- The main lifts stay, and an isolation exercise gives way first. Among isolation exercises, the
+  one whose muscles the main lifts still in the plan train most goes first (a curl on a day with
+  rows and chin-ups); the day's only work for a muscle goes later, core work counting as that, and
+  lower-back work last. A main lift gives way only once no isolation exercise is left. The main
+  lifts' work on a muscle is counted in sets: in full for a lift's primary muscles, at half for its
+  secondary ones, and none for the hamstrings in a squat or a hip thrust (settled from the
+  evidence, below).
+- A circuit's three moves shrink to a pair before the circuit goes whole: the move the main lifts
+  train most goes, and can come back on its own (settled from the evidence, below).
 - Down to two exercises, a row that still does not fit goes for a move left out that fits in its
   place, tried with its rest cut as far as the fit cuts rests (never longer than its own), then at
   fewer sets, down to two, and never under the sets the plan had before Make it harder added one;
@@ -44,19 +49,22 @@ PMID 27677913), though it can matter for a muscle the main lifts barely train (M
 - When rows left out leave minutes unused, their moves come back on their own while they fit, the
   one this order keeps longest first. Rows the row cap left out come back too.
 - The owner's case: the 30-minute pull day at home with dumbbells to 20 lb now keeps Chin-Up. The
-  hammer curl goes first, then the curl and rear-delt pair, and the curl comes back on its own.
+  rear-delt fly and curl pair goes, and the hammer curl stays: the chin-ups train the biceps in
+  full and the rows half, the rows give the rear delts half a set a set, and the hammer curl's
+  forearms get the least, half a set for each chin-up set.
 
 **Measured:** across 2,700 plans at 15, 30 and 45 minutes (the gym, home, and dumbbells to 15, 20
 or 30 lb; five templates; four goals; default lengths of 45, 60 and 75 minutes; techniques on and
-off), 1,128 changed: 666 keep more main lifts, and 48 keep one fewer, all at 15 minutes at the
+off), 1,344 changed: 666 keep more main lifts, and 48 keep one fewer, all at 15 minutes at the
 light dumbbells, where the old order kept two main lifts that ran over: two presses, 2.4 or 2.6
 minutes over, in 24, and a goblet squat with a dumbbell bench press on the full-body day, 1.6 over,
 in the other 24. "Even the leanest version runs about N min over" shows on none of them now,
 against 216 fifteen-minute plans with the old order. Across 480 rebuilds (sessions shortened while
 not started, with the main lift pinned, under way, or one set in), none runs over where the old
 order fit, and 69 of the 81 that ran over with it no longer do. A fresh plan at a default length
-of 60 or 75 minutes changed in none of 600. The fixes of every re-check since change none of
-these figures: both runs are the same, line for line.
+of 60 or 75 minutes changed in none of 600. The two decisions settled from the evidence change
+which isolation moves 426 of the short plans keep (and 72 of the 300 with a 45-minute default),
+never their main lifts or their number of moves, and none of the other figures.
 
 ## 34. The check-in, and Make it harder or easier, hold through every change
 
@@ -213,12 +221,12 @@ acted on.
 
 - **33:** two main lifts ran 15-minute sessions over: fixed, a main lift now gives way down to two
   exercises for a move that fits. A plan could end with one exercise because the row cap's rows
-  never came back: fixed. On push and upper days at 30 minutes a circuit of moves the presses
-  train is now always left out, and a main lift's secondary muscles count as trained: both are
-  questions for the owner (Things to settle). The docs said a default-length plan never changes,
-  which is true of a fresh plan but not of a rebuild that must leave something out, said the
-  refill keeps one move, and left out that only a lifter's own exercise can be lower-back work:
-  all corrected.
+  never came back: fixed. On push and upper days at 30 minutes a circuit of moves the presses train
+  is now always left out, and a main lift's secondary muscles count as trained: both are questions
+  settled from the evidence since (Settled from the evidence). The docs said a default-length plan
+  never changes, which is true of a fresh plan but not of a rebuild that must leave something out,
+  said the refill keeps one move, and left out that only a lifter's own exercise can be lower-back
+  work: all corrected.
 - **34:** a check-in back to fine left the cut sets and said "full workout kept": fixed. A plan
   built again for a coach focus or a deload week dropped the check-in, the length and today's
   skips: fixed. The carried effort was read on a set already done, and read as none at the reserve
@@ -498,17 +506,46 @@ is taken back out; no further independent review has looked at them.
 - The exercise the coach adds now passes the place's weights to the set builder like every other
   call; with no ramp or drop set on it and its target already fitted, this changes nothing today,
   so it has no revert. Likewise the refill's check that a move comes back only once has no case in
-  the plans checked; it stays so a move can never appear twice.
+  the plans checked; it stays so a move can never appear twice. And a circuit shrunk to a pair
+  sets the pair's rounds from its two moves, which by then always have equal sets, since the fit
+  trims every move to its floor before it shrinks a circuit (939 of 939 shrunk pairs checked); it
+  stays so the count can never go stale.
+- **The weekly volume still counts a squat's hamstrings at half a set.** The leave-out order counts
+  them as none, following the trials; the weekly count, which decides which exercises a plan
+  picks, still uses half for every secondary muscle. Proposed.
+- **A circuit shrunk to a pair is not checked for a shared muscle,** as a new pair is. No circuit
+  the app builds has two moves on one muscle, since each template gives a circuit's moves
+  different muscles: none of 41,760 circuits checked across every coach focus, nor of 331,200
+  with each circuit move and each two of them disliked (every place, template, goal, program
+  style, rest setting and experience). Proposed.
 
-## Things to settle
+## Settled from the evidence
 
-1. Circuits on push and upper days at 30 minutes: the circuit's three moves (fly, pushdown,
-   lateral raise) are all trained by the presses, so the rule leaves the whole circuit out first
-   and brings one move back. Keep that, or shrink a circuit by its lowest member before leaving it
-   out? Pull days keep theirs.
-2. A main lift's secondary muscles count as trained (the rows train the biceps and rear delts), as
-   in the design's example of a curl on a pull day. Counting primary muscles only would keep the
-   rear-delt fly and drop the shrugs in your pull-day case. Keep it as built?
+The owner asked (2026-09-25) that the two open questions be decided by the best available
+exercise-science evidence, not by preference, with the evidence and its limits documented. The
+full account, with every source, is in `docs/research/short-sessions.md`.
+
+1. **A main lift's secondary muscles count half a set.** A meta-regression of 67 studies found that
+   counting indirect sets at half predicted growth and strength best, with diminishing returns as
+   volume rises (Pelland et al. 2026, PMID 41343037); curls grew the elbow flexors about twice as
+   much as rows did (Mannarino et al. 2021, PMID 31268995). Where controlled trials show a muscle
+   does not grow from a movement it counts nothing: squats and hip thrusts grew the hamstrings
+   little or not at all (Kubo et al. 2019, PMID 31230110; Plotkin et al. 2023, PMID 37877099). An
+   isolation exercise now goes the sooner the more work its least-trained muscle already gets.
+   Uncertain: half is an average; exercise-by-exercise trials exist for only a few lifts, and the
+   catalog's primary and secondary labels decide which share applies.
+2. **A circuit shrinks to a pair before it goes whole.** Paired moves on different muscles keep
+   their volume in a shorter session with similar strength and growth, while pairs on the same
+   muscle lose volume (Zhang et al. 2025, PMID 39903375; Iversen et al. 2024, PMID 39072654); set
+   structure did not consistently change outcomes while volume did (ACSM position stand, Currier
+   et al. 2026, PMID 41843416). A circuit's moves always train different muscles, so the pair left
+   does too. Uncertain: the evidence is mostly for pairs, and no trial compared shrinking a circuit
+   with dropping it.
+
+In practice: at 30 minutes the pair seldom fits, so a push or upper day's circuit usually ends as
+the lateral raise on its own, the side delts getting only half a set from the shoulder press,
+where the fly or the pushdown came back before; with an exact end time the pair often stays (231
+of 1,248 shrunk circuits checked). Nothing is left to settle.
 
 ## Proposed
 
@@ -541,15 +578,20 @@ is taken back out; no further independent review has looked at them.
 - **Apply the week's order before the fit to time,** so an exact end time is never passed.
 - **Fit the plan to its length again after a max,** at light dumbbells above all.
 - **Say "where the weights allow" on the Plan tab's deload line.**
+- **Count a squat's and a hip thrust's hamstrings as none in the weekly volume too,** as the
+  leave-out order now does.
+- **Check a circuit shrunk to a pair for a shared muscle,** as a new pair is, so a template that
+  one day gave a circuit two moves on one muscle could not make a same-muscle pair.
 
 ## The complete revert run
 
 Every fix of this round and of Maintenance 23 has an entry that takes that fix alone back out and
-runs its tests: 348 entries, 174 this round and 174 from Maintenance 23. The complete run caught
-347. The one it missed, Maintenance 23's check that a set the weights push takes no planned drop
-set, was no regression: the rule still holds, but this round's order leaves out the isolation moves
-its test reached. The test now covers an advanced lifter too, whose 30-minute pull day at dumbbells
-to 20 lb keeps a pushed shrug where the drop set would go, and it catches that revert: 348 of 348.
+runs its tests: 359 entries, 185 this round and 174 from Maintenance 23, the two rules settled from
+the evidence included. The complete run on the final build caught all 359. An earlier complete run
+caught 347 of 348: the one it missed, Maintenance 23's check that a set the weights push takes no
+planned drop set, was no regression, but this round's order had left out the isolation moves its
+test reached; the test now covers an advanced lifter too, whose 30-minute pull day at dumbbells to
+20 lb keeps a pushed shrug where the drop set would go.
 
 ## Verification
 

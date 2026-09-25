@@ -16,6 +16,12 @@ import type { MusclePriority } from '../workout/types';
 
 const DAY_MS = 86_400_000;
 
+/**
+ * A set as work for a secondary muscle: half a set. Counting indirect sets at half predicted
+ * growth and strength best across 67 studies (Pelland et al. 2026, PMID 41343037).
+ */
+export const INDIRECT_SET_WEIGHT = 0.5;
+
 export interface MuscleVolume {
   direct: number;
   indirect: number;
@@ -56,7 +62,8 @@ export function computeWeeklyVolume(
       if (!exercise) continue;
       const sets = logged.sets.filter((set) => set.completed && set.kind !== 'warmup').length;
       for (const muscle of exercise.primaryMuscles) volume[muscle].direct += sets;
-      for (const muscle of exercise.secondaryMuscles) volume[muscle].indirect += sets * 0.5;
+      for (const muscle of exercise.secondaryMuscles)
+        volume[muscle].indirect += sets * INDIRECT_SET_WEIGHT;
     }
   }
   return volume;
