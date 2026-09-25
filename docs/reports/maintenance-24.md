@@ -561,6 +561,14 @@ server: two cloud-copy tests at 360 px and the two accessibility sweeps) and 2 n
 run, with nothing changed between them, passed whole. The short-session figures were measured
 again on the final tree: both runs are the same, line for line.
 
+Deployed as build `6d1b105` by Deploy Pages run 36176742471 (its verify job and the deploy both
+passed); the live bundle carries the commit, and the marker reads "Build 6d1b105 · 2026-09-25 19:00
+UTC". Against the live URL: 312 passed, 14 skipped by design; the data-safety test at 412 px timed
+out once at its first page load (net::ERR_TIMED_OUT) and passed 3 of 3 reruns, and the 2
+installed-app tests it held back passed on their own. Three captures from the live build are in
+`docs/screenshots/maintenance-24`: the 15-minute push day keeping its main lifts, a low check-in's
+extra rep kept at 45 minutes, and "Planned sets and effort back".
+
 ## Review on the phone
 
 Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
