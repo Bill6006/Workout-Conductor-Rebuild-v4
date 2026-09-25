@@ -526,6 +526,13 @@ All 174 reverts are caught.
   suite (309 passed, 14 skipped by design, none failed).
 - Every fix was also taken out on its own to watch its test fail: all 174 reverts are caught (The
   complete revert run, above).
+- Build `db22916` was deployed by Deploy Pages run 36078688657. The live bundle carries the build and the
+  new text.
+- The browser suite against the live URL: 306 passed, 14 skipped by design. One cloud-recovery
+  test (desktop) timed out once waiting for Sync now's result and passed in 3 of 3 reruns; the 2
+  installed-app tests it held back then passed on their own. Nothing in this round touches
+  cloud sync.
+- Screenshots: `docs/screenshots/maintenance-23`.
 
 ## Review on the phone
 
