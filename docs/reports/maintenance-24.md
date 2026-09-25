@@ -595,21 +595,25 @@ test reached; the test now covers an advanced lifter too, whose 30-minute pull d
 
 ## Verification
 
-The local gate (`npm run verify`) on the final tree: lint and type check clean; 1,176 unit tests in
-163 files passed; the build, the privacy scan (607 text files, no findings) and the build check
-passed; and the browser suite passed 315 tests, 14 skipped by design, none failed. The gate's first
-run had 4 browser tests fail at their first page load (net::ERR_ABORTED from the local preview
-server: two cloud-copy tests at 360 px and the two accessibility sweeps) and 2 not run; the second
-run, with nothing changed between them, passed whole. The short-session figures were measured
+The local gate (`npm run verify`) on the final tree, the two rules settled from the evidence
+included: lint and type check clean; 1,185 unit tests in 163 files passed; the build, the privacy
+scan (607 text files, no findings) and the build check passed; and the browser suite passed 315
+tests, 14 skipped by design, none failed, on its first run. The short-session figures were measured
 again on the final tree: both runs are the same, line for line.
 
-Deployed as build `6d1b105` by Deploy Pages run 36176742471 (its verify job and the deploy both
-passed); the live bundle carries the commit, and the marker reads "Build 6d1b105 · 2026-09-25 19:00
-UTC". Against the live URL: 312 passed, 14 skipped by design; the data-safety test at 412 px timed
-out once at its first page load (net::ERR_TIMED_OUT) and passed 3 of 3 reruns, and the 2
-installed-app tests it held back passed on their own. Three captures from the live build are in
-`docs/screenshots/maintenance-24`: the 15-minute push day keeping its main lifts, a low check-in's
-extra rep kept at 45 minutes, and "Planned sets and effort back".
+Deployed as build `4f63e3d` by Deploy Pages run 36198581919 (its verify job and the deploy both
+passed); the live bundle carries the commit, and the marker reads "Build 4f63e3d · 2026-09-25 22:52
+UTC". Against the live URL: 315 passed, 14 skipped by design, none failed, on the first run. Three
+captures from the live build are in `docs/screenshots/maintenance-24`: the 15-minute push day
+keeping its main lifts, a low check-in's extra rep kept at 45 minutes, and "Planned sets and effort
+back". The two rules settled from the evidence change nothing on these screens but the build line.
+
+The build before the two settled rules, `6d1b105` (Deploy Pages run 36176742471), passed the same
+checks: 1,176 unit tests; 315 browser tests locally, 14 skipped by design, where the gate's first
+run had 4 fail at their first page load (net::ERR_ABORTED from the local preview server) and 2 not
+run, and the second passed whole; and 312 against the live URL, where one data-safety test timed out
+once at its first page load and passed 3 of 3 reruns, and the 2 installed-app tests it held back
+passed on their own.
 
 ## Review on the phone
 
