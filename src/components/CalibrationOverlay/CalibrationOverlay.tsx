@@ -1,5 +1,6 @@
 import { Button } from '../Button/Button';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
+import { keyedLines } from '../../core/screen/keyedLines';
 import styles from './CalibrationOverlay.module.css';
 
 /**
@@ -33,9 +34,9 @@ export function CalibrationOverlay() {
             <p className={styles.eyebrow}>Recalibrating · {calibration.label}</p>
             <h2 className={styles.title}>{calibration.title}</h2>
             <ul className={styles.list} aria-label="What the engine is evaluating">
-              {calibration.evaluating.map((line, index) => (
+              {keyedLines(calibration.evaluating).map(({ key, line }, index) => (
                 <li
-                  key={line}
+                  key={key}
                   className={styles.item}
                   style={{ animationDelay: `${index * 110}ms` }}
                 >

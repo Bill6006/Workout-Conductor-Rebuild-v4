@@ -6,7 +6,6 @@ import {
   barWeightFor,
   convertEstimate,
   estimateStartingMax,
-  floorToBar,
   sexFactor,
   startRatio,
 } from './startingLoad';
@@ -71,15 +70,11 @@ describe('starting load references', () => {
     expect(estimateStartingMax(pushUp, { ...profile, bodyweight: 180 })).toBeNull();
   });
 
-  it('knows the empty bar and never targets below it', () => {
+  it('knows the empty bar', () => {
     expect(barWeightFor(bench, 'lb')).toBe(45);
     expect(barWeightFor(bench, 'kg')).toBe(20);
     expect(barWeightFor(requireExercise('ez-bar-curl'), 'lb')).toBe(25);
     expect(barWeightFor(dumbbellBench, 'lb')).toBeNull();
-    expect(floorToBar(30, bench, 'lb')).toBe(45);
-    expect(floorToBar(95, bench, 'lb')).toBe(95);
-    expect(floorToBar(null, bench, 'lb')).toBeNull();
-    expect(floorToBar(30, dumbbellBench, 'lb')).toBe(30);
   });
 
   it('converts a family estimate between load types by their references', () => {

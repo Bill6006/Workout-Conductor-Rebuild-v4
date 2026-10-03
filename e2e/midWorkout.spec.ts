@@ -167,7 +167,9 @@ test.describe('mid-workout', () => {
     );
     // The dial starts from what the plates make, and the plate line says what to load.
     await expect(page.getByTestId('logger-weight')).toContainText('155');
-    await expect(page.getByText('Bar 45 + 45, 10 each side · 155 lb').first()).toBeVisible();
+    await expect(page.getByTestId('logger-helper').getByRole('img')).toHaveAccessibleName(
+      'Load each side with 45 and 10, on the 45 lb bar: 155 lb.',
+    );
     await expect(page.getByText(/short\)/)).toHaveCount(0);
     await capture(page, testInfo, 'plate-missing-today', page.getByTestId('set-logger'));
     // The arrows step between weights the plates make.
@@ -186,7 +188,7 @@ test.describe('mid-workout', () => {
 
   test('Not now on a safety card sets it aside for this workout', async ({ page }, testInfo) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/limitations');
     await page
       .getByRole('group', { name: 'Pain areas' })
       .getByRole('button', { name: 'Shoulder' })

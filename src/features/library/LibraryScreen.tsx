@@ -18,6 +18,7 @@ import { movementPatternName } from '../../catalog/movementPatterns/movementPatt
 import { Card } from '../../components/Card/Card';
 import { ExerciseDetailSheet } from '../../components/ExerciseDetail/ExerciseDetailSheet';
 import { ExerciseThumb } from '../../components/ExerciseDetail/ExerciseMedia';
+import { DEMONSTRATED_EXERCISE_IDS } from '../../catalog/media/exerciseMedia';
 import formStyles from '../../components/Form/Form.module.css';
 import { ScreenHeader } from '../../components/Screen/Screen';
 import { useToast } from '../../components/Toast/useToast';
@@ -93,7 +94,7 @@ export function LibraryScreen() {
     <>
       <ScreenHeader
         title="Exercise library"
-        intro={`${EXERCISES.length} exercises with structured metadata. Placeholder diagrams stand in for production demonstrations until Phase 8.`}
+        intro={`${EXERCISES.length} exercises. ${DEMONSTRATED_EXERCISE_IDS.size} show a demonstration of their own; the rest, a diagram of their movement.`}
       />
       <div className={styles.chipRow}>
         <button

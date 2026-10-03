@@ -15,8 +15,9 @@ import { restCategory } from './roles';
 /**
  * Maintenance 23, the owner's item 21: at weights well short of the target (more than 10%
  * lighter, mostly light dumbbells at home), a muscle-building set runs to its reps in reserve
- * instead of stopping three reps on. A strength set keeps the old rule, and so does a set 10%
- * light or less (docs/research/lighter-loads.md).
+ * instead of stopping three reps on. A set 10% light or less keeps the old rule. Since Maintenance
+ * 25 a strength set well short runs to its reserve too: at a load that light only the effort
+ * trains it, and "RIR 2" on an easy set was untrue (docs/research/lighter-loads.md).
  */
 
 const NOW = '2026-09-24T12:00:00.000Z';
@@ -133,14 +134,24 @@ describe('a target past the heaviest weight here', () => {
     }
   });
 
-  it('keeps the old rule for a strength set, a set 10% light or less, and a hold', () => {
-    for (const role of ['primary-strength', 'secondary-strength', undefined] as const) {
+  it('runs a strength set well short of it to its reserve too (Maintenance 25)', () => {
+    for (const role of ['primary-strength', 'secondary-strength'] as const) {
       const fitted = capTarget(target(50, [8, 12], 2), topAt40, 'lb', role);
-      expect(fitted.reps).toEqual([10, 14]);
+      expect(fitted.reps).toEqual([18, 22]);
       expect(fitted.evidence.at(-1)).toBe(
-        'Held at the heaviest weight here (40 lb): the reps go up instead.',
+        'Held at the heaviest weight here (40 lb): about 10 more reps, to 2 in reserve.',
       );
     }
+  });
+
+  it('keeps the old rule for a set 10% light or less, a hold, and a target given no role', () => {
+    const plain = capTarget(target(50, [8, 12], 2), topAt40, 'lb');
+    expect(plain.reps).toEqual([10, 14]);
+    expect(plain.evidence.at(-1)).toBe(
+      'Held at the heaviest weight here (40 lb): the reps go up instead.',
+    );
+    const closeStrength = capTarget(target(50, [4, 6], 2), topAt45, 'lb', 'primary-strength');
+    expect(closeStrength.reps).toEqual([6, 8]);
     const close = capTarget(target(50, [8, 12], 2), topAt45, 'lb', 'isolation');
     expect(close.reps).toEqual([10, 14]);
     expect(close.evidence.at(-1)).toBe(
@@ -158,8 +169,9 @@ describe('a target past the heaviest weight here', () => {
     expect(fitted.rack?.line).toBe(
       'The weights here make 40, not 50 lb: about 10 more reps, to 2 in reserve.',
     );
+    // A strength set well short runs to its reserve here too (Maintenance 25).
     expect(capTarget(target(50, [8, 12], 2), gapAt40, 'lb', 'primary-strength').reps).toEqual([
-      11, 15,
+      18, 22,
     ]);
   });
 });
@@ -171,7 +183,7 @@ const lightHome: LocationProfile = {
 };
 
 describe('a planned workout at light dumbbells', () => {
-  it('says how far each capped set goes, by its role', () => {
+  it('says how far each capped set goes, a strength set’s effort too', () => {
     const workout = generateWorkout({
       profile,
       location: lightHome,
@@ -187,10 +199,16 @@ describe('a planned workout at light dumbbells', () => {
       if (at === undefined) continue;
       const working = entry.sets.filter((set) => set.kind === 'working');
       const line = entry.progression?.evidence.at(-1) ?? '';
+      // Every lift well short of its load at 20 lb runs to its effort, a strength lift too
+      // (Maintenance 25).
       if (restCategory(entry.role) === 'strength') {
         strength += 1;
-        expect(line).toMatch(/: the reps go up instead\.$/);
-      } else if (line.includes('in reserve') || line.includes('last clean rep')) {
+        // Its line says how far it goes too: to its reserve, or to thirty reps at most.
+        expect(line).toMatch(
+          /^Held at the heaviest weight here \(20 lb\): about \d+ more reps?, (to \d in reserve|to the last clean rep|up to 30)\.$/,
+        );
+      }
+      if (line.includes('in reserve') || line.includes('last clean rep')) {
         effort += 1;
         const rir = working[0]?.targetRir ?? -1;
         expect(line).toMatch(
@@ -327,7 +345,7 @@ describe('the weights change in the middle of an exercise', () => {
     expect(back.after.progression?.rack).toBeUndefined();
   });
 
-  it('keeps a started strength lift to three extra reps', () => {
+  it('runs a started strength lift to its reserve too (Maintenance 25)', () => {
     const { workout, completed, lift } = startedAtFifty('goblet-squat');
     expect(restCategory(lift.role)).toBe('strength');
     const { after, remaining } = still(
@@ -337,10 +355,10 @@ describe('the weights change in the middle of an exercise', () => {
     );
     for (const set of remaining) {
       expect(set.targetWeight).toBe(40);
-      expect(set.targetReps).toEqual([11, 18]);
+      expect(set.targetReps).toEqual([18, 25]);
     }
-    expect(after.progression?.rack?.line).toBe(
-      'The weights here make 40, not 50 lb: three extra reps.',
+    expect(after.progression?.rack?.line).toMatch(
+      /^The weights here make 40, not 50 lb: about 10 more reps, to \d in reserve\.$/,
     );
   });
 });

@@ -18,18 +18,26 @@ export const LEG_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['hack-squat', 'leg-press', 'goblet-squat'],
     setup: [
-      'Bar on the upper back, hands just outside the shoulders, elbows under the bar.',
-      'Unrack, step back, feet about shoulder width with toes slightly out.',
+      'Set the bar at armpit height and the safety arms just below your lowest squat point.',
+      'Rest the bar across your upper back (not your neck), hands just outside your shoulders.',
+      'Stand to lift it off, take 2-3 steps back, feet shoulder-width, toes turned out slightly.',
     ],
     execution: [
-      'Sit down between the hips with the chest up until the thighs reach at least parallel.',
-      'Drive the floor away, keeping the knees tracking over the toes.',
-      'Brace before each rep as if taking a punch.',
+      'Take a big breath and brace: tighten your stomach as if about to be poked.',
+      'Bend your hips and knees together and sit down between your heels, chest up.',
+      'Push the floor away to stand, hips and chest rising together.',
+      'Breathe out near the top, then breathe in and brace again for the next rep.',
+    ],
+    cues: [
+      'Knees follow the line of your toes; it is fine for them to pass your toes.',
+      'Keep your whole foot flat, weight between heel and the ball of your foot.',
+      "If you can't stand up, lower yourself until the bar rests on the safety arms.",
     ],
     mistakes: [
-      'Knees caving inward on the way up.',
-      'Hips shooting up first and turning it into a good morning.',
+      'Knees caving inward, especially on the way up.',
+      'Hips shooting up first so your chest tips forward.',
     ],
+    range: 'Thighs at least parallel to the floor, as long as your back stays flat and heels down.',
   }),
   defineExercise({
     id: 'front-squat',
@@ -46,14 +54,26 @@ export const LEG_EXERCISES = [
     difficulty: 'advanced',
     substitutions: ['hack-squat', 'goblet-squat', 'leg-press'],
     setup: [
-      'Bar racked on the front of the shoulders with the elbows high.',
-      'Use a clean grip or crossed arms, whichever keeps the elbows up.',
+      'Set the bar on the rack at upper-chest height, and the safety arms just below your lowest point.',
+      'Rest the bar on the fronts of your shoulders near your neck, elbows up and forward.',
+      'Hold it with fingertips under the bar or arms crossed, whichever keeps your elbows higher.',
     ],
     execution: [
-      'Squat straight down keeping the torso upright.',
-      'Drive up while pushing the elbows toward the ceiling.',
+      'Lift it off, step back to shoulder-width feet, and brace: tighten your stomach hard.',
+      'Squat straight down with your torso upright and elbows high.',
+      'Stand back up, driving your elbows toward the ceiling as you rise.',
     ],
-    mistakes: ['Elbows dropping and the bar rolling forward.', 'Heels lifting off the floor.'],
+    cues: [
+      'The bar rests on your shoulders, not your hands; your fingers only steady it.',
+      'Heels stay down and knees travel out over your toes.',
+      'If a rep stalls, sit down and let the bar settle onto the safety arms.',
+    ],
+    mistakes: [
+      'Letting your elbows drop so the bar rolls forward.',
+      'Heels lifting off the floor.',
+    ],
+    range:
+      'Go as low as your elbows stay high and heels stay down; aim for thighs at least parallel.',
   }),
   defineExercise({
     id: 'goblet-squat',
@@ -70,14 +90,25 @@ export const LEG_EXERCISES = [
     reps: { hypertrophy: [8, 15] },
     substitutions: ['leg-press', 'hack-squat', 'bulgarian-split-squat'],
     setup: [
-      'Hold one dumbbell or kettlebell against the chest with both hands.',
-      'Feet shoulder width, toes slightly out.',
+      'Hold one dumbbell upright by its top end, or a kettlebell by the sides of its handle.',
+      'Keep the weight against your chest with your elbows tucked beneath it.',
+      'Stand with feet shoulder-width apart, toes turned out slightly.',
     ],
     execution: [
-      'Squat down between the knees, elbows brushing the inside of the thighs.',
-      'Stand tall, squeezing the glutes at the top.',
+      'Sit straight down between your knees, keeping the weight against your chest.',
+      'Let your elbows brush the insides of your thighs at the bottom.',
+      'Push through your whole foot to stand, squeezing your buttocks at the top.',
     ],
-    mistakes: ['Letting the weight pull the chest forward.', 'Heels rising at the bottom.'],
+    cues: [
+      'Keep your chest tall so the weight stays close to your body.',
+      'Knees point the same way as your toes; heels stay flat.',
+    ],
+    mistakes: [
+      'Letting the weight pull your chest forward and round your back.',
+      'Heels rising at the bottom.',
+    ],
+    range:
+      'Aim for hips just below knee height, as long as heels stay down and your back stays flat.',
   }),
   defineExercise({
     id: 'hack-squat',
@@ -94,14 +125,24 @@ export const LEG_EXERCISES = [
     joints: { knee: 'moderate' },
     substitutions: ['leg-press', 'back-squat', 'goblet-squat'],
     setup: [
-      'Shoulders under the pads, feet mid-platform at shoulder width.',
-      'Release the safeties and stand tall.',
+      'Step in with your back flat on the pad and your shoulders under the shoulder pads.',
+      'Place your feet shoulder-width in the middle of the platform, toes turned out slightly.',
+      'Straighten your legs to lift the weight, then release the safety handles.',
     ],
     execution: [
-      'Lower until the thighs are at least parallel to the platform.',
-      'Press through the whole foot back to a soft lockout.',
+      'Bend your knees and hips to lower yourself under control.',
+      'Press through your whole foot back up, stopping just short of locked knees.',
+      'After the last rep, lock the safety handles back in before you step out.',
     ],
-    mistakes: ['Feet placed too low, forcing the heels up.', 'Locking the knees hard at the top.'],
+    cues: [
+      'Keep your back and hips pressed against the pad throughout.',
+      'Knees move in the direction your toes point; heels stay down.',
+    ],
+    mistakes: [
+      'Feet so low on the platform that your heels lift.',
+      'Snapping your knees straight and locked at the top.',
+    ],
+    range: 'Lower until your thighs are at least parallel to the platform, hips still on the pad.',
   }),
   defineExercise({
     id: 'leg-press',
@@ -117,17 +158,25 @@ export const LEG_EXERCISES = [
     joints: { knee: 'moderate' },
     substitutions: ['hack-squat', 'back-squat', 'goblet-squat'],
     setup: [
-      'Feet shoulder width in the middle of the platform, back and hips against the pad.',
-      'Release the safeties with the knees slightly bent.',
+      'Sit with your back and hips flat against the pad.',
+      'Set your feet shoulder-width apart, mid-platform, toes forward or turned out a little.',
+      'Push the platform up a little and release the safety handles, knees still slightly bent.',
     ],
     execution: [
-      'Lower the platform until the knees reach about 90 degrees.',
-      'Press back up without locking the knees out hard.',
+      'Lower the platform slowly by bending your knees toward your chest.',
+      'Press through your whole foot until your legs are almost straight.',
+      'Once you finish, re-lock the safety handles before taking your feet off.',
+    ],
+    cues: [
+      'Keep your hips and lower back on the pad the whole time.',
+      'Knees stay in line with your toes; heels stay on the platform.',
     ],
     mistakes: [
-      'Letting the lower back peel off the pad at the bottom.',
-      'Bouncing the platform at the turnaround.',
+      'Lowering so far that your hips curl up off the seat.',
+      'Bouncing the platform at the bottom or locking your knees hard at the top.',
     ],
+    range:
+      'Lower until your knees bend to about 90 degrees; stop sooner if your hips start to lift.',
   }),
   defineExercise({
     id: 'smith-machine-squat',
@@ -143,17 +192,23 @@ export const LEG_EXERCISES = [
     joints: { knee: 'moderate', 'lower-back': 'moderate' },
     substitutions: ['hack-squat', 'leg-press', 'back-squat'],
     setup: [
-      'Bar on the upper back, feet slightly in front of the bar line.',
-      'Unhook and set the safety stops just below your lowest position.',
+      'Set the safety stops just below your lowest squat before you load the bar.',
+      'Step under the bar so it rests on your upper back, feet a little in front of it.',
+      'Stand up and twist the bar off its hooks; twist it back onto a hook when you finish.',
     ],
     execution: [
-      'Squat to at least parallel with the torso upright.',
-      'Drive up through the whole foot.',
+      'Breathe in and brace (tighten your stomach), then sit down with your chest up.',
+      'Push up through your whole foot until you are standing tall.',
+    ],
+    cues: [
+      'The bar only moves straight up and down, so your foot position sets the balance.',
+      'Keep your knees pointing where your toes point.',
     ],
     mistakes: [
-      'Feet placed directly under the bar.',
-      'Relying on the rails to balance and rounding the back.',
+      'Feet so far back that your heels lift, or so far forward that your back rounds.',
+      'Stepping away before the bar is twisted back onto a hook.',
     ],
+    range: 'Squat until your thighs are at least parallel to the floor, heels down and back flat.',
   }),
   defineExercise({
     id: 'bulgarian-split-squat',
@@ -173,16 +228,24 @@ export const LEG_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['reverse-lunge', 'step-up', 'leg-press'],
     setup: [
-      'Rear foot on a bench or step, front foot far enough forward to keep the shin near vertical.',
-      'Hold dumbbells at the sides to add load.',
+      'Stand about a stride in front of a knee-high bench or box, facing away from it.',
+      'Rest the top of one foot on it behind you; hold dumbbells or kettlebells at your sides if loading.',
+      'Set your front foot far enough forward that its heel stays down at the bottom.',
     ],
     execution: [
-      'Lower straight down until the rear knee nearly touches the floor.',
-      'Drive up through the front heel.',
+      'Lower straight down until your back knee is just above the floor.',
+      'Drive up through your whole front foot to stand.',
+      'Finish every rep on one leg, then switch legs.',
+    ],
+    cues: [
+      'Keep most of your weight on the front leg; the back foot is mainly for balance.',
+      'Front knee follows your toes and may drift a little past them; that is fine.',
+      'A slight forward lean of your chest is fine and works the hips more.',
     ],
     mistakes: [
-      'Front foot too close so the knee shoots past the toes.',
-      'Leaning forward and pushing off the rear foot.',
+      'Standing so close to the bench or box that your front heel lifts.',
+      'Pushing up mostly with the back leg.',
+      'Letting your front knee cave inward.',
     ],
   }),
   defineExercise({
@@ -201,14 +264,22 @@ export const LEG_EXERCISES = [
     reps: { hypertrophy: [8, 15] },
     substitutions: ['bulgarian-split-squat', 'step-up', 'goblet-squat'],
     setup: [
-      'Stand tall, dumbbells at the sides if adding load.',
-      'Pick a spot ahead to keep the eyes level.',
+      'Stand tall with feet hip-width apart, dumbbells at your sides if adding load.',
+      'Fix your eyes on a spot straight ahead at eye level.',
     ],
     execution: [
-      'Step one foot back and lower until both knees are near 90 degrees.',
-      'Push through the front foot to return to standing.',
+      'Take a long step back and land on the ball of that foot.',
+      'Lower until both knees bend to about 90 degrees, back knee just off the floor.',
+      'Push through your front foot to bring the back foot forward and stand tall.',
     ],
-    mistakes: ['Short steps that jam the front knee forward.', 'Letting the torso twist.'],
+    cues: [
+      'Keep most of your weight on the front foot, heel flat.',
+      'Hips and shoulders stay square to the front; chest stays up.',
+    ],
+    mistakes: [
+      'A step so short that your front heel lifts and the knee jams forward.',
+      'Twisting or leaning your torso to one side.',
+    ],
   }),
   defineExercise({
     id: 'step-up',
@@ -226,14 +297,22 @@ export const LEG_EXERCISES = [
     reps: { hypertrophy: [8, 15] },
     substitutions: ['reverse-lunge', 'bulgarian-split-squat'],
     setup: [
-      'Bench or box at about knee height, one whole foot on top.',
-      'Dumbbells at the sides for load.',
+      'Use a sturdy bench or box, no higher than your knee, that cannot slide or tip.',
+      'Place one whole foot flat on top; hold dumbbells at your sides if adding load.',
     ],
     execution: [
-      'Drive through the top foot to stand fully on the bench.',
-      'Lower slowly with the same leg doing the work.',
+      'Press through the top foot to stand up straight on the bench.',
+      'Bring your other foot up beside it.',
+      'Step the other foot back down slowly, letting the top leg lower you.',
     ],
-    mistakes: ['Pushing off the bottom foot.', 'Dropping down instead of controlling the descent.'],
+    cues: [
+      'Let the top leg do the work; the bottom foot only lightly pushes off.',
+      'Top knee stays in line with your toes; chest stays tall.',
+    ],
+    mistakes: [
+      'Springing up off the bottom foot.',
+      'Dropping down fast instead of lowering with control.',
+    ],
   }),
   defineExercise({
     id: 'leg-extension',
@@ -248,14 +327,23 @@ export const LEG_EXERCISES = [
     joints: { knee: 'moderate' },
     substitutions: ['goblet-squat', 'hack-squat'],
     setup: [
-      'Knees lined up with the machine pivot, pad on the lower shins.',
-      'Grip the handles and sit back.',
+      "Adjust the back pad so your knees line up with the machine's pivot point.",
+      'Set the leg pad on the front of your lower shins, just above your ankles.',
+      'Sit back fully and hold the side handles.',
     ],
     execution: [
-      'Extend the legs until they are straight and squeeze the quads.',
-      'Lower slowly to about 90 degrees.',
+      'Straighten your knees to raise the pad until your legs are straight.',
+      'Squeeze the muscles on the front of your thighs for a moment.',
+      'Lower slowly until your knees are bent to about 90 degrees.',
     ],
-    mistakes: ['Lifting the hips off the seat.', 'Dropping the weight on the way down.'],
+    cues: [
+      'Keep your hips and back against the seat; pull lightly on the handles.',
+      'Move smoothly; no kicking or swinging the weight up.',
+    ],
+    mistakes: [
+      'Lifting your hips off the seat to move the weight.',
+      'Letting the weight drop on the way down.',
+    ],
   }),
   defineExercise({
     id: 'leg-curl',
@@ -270,11 +358,22 @@ export const LEG_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['dumbbell-romanian-deadlift', 'romanian-deadlift'],
     setup: [
-      'Pad just above the heels, knees lined up with the pivot.',
-      'Hips pressed into the bench or seat.',
+      "Line up your knees with the machine's pivot point.",
+      'Rest the pad on the backs of your lower legs, a few inches above your heels.',
+      'Lying machine: lie face down, hips flat. Seated machine: lock the thigh pad down snugly.',
     ],
-    execution: ['Curl the heels toward the glutes.', 'Lower slowly to a full stretch.'],
-    mistakes: ['Hips rising off the pad.', 'Half reps with too much weight.'],
+    execution: [
+      'Bend your knees to curl the pad as close to your buttocks as you can.',
+      'Pause briefly, then lower the pad slowly until your legs are straight.',
+    ],
+    cues: [
+      'Keep your hips pressed down and your lower back still the whole time.',
+      'Hold the handles lightly to keep your body steady.',
+    ],
+    mistakes: [
+      'Lifting your hips or arching your back to finish the curl.',
+      'Cutting the curl short instead of bending your knees fully.',
+    ],
   }),
   defineExercise({
     id: 'romanian-deadlift',
@@ -292,18 +391,25 @@ export const LEG_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['dumbbell-romanian-deadlift', 'leg-curl', 'trap-bar-deadlift'],
     setup: [
-      'Stand with the bar at the thighs, soft knees, shoulders pulled back.',
-      'Grip just outside the legs.',
+      'Take the bar from a rack set at mid-thigh, or stand up with it from the floor, back flat.',
+      'Stand tall, feet hip-width, overhand grip just outside your thighs, knees slightly bent.',
+      'Pull your shoulders back and down; the bar rests against your thighs.',
     ],
     execution: [
-      'Push the hips back and slide the bar down the thighs with a flat back.',
-      'Stop when the hamstrings are fully stretched, usually just below the knees.',
-      'Drive the hips forward to stand tall.',
+      'Brace (tighten your stomach), then hinge: push your hips back as your chest tips forward.',
+      'Slide the bar down your thighs, keeping it touching your legs.',
+      'At the lowest point, squeeze your buttocks and drive your hips forward to stand tall.',
+    ],
+    cues: [
+      'Keep your back flat from head to hips, all the way down and up.',
+      'Knees keep the same slight bend; your hips do the moving.',
     ],
     mistakes: [
-      'Rounding the lower back at the bottom.',
-      'Bending the knees so much that it becomes a squat.',
+      'Rounding your lower back to reach lower.',
+      'Bending your knees so much that it becomes a squat.',
+      'Letting the bar drift forward, away from your legs.',
     ],
+    range: 'Go down until the backs of your thighs are well stretched, often just below the knee.',
   }),
   defineExercise({
     id: 'dumbbell-romanian-deadlift',
@@ -320,17 +426,24 @@ export const LEG_EXERCISES = [
     joints: { 'lower-back': 'moderate' },
     substitutions: ['romanian-deadlift', 'leg-curl', 'kettlebell-swing'],
     setup: [
-      'Dumbbells in front of the thighs, feet hip width, soft knees.',
-      'Shoulders back and chest tall.',
+      'Stand with feet hip-width apart and knees slightly bent, a dumbbell in each hand.',
+      'Hold them against the fronts of your thighs, palms facing you; shoulders back, chest tall.',
     ],
     execution: [
-      'Hinge at the hips, keeping the dumbbells close to the legs.',
-      'Stand back up by driving the hips forward.',
+      'Hinge: send your hips back while your chest leans forward, back flat.',
+      'Slide the dumbbells down the fronts of your legs.',
+      'Squeeze your buttocks and push your hips forward to stand tall.',
+    ],
+    cues: [
+      'Hold the same small knee bend throughout; let your hips travel back and forward.',
+      'Keep your neck in line with your back; look at the floor a few feet ahead.',
     ],
     mistakes: [
-      'Letting the dumbbells drift away from the legs.',
-      'Looking up and cranking the neck.',
+      'Letting the dumbbells drift away from your legs.',
+      'Looking up and cranking your neck back.',
+      'Rounding your back to get the weights lower.',
     ],
+    range: 'Stop at a strong stretch in the backs of your thighs, often just below the knees.',
   }),
   defineExercise({
     id: 'deadlift',
@@ -350,17 +463,24 @@ export const LEG_EXERCISES = [
     reps: { strength: [3, 5], hypertrophy: [5, 8] },
     substitutions: ['trap-bar-deadlift', 'romanian-deadlift', 'hip-thrust'],
     setup: [
-      'Bar over the mid-foot, shins an inch away, grip just outside the legs.',
-      'Drop the hips until the shins touch the bar and pull the slack out.',
+      'Stand with feet hip- to shoulder-width, the bar over mid-foot, shins an inch away.',
+      'Push your hips back and reach down to grip the bar overhand, hands just outside your legs.',
+      'Bend your knees until your shins touch the bar; chest up, back flat.',
     ],
     execution: [
-      'Push the floor away, keeping the bar against the legs.',
-      'Stand tall with the hips and knees locking together.',
-      'Lower by hinging the hips back first.',
+      'Breathe in and brace (tighten your stomach hard), then pull until the bar is tight.',
+      'Push the floor away with your legs, keeping the bar against your legs.',
+      'Stand tall with your hips and knees straightening together.',
+      'Lower it by pushing your hips back first, bending your knees once the bar passes them.',
+    ],
+    cues: [
+      'Hips and shoulders rise at the same rate as the bar leaves the floor.',
+      'Keep the bar touching your legs all the way up and down.',
     ],
     mistakes: [
-      'Rounding the lower back off the floor.',
-      'Jerking the bar instead of pulling the slack out first.',
+      'Rounding your lower back as the bar leaves the floor.',
+      'Yanking the bar off the floor before your body is tight.',
+      'Leaning back or shrugging at the top.',
     ],
   }),
   defineExercise({
@@ -379,14 +499,23 @@ export const LEG_EXERCISES = [
     reps: { strength: [3, 6], hypertrophy: [6, 10] },
     substitutions: ['deadlift', 'romanian-deadlift', 'leg-press'],
     setup: [
-      'Stand in the middle of the bar, feet hip width, grip the handles.',
-      'Chest up, hips down, back flat.',
+      'Stand in the center of the trap bar, feet hip-width, handles beside your feet.',
+      'Bend your hips and knees to grip the middle of each handle, palms facing in.',
+      'Lift your chest and flatten your back, hips above your knees and below your shoulders.',
     ],
     execution: [
-      'Push through the floor and stand tall.',
-      'Lower under control by bending the hips and knees together.',
+      'Breathe in and brace, tightening your stomach, then push the floor away to stand.',
+      'Finish tall with hips and knees straight, without leaning back.',
+      'Lower the bar by bending your hips and knees together, back flat.',
     ],
-    mistakes: ['Squatting it up with the hips too low.', 'Letting the shoulders round forward.'],
+    cues: [
+      'Hold each handle at its center so the bar stays level and balanced.',
+      'Push through your whole foot, knees in line with your toes.',
+    ],
+    mistakes: [
+      'Rounding your back or letting your shoulders slump forward.',
+      'Jerking the bar off the floor before you are tight.',
+    ],
   }),
   defineExercise({
     id: 'kettlebell-swing',
@@ -403,14 +532,26 @@ export const LEG_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['dumbbell-romanian-deadlift', 'hip-thrust'],
     setup: [
-      'Kettlebell a foot in front, hinge and hike it back between the legs.',
-      'Flat back, chin tucked.',
+      'Stand with feet a little wider than your shoulders, the kettlebell a foot in front.',
+      'Hinge: push your hips back, knees slightly bent, back flat; grip the handle two-handed.',
+      'Hike it: pull it back between your thighs, like a football snap.',
     ],
     execution: [
-      'Snap the hips forward so the bell floats to chest height.',
-      'Let it swing back and hinge again; the arms only guide.',
+      'Snap your hips forward to stand tall and let the bell float up in front of you.',
+      'Let it fall; as your forearms meet your hips, hinge and let it swing back through.',
+      'Repeat, powering every swing with your hips, not your arms.',
+      'To stop, let it swing back once more and set it on the floor in front of you.',
     ],
-    mistakes: ['Squatting instead of hinging.', 'Lifting the bell with the shoulders.'],
+    cues: [
+      'At the top, stand fully upright: legs straight, buttocks squeezed, no leaning back.',
+      'Arms stay long and loose, like ropes; they only guide the bell.',
+      'Keep your back flat and your neck in line with it throughout.',
+    ],
+    mistakes: [
+      'Squatting down instead of pushing your hips back.',
+      'Lifting the bell with your shoulders or arms.',
+    ],
+    range: 'In this version the bell floats to about chest or shoulder height, not overhead.',
   }),
   defineExercise({
     id: 'hip-thrust',
@@ -430,16 +571,24 @@ export const LEG_EXERCISES = [
     reps: { hypertrophy: [8, 12] },
     substitutions: ['glute-bridge', 'romanian-deadlift', 'leg-press'],
     setup: [
-      'Upper back on a bench, bar padded over the hips, feet flat under the knees.',
-      'Chin tucked toward the chest.',
+      'Sit on the floor with your back to a bench, its edge just below your shoulder blades.',
+      'Roll a padded barbell over your legs until it rests in the crease of your hips.',
+      'Plant your feet hip-width apart, close enough that your shins are upright at the top.',
     ],
     execution: [
-      'Drive the hips up until the torso is parallel to the floor.',
-      'Squeeze the glutes at the top, then lower under control.',
+      'Hold the bar steady with both hands, one on each side of your hips.',
+      'Push through your heels to lift your hips until your torso is level with the floor.',
+      'Squeeze your buttocks hard for a moment at the top.',
+      'Lower the bar under control until your hips are just above the floor.',
+    ],
+    cues: [
+      'Brace before each lift: tighten your stomach as if about to be poked.',
+      "Keep your chin tucked and eyes forward; don't throw your head back.",
+      'Set the bench against a wall or rack so it cannot slide away.',
     ],
     mistakes: [
-      'Arching the lower back at the top.',
-      'Feet too far forward so the hamstrings take over.',
+      'Arching your lower back to lift your hips past a straight line.',
+      'Feet too far out, which shifts the work to the backs of your thighs.',
     ],
   }),
   defineExercise({
@@ -455,14 +604,25 @@ export const LEG_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['hip-thrust', 'kettlebell-swing'],
     setup: [
-      'Lie on the back with the knees bent and feet flat, hip width apart.',
-      'Rest a dumbbell over the hips to add load.',
+      'Lie on your back with your knees bent and feet flat, hip-width apart.',
+      'Bring your heels close enough that your knees form about a right angle at the top.',
+      'To add load, hold a dumbbell across your hip bones with both hands.',
     ],
     execution: [
-      'Push through the heels to lift the hips until the body is straight from knees to shoulders.',
-      'Hold a second, then lower.',
+      'Tighten your stomach gently so your lower back flattens toward the floor.',
+      'Press through your heels and squeeze your buttocks to lift your hips.',
+      'Stop when your body forms a straight line from knees to shoulders; hold one second.',
+      'Lower your hips slowly back to the floor.',
     ],
-    mistakes: ['Pushing through the toes.', 'Over-arching the lower back at the top.'],
+    cues: [
+      'Keep your stomach tight the whole time so your lower back stays still.',
+      "You should feel your buttocks working; if your lower back takes over, don't lift as high.",
+    ],
+    mistakes: [
+      'Pushing your hips so high that your lower back arches.',
+      'Pushing through your toes so your heels come up.',
+      'Feet far from your hips, which hands the work to the backs of your thighs.',
+    ],
   }),
   defineExercise({
     id: 'standing-calf-raise',
@@ -477,14 +637,23 @@ export const LEG_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['leg-press-calf-raise'],
     setup: [
-      'Balls of the feet on a step, heels hanging free; hold a wall or rack for balance.',
-      'Add dumbbells for load.',
+      'Stand on the balls of your feet on a step, heels hanging over the edge.',
+      'Rest one hand on a wall or rack for balance; knees straight but not locked.',
+      'To add load, hold a dumbbell in your free hand.',
     ],
     execution: [
-      'Rise as high as possible onto the toes and pause.',
-      'Lower slowly into a full stretch.',
+      'Rise onto the balls of your feet as high as you can, and pause.',
+      'Lower slowly until your heels sink below the step and your calves stretch.',
+      'Hold the stretch for a moment, then rise again.',
     ],
-    mistakes: ['Bouncing out of the bottom.', 'Bending the knees to help.'],
+    cues: [
+      'Keep your knees straight so the big calf muscle does the lifting.',
+      "Don't shortchange the stretch at the bottom; it is the most useful part.",
+    ],
+    mistakes: [
+      'Bouncing out of the bottom instead of pausing.',
+      'Bending your knees to help yourself up.',
+    ],
   }),
   defineExercise({
     id: 'leg-press-calf-raise',
@@ -498,13 +667,22 @@ export const LEG_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['standing-calf-raise'],
     setup: [
-      'Balls of the feet on the bottom edge of the platform, legs straight but not locked.',
-      'Safeties released.',
+      'Sit in the leg press and push the platform out until your legs are straight, not locked.',
+      "Slide your feet down so only the balls of your feet rest on the platform's lower edge.",
+      'If the machine has safety handles, release them only once your feet are set.',
     ],
     execution: [
-      'Push the platform away by extending the ankles.',
-      'Lower slowly until the calves stretch.',
+      'Point your toes to push the platform away as far as your ankles allow.',
+      'Let the platform come back slowly until your calves are fully stretched.',
+      'If it has safety handles, lock them again before you bend your knees.',
     ],
-    mistakes: ['Bending the knees to press.', 'Short bouncy reps.'],
+    cues: [
+      'Only your ankles move; your knees stay straight the whole time.',
+      "Keep the balls of your feet pressed firmly on the platform so they can't slip.",
+    ],
+    mistakes: [
+      'Bending your knees to help push the platform.',
+      'Short, bouncing movements that skip the stretch.',
+    ],
   }),
 ];

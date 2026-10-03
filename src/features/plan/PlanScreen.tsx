@@ -1,9 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../components/Button/Button';
 import { Card } from '../../components/Card/Card';
-import { ChipSelect } from '../../components/Form/ChipSelect';
-import { Field } from '../../components/Form/Field';
-import { BandBar } from '../../components/Charts/Bars';
 import { ScreenHeader } from '../../components/Screen/Screen';
 import { getExercise } from '../../catalog/exercises/catalog';
 import { muscleName } from '../../catalog/muscles/muscles';
@@ -18,23 +15,22 @@ import { allEntries } from '../../engine/workout/types';
 import { useToast } from '../../components/Toast/useToast';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import { HOME_LOCATION_ID, type LocationProfile } from '../../core/validation/location';
-import type { Weekday } from '../../core/validation/profile';
-import { updateProfile } from '../profile/draft';
-import { LOCATION_KIND_OPTIONS, WEEKDAY_OPTIONS, labelFor } from '../profile/labels';
-import { useProfileEditor } from '../profile/useProfileEditor';
+import { routeHref, sectionHref } from '../../app/navigation';
+import { useHashSection } from '../../app/useHashRoute';
+import { LOCATION_KIND_OPTIONS, labelFor } from '../profile/labels';
+import { daysText } from '../settings/summaries';
 import { LocationEditorSheet } from './LocationEditorSheet';
 import styles from './PlanScreen.module.css';
 
 type SheetState = { open: false } | { open: true; location: LocationProfile | null };
 
-const BAND_TEXT = { under: '▲ under', in: '● in band', over: '▼ over' } as const;
+const BAND_TEXT = { under: 'under', in: 'in band', over: 'over' } as const;
 const RECOVERY_TEXT = { recovering: 'Recovering', ready: 'Ready', fresh: 'Fresh' } as const;
 
 export function PlanScreen() {
   const state = useAppState();
   const store = useAppStore();
   const toast = useToast();
-  const editor = useProfileEditor();
   const [sheet, setSheet] = useState<SheetState>({ open: false });
   const [sheetKey, setSheetKey] = useState(0);
 
@@ -44,7 +40,6 @@ export function PlanScreen() {
   }
 
   const profile = state.profile;
-  const draft = editor.draft;
   const nowEpoch = useNow();
   const nowIso = nowEpoch
     ? new Date(nowEpoch).toISOString()
@@ -74,57 +69,41 @@ export function PlanScreen() {
     return recommendDeload(state.history, fatigue, profile, nowIso);
   }, [profile, state.history, state.session, nowIso]);
   const [savedName, setSavedName] = useState('');
+  // "#/plan/places" brings the places card into view: Settings links to it.
+  const section = useHashSection();
+  const placesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (section === 'places') placesRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [section]);
   const defaultSavedName = state.session
     ? `${state.session.workout.title} · ${nowIso.slice(0, 10)}`
     : '';
 
   return (
     <>
-      <ScreenHeader
-        title="Plan"
-        intro="Your week, weekly targets, recovery balance, saved workouts, and the places you train."
-      />
-
-      {draft && profile ? (
-        <Card
-          eyebrow="Training days"
-          title={`${profile.schedule.weeklyFrequency} sessions per week`}
-        >
-          <Field label="Available days" hint="Saved automatically.">
-            <ChipSelect<Weekday>
-              label="Available days"
-              values={draft.profile.schedule.availableDays}
-              options={WEEKDAY_OPTIONS}
-              onChange={(availableDays) =>
-                editor.update(
-                  updateProfile(draft, (current) => ({
-                    ...current,
-                    schedule: {
-                      ...current.schedule,
-                      availableDays: WEEKDAY_OPTIONS.map((option) => option.value).filter((day) =>
-                        availableDays.includes(day),
-                      ),
-                    },
-                  })),
-                )
-              }
-            />
-          </Field>
-          <p className={styles.status} data-testid="plan-save-status">
-            {editor.status === 'saving'
-              ? 'Saving…'
-              : editor.status === 'error'
-                ? `Save failed: ${editor.error}`
-                : editor.status === 'saved'
-                  ? 'Saved and verified'
-                  : 'Changes save automatically'}
-          </p>
-        </Card>
-      ) : null}
+      <ScreenHeader title="Plan" intro="Your week, what adjusts it, and where you train." />
 
       <Card eyebrow="This week" title="Upcoming sessions">
+        {profile ? (
+          // The days are set with the rest of the schedule, in Settings (Maintenance 25).
+          <p className={styles.days} data-testid="plan-days">
+            <span>{daysText(profile)}</span>
+            <a
+              className={styles.inlineLink}
+              href={sectionHref('settings', 'schedule')}
+              data-testid="plan-days-link"
+            >
+              Change days ›
+            </a>
+          </p>
+        ) : null}
         {week.length === 0 ? (
-          <p className={styles.status}>No available days set.</p>
+          <p className={styles.status} data-testid="week-empty">
+            {profile && profile.schedule.availableDays.length > 0
+              ? // The only day set is today, and today's session is done.
+                'Today’s session is done. The next one is a week from today.'
+              : 'No available days set.'}
+          </p>
         ) : (
           <ol className={styles.planList} aria-label="This week's plan" data-testid="week-plan">
             {week.map((session) => (
@@ -140,49 +119,67 @@ export function PlanScreen() {
             ))}
           </ol>
         )}
+        {/* The week's priority muscles in a line; every muscle's bars are on Progress, their one
+            home (Maintenance 25), and the link is there with or without priorities. */}
+        <div className={styles.priority} data-testid="weekly-targets">
+          {coverage.length > 0 ? (
+            <>
+              <span className={styles.priorityLabel}>Priority this week</span>
+              <ul className={styles.priorityList}>
+                {coverage.map((row) => (
+                  <li key={row.muscle} className={styles.priorityRow}>
+                    <span className={styles.priorityName}>{row.name}</span>
+                    <span className={styles.priorityValue}>
+                      {Math.round((row.direct + row.indirect) * 10) / 10} of {row.target} sets ·{' '}
+                      {BAND_TEXT[row.band]}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          <a
+            className={styles.inlineLink}
+            href={routeHref('progress')}
+            data-testid="plan-progress-link"
+          >
+            Every muscle on Progress ›
+          </a>
+        </div>
         <p className={styles.status}>
-          Rotates as sessions are logged: each day is what the generator would build from your
-          history that morning.
-        </p>
-      </Card>
-
-      <Card eyebrow="Weekly muscle targets" title="Priority muscles this week">
-        <ul className={styles.targetList} data-testid="weekly-targets">
-          {coverage.map((row) => (
-            <li key={row.muscle} className={styles.targetRow}>
-              <span className={styles.targetName}>
-                {row.name} <span className={styles.bandLabel}>{BAND_TEXT[row.band]}</span>
-              </span>
-              <BandBar direct={row.direct} indirect={row.indirect} target={row.target} />
-            </li>
-          ))}
-        </ul>
-        <p className={styles.status}>
-          Solid is direct work, striped is indirect at half weight, and the outlined band is 70 to
-          130 percent of the weekly target. Every muscle is on <a href="#/progress">Progress</a>.
+          Each day is what the plan would build from your history that morning, so it rotates as
+          sessions are logged.
         </p>
       </Card>
 
       <Card eyebrow="Recovery balance" title="What is ready to train">
-        <div data-testid="recovery-balance">
+        {/* Each state on its own labelled row (Maintenance 25): easier to read than one paragraph. */}
+        <ul className={styles.recoveryList} data-testid="recovery-balance">
           {(['recovering', 'ready', 'fresh'] as const).map((key) => {
             const rows = recovery.filter((row) => row.state === key);
             return (
-              <p key={key} className={styles.status}>
-                <strong>{RECOVERY_TEXT[key]}</strong>:{' '}
-                {rows.length === 0
-                  ? 'none'
-                  : rows
-                      .slice(0, 8)
-                      .map((row) =>
-                        row.daysSince === null ? row.name : `${row.name} (${row.daysSince} d)`,
-                      )
-                      .join(', ')}
-                {rows.length > 8 ? ` and ${rows.length - 8} more` : ''}
-              </p>
+              <li key={key} className={styles.recoveryRow}>
+                <span className={styles.recoveryState} data-state={key}>
+                  {RECOVERY_TEXT[key]}
+                </span>
+                <span className={styles.recoveryMuscles}>
+                  {rows.length === 0
+                    ? 'none'
+                    : rows
+                        .slice(0, 8)
+                        .map((row) =>
+                          row.daysSince === null
+                            ? row.name
+                            : // A non-breaking space: "(1 d)" never breaks at a narrow width.
+                              `${row.name} (${row.daysSince}\u00a0d)`,
+                        )
+                        .join(', ')}
+                  {rows.length > 8 ? ` and ${rows.length - 8} more` : ''}
+                </span>
+              </li>
             );
           })}
-        </div>
+        </ul>
         {state.coachFocus ? (
           <div className={styles.status} data-testid="coach-focus">
             <strong>
@@ -351,67 +348,70 @@ export function PlanScreen() {
         )}
       </Card>
 
-      <Card eyebrow="Locations and equipment" title="Where you train">
-        <ul className={styles.locations} aria-label="Saved locations">
-          {state.locations.map((location) => {
-            const current = location.id === profile?.currentLocationId;
-            return (
-              <li key={location.id} className={styles.location}>
-                <div className={styles.locationText}>
-                  <span className={styles.locationName}>
-                    {location.name}
-                    {current ? <span className={styles.currentBadge}>Current</span> : null}
-                  </span>
-                  <span className={styles.locationMeta}>
-                    {labelFor(LOCATION_KIND_OPTIONS, location.kind)} · {location.equipment.length}{' '}
-                    equipment
-                  </span>
-                </div>
-                <div className={styles.locationActions}>
-                  {!current && profile ? (
+      {/* Settings, Where you train, lands here with the card in view (Maintenance 25). */}
+      <div ref={placesRef} className={styles.anchor} data-testid="plan-places">
+        <Card eyebrow="Locations and equipment" title="Where you train">
+          <ul className={styles.locations} aria-label="Saved locations">
+            {state.locations.map((location) => {
+              const current = location.id === profile?.currentLocationId;
+              return (
+                <li key={location.id} className={styles.location}>
+                  <div className={styles.locationText}>
+                    <span className={styles.locationName}>
+                      {location.name}
+                      {current ? <span className={styles.currentBadge}>Current</span> : null}
+                    </span>
+                    <span className={styles.locationMeta}>
+                      {labelFor(LOCATION_KIND_OPTIONS, location.kind)} · {location.equipment.length}{' '}
+                      equipment
+                    </span>
+                  </div>
+                  <div className={styles.locationActions}>
+                    {!current && profile ? (
+                      <button
+                        type="button"
+                        className={styles.smallButton}
+                        onClick={() =>
+                          void store
+                            .setCurrentLocation(location.id)
+                            .then(() => toast.show(`Training at ${location.name}`, 'success'))
+                            .catch((error: unknown) =>
+                              toast.show(
+                                error instanceof Error ? error.message : 'Could not switch',
+                                'error',
+                              ),
+                            )
+                        }
+                      >
+                        Use
+                      </button>
+                    ) : null}
+                    {location.id !== HOME_LOCATION_ID ? (
+                      <button
+                        type="button"
+                        className={styles.smallButton}
+                        onClick={() => store.openBarcodeSheet(location.id)}
+                      >
+                        Barcode
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className={styles.smallButton}
-                      onClick={() =>
-                        void store
-                          .setCurrentLocation(location.id)
-                          .then(() => toast.show(`Training at ${location.name}`, 'success'))
-                          .catch((error: unknown) =>
-                            toast.show(
-                              error instanceof Error ? error.message : 'Could not switch',
-                              'error',
-                            ),
-                          )
-                      }
+                      onClick={() => openSheet(location)}
                     >
-                      Use
+                      Edit
                     </button>
-                  ) : null}
-                  {location.id !== HOME_LOCATION_ID ? (
-                    <button
-                      type="button"
-                      className={styles.smallButton}
-                      onClick={() => store.openBarcodeSheet(location.id)}
-                    >
-                      Barcode
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={styles.smallButton}
-                    onClick={() => openSheet(location)}
-                  >
-                    Edit
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        <Button variant="secondary" onClick={() => openSheet(null)}>
-          Add a place
-        </Button>
-      </Card>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <Button variant="secondary" onClick={() => openSheet(null)}>
+            Add a place
+          </Button>
+        </Card>
+      </div>
 
       {sheet.open ? (
         <LocationEditorSheet

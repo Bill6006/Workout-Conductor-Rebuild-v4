@@ -2,6 +2,7 @@ import { Button } from '../../components/Button/Button';
 import { FactList } from '../../components/FactList/FactList';
 import { Sheet } from '../../components/Sheet/Sheet';
 import type { BackupSummary } from '../../core/backup/backup';
+import { useAppSelector } from '../../core/state/useAppStore';
 import { formatDateTime } from '../../core/time/clock';
 import { GOAL_OPTIONS, labelFor } from '../profile/labels';
 import { formatBytes } from './format';
@@ -27,6 +28,7 @@ export function RestorePreviewSheet({
   onCancel,
   onConfirm,
 }: RestorePreviewSheetProps) {
+  const cloudOn = useAppSelector((state) => state.cloud.configured);
   if (!open || !summary) return null;
   return (
     <Sheet
@@ -55,6 +57,13 @@ export function RestorePreviewSheet({
         your current data is put back and checked. The data from before is kept as an automatic
         backup so this can be undone.
       </p>
+      {cloudOn ? (
+        // Maintenance 25: a restore never cuts the cloud copy back (the owner's barcode report).
+        <p className={styles.body} data-testid="restore-cloud-note">
+          Nothing is deleted from the cloud copy: anything there that this backup lacks, or that
+          changed after it was made, comes back to this device at the next sync.
+        </p>
+      ) : null}
       <FactList
         items={[
           { label: 'Exported', value: formatDateTime(summary.exportedAt) },

@@ -145,11 +145,14 @@ test.describe('screenshots @screenshots', () => {
     await capture(page, testInfo, 'plan-add-place');
     await page.keyboard.press('Escape');
 
-    await page.goto('./#/settings');
+    // Each Settings row these sheets start from, opened as the lifter opens it (Maintenance 25).
+    await page.goto('./#/settings/units');
     await page.locator('#age').scrollIntoViewIfNeeded();
     await capture(page, testInfo, 'settings-units-and-body');
+    await page.getByTestId('row-cloud').click();
     await page.getByTestId('cloud-token').scrollIntoViewIfNeeded();
     await capture(page, testInfo, 'settings-cloud-copy');
+    await page.getByTestId('row-backup').click();
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
     const download = await downloadPromise;
@@ -159,10 +162,12 @@ test.describe('screenshots @screenshots', () => {
     await capture(page, testInfo, 'settings-import-preview');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
+    await page.getByTestId('row-automatic-backups').click();
     await page.getByTestId('snapshot-now').click();
     await expect(page.getByTestId('snapshot-list')).toBeVisible();
     await page.getByTestId('snapshot-list').scrollIntoViewIfNeeded();
     await capture(page, testInfo, 'settings-data-safety');
+    await page.getByTestId('row-older-exports').click();
     await page.getByTestId('legacy-file-input').setInputFiles({
       name: 'old-history.json',
       mimeType: 'application/json',
@@ -188,7 +193,7 @@ test.describe('screenshots @screenshots', () => {
   test('coach stall route', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== PRIMARY_PROJECT, 'primary project only');
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/older-exports');
     await page.getByTestId('legacy-file-input').setInputFiles({
       name: 'old-history.json',
       mimeType: 'application/json',
@@ -217,6 +222,7 @@ test.describe('screenshots @screenshots', () => {
       page.locator('[role="status"]').filter({ hasText: 'Imported and verified 4 workouts' }),
     ).toBeVisible();
     // A fresh backup, so the coach's save reminder does not outrank the stall.
+    await page.getByTestId('row-backup').click();
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
     await download;
@@ -253,9 +259,17 @@ test.describe('screenshots @screenshots', () => {
     await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
     await expect(page.getByTestId('recalibration-summary')).toContainText('from your max');
     await capture(page, testInfo, 'workout-first-target-from-max');
+    // How to: the clip large, then the steps (Maintenance 25, item 7).
     await page.getByTestId('exercise-card').first().getByTestId('card-thumb').click();
-    await expect(page.getByRole('dialog').getByTestId('demo-pick')).toBeVisible();
+    const howTo = page.getByRole('dialog', { name: /^How to: / });
+    await expect(howTo.getByTestId('how-to-text')).toBeVisible();
+    await expect(howTo.locator('video[data-testid="exercise-demo"]')).toBeVisible();
     await capture(page, testInfo, 'workout-how-to-sheet');
+    await page.keyboard.press('Escape');
+    await expect(howTo).toBeHidden();
+    // Your own GIF is picked in Options.
+    await page.getByTestId('exercise-card').first().getByTestId('options-tab').click();
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Your GIF' })).toBeVisible();
     await page
       .getByRole('dialog')
       .getByTestId('demo-file-input')

@@ -12,7 +12,8 @@ foundation (Phase 1), and the structure later phases fill in.
   settings in localStorage. No network dependency for any training decision.
 - **Deterministic engines, thin UI.** Engines are pure TypeScript functions over typed inputs so
   they can be unit tested without a browser.
-- **Honest UI.** The shell shows the current phase and build marker on every screen, and a screen
+- **Honest UI.** Settings, About this app shows the current phase and build marker (every screen's
+  header did until Maintenance 25, when developer facts left the main flow), and a screen
   never pretends a feature exists before its phase.
 
 ## Source map
@@ -27,7 +28,7 @@ src/
     useHashRoute.ts             hash routing (works under the Pages subpath and on reload)
     phases.ts                   the nine plan phases, CURRENT_PHASE, gate state
     buildInfo.ts                Zod-validated build marker injected by vite.config.ts
-    pwa/UpdatePrompt.tsx        "New version available" prompt; never forces a refresh
+    pwa/UpdatePrompt.tsx        "New version available" prompt, and the checks for a release; never forces a refresh
   core/
     validation/                 Zod schemas: profile, location, settings, backup (loose objects)
     storage/indexedDb.ts        promise wrapper, stores: profile, locations, workouts, meta
@@ -60,7 +61,7 @@ src/
     barcode/                    a place's membership barcode: add from a picture, read it where the
                                 phone can, redraw it (JsBarcode, qrcode-generator, loaded on demand),
                                 popup, full screen on a tap; device-only store, never synced or backed up
-    settings/                   editor sections, BackupCard, DiagnosticsCard
+    settings/                   grouped rows, BackupCard, DiagnosticsCard (About)
     workout/                    Active Workout List preview (one row per block); logging in Phase 5
     progress/                   placeholder until Phase 7
   components/
@@ -89,8 +90,8 @@ through `useSyncExternalStore`. Mutations (`saveProfile`, `saveLocation`, `delet
 ### Build marker
 
 `vite.config.ts` injects `__BUILD_INFO__` (commit, branch, build time, version, phase). The app
-validates it with Zod and shows `Build <sha> · <time> UTC · Phase <n>` under the header;
-Settings, Diagnostics shows the full facts. `scripts/verify-build.mjs` checks the marker is really
+validates it with Zod and shows `Build <sha> · <time> UTC · Phase <n>` under Settings, About this
+app, with the full facts (Maintenance 25; until then under every screen's header). `scripts/verify-build.mjs` checks the marker is really
 in the bundle and that the phase constant in `vite.config.ts` matches `src/app/phases.ts`.
 
 ### Catalog and engines (Phase 2)
@@ -125,9 +126,26 @@ Default length is the profile's typical workout length.
 ### PWA
 
 `vite-plugin-pwa` in `prompt` mode precaches the app shell. A waiting service worker is only
-activated when the user taps Reload. During a workout the offer stays and says the session is
-kept on this device and carries on after the reload, which it does: the session lives in local
-storage and the rest timer keeps an absolute end time.
+activated when the user taps Reload. During a workout the offer stays and says the logged sets and
+timers are kept on this device and carry on after the reload, which they do: the session lives in
+local storage and the rest and hold timers keep absolute end times. A value on a dial not yet
+logged is not kept, and is not promised.
+
+An installed app on Android is mostly brought back from the background rather than loaded, and a
+browser looks for a new worker only when a page loads, so an installed app could sit on an old
+build (the owner saw one). Since Maintenance 25 the app looks itself (`UpdatePrompt`): when it
+comes back to the front, when the network comes back, and hourly while open, through
+`registration.update()`; a release put off with Later is offered again the next time the app
+comes back, until the page loads again, whether it still waits or already runs the service worker
+(it took over with no page under it, or another page let it in). The plugin listens for new
+workers only until it sees one it takes for another page's (found a minute or more after the page
+registered, or any after its first), and never sees a worker after it, so the app listens itself:
+it offers a release the moment it waits, and when another page of the app let it take over;
+Reload loads the page once the new worker is in (as this page's worker, or active for a page no
+worker runs), and at once when nothing waits. Pages serves every
+file with `max-age=600`, and the browser fetches the worker script past that cache for an update
+check, so a deploy is found at the next check. `e2e/pwaUpdate.spec.ts` proves it on two real
+builds served one after the other on one origin (`scripts/pwa-update-server.mjs`).
 
 ## Planned structure (from the execution plan)
 
@@ -141,7 +159,8 @@ src/components/ DurationSelector, CalibrationOverlay, ExerciseCard, AlternativeS
 ## Delivery pipeline
 
 `.github/workflows/ci.yml` runs install, lint, type-check, unit tests, build, privacy scan,
-build verification, and the Playwright suite (three device projects plus a serial PWA project).
+build verification, and the Playwright suite (three device projects, a serial PWA project, and a
+serial update project on two builds served by its own server).
 `.github/workflows/pages.yml` reuses that workflow on every push to `main` and deploys `dist/`
 to the permanent Pages URL only when every step passed. `E2E_BASE_URL=<url> npx playwright test`
 runs the same suite against a deployed build.

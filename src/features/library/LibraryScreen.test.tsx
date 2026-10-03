@@ -50,6 +50,20 @@ describe('LibraryScreen', () => {
     },
   );
 
+  it('says how many exercises show a demonstration of their own', async () => {
+    const { store } = await seeded();
+    render(
+      <Providers store={store}>
+        <LibraryScreen />
+      </Providers>,
+    );
+    expect(
+      await screen.findByText(
+        '83 exercises. 72 show a demonstration of their own; the rest, a diagram of their movement.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('opens an exercise with its demonstration, instructions, and ranked alternatives', async () => {
     const { store } = await seeded();
     const user = userEvent.setup();
@@ -62,9 +76,15 @@ describe('LibraryScreen', () => {
     await user.click(screen.getAllByTestId('library-row')[0]!);
 
     const dialog = await screen.findByRole('dialog', { name: 'Barbell Bench Press' });
-    expect(within(dialog).getByTestId('exercise-demo')).toHaveAttribute('data-playing', 'true');
-    expect(within(dialog).getByRole('heading', { name: 'Setup' })).toBeInTheDocument();
-    expect(within(dialog).getByRole('heading', { name: 'Common mistakes' })).toBeInTheDocument();
+    // Its own licensed clip (Maintenance 25, item 7), credited under it; the still stands in
+    // until the clip arrives, and here the test's network has none.
+    expect(within(dialog).getByTestId('exercise-demo')).toBeInTheDocument();
+    expect(within(dialog).getByTestId('demo-credit')).toHaveTextContent(
+      'Video: FitnessScape · CC BY 3.0',
+    );
+    for (const heading of ['Setup', 'Do it', 'Key cues', 'Avoid']) {
+      expect(within(dialog).getByRole('heading', { name: heading })).toBeInTheDocument();
+    }
     expect(within(dialog).getByText('No drop sets')).toBeInTheDocument();
     expect(within(dialog).getByText('Dumbbell Bench Press')).toBeInTheDocument();
   });

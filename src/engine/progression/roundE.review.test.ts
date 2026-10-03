@@ -322,7 +322,31 @@ describe('a started lift at the heaviest weight, when the weights change', () =>
   });
 
   it('leaves a lift whose weights did not change exactly as it was', () => {
-    const { workout, completed } = startedAtLightHome();
+    const { workout, completed: started, lift } = startedAtLightHome();
+    // The lifts before the incline press are done, in the plan's order: since Maintenance 25 a
+    // lift not begun counts work done today after it in the order too, as work before it.
+    const earlier = allEntries(workout.blocks).slice(
+      0,
+      allEntries(workout.blocks).findIndex((entry) => entry.id === lift.id),
+    );
+    const completed: CompletedWork = {
+      ...started,
+      sets: [
+        ...earlier.flatMap((entry) =>
+          entry.sets.map((set) => ({
+            entryId: entry.id,
+            exerciseId: entry.exerciseId,
+            setIndex: set.index,
+            kind: set.kind,
+            reps: set.targetReps[1],
+            weight: set.targetWeight,
+            rir: 2,
+            completedAt: NOW,
+          })),
+        ),
+        ...started.sets,
+      ],
+    };
     // A plate missing today changes nothing about the dumbbells.
     const same = at(lightHome, workout, completed, { type: 'loading' }, { missingPlates: [2.5] });
     for (const entry of allEntries(workout.blocks)) {
@@ -510,10 +534,11 @@ describe('a set pushed to its effort', () => {
       workSecondsFor(muscle, pushedSet) -
         workSecondsFor(muscle, { ...pushedSet, asked: undefined }),
     ).toBe(27 * (REP_SECONDS.hypertrophy - REP_SECONDS.capped));
-    // A strength set at the heaviest weight keeps the slower tempo.
-    expect(workSecondsFor(strength, pushedSet)).toBe(
-      workSecondsFor(strength, { ...pushedSet, asked: undefined }),
-    );
+    // A strength set run to its effort too (Maintenance 25): its reps bring the effort.
+    expect(
+      workSecondsFor(strength, pushedSet) -
+        workSecondsFor(strength, { ...pushedSet, asked: undefined }),
+    ).toBe(27 * (REP_SECONDS.strength - REP_SECONDS.capped));
   });
 });
 

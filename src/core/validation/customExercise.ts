@@ -165,9 +165,8 @@ export function customToCatalogExercise(custom: CustomExercise): CatalogExercise
         custom.instructions.execution.length > 0
           ? custom.instructions.execution
           : ['Perform with control through a full range.'],
-      breathing:
-        custom.instructions.breathing ||
-        'Inhale and brace before the hard part, exhale through the effort.',
+      // A breathing note stored with an exercise made before Maintenance 25 is its key cue now.
+      cues: custom.instructions.breathing.trim() ? [custom.instructions.breathing.trim()] : [],
       mistakes:
         custom.instructions.mistakes.length > 0
           ? custom.instructions.mistakes

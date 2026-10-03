@@ -7,6 +7,7 @@ import { GRADE_LABEL, evidenceLines, styleInfo } from '../../../engine/planning/
 import { updateProfile } from '../draft';
 import { REST_STYLE_OPTIONS, styleOptions } from '../labels';
 import type { EditorProps } from './EditorProps';
+import { keyedLines } from '../../../core/screen/keyedLines';
 import styles from './editors.module.css';
 
 /** What the chosen style is, why Auto came to it, and the research, folded away until asked for. */
@@ -24,9 +25,9 @@ function StyleWhy({ profile }: { profile: UserProfile }) {
         </span>
       </p>
       {auto ? (
-        advice.reasons.map((reason) => (
-          <p key={reason} className={styles.summary}>
-            {reason}
+        keyedLines(advice.reasons).map(({ key, line }) => (
+          <p key={key} className={styles.summary}>
+            {line}
           </p>
         ))
       ) : (
@@ -39,8 +40,8 @@ function StyleWhy({ profile }: { profile: UserProfile }) {
       <details className={styles.research} data-testid="style-research">
         <summary className={styles.researchSummary}>The research</summary>
         <ul className={styles.researchList}>
-          {evidenceLines(info.id).map((line) => (
-            <li key={line}>{line}</li>
+          {keyedLines(evidenceLines(info.id)).map(({ key, line }) => (
+            <li key={key}>{line}</li>
           ))}
         </ul>
       </details>

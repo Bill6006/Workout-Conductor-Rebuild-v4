@@ -1,4 +1,3 @@
-import { EQUIPMENT } from '../../catalog/equipment/equipment';
 import {
   allExercises,
   getExercise,
@@ -19,15 +18,18 @@ import {
   type LoadingSpec,
 } from '../../engine/loading/loading';
 import {
+  clearSyncError,
   inspectCloud,
+  noteDatabaseBirth,
   pendingCount,
+  readDatabaseBirth,
   readCloudState,
-  readCloudUrl,
   resetCloudState,
   restartPull,
   saveCloudUrl,
   seedOutbox,
   syncOnce,
+  withinBound,
   type SyncOutcome,
 } from '../cloud/cloudSync';
 import { deviceLabel, ensureDeviceId } from '../cloud/deviceId';
@@ -35,12 +37,26 @@ import {
   TOKEN_LOG_KEY,
   TOKEN_MARK_KEY,
   TOKEN_MIRROR_KEY,
+  URL_MIRROR_KEY,
   clearToken,
+  liveNotice,
   readTokenLog,
+  resolveCloudUrl,
   resolveToken,
   saveToken,
   type TokenEvent,
 } from '../cloud/tokenVault';
+import {
+  BARCODE_MIRROR_KEY,
+  MIRROR_PICTURE_MAX,
+  dropFromMirror,
+  keepInMirror,
+  mirrorCopyOf,
+  readBarcodeMirror,
+  type MirrorCopy,
+  type MirrorPicture,
+} from './barcodeMirror';
+import { SetupInterruptedError, setupBase } from './setupBase';
 import { createLibsqlCloudClient } from '../cloud/libsqlClient';
 import {
   DEFAULT_CLOUD_URL,
@@ -51,6 +67,7 @@ import {
 import {
   STRENGTH_MAXES_ID,
   emptyMaxes,
+  enteredE1rm,
   parseStrengthMaxes,
   recordMax,
   snoozeMaxPrompt,
@@ -62,6 +79,8 @@ import { recalibrate as runRecalibration } from '../../engine/recalibration/reca
 import { describeTrigger, type TriggerContext } from '../../engine/recalibration/triggers';
 import type {
   CompletedSet,
+  MaxHeldBy,
+  MaxOutcome,
   RecalibrationRequest,
   RecalibrationResult,
   RecalibrationTrigger,
@@ -74,17 +93,22 @@ import {
 } from '../../engine/workout/sequence';
 import {
   allEntries,
+  isStopped,
   planOwnExercise,
   withoutStops,
   type DurationChoice,
   type GeneratedWorkout,
 } from '../../engine/workout/types';
 import { generateWorkout, withSwapLines } from '../../engine/workoutGenerator/generate';
+import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
 import { normalizeName } from '../backup/legacyImport';
 import {
   COACH_DECLINES_ID,
   UNFINISHED_SOURCE,
   acceptKey,
+  restLengthened,
+  restOfferStands,
+  restRunning,
   emptyDeclines,
   recordDecline,
   setAsideForWorkout,
@@ -156,7 +180,12 @@ import {
   updateLocalSettings,
   type KeyValueStorage,
 } from '../storage/localSettings';
-import { deleteVerified, putVerified, type SaveReceipt } from '../storage/verifiedSave';
+import {
+  deleteVerified,
+  putVerified,
+  structurallyEqual,
+  type SaveReceipt,
+} from '../storage/verifiedSave';
 import {
   BackupSchema,
   type Backup,
@@ -182,6 +211,7 @@ import {
   type CustomMedia,
 } from '../validation/customExercise';
 import {
+  GYM_LOCATION_ID,
   HOME_LOCATION_ID,
   LocationProfileSchema,
   type LocationProfile,
@@ -261,6 +291,22 @@ export interface AppState {
   barcodeSheet: string | null;
   /** The place whose barcode is full screen, or null; opened from the popup. */
   barcodeFullScreen: string | null;
+  /**
+   * Barcodes brought back from the phone's second copy when the app opened, by id: the browser
+   * had cleared the database they live in (Maintenance 25). Their popup says so.
+   */
+  restoredBarcodes: string[];
+  /**
+   * What the phone's second copy holds of each barcode, by id: its picture, its code alone, or
+   * nothing usable (a big picture with no code read, short of room). Read back after each write.
+   */
+  barcodeCopies: Record<string, MirrorCopy>;
+  /**
+   * The phone's database was made since the cloud copy was last walked in full, with a token on
+   * the device and no profile: its data is on its way back from the cloud copy, and setup waits
+   * for it (the tenth review), unless the lifter chooses to set up anyway.
+   */
+  restoring: boolean;
   calibration: CalibrationState;
   customExercises: CustomExercise[];
   /** Per-exercise notes and cue memory. */
@@ -283,6 +329,9 @@ export interface AppState {
   cloud: CloudStatus;
 }
 
+/** Why a sync waits while the device is offline: a wait, not a failure (Maintenance 25). */
+export const CLOUD_OFFLINE = 'Offline; it will sync when the device is back online.';
+
 export interface CloudStatus {
   url: string;
   configured: boolean;
@@ -291,6 +340,12 @@ export interface CloudStatus {
   pending: number;
   lastSyncAt: string | null;
   lastError: string | null;
+  /**
+   * Why the last setup link opened was not used (Maintenance 25). Its own field: no sync or
+   * reload of the saved state says anything about the link, so none overwrites it. A token saved
+   * or removed clears it.
+   */
+  linkError: string | null;
   deviceId: string | null;
   /**
    * The latest thing that happened to the token when it was a loss: a copy
@@ -321,6 +376,7 @@ const CLOUD_OFF: CloudStatus = {
   pending: 0,
   lastSyncAt: null,
   lastError: null,
+  linkError: null,
   deviceId: null,
   notice: null,
 };
@@ -441,6 +497,11 @@ export interface AppStoreOptions {
   recalibrate?: typeof runRecalibration;
   /** Minimum time the calibration overlay stays up so a fast rebuild still reads as a change. */
   minOverlayMs?: number;
+  /**
+   * A smaller copy of a barcode picture too big for the phone's second copy; the app draws one on
+   * a canvas, tests pass a stand-in. Without it a big picture's second copy keeps its code only.
+   */
+  shrinkPicture?: (picture: MirrorPicture) => Promise<MirrorPicture | null>;
 }
 
 export interface SetValues {
@@ -472,6 +533,8 @@ type Listener = () => void;
 const DEFAULT_MIN_OVERLAY_MS = 450;
 const LONG_INTERRUPTION_SECONDS = 20 * 60;
 const TECHNIQUES = ['supersets', 'dropSets', 'circuits'] as const;
+/** The Web Lock barcode changes take, shared by this app's windows (never by another app's). */
+const BARCODE_LOCK = 'workout-conductor-v4-barcodes';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -594,6 +657,52 @@ function rearmed<T extends { endsAt: string; pausedRemaining: number | null }>(
   };
 }
 
+/**
+ * The engine's lines a max's preview repeats (Maintenance 25): what the weights here, a plate
+ * missing, a deload week, the work before the lift today or the max itself did to the target.
+ */
+function previewLine(line: string): boolean {
+  return (
+    line.startsWith('Held at the heaviest weight here') ||
+    / here make [\d.]+, not [\d.]+ /.test(line) ||
+    /^No .+ today: /.test(line) ||
+    line.startsWith('The next weight here after ') ||
+    line.startsWith('Deload week: ') ||
+    line.startsWith('Before this today: ') ||
+    line.startsWith('Your max of ')
+  );
+}
+
+/** What saving a max would do to a lift today: the max sheet's preview (Maintenance 25). */
+export interface MaxPreview {
+  /** The estimated max the input gives, in the lifter's units. */
+  e1rm: number;
+  outcome: MaxOutcome;
+  /** The lift's first working set after the save's rebuild. */
+  target: { weight: number | null; reps: [number, number]; rir: number } | null;
+  /** The engine's lines for what the place or the max did to that target. */
+  lines: string[];
+  /** The target is the one the plan has now: weight, reps and reserve all stay. */
+  stays: boolean;
+  /** With the outcome 'held': what held the target (Maintenance 25). */
+  heldBy?: MaxHeldBy;
+}
+
+/** A rest made longer (or shorter) by some seconds, running or paused. */
+function restLongerBy(rest: RestState, deltaSeconds: number): RestState {
+  const seconds = Math.max(0, rest.seconds + deltaSeconds);
+  return rest.pausedRemaining !== null
+    ? { ...rest, seconds, pausedRemaining: Math.max(0, rest.pausedRemaining + deltaSeconds) }
+    : {
+        ...rest,
+        seconds,
+        endsAt: new Date(Date.parse(rest.endsAt) + deltaSeconds * 1000).toISOString(),
+      };
+}
+
+/** What one sync is asked to do: pull too, ignore the retry delay, walk from the beginning. */
+type SyncRequest = { pull: boolean; force?: boolean; full?: boolean };
+
 export class AppStore {
   private state: AppState;
   private readonly listeners = new Set<Listener>();
@@ -605,6 +714,25 @@ export class AppStore {
   private swapsQueue: Promise<unknown> = Promise.resolve();
   /** Counts the kept-swap changes shown, so a reload that read the list before one keeps it. */
   private swapsVersion = 0;
+  /**
+   * Counts the barcode changes shown, so a reload that read the barcodes before a save, a switch
+   * or a removal keeps what that change showed (Maintenance 25).
+   */
+  private barcodesVersion = 0;
+  /** Barcode changes and the second copy's upkeep, one at a time (see withBarcodeLock). */
+  private barcodeQueue: Promise<unknown> = Promise.resolve();
+  private readonly shrinkPicture:
+    ((picture: MirrorPicture) => Promise<MirrorPicture | null>) | null;
+  /** Asked once per open for this origin's storage to be kept. */
+  private persistenceAsked = false;
+  /** Set up anyway, chosen on the screen that waits for the cloud copy: it waits no more. */
+  private restoreSkipped = false;
+  /**
+   * When the first walk of the cloud copy had ended as this screen last read the disk (null: not
+   * yet). A sync that finds a later one reloads, whoever walked: another window, or an attempt
+   * cut short (the tenth review's fifth re-check).
+   */
+  private walkShown: string | null = null;
   private readonly engine: typeof runRecalibration;
   private readonly minOverlayMs: number;
   private dbPromise: Promise<Database> | null = null;
@@ -619,6 +747,8 @@ export class AppStore {
    */
   private cloudEpoch = 0;
   private syncRun: Promise<SyncOutcome | null> = Promise.resolve(null);
+  /** A sync waiting behind the one under way, not yet started: a later request joins it. */
+  private queuedSync: { options: SyncRequest; run: Promise<SyncOutcome | null> } | null = null;
   private cloudTimer: number | null = null;
   private drainTimer: number | null = null;
   private onlineHandler: (() => void) | null = null;
@@ -630,6 +760,7 @@ export class AppStore {
     this.engine = options.recalibrate ?? runRecalibration;
     this.minOverlayMs = options.minOverlayMs ?? DEFAULT_MIN_OVERLAY_MS;
     this.makeCloudClient = options.cloudClient ?? createLibsqlCloudClient;
+    this.shrinkPicture = options.shrinkPicture ?? null;
     this.isOnline =
       options.isOnline ?? (() => typeof navigator === 'undefined' || navigator.onLine !== false);
     this.state = {
@@ -648,6 +779,9 @@ export class AppStore {
       barcodes: [],
       barcodeSheet: null,
       barcodeFullScreen: null,
+      restoredBarcodes: [],
+      barcodeCopies: {},
+      restoring: false,
       calibration: IDLE_CALIBRATION,
       customExercises: [],
       customInstructions: [],
@@ -689,8 +823,12 @@ export class AppStore {
 
   async hydrate(): Promise<void> {
     const swapsSeen = this.swapsVersion;
+    const barcodesSeen = this.barcodesVersion;
     try {
       const db = await this.getDatabase();
+      // The walk this screen will show, read before the records it shows: a walk ending while
+      // they are read then counts as not shown, and the next sync reloads (the sixth re-check).
+      const shownBirth = await readDatabaseBirth(db).catch(() => ({ at: null, walkedAt: null }));
       const [
         profiles,
         locations,
@@ -726,12 +864,30 @@ export class AppStore {
       // Finds the token in either of its copies and heals the other. A copy that
       // could not be healed must not stop the app from opening.
       const resolved = await resolveToken(db, this.storage, this.now()).catch(() => null);
-      // A database that lost the token may have lost more: the next sync walks everything.
-      if (resolved?.recover) await restartPull(db);
-      const [cloudUrl, cloudState, pending] = await Promise.all([
-        readCloudUrl(db),
+      // A database that lost the token may have lost more: the next sync walks everything. A
+      // write that fails here (a full disk is when browsers clear storage) never stops the app.
+      if (resolved?.recover) await restartPull(db).catch(() => undefined);
+      // When this database was made, once: a cleared phone's own rows come back over what was
+      // made since (Maintenance 25).
+      const empty =
+        profiles.length +
+          locations.length +
+          workouts.length +
+          customExercises.length +
+          customInstructions.length +
+          savedRaw.length ===
+          0 &&
+        [routesRaw, declinesRaw, deloadRaw, maxesRaw, focusRaw, swapsRaw].every(
+          (record) => record === undefined,
+        );
+      await noteDatabaseBirth(db, this.now(), empty).catch(() => null);
+      // A barcode the database lost comes back from the phone's second copy.
+      const barcodes = await this.reconcileBarcodes(db, parsePlaceBarcodes(deviceRaw));
+      const [cloudUrl, cloudState, pending, birth] = await Promise.all([
+        resolveCloudUrl(db, this.storage, this.now()),
         readCloudState(db),
         pendingCount(db),
+        readDatabaseBirth(db).catch(() => ({ at: null, walkedAt: null })),
       ]);
       const parsedProfile = profiles[0] ? UserProfileSchema.safeParse(profiles[0]) : null;
       const validLocations = locations
@@ -748,6 +904,8 @@ export class AppStore {
         .map((result) => result.data);
       registerCustomExercises(validCustom.map(customToCatalogExercise));
 
+      // The walk this screen shows from now on, set in the same step as the state.
+      this.walkShown = shownBirth.walkedAt ?? null;
       this.setState({
         status: 'ready',
         error:
@@ -779,16 +937,39 @@ export class AppStore {
           this.swapsVersion === swapsSeen
             ? parseLastingSwaps(swapsRaw, this.now())
             : this.state.lastingSwaps,
-        barcodes: parsePlaceBarcodes(deviceRaw),
+        // A barcode saved, switched or removed while this read was under way is newer than it.
+        ...(this.barcodesVersion === barcodesSeen
+          ? {
+              barcodes: barcodes.all,
+              // Read as this state is set: a smaller copy kept since the reconcile counts.
+              barcodeCopies: this.copiesOf(barcodes.all),
+              restoredBarcodes: [
+                ...new Set([...this.state.restoredBarcodes, ...barcodes.restored]),
+              ],
+            }
+          : {}),
+        restoring:
+          !this.restoreSkipped &&
+          !parsedProfile?.success &&
+          (resolved?.token ?? null) !== null &&
+          birth.at !== null &&
+          birth.walkedAt === null,
         cloud: {
           ...this.state.cloud,
           url: cloudUrl,
           configured: (resolved?.token ?? null) !== null,
           pending,
           lastSyncAt: cloudState.lastSyncAt,
-          lastError: cloudState.lastError,
+          // With no token nothing syncs, and an error kept from before is not news (Maintenance
+          // 25). A setup link's failure is kept apart, in `linkError`, and stays.
+          lastError:
+            (resolved?.token ?? null) === null
+              ? null
+              : this.isOnline()
+                ? cloudState.lastError
+                : CLOUD_OFFLINE,
           deviceId,
-          notice: resolved?.notice ?? null,
+          notice: liveNotice(resolved?.notice ?? null, cloudState.lastSyncAt),
         },
       });
       this.ensureSession();
@@ -913,6 +1094,37 @@ export class AppStore {
     if (key && session && session.baseKey !== key) this.setSession({ ...session, baseKey: key });
   }
 
+  /** One change's request to the engine, from the session as it stands (a preview's too). */
+  private calibrationRequest(
+    trigger: RecalibrationTrigger,
+    session: WorkoutSession,
+    profile: UserProfile,
+    reason: string,
+    overrides: Partial<RecalibrationRequest> = {},
+  ): RecalibrationRequest {
+    return {
+      trigger,
+      workout: session.workout,
+      completed: {
+        ...session.completed,
+        elapsedSeconds: elapsedSeconds(session, this.nowMs()),
+      },
+      lockedEntryIds: [],
+      currentEntryId: session.completed.currentEntryId,
+      duration: trigger.type === 'duration' ? trigger.choice : session.duration,
+      profile,
+      location: this.currentLocation(),
+      loading: session.loading,
+      history: this.state.history,
+      constraints: session.constraints,
+      maxes: this.state.strengthMaxes,
+      swaps: this.activeSwaps(),
+      reason,
+      timestamp: this.now(),
+      ...overrides,
+    };
+  }
+
   private triggerContext(trigger: RecalibrationTrigger, session: WorkoutSession): TriggerContext {
     const entryOf = (id: string) =>
       allEntries(session.workout.blocks).find((entry) => entry.id === id);
@@ -924,15 +1136,10 @@ export class AppStore {
       case 'sets':
       case 'add-warmup':
       case 'rep-range':
-      case 'reorder': {
-        const entry = entryOf(trigger.entryId);
-        return { exerciseName: entry ? requireExercise(entry.exerciseId).name : undefined };
-      }
+      case 'reorder':
       case 'equipment-busy': {
         const entry = entryOf(trigger.entryId);
-        const first = entry ? requireExercise(entry.exerciseId).equipment[0]?.[0] : undefined;
-        const name = first ? EQUIPMENT.find((item) => item.id === first)?.name : undefined;
-        return { equipment: name ? name.toLowerCase() : 'station' };
+        return { exerciseName: entry ? requireExercise(entry.exerciseId).name : undefined };
       }
       default:
         return { locationName: this.currentLocation()?.name };
@@ -980,26 +1187,10 @@ export class AppStore {
     // Let the overlay paint before the engine runs.
     await sleep(0);
 
-    const request: RecalibrationRequest = {
-      trigger,
-      workout: session.workout,
-      completed: {
-        ...session.completed,
-        elapsedSeconds: elapsedSeconds(session, this.nowMs()),
-      },
-      lockedEntryIds: [],
-      currentEntryId: session.completed.currentEntryId,
-      duration: trigger.type === 'duration' ? trigger.choice : session.duration,
-      profile,
-      location: this.currentLocation(),
-      loading: session.loading,
+    // The history read before the overlay's pause, as the session and profile are.
+    const request = this.calibrationRequest(trigger, session, profile, reason ?? described.title, {
       history,
-      constraints: session.constraints,
-      maxes: this.state.strengthMaxes,
-      swaps: this.activeSwaps(),
-      reason: reason ?? described.title,
-      timestamp: this.now(),
-    };
+    });
     let result: RecalibrationResult;
     try {
       result = this.engine(request);
@@ -1586,19 +1777,44 @@ export class AppStore {
   adjustRest(deltaSeconds: number): void {
     const session = this.requireSession();
     if (!session.rest) return;
+    this.setSession({ ...session, rest: restLongerBy(session.rest, deltaSeconds) });
+  }
+
+  /**
+   * The coach's longer rest, tapped (Maintenance 25): the rest running gets the seconds, and the
+   * offer is marked as taken for the set that fell short in the same change, so the button never
+   * comes back for that set. Once the rest is over, the rest running is before another lift's set,
+   * or a newer set of the lift is logged, nothing changes and the error says why. False when the
+   * coach already lengthened this rest: a second tap adds nothing.
+   */
+  takeCoachRest(
+    signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'headline' | 'occasion'>,
+    deltaSeconds: number,
+  ): boolean {
+    const session = this.requireSession();
     const rest = session.rest;
-    const seconds = Math.max(0, rest.seconds + deltaSeconds);
+    if (
+      !rest ||
+      !restRunning(rest, this.now()) ||
+      (signal.occasion !== undefined &&
+        !restOfferStands(session.workout, session.completed, rest, signal.occasion))
+    ) {
+      throw new Error('That rest is over: the next set can start.');
+    }
+    const key = acceptKey(signal);
+    // Taken already for this rest (a second tap before the card went): nothing more to add.
+    if (
+      session.coachAccepted.includes(key) ||
+      restLengthened(session.workout, session.completed, rest, session.coachAccepted)
+    ) {
+      return false;
+    }
     this.setSession({
       ...session,
-      rest:
-        rest.pausedRemaining !== null
-          ? { ...rest, seconds, pausedRemaining: Math.max(0, rest.pausedRemaining + deltaSeconds) }
-          : {
-              ...rest,
-              seconds,
-              endsAt: new Date(Date.parse(rest.endsAt) + deltaSeconds * 1000).toISOString(),
-            },
+      rest: restLongerBy(rest, deltaSeconds),
+      coachAccepted: [...session.coachAccepted, key],
     });
+    return true;
   }
 
   skipRest(): void {
@@ -1754,8 +1970,9 @@ export class AppStore {
     const session = this.state.session;
     if (!saved || !session || session.status !== 'preview') return;
     const now = this.now();
-    // Made fresh: an exercise stopped on the day it was saved does not come back stopped.
-    const fresh = withoutStops(saved.workout);
+    // Made fresh: an exercise stopped on the day it was saved does not come back stopped, and a
+    // plan saved before Maintenance 25 says each fitting step once.
+    const fresh = explanationOnce(withoutStops(saved.workout));
     const workout = {
       ...fresh,
       id: `wk-${now.slice(0, 10)}-saved-${saved.id}`,
@@ -2011,14 +2228,178 @@ export class AppStore {
       throw new Error('The Home location cannot be deleted.');
     }
     const db = await this.getDatabase();
-    await deleteVerified(db, 'locations', id);
+    // Not while the first walk after a clearing is pending: the place may be the owner's own,
+    // coming back, and its barcode, which the cloud copy never holds, would go for good (the
+    // tenth review's fifth re-check).
+    const birth = await readDatabaseBirth(db).catch(() => ({ at: null, walkedAt: null }));
+    if (this.state.cloud.configured && birth.at !== null && birth.walkedAt === null) {
+      throw new Error(
+        'Your places are still coming back from the cloud copy: remove a place once that is done.',
+      );
+    }
+    // Its barcode goes with it, from both copies, whether or not this window's list shows one
+    // (another window may have saved it), and first: a barcode that cannot be removed keeps its
+    // place, so Delete again is a real retry. Both under the barcode lock, so a save in another
+    // window comes before (and goes with the place) or finds the place gone (the re-checks).
+    await this.withBarcodeLock(async () => {
+      await this.removeBarcodeNow(db, id);
+      await deleteVerified(db, 'locations', id);
+    });
     const locations = this.state.locations.filter((location) => location.id !== id);
     this.setState({ locations });
-    if (this.barcodeFor(id)) await this.removeBarcode(id);
     if (this.state.barcodeSheet === id) this.setState({ barcodeSheet: null });
     if (this.state.profile?.currentLocationId === id) {
       await this.saveProfile({ ...this.state.profile, currentLocationId: HOME_LOCATION_ID });
     }
+  }
+
+  /**
+   * Runs a barcode change, or the second copy's upkeep, alone: after the one before it in this
+   * window and, where the browser has Web Locks, never beside one in another window of the app.
+   * Each reads the database and the second copy inside, so none writes from a read another has
+   * overtaken (the tenth review's re-check: a reload put a code-only copy over a picture saved
+   * while it ran, and wrote a barcode removed meanwhile back into the second copy).
+   */
+  private withBarcodeLock<T>(work: () => Promise<T>): Promise<T> {
+    const locks: LockManager | undefined =
+      typeof navigator === 'undefined' ? undefined : navigator.locks;
+    const run = async (): Promise<T> => {
+      if (!locks) return work();
+      let started = false;
+      let result!: T;
+      try {
+        await locks.request(BARCODE_LOCK, async () => {
+          started = true;
+          result = await work();
+        });
+      } catch (error) {
+        if (started) throw error;
+        // No lock to be had here: this window's own queue still keeps its changes in order.
+        return work();
+      }
+      return result;
+    };
+    const next = this.barcodeQueue.then(run, run);
+    this.barcodeQueue = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
+   * Brings back each barcode the database lost from the phone's second copy, then makes the
+   * second copy hold every barcode the database holds, one entry at a time (Maintenance 25). A
+   * barcode whose write back fails stays in the second copy and shows this open (the tenth review:
+   * the rewrite used to drop it). It reads both copies under the barcode lock, never from the
+   * opening's earlier read: a barcode saved since is in the database, not lost.
+   */
+  private async reconcileBarcodes(
+    db: Database,
+    read: PlaceBarcode[],
+  ): Promise<{ all: PlaceBarcode[]; restored: string[] }> {
+    return this.withBarcodeLock(() => this.reconcileBarcodesNow(db, read));
+  }
+
+  private async reconcileBarcodesNow(
+    db: Database,
+    read: PlaceBarcode[],
+  ): Promise<{ all: PlaceBarcode[]; restored: string[] }> {
+    try {
+      const held = parsePlaceBarcodes(await db.getAll<Identified>('device'));
+      const ids = new Set(held.map((barcode) => barcode.id));
+      const lost = readBarcodeMirror(this.storage).filter((barcode) => !ids.has(barcode.id));
+      const restored: PlaceBarcode[] = [];
+      const unrestored: PlaceBarcode[] = [];
+      for (const barcode of lost) {
+        try {
+          await putVerified(db, 'device', barcode, { now: this.now });
+          restored.push(barcode);
+        } catch {
+          unrestored.push(barcode);
+        }
+      }
+      // The database as it is now, the barcodes brought back included.
+      const current = parsePlaceBarcodes(await db.getAll<Identified>('device'));
+      for (const barcode of current) keepInMirror(this.storage, barcode);
+      // A barcode whose write back failed keeps its entry, so the next open tries again.
+      const currentIds = new Set(current.map((barcode) => barcode.id));
+      for (const barcode of current) this.shrinkForMirror(barcode);
+      return {
+        all: [...current, ...unrestored.filter((barcode) => !currentIds.has(barcode.id))],
+        restored: restored.map((barcode) => barcode.id).filter((id) => currentIds.has(id)),
+      };
+    } catch {
+      // A second copy that cannot be read or healed never stops the app opening.
+      return { all: read, restored: [] };
+    }
+  }
+
+  /** A place's barcode as the database holds it now, read inside the barcode lock. */
+  private async storedBarcode(db: Database, id: string): Promise<PlaceBarcode | undefined> {
+    const raw = await db.get<Identified>('device', id);
+    return raw ? parsePlaceBarcodes([raw])[0] : undefined;
+  }
+
+  /**
+   * Shows a place's barcode as stored: replaced in the list, added, or taken out of it, with what
+   * the second copy holds of it (the cloud card reads that).
+   */
+  private showBarcode(locationId: string, barcode: PlaceBarcode | undefined): void {
+    const listed = this.state.barcodes.some((item) => item.locationId === locationId);
+    if (!barcode && !listed) return;
+    this.barcodesVersion += 1;
+    const barcodes = barcode
+      ? listed
+        ? this.state.barcodes.map((item) => (item.locationId === locationId ? barcode : item))
+        : [...this.state.barcodes, barcode]
+      : this.state.barcodes.filter((item) => item.locationId !== locationId);
+    const id = barcodeIdFor(locationId);
+    const barcodeCopies = { ...this.state.barcodeCopies };
+    if (barcode) barcodeCopies[id] = mirrorCopyOf(this.storage, barcode);
+    else delete barcodeCopies[id];
+    this.setState({ barcodes, barcodeCopies });
+  }
+
+  /** What the second copy holds of each barcode, read back now. */
+  private copiesOf(barcodes: readonly PlaceBarcode[]): Record<string, MirrorCopy> {
+    return Object.fromEntries(
+      barcodes.map((barcode) => [barcode.id, mirrorCopyOf(this.storage, barcode)]),
+    );
+  }
+
+  /** The picture the second copy keeps for this very version of a barcode, if any. */
+  private mirroredImage(barcode: PlaceBarcode): MirrorPicture | undefined {
+    const kept = readBarcodeMirror(this.storage).find((item) => item.id === barcode.id);
+    return kept && kept.updatedAt === barcode.updatedAt ? kept.image : undefined;
+  }
+
+  /** Keeps one barcode's entry in the second copy, the others as they are, and says what stuck. */
+  private keepBarcodeCopy(barcode: PlaceBarcode, smaller?: MirrorPicture): void {
+    const copy = keepInMirror(this.storage, barcode, smaller);
+    if (this.state.barcodeCopies[barcode.id] !== copy) {
+      this.setState({ barcodeCopies: { ...this.state.barcodeCopies, [barcode.id]: copy } });
+    }
+  }
+
+  /**
+   * Makes a smaller copy of a big picture for the second copy, in the background, and keeps it
+   * only for the barcode as the database still holds it (not the screen's list, which the app
+   * opening may not have filled yet: the tenth review).
+   */
+  private shrinkForMirror(barcode: PlaceBarcode): void {
+    const picture = barcode.image;
+    if (!this.shrinkPicture || !picture || picture.dataUrl.length <= MIRROR_PICTURE_MAX) return;
+    if (mirrorCopyOf(this.storage, barcode) === 'picture') return;
+    const shrink = this.shrinkPicture;
+    const work = (async () => {
+      const copy = await shrink(picture).catch(() => null);
+      if (!copy) return;
+      const db = await this.getDatabase();
+      await this.withBarcodeLock(async () => {
+        const stored = await db.get<PlaceBarcode>('device', barcode.id).catch(() => undefined);
+        if (!stored || stored.updatedAt !== barcode.updatedAt) return;
+        this.keepBarcodeCopy(barcode, copy);
+      });
+    })();
+    this.pendingWork = this.pendingWork.then(() => work);
   }
 
   private barcodeFor(locationId: string | undefined): PlaceBarcode | undefined {
@@ -2031,41 +2412,91 @@ export class AppStore {
     if (!this.state.locations.some((location) => location.id === locationId)) {
       throw new Error('That place is no longer saved.');
     }
-    const now = this.now();
-    const previous = this.barcodeFor(locationId);
-    const record = PlaceBarcodeSchema.parse({
-      id: barcodeIdFor(locationId),
-      locationId,
-      image: picked.image,
-      ...(picked.code ? { code: picked.code } : {}),
-      autoShow: previous?.autoShow ?? true,
-      addedAt: previous?.addedAt ?? now,
-      updatedAt: now,
-    });
     const db = await this.getDatabase();
-    const receipt = await putVerified(db, 'device', record, { now: this.now });
-    this.setState({
-      barcodes: [...this.state.barcodes.filter((item) => item.locationId !== locationId), record],
-      lastReceipt: receipt,
+    const id = barcodeIdFor(locationId);
+    let record: PlaceBarcode | null = null;
+    const receipt = await this.withBarcodeLock(async () => {
+      // The place as stored: another window may have deleted it, and a barcode saved for it
+      // then could never be removed (the tenth review's second re-check).
+      if (!(await db.get<Identified>('locations', locationId))) {
+        throw new Error('That place is no longer saved.');
+      }
+      // The switch and the first time come from the barcode as stored, not this window's list,
+      // which another window may have overtaken (the tenth review's re-check).
+      const previous = await this.storedBarcode(db, id);
+      const now = this.now();
+      const made = PlaceBarcodeSchema.parse({
+        id,
+        locationId,
+        image: picked.image,
+        ...(picked.code ? { code: picked.code } : {}),
+        autoShow: previous?.autoShow ?? true,
+        addedAt: previous?.addedAt ?? now,
+        updatedAt: now,
+      });
+      record = made;
+      const saved = await putVerified(db, 'device', made, { now: this.now });
+      this.barcodesVersion += 1;
+      const barcodes = [
+        ...this.state.barcodes.filter((item) => item.locationId !== locationId),
+        made,
+      ];
+      this.setState({
+        barcodes,
+        restoredBarcodes: this.state.restoredBarcodes.filter((item) => item !== id),
+        lastReceipt: saved,
+      });
+      // The second copy, at once with the code; a big picture's smaller copy follows.
+      this.keepBarcodeCopy(made);
+      return saved;
     });
+    if (record) this.shrinkForMirror(record);
     return receipt;
   }
 
   async setBarcodeAutoShow(locationId: string, autoShow: boolean): Promise<void> {
-    const barcode = this.barcodeFor(locationId);
-    if (!barcode || barcode.autoShow === autoShow) return;
-    const record = { ...barcode, autoShow, updatedAt: this.now() };
     const db = await this.getDatabase();
-    await putVerified(db, 'device', record, { now: this.now });
-    this.setState({
-      barcodes: this.state.barcodes.map((item) => (item.locationId === locationId ? record : item)),
+    const id = barcodeIdFor(locationId);
+    const record = await this.withBarcodeLock(async () => {
+      // From the barcode as stored: this window's list may be out of date (another window saved a
+      // new picture or removed it, or a Replace here ran first), and an old picture or a removed
+      // barcode must never come back with the switch (the tenth review's re-check).
+      const stored = await this.storedBarcode(db, id);
+      if (!stored || stored.autoShow === autoShow) {
+        this.showBarcode(locationId, stored);
+        return null;
+      }
+      const next = { ...stored, autoShow, updatedAt: this.now() };
+      // Same picture, new time: the second copy keeps the picture it had (a smaller copy too).
+      const kept = this.mirroredImage(stored);
+      await putVerified(db, 'device', next, { now: this.now });
+      this.showBarcode(locationId, next);
+      this.keepBarcodeCopy(next, kept);
+      return next;
     });
+    // A smaller copy still being made was for the version before the switch: make it again.
+    if (record) this.shrinkForMirror(record);
   }
 
   async removeBarcode(locationId: string): Promise<void> {
     const db = await this.getDatabase();
-    await deleteVerified(db, 'device', barcodeIdFor(locationId));
+    await this.withBarcodeLock(() => this.removeBarcodeNow(db, locationId));
+  }
+
+  /** Removes a place's barcode from both copies; the caller holds the barcode lock. */
+  private async removeBarcodeNow(db: Database, locationId: string): Promise<void> {
+    const id = barcodeIdFor(locationId);
+    // The second copy goes first: one left behind would bring the barcode back at the next open.
+    if (!dropFromMirror(this.storage, id)) {
+      throw new Error("The barcode's second copy on this phone could not be removed. Try again.");
+    }
+    await deleteVerified(db, 'device', id);
+    this.barcodesVersion += 1;
+    const copies = { ...this.state.barcodeCopies };
+    delete copies[id];
     this.setState({
+      barcodeCopies: copies,
+      restoredBarcodes: this.state.restoredBarcodes.filter((item) => item !== id),
       barcodes: this.state.barcodes.filter((item) => item.locationId !== locationId),
       barcodeFullScreen:
         this.state.barcodeFullScreen === locationId ? null : this.state.barcodeFullScreen,
@@ -2106,23 +2537,142 @@ export class AppStore {
     return this.saveProfile({ ...this.state.profile, currentLocationId: id });
   }
 
-  /** Saves locations first, then the profile, then marks onboarding complete. */
-  async completeOnboarding(rawProfile: UserProfile, locations: LocationProfile[]): Promise<void> {
+  /**
+   * Saves locations first, then the profile, then marks onboarding complete. Says 'restored'
+   * instead when a profile came back to the phone while setup was open: setup then writes nothing
+   * and the screen shows what came back.
+   */
+  async completeOnboarding(
+    rawProfile: UserProfile,
+    locations: LocationProfile[],
+    options: { base?: string | null } = {},
+  ): Promise<'saved' | 'restored'> {
+    // What setup began from: the setup screen says (null on a first run); a direct call takes
+    // what this window shows now.
+    const base =
+      options.base !== undefined
+        ? options.base
+        : setupBase(this.state.profile, this.state.locations);
+    // In turn with the syncs: a walk of the cloud copy never ends part-way through setup, so it
+    // either ends first (and setup sees what came back) or starts after (and its rule replaces
+    // what setup wrote) (the tenth review's fifth re-check).
+    const run = this.syncRun.then(() => this.completeOnboardingNow(rawProfile, locations, base));
+    this.syncRun = run.then(
+      () => null,
+      () => null,
+    );
+    // A sync asked for from now on runs after setup, never joining one queued before it.
+    this.queuedSync = null;
+    return run;
+  }
+
+  private async completeOnboardingNow(
+    rawProfile: UserProfile,
+    locations: LocationProfile[],
+    base: string | null,
+  ): Promise<'saved' | 'restored'> {
     const profile = normalizeProfile(rawProfile);
     const db = await this.getDatabase();
+    // Everything setup writes is checked before its first write: an answer the profile cannot take
+    // then fails with nothing written, and a Finish again goes through (the tenth review's
+    // eleventh re-check: an age typo failed after the places were written).
+    UserProfileSchema.parse(profile);
+    const checked = locations.map((location) => LocationProfileSchema.parse(location));
+    // Setup writes only over the very data it began from. The cloud copy (or another window) may
+    // have changed the profile or the places while it was open, a walk ending before this turn
+    // came included: then it writes nothing, its draft goes (Run setup again never resumes it),
+    // and the screen shows what is there. A first run began from no profile at all (the tenth
+    // review's fourth to sixth re-checks: a wizard open across the walk wrote over the copy).
+    const begun = await this.readSetupState(db);
+    if (setupBase(begun.profile, begun.places) !== base) {
+      removeKey(ONBOARDING_DRAFT_KEY, this.storage);
+      await this.hydrate();
+      return 'restored';
+    }
     const existing = await db.getAll<Identified>('locations');
-    for (const stale of existing) {
-      if (!locations.some((location) => location.id === stale.id)) {
-        await deleteVerified(db, 'locations', stale.id);
+    // After the browser cleared the database, until the first walk of the cloud copy is done, a
+    // place here may be the owner's own coming back: setup leaves the places it does not list, and
+    // their barcodes, alone. The walk's records win over setup's anyway; a barcode, never in the
+    // cloud copy, would be lost for good (the tenth review's third re-check).
+    const birth = await readDatabaseBirth(db).catch(() => ({ at: null, walkedAt: null }));
+    const walkPending = this.state.cloud.configured && birth.at !== null && birth.walkedAt === null;
+    // And it removes only what its own steps can remove: the Gym, when gym access is switched
+    // off, and only a Gym the screen showed. A place setup never lists (one added on Plan that a
+    // draft saved earlier never knew, or one the cloud copy brought back unseen) stays, with its
+    // barcode (the fourth re-check).
+    const shown = new Set(this.state.locations.map((location) => location.id));
+    const leftOut = walkPending
+      ? []
+      : existing.filter(
+          (stale) =>
+            stale.id === GYM_LOCATION_ID &&
+            shown.has(stale.id) &&
+            !locations.some((location) => location.id === stale.id),
+        );
+    try {
+      for (const stale of leftOut) {
+        // Its barcode goes with it, from both copies and first, as when the place is deleted.
+        await this.withBarcodeLock(async () => {
+          if ((await db.get('device', barcodeIdFor(stale.id))) || this.barcodeFor(stale.id)) {
+            await this.removeBarcodeNow(db, stale.id);
+          }
+          await deleteVerified(db, 'locations', stale.id);
+        });
       }
+      for (const location of checked) {
+        await putVerified(db, 'locations', location, { now: this.now });
+      }
+      // Every place on disk now, setup's and the ones it left alone.
+      const kept = (await db.getAll<Identified>('locations'))
+        .map((record) => LocationProfileSchema.safeParse(record))
+        .filter((result) => result.success)
+        .map((result) => result.data);
+      this.setState({ locations: sortLocations(kept) });
+      await this.saveProfile(profile);
+    } catch (error) {
+      // Cut off part-way (a full disk, say). What this run wrote stays. Setup starts again from
+      // the disk as the cut-off left it when every place there is as setup began from it or as
+      // setup meant to write it, and every place gone is one setup removed: a write that landed
+      // though its check failed counts as setup's own, and a place another window wrote meanwhile
+      // still makes Finish again refuse (the tenth review's eleventh to thirteenth re-checks). The
+      // screen shows the places as the cut-off left them, so a reopened setup resumes (unless the
+      // profile's own write landed: see Known limits); the profile it shows stays as it was, so
+      // Finish again rebuilds the plan, and a first setup stays on screen (the fourteenth and
+      // fifteenth re-checks).
+      const removed = new Set(leftOut.map((stale) => stale.id));
+      const left = await this.readSetupState(db)
+        .then((now) => {
+          this.setState({ locations: sortLocations(now.places) });
+          const setupsOwn = (place: LocationProfile) =>
+            begun.places.some((before) => structurallyEqual(before, place)) ||
+            checked.some((meant) => structurallyEqual(meant, place));
+          const ownOnly =
+            now.places.every(setupsOwn) &&
+            begun.places.every(
+              (before) =>
+                removed.has(before.id) || now.places.some((place) => place.id === before.id),
+            );
+          return ownOnly ? setupBase(now.profile, now.places) : base;
+        })
+        .catch(() => base);
+      throw new SetupInterruptedError(error, left);
     }
-    for (const location of locations) {
-      await putVerified(db, 'locations', LocationProfileSchema.parse(location), { now: this.now });
-    }
-    this.setState({ locations: sortLocations(locations) });
-    await this.saveProfile(profile);
     removeKey(ONBOARDING_DRAFT_KEY, this.storage);
     this.updateLocalSettings({ onboardingCompletedAt: this.now() });
+    return 'saved';
+  }
+
+  /** The profile and places setup starts from, read from disk: the profile if it reads, and the places that do. */
+  private async readSetupState(
+    db: Database,
+  ): Promise<{ profile: UserProfile | null; places: LocationProfile[] }> {
+    const [storedProfile] = await db.getAll<Identified>('profile');
+    const readProfile = storedProfile ? UserProfileSchema.safeParse(storedProfile) : null;
+    const places = (await db.getAll<Identified>('locations'))
+      .map((record) => LocationProfileSchema.safeParse(record))
+      .filter((result) => result.success)
+      .map((result) => result.data);
+    return { profile: readProfile?.success ? normalizeProfile(readProfile.data) : null, places };
   }
 
   updateLocalSettings(patch: Partial<LocalSettings>): LocalSettings {
@@ -2215,6 +2765,9 @@ export class AppStore {
     const db = await this.getDatabase();
     if (options.snapshotFirst ?? true) await this.snapshotBackup('pre-import');
     const counts = await restoreBackup(db, backup, { now: this.now });
+    // The next sync walks the whole cloud copy again before it pushes, so anything there that this
+    // backup lacks, or that changed after it was made, comes back to this phone (Maintenance 25).
+    await restartPull(db).catch(() => undefined);
     this.updateLocalSettings({
       onboardingCompletedAt: backup.data.localSettings.onboardingCompletedAt,
       lastImportAt: this.now(),
@@ -2413,8 +2966,9 @@ export class AppStore {
   /**
    * A previewed (not started) session is rebuilt from today's inputs, in turn with every other
    * change. Today's choices hold through it (Maintenance 24): the length, a check-in, the plates
-   * missing today, and what was set aside for today (skips, sore joints, busy equipment, an end time
-   * still ahead) are applied to the new plan by the engine, as every rebuild applies them.
+   * missing today, and what was set aside for today (skips, sore joints, a lift moved later for
+   * busy equipment, an end time still ahead) are applied to the new plan by the engine, as every
+   * rebuild applies them.
    */
   private regeneratePreview(): Promise<void> {
     const run = this.calibrationQueue.then(() => this.rebuildPreview());
@@ -2444,7 +2998,7 @@ export class AppStore {
       today.intensity !== 0 ||
       today.endBy !== null ||
       today.avoidExerciseIds.length > 0 ||
-      today.busyEquipment.length > 0 ||
+      today.postponed.length > 0 ||
       today.painJoints.length > 0 ||
       session.loading.missingPlates.length > 0;
     if (!chosen) return;
@@ -2567,7 +3121,7 @@ export class AppStore {
     if (token.length === 0) throw new Error('Paste the token first.');
     this.cloudEpoch += 1;
     const db = await this.getDatabase();
-    const current = await readCloudUrl(db);
+    const current = await resolveCloudUrl(db, this.storage, this.now());
     const url = (input.url ?? current).trim();
     if (!looksLikeLibsqlUrl(url)) {
       throw new Error('That database address does not look right. It starts with libsql://');
@@ -2613,14 +3167,30 @@ export class AppStore {
     // Either way the next sync walks the whole history back before it pushes.
     if (!changed) await restartPull(db);
     this.setState({
-      cloud: { ...this.state.cloud, url, configured: true, lastError: null, notice: null },
+      cloud: {
+        ...this.state.cloud,
+        url,
+        configured: true,
+        lastError: null,
+        linkError: null,
+        notice: null,
+      },
     });
     if (!this.startCloud()) await this.syncNow({ pull: true, force: true });
   }
 
-  /** Reports a cloud problem where the Cloud copy card already shows one. */
-  noteCloudError(message: string): void {
-    this.setState({ cloud: { ...this.state.cloud, lastError: message } });
+  /**
+   * Setup without waiting for the cloud copy (the tenth review): offline, or with a copy that
+   * cannot be reached. What is set up then is replaced by the cloud copy's records once it is.
+   */
+  skipRestoring(): void {
+    this.restoreSkipped = true;
+    if (this.state.restoring) this.setState({ restoring: false });
+  }
+
+  /** Says on the Cloud copy card why a setup link was not used (Maintenance 25). */
+  noteSetupLinkFailure(message: string): void {
+    this.setState({ cloud: { ...this.state.cloud, linkError: message } });
   }
 
   /** Removes the token; the cloud copy is off and nothing leaves the device. The outbox is kept. */
@@ -2628,6 +3198,7 @@ export class AppStore {
     this.cloudEpoch += 1;
     const db = await this.getDatabase();
     await clearToken(db, this.storage, this.now());
+    await clearSyncError(db);
     this.stopCloud();
     this.dropCloudClient();
     this.setState({
@@ -2636,6 +3207,7 @@ export class AppStore {
         configured: false,
         syncing: false,
         lastError: null,
+        linkError: null,
         notice: null,
       },
     });
@@ -2647,20 +3219,35 @@ export class AppStore {
    * With `full` the pull walks the whole history again, so anything this device
    * has lost comes back; the card's "Sync now" asks for that.
    */
-  syncNow(
-    options: { pull: boolean; force?: boolean; full?: boolean } = { pull: true },
-  ): Promise<SyncOutcome | null> {
-    const run = this.syncRun.then(() => this.runSync(options));
+  syncNow(options: SyncRequest = { pull: true }): Promise<SyncOutcome | null> {
+    // A request made while another sync waits its turn joins that one, adding what it asks for:
+    // taps on Try again, or a run of saves, never stack up syncs for setup to wait through one by
+    // one (the tenth review's seventh re-check).
+    const waiting = this.queuedSync;
+    if (waiting) {
+      waiting.options = {
+        pull: waiting.options.pull || options.pull,
+        force: waiting.options.force === true || options.force === true,
+        full: waiting.options.full === true || options.full === true,
+      };
+      return waiting.run;
+    }
+    const entry: { options: SyncRequest; run: Promise<SyncOutcome | null> } = {
+      options: { ...options },
+      run: Promise.resolve(null),
+    };
+    const run = this.syncRun.then(() => {
+      if (this.queuedSync === entry) this.queuedSync = null;
+      return this.runSync(entry.options);
+    });
+    entry.run = run;
+    this.queuedSync = entry;
     this.syncRun = run.catch(() => null);
     this.pendingWork = this.pendingWork.then(() => this.syncRun.then(() => undefined));
     return run;
   }
 
-  private async runSync(options: {
-    pull: boolean;
-    force?: boolean;
-    full?: boolean;
-  }): Promise<SyncOutcome | null> {
+  private async runSync(options: SyncRequest): Promise<SyncOutcome | null> {
     const epoch = this.cloudEpoch;
     const db = await this.getDatabase();
     const resolved = await resolveToken(db, this.storage, this.now());
@@ -2676,7 +3263,26 @@ export class AppStore {
     }
     if (resolved.recover) await restartPull(db);
     const token = resolved.token;
-    const client = await this.cloudClientFor(token, await readCloudUrl(db));
+    const url = await resolveCloudUrl(db, this.storage, this.now());
+    let client: CloudClient;
+    try {
+      // The driver comes over the network when the browser has evicted it: a network that never
+      // answers fails this sync too, so setup waiting its turn never waits forever (the tenth
+      // review's seventh re-check).
+      client = await withinBound(this.cloudClientFor(token, url));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Sync failed.';
+      // Offline, a driver the browser no longer keeps cannot come: that is "offline", not its
+      // error, on the card and in what Sync now says (the eighth and ninth re-checks).
+      const offline = !this.isOnline();
+      if (epoch === this.cloudEpoch) {
+        const lastError = offline ? CLOUD_OFFLINE : message;
+        this.setState({ cloud: { ...this.state.cloud, syncing: false, lastError } });
+      }
+      return offline
+        ? { ran: false, reason: 'offline', pushed: 0, applied: 0, removed: 0, kept: 0, error: null }
+        : { ran: true, pushed: 0, applied: 0, removed: 0, kept: 0, error: message };
+    }
     this.setState({ cloud: { ...this.state.cloud, syncing: true } });
     let outcome: SyncOutcome;
     try {
@@ -2697,30 +3303,44 @@ export class AppStore {
         pushed: 0,
         applied: 0,
         removed: 0,
+        kept: 0,
         error: error instanceof Error ? error.message : 'Sync failed.',
       };
     }
     const cloudState = await readCloudState(db);
     const pending = await pendingCount(db);
+    // What the walk brought back is on disk whatever else happened; the state reloads from it
+    // when records arrived, or when the first walk ended after this screen last read the disk
+    // (in an attempt cut short, before a restart, or in another window): the screen must never
+    // show setup over a phone whose data is back (the tenth review's fifth re-check).
+    const walked = (await readDatabaseBirth(db).catch(() => null))?.walkedAt ?? null;
+    const reload =
+      outcome.applied + outcome.removed > 0 || (walked !== null && walked !== this.walkShown);
     // The token was saved or removed while this attempt was in flight: its result is stale.
-    if (epoch !== this.cloudEpoch) return outcome;
+    if (epoch !== this.cloudEpoch) {
+      if (reload) await this.hydrate();
+      return outcome;
+    }
     this.setState({
       cloud: {
         ...this.state.cloud,
         configured: true,
         syncing: false,
         pending,
-        notice: resolved.notice,
+        notice: liveNotice(resolved.notice, cloudState.lastSyncAt),
         lastSyncAt: cloudState.lastSyncAt,
         lastError: outcome.ran
           ? outcome.error
           : outcome.reason === 'offline'
-            ? 'Offline; it will sync when the device is back online.'
+            ? CLOUD_OFFLINE
             : cloudState.lastError,
       },
     });
-    // Records that arrived from the cloud are on disk; the state reloads from it.
-    if (outcome.applied + outcome.removed > 0) await this.hydrate();
+    // Records that arrived from the cloud are on disk; the state reloads from it. The reload also
+    // ends the wait for the first walk, in the same step as it shows what came back: ending the
+    // wait first showed setup for a moment, and a tap there wrote over the cloud copy (the tenth
+    // review's fourth re-check).
+    if (reload) await this.hydrate();
     return outcome;
   }
 
@@ -2768,6 +3388,64 @@ export class AppStore {
   }
 
   // ---------------------------------------------------------------- entered maxes
+
+  /**
+   * What saving a max would do to a lift today (Maintenance 25): the save's own rebuild, run on
+   * the session as it stands without saving anything, so the max sheet shows the target the plan
+   * will have. Null with no session to show it on, or an input that makes no max.
+   */
+  previewStrengthMax(exerciseId: string, entryId: string, input: MaxInput): MaxPreview | null {
+    const { session, profile } = this.state;
+    if (!session || !profile || session.status === 'completed') return null;
+    let maxes: StrengthMaxes;
+    try {
+      maxes = recordMax(this.state.strengthMaxes, exerciseId, input, profile.units, this.now());
+    } catch {
+      return null;
+    }
+    const entered = maxes.maxes[exerciseId];
+    if (!entered) return null;
+    const result = this.engine(
+      this.calibrationRequest({ type: 'max', exerciseId }, session, profile, 'Max preview', {
+        maxes,
+      }),
+    );
+    if (!result.ok || !result.max) return null;
+    const entry = allEntries(result.workout.blocks).find(
+      (candidate) => candidate.id === entryId && !isStopped(candidate),
+    );
+    const set = entry?.sets.find((candidate) => candidate.kind === 'working');
+    // The engine's own words for the target, as the lift's card shows them after the save: only
+    // where this save's rebuild set it. A lift under way, logged or set by hand keeps lines from
+    // before, about a max the lifter is now changing.
+    const setNow =
+      result.max === 'first' ||
+      result.max === 'moved' ||
+      result.max === 'held' ||
+      result.max === 'eased' ||
+      result.max === 'kept';
+    const evidence = setNow ? (entry?.progression?.evidence ?? []) : [];
+    const now = allEntries(session.workout.blocks)
+      .find((candidate) => candidate.id === entryId)
+      ?.sets.find((candidate) => candidate.kind === 'working');
+    const target = set
+      ? { weight: set.targetWeight, reps: set.targetReps, rir: set.targetRir }
+      : null;
+    return {
+      e1rm: enteredE1rm(entered),
+      outcome: result.max,
+      ...(result.maxHeldBy ? { heldBy: result.maxHeldBy } : {}),
+      target,
+      lines: evidence.filter(previewLine),
+      stays:
+        target !== null &&
+        now !== undefined &&
+        now.targetWeight === target.weight &&
+        now.targetReps[0] === target.reps[0] &&
+        now.targetReps[1] === target.reps[1] &&
+        now.targetRir === target.rir,
+    };
+  }
 
   /** Saves a max the lifter entered; unlogged sets of that lift in today's session start from it. */
   async recordStrengthMax(exerciseId: string, input: MaxInput): Promise<void> {
@@ -3005,7 +3683,10 @@ export class AppStore {
   }
 
   /** Remembers an offer the lifter took, so the coach does not make it twice in one session. */
-  acceptCoachSignal(signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'headline'>): void {
+  acceptCoachSignal(
+    signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'headline'> &
+      Partial<Pick<CoachSignal, 'occasion'>>,
+  ): void {
     const session = this.state.session;
     if (!session) return;
     const key = acceptKey(signal);
@@ -3141,12 +3822,33 @@ export class AppStore {
       TOKEN_MIRROR_KEY,
       TOKEN_MARK_KEY,
       TOKEN_LOG_KEY,
+      URL_MIRROR_KEY,
+      BARCODE_MIRROR_KEY,
     ].map((key) => ({
       key,
       present: this.storage.getItem(key) !== null,
     }));
     const tokenLog = await readTokenLog(db, this.storage);
     return { usageBytes, quotaBytes, persisted, counts, localKeys, tokenLog };
+  }
+
+  /**
+   * Asks once per open for this origin's storage to be kept (Maintenance 25). Chrome clears a
+   * best-effort origin's database first when the phone runs low on space, and it cleared this
+   * one; an installed app asking is usually granted without a prompt. Already kept: nothing asked.
+   */
+  async ensurePersistence(): Promise<boolean | null> {
+    if (this.persistenceAsked) return null;
+    this.persistenceAsked = true;
+    const manager =
+      typeof navigator !== 'undefined' && 'storage' in navigator ? navigator.storage : undefined;
+    if (!manager || typeof manager.persisted !== 'function') return null;
+    try {
+      if (await manager.persisted()) return true;
+      return typeof manager.persist === 'function' ? await manager.persist() : false;
+    } catch {
+      return null;
+    }
   }
 
   /** Asks the browser to protect this origin's data from eviction; null when unsupported. */

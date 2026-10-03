@@ -13,6 +13,7 @@ import {
   searchExercises,
 } from './catalog';
 import { ExerciseSchema } from './exerciseSchema';
+import { hasProductionMedia } from '../media/mediaManifest';
 
 describe('exercise catalog integrity', () => {
   it('is a strong catalog with unique ids', () => {
@@ -85,8 +86,40 @@ describe('exercise catalog integrity', () => {
     }
   });
 
-  it('keeps every exercise development-only until production media exists', () => {
-    expect(EXERCISES.every((exercise) => exercise.productionEnabled === false)).toBe(true);
+  it('marks an exercise production-ready exactly when it has a licensed demonstration of its own', () => {
+    for (const exercise of EXERCISES) {
+      expect(exercise.productionEnabled, exercise.id).toBe(hasProductionMedia(exercise));
+    }
+    expect(EXERCISES.filter((exercise) => exercise.productionEnabled)).toHaveLength(72);
+  });
+
+  // Maintenance 25, item 7: short, plain How-to text, the owner's lengths.
+  it('keeps every How to to setup, two to four steps, the cues that matter and what to avoid', () => {
+    for (const exercise of EXERCISES) {
+      const { setup, execution, cues, mistakes, range } = exercise.instructions;
+      expect(setup.length, exercise.id).toBeGreaterThanOrEqual(1);
+      expect(setup.length, exercise.id).toBeLessThanOrEqual(3);
+      expect(execution.length, exercise.id).toBeGreaterThanOrEqual(2);
+      expect(execution.length, exercise.id).toBeLessThanOrEqual(4);
+      expect(cues.length, exercise.id).toBeGreaterThanOrEqual(1);
+      expect(cues.length, exercise.id).toBeLessThanOrEqual(3);
+      expect(mistakes.length, exercise.id).toBeGreaterThanOrEqual(1);
+      expect(mistakes.length, exercise.id).toBeLessThanOrEqual(3);
+      for (const line of [
+        ...setup,
+        ...execution,
+        ...cues,
+        ...mistakes,
+        ...(range ? [range] : []),
+      ]) {
+        // A line is a plain sentence a beginner reads between sets, no shorthand: a helper, not
+        // a spotter, and the bar put back, not racked (the ninth and tenth reviews).
+        expect(line.length, `${exercise.id}: ${line}`).toBeLessThanOrEqual(120);
+        expect(line, exercise.id).not.toMatch(
+          /\b(RIR|RPE|ROM|ATG|TUT|eccentric|concentric|scapula|spotter|rack the bar)\b/i,
+        );
+      }
+    }
   });
 
   it('carries the metadata later phases need', () => {

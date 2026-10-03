@@ -49,6 +49,28 @@ describe('custom content schemas', () => {
     expect(catalog.productionEnabled).toBe(false);
   });
 
+  // Maintenance 25, item 7: How to has key cues and no breathing line. A breathing note stored
+  // with an exercise made before then is its key cue; none leaves the cues empty.
+  it('makes a stored breathing note the key cue, and keeps setup and steps as written', () => {
+    const noted = customToCatalogExercise(
+      CustomExerciseSchema.parse({
+        ...minimal,
+        instructions: {
+          setup: ['Bar in the corner.'],
+          execution: ['Press up and in.'],
+          breathing: '  Breathe out as you press.  ',
+          mistakes: [],
+        },
+      }),
+    );
+    expect(noted.instructions.cues).toEqual(['Breathe out as you press.']);
+    expect(noted.instructions.setup).toEqual(['Bar in the corner.']);
+    expect(ExerciseSchema.safeParse(noted).success).toBe(true);
+    const plain = customToCatalogExercise(CustomExerciseSchema.parse(minimal));
+    expect(plain.instructions.cues).toEqual([]);
+    expect('breathing' in plain.instructions).toBe(false);
+  });
+
   it('validates custom instructions and size-capped custom media', () => {
     expect(
       CustomInstructionSchema.parse({

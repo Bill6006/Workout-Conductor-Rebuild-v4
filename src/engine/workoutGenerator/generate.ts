@@ -1,4 +1,5 @@
 import { muscleLoads, type MuscleLoad } from '../alternatives/signals';
+import { FittingLog, SHORTENED_RESTS, gaveBackLine, trimmedLine } from './fittingLog';
 import {
   DELOAD_LOAD_SCALE,
   DELOAD_RIR_DELTA,
@@ -589,8 +590,7 @@ export function withSwapLines(
   const others = reasons.filter((line) => !isSwapLine(line));
   const first = reasons.findIndex(isSwapLine);
   const lead = others.reduce(
-    (last, line, index) =>
-      line.includes(' leads as the ') || line.startsWith('Kept ') ? index : last,
+    (last, line, index) => (isMainLiftLine(line) || line.startsWith('Kept ') ? index : last),
     Math.min(others.length, 3) - 1,
   );
   const at = first >= 0 ? first : lead + 1;
@@ -730,9 +730,12 @@ export function scaleForDeload(
   const scale = adjust?.loadScale;
   if (!scale || scale === 1 || target.weight === null) return target;
   const weight = Math.max(step, Math.round((target.weight * scale) / step) * step);
+  // The estimate a target was rounded from is lighter too (Maintenance 25): at the heaviest weight
+  // here it no longer asks for more than that weight when the deload takes it under.
+  const exact = target.exact === undefined ? {} : { exact: target.exact * scale };
   // A light load a tenth off can round back to itself: the line only where the load is lighter.
-  if (weight >= target.weight) return target;
-  return { ...target, weight, evidence: [...target.evidence, deloadLine(scale)] };
+  if (weight >= target.weight) return { ...target, ...exact };
+  return { ...target, ...exact, weight, evidence: [...target.evidence, deloadLine(scale)] };
 }
 
 function deloadLine(scale: number): string {
@@ -1158,7 +1161,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     });
   }
 
-  const fittingSteps: string[] = [];
+  // Each fitting outcome once, however many passes it took (Maintenance 25).
+  const fitLog = new FittingLog();
   const generalWarmup =
     constraints.generalWarmupMinutesOverride ?? generalWarmupMinutes(targetMinutes);
   const estimate = (): TimeBreakdown => estimateWorkout(blocks, generalWarmup, exerciseOf, isDone);
@@ -1196,7 +1200,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const dropBlock = (block: WorkoutBlock, why: string) => {
     blocks = blocks.filter((candidate) => candidate.id !== block.id);
     leftOut.push(block);
-    fittingSteps.push(`Left out ${block.label} ${why}.`);
+    fitLog.add(`Left out ${block.label} ${why}.`);
   };
   // A circuit's three moves shrink to a pair before the circuit goes whole (Maintenance 24): a
   // pair is the least that still alternates moves, and paired moves keep their volume in less
@@ -1218,7 +1222,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     block.label = `A1 ${names[0]} + A2 ${names[1]}`;
     block.rounds = Math.min(...block.entries.map((entry) => workingSets(entry).length));
     leftOut.push(straightBlock(gone, exerciseOf));
-    fittingSteps.push(`Left out ${exerciseOf(gone.exerciseId).name} from the circuit ${why}.`);
+    fitLog.add(`Left out ${exerciseOf(gone.exerciseId).name} from the circuit ${why}.`);
     return true;
   };
 
@@ -1260,7 +1264,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       );
       blocks = blocks.filter((block) => !block.entries.some((entry) => memberIds.has(entry.id)));
       blocks.splice(firstIndex, 0, circuit);
-      fittingSteps.push(`Ran ${members.length} isolation moves as a ${rounds}-round circuit.`);
+      fitLog.add(`Ran ${members.length} isolation moves as a ${rounds}-round circuit.`);
     }
   }
 
@@ -1302,7 +1306,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
           (block) => block.entries[0]?.id !== a.id && block.entries[0]?.id !== b.id,
         );
         blocks.splice(indexA, 0, superset);
-        fittingSteps.push(`Paired ${exerciseA.name} with ${exerciseB.name} as a superset.`);
+        fitLog.add(`Paired ${exerciseA.name} with ${exerciseB.name} as a superset.`);
         pairs += 1;
         break;
       }
@@ -1339,7 +1343,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
         }
       }
     }
-    if (changed) fittingSteps.push('Shortened rests toward the realistic minimum.');
+    if (changed) fitLog.add(SHORTENED_RESTS);
     return changed;
   };
   const remainingWorking = (entry: WorkoutEntry) =>
@@ -1387,7 +1391,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     trimmed.push({ entry: target, set: lastWorking, at: target.sets.indexOf(lastWorking) });
     target.sets = target.sets.filter((set) => set !== lastWorking);
     syncRoundsOf(target);
-    fittingSteps.push(`Trimmed one set from ${exerciseOf(target.exerciseId).name}.`);
+    const trimmedName = exerciseOf(target.exerciseId).name;
+    fitLog.add(`trimmed|${trimmedName}`, trimmedLine(trimmedName));
     return true;
   };
 
@@ -1409,7 +1414,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       candidate.sets.filter((set) => set.kind === 'working').length;
     const sets = count(move);
     const fewer = sets < count(entry) ? ` at ${sets} ${sets === 1 ? 'set' : 'sets'}` : '';
-    fittingSteps.push(
+    fitLog.add(
       `Kept ${exerciseOf(entry.exerciseId).name} on its own${fewer}: the minutes left fit it.`,
     );
   };
@@ -1445,9 +1450,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       entry.sets = [...sets.slice(0, at), set, ...sets.slice(at)];
       syncRoundsOf(entry);
       if (estimate().totalMinutes <= limit) {
-        fittingSteps.push(
-          `Gave ${exerciseOf(entry.exerciseId).name} back a set: the minutes left fit it.`,
-        );
+        const name = exerciseOf(entry.exerciseId).name;
+        fitLog.add(`gave back|${name}`, gaveBackLine(name));
         continue;
       }
       entry.sets = sets;
@@ -1470,7 +1474,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       }
     }
     leftOut.push(row);
-    fittingSteps.push(`Left out ${row.label} so the session fits ${targetMinutes} min.`);
+    fitLog.add(`Left out ${row.label} so the session fits ${targetMinutes} min.`);
     if (placed) onItsOwn(placed.entry, placed.move);
     else giveBackTrimmed();
   };
@@ -1550,7 +1554,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
         target.dropSet = false;
         target.sets.pop();
       } else {
-        fittingSteps.push(
+        fitLog.add(
           `Added a drop set to ${exerciseOf(target.exerciseId).name} for extra volume in less time.`,
         );
       }
@@ -1604,10 +1608,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     `Priority muscles today: ${topPriorities.map((priority) => priority.reason).join('; ')}.`,
     `Built for ${location?.name ?? 'your place'} from the equipment saved there, every pick checked by the conflict engine.`,
   ];
-  if (anchorExercise && anchor)
-    reasons.push(
-      `${anchorExercise.name} leads as the ${roleLabel(anchor.role)} lift with full rests and warm-up ramp sets.`,
-    );
+  if (anchorExercise && anchor) reasons.push(mainLiftLine(anchorExercise.name, anchor.role, true));
   if (keep.length > 0)
     reasons.push(
       `Kept ${keep.length} ${keep.length === 1 ? 'exercise' : 'exercises'} in place: logged sets and pinned picks never move.`,
@@ -1661,7 +1662,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const fittedLabel =
     constraints.targetMinutesOverride !== undefined
       ? `, fitted to the ${targetMinutes} min left`
-      : fittingSteps.length > 0 && duration !== 'default'
+      : fitLog.size > 0 && duration !== 'default'
         ? `, fitted to ${targetMinutes} min`
         : '';
   const summary = `${template.title}: ${count} exercises in about ${Math.round(time.totalMinutes)} min${anchorExercise ? `, ${anchorExercise.name} first` : ''}${fittedLabel}.`;
@@ -1694,7 +1695,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
             ? 'Short general warm-up, then one ramp set on the main lift.'
             : `${generalWarmup} min general warm-up, then ramp sets on the main lifts; ramp sets never count as working sets.`,
     },
-    explanation: { summary, reasons, fittingSteps, time },
+    explanation: { summary, reasons, fittingSteps: fitLog.lines(), time },
     confidence:
       exposure.sessionsLast14Days >= 3
         ? 'high'
@@ -1733,6 +1734,28 @@ function styleLine(profile: UserProfile): string {
   return isAutoStyle(profile)
     ? `${info.session} (${info.name}, picked from your goals)`
     : info.session;
+}
+
+/**
+ * The line on the plan's main lift. It leads while it comes first; moved later (busy equipment,
+ * or by hand) it is still the main lift, and the line says so (Maintenance 25).
+ */
+export function mainLiftLine(name: string, role: TrainingRole, leads: boolean): string {
+  return leads
+    ? `${name} leads as the ${roleLabel(role)} lift with full rests and warm-up ramp sets.`
+    : `${name} is the ${roleLabel(role)} lift, with full rests and warm-up ramp sets.`;
+}
+
+const MAIN_LIFT_LINE =
+  /^(.+?) (?:leads as|is) the .+ lift,? with full rests and warm-up ramp sets\.$/;
+
+/** The lift a main-lift line names, or null for any other line. */
+export function mainLiftName(line: string): string | null {
+  return MAIN_LIFT_LINE.exec(line)?.[1] ?? null;
+}
+
+export function isMainLiftLine(line: string): boolean {
+  return MAIN_LIFT_LINE.test(line);
 }
 
 function roleLabel(role: TrainingRole): string {

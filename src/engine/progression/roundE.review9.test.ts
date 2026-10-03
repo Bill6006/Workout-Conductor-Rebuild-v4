@@ -265,10 +265,11 @@ describe('ramps after four ramps, at a place with no saved weights', () => {
     );
     const moved = entryFor(act(gym, twice, done, { type: 'location' }), row);
     // The plan's own ramp to 30 lb, above the 5 lb ramps done.
+    // The row runs two working sets at the light dumbbells: at its effort since Maintenance 25,
+    // its sets take longer, and the full-body plan fits them to the time.
     expect(toCome(moved, done).map((set) => [set.kind, set.targetWeight])).toEqual([
       ['warmup', 15],
       ['warmup', 25],
-      ['working', 30],
       ['working', 30],
       ['working', 30],
     ]);
@@ -292,9 +293,10 @@ describe('ramps after four ramps, at a place with no saved weights', () => {
       { weight: 20, reps: 8 },
     );
     const moved = entryFor(act(gym, once, done, { type: 'location' }), row);
+    // The row runs two working sets at the light dumbbells: at its effort since Maintenance 25,
+    // its sets take longer, and the full-body plan fits them to the time.
     expect(toCome(moved, done).map((set) => [set.kind, set.targetWeight])).toEqual([
       ['warmup', 25],
-      ['working', 30],
       ['working', 30],
       ['working', 30],
     ]);
@@ -394,9 +396,10 @@ describe('the ramp put back after a long break', () => {
     done = logSets(entryFor(once, row), [first.index], done);
     const back = act(lightHome, once, done, { type: 'resume', awaySeconds: 25 * 60 });
     const moved = entryFor(act(gym, back, done, { type: 'location' }), row);
+    // The row runs two working sets at the light dumbbells: at its effort since Maintenance 25,
+    // its sets take longer, and the full-body plan fits them to the time.
     expect(toCome(moved, done).map((set) => [set.kind, set.targetWeight])).toEqual([
       ['warmup', 20],
-      ['working', 30],
       ['working', 30],
     ]);
   });

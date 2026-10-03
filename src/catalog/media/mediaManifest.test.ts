@@ -18,10 +18,27 @@ describe('media manifest', () => {
       for (const file of [asset.poster, asset.demo]) {
         const full = path.join(PUBLIC, file);
         expect(existsSync(full), `${file} must exist`).toBe(true);
-        expect(readFileSync(full, 'utf8')).toContain('PLACEHOLDER');
+        // A diagram, labelled as one (the ninth review), never as a placeholder.
+        expect(readFileSync(full, 'utf8')).toContain('aria-label="Diagram: ');
+        expect(readFileSync(full, 'utf8')).not.toMatch(/PLACEHOLDER/i);
       }
       expect(readFileSync(path.join(PUBLIC, asset.demo), 'utf8')).toContain('<animateTransform');
     }
+  });
+
+  it('gives Dead Bug a diagram of its own, on its back, where its pattern’s would plank', () => {
+    const deadBug = EXERCISES.find((exercise) => exercise.id === 'dead-bug')!;
+    const asset = mediaFor(deadBug);
+    expect(asset.poster).toBe('media/placeholders/dead-bug.svg');
+    expect(asset.demo).toBe('media/placeholders/dead-bug-loop.svg');
+    const svg = readFileSync(path.join(PUBLIC, asset.demo), 'utf8');
+    expect(svg).toContain('aria-label="Diagram: Dead bug"');
+    expect(svg).toContain('<animateTransform');
+    // The pattern's own diagram is the plank, which a Dead Bug is not.
+    const plank = MEDIA_ASSETS['placeholder-core-anti-extension']!;
+    expect(readFileSync(path.join(PUBLIC, plank.poster), 'utf8')).not.toBe(
+      readFileSync(path.join(PUBLIC, asset.poster), 'utf8'),
+    );
   });
 
   it('resolves every catalog exercise to a working demonstration', () => {

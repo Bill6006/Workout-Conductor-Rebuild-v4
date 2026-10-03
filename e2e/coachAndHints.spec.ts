@@ -27,7 +27,7 @@ async function capture(page: Page, testInfo: TestInfo, name: string, target?: Lo
 
 /** A fresh backup, so the coach's save reminder does not outrank what the test is about. */
 async function backUp(page: Page): Promise<void> {
-  await page.goto('./#/settings');
+  await page.goto('./#/settings/backup');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
   await download;
@@ -56,7 +56,7 @@ const STALLED_BENCH = Buffer.from(
 
 /** Four bench sessions at the same load and effort, imported as older history. */
 async function importStalledBench(page: Page): Promise<void> {
-  await page.goto('./#/settings');
+  await page.goto('./#/settings/older-exports');
   await page.getByTestId('legacy-file-input').setInputFiles({
     name: 'old-history.json',
     mimeType: 'application/json',

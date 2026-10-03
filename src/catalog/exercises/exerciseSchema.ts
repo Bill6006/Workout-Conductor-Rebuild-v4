@@ -127,11 +127,18 @@ export const ExerciseSchema = z.object({
   jointStress: z.partialRecord(z.enum(JOINTS), z.enum(STRESS_LEVELS)),
   limitationFlags: z.array(z.enum(LIMITATION_FLAGS)),
   substitutions: z.array(z.string()),
+  /**
+   * How to do it (Maintenance 25, item 7): setup, the steps, the few cues that matter most, the
+   * mistakes to avoid, and how far to go where that matters. Each catalog exercise's text matches
+   * its demonstration and is sourced in docs/exercise-howto-sources.md; the catalog keeps to the
+   * owner's lengths (catalog.test.ts), and a custom exercise may say more.
+   */
   instructions: z.object({
     setup: z.array(text).min(1).max(5),
     execution: z.array(text).min(1).max(6),
-    breathing: text,
+    cues: z.array(text).max(4),
     mistakes: z.array(text).min(1).max(5),
+    range: text.optional(),
   }),
   difficulty: z.enum(DIFFICULTIES),
   progressionFamily: z.string().min(1),

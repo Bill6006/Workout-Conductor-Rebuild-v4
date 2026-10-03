@@ -35,17 +35,24 @@ function firstNumber(text: string | null): number {
   return Number(/\d+(?:\.\d+)?/.exec(text ?? '')?.[0]);
 }
 
-/** The total a plate line loads: "Empty bar · 45 lb", or "Bar 45 + 45, 25 each side · 185 lb". */
-function loadedTotal(line: string): number | null {
-  const empty = /^Empty bar · (\d+(?:\.\d+)?) (?:lb|kg)$/.exec(line.trim());
+/**
+ * The total the plates under the logger load, from what the drawing says: "Load each side with 45
+ * and 25, on the 45 lb bar: 185 lb.", "Load each side with 3 × 45 and 10, …", or the empty bar.
+ */
+function loadedTotal(said: string): number | null {
+  const empty = /^Empty bar[,·] (\d+(?:\.\d+)?) (?:lb|kg)\.?$/.exec(said.trim());
   if (empty) return Number(empty[1]);
-  const match = /^Bar (\d+(?:\.\d+)?) \+ (.+) each side · (\d+(?:\.\d+)?) (?:lb|kg)$/.exec(
-    line.trim(),
-  );
+  const match =
+    /^Load each side with (.+), on the (\d+(?:\.\d+)?) (?:lb|kg) bar: (\d+(?:\.\d+)?) (?:lb|kg)\.$/.exec(
+      said.trim(),
+    );
   if (!match) return null;
-  const perSide = (match[2] ?? '').split(',').reduce((sum, part) => sum + Number(part.trim()), 0);
-  const total = Number(match[1]) + perSide * 2;
-  // The line states its total, and the plates it names add up to it.
+  const perSide = (match[1] ?? '').split(/, | and /).reduce((sum, part) => {
+    const run = /^(\d+) × (\d+(?:\.\d+)?)$/.exec(part.trim());
+    return sum + (run ? Number(run[1]) * Number(run[2]) : Number(part.trim()));
+  }, 0);
+  const total = Number(match[2]) + perSide * 2;
+  // The drawing states its total, and the plates it names add up to it.
   return total === Number(match[3]) ? total : null;
 }
 
@@ -80,9 +87,13 @@ test.describe('logger fixes', () => {
     const dial = firstNumber(await card.getByTestId('logger-weight').textContent());
     expect(dial).toBeGreaterThan(0);
     expect(dial).not.toBe(rampWeight);
-    const plateLine = card.getByText(/^(Bar \d|Empty bar)/).first();
-    await expect(plateLine).toBeVisible();
-    expect(loadedTotal((await plateLine.textContent()) ?? '')).toBe(dial);
+    const plates = card.getByTestId('logger-helper').getByTestId('plate-line');
+    await expect(plates).toBeVisible();
+    const said =
+      (await plates.getAttribute('role')) === 'img'
+        ? await plates.getAttribute('aria-label')
+        : await plates.textContent();
+    expect(loadedTotal(said ?? '')).toBe(dial);
 
     // Turn the reps down to zero: the button says what will happen.
     const decrease = card.getByRole('button', { name: 'Decrease reps' });

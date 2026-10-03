@@ -24,15 +24,16 @@ test.describe('exercise library', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Lat Pulldown' });
     await expect(dialog).toBeVisible();
-    const demo = dialog.getByTestId('exercise-demo');
-    await expect(demo).toHaveAttribute('data-playing', 'true');
-    // The loop is fetched over the network on the live site; poll until it has loaded.
+    // Its own licensed clip (Maintenance 25, item 7), fetched whole, then playing.
+    const demo = dialog.locator('video[data-testid="exercise-demo"]');
+    await expect(demo).toHaveAttribute('data-playing', 'true', { timeout: 10_000 });
     await expect
-      .poll(() => demo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0), {
+      .poll(() => demo.evaluate((video: HTMLVideoElement) => video.currentTime), {
         timeout: 10_000,
       })
-      .toBe(true);
-    await expect(dialog.getByRole('heading', { name: 'Execution' })).toBeVisible();
+      .toBeGreaterThan(0);
+    await expect(dialog.getByTestId('demo-credit')).toHaveText('Video: FitnessScape · CC BY 3.0');
+    await expect(dialog.getByRole('heading', { name: 'Do it' })).toBeVisible();
     await expect(
       dialog.getByRole('heading', { name: /Alternatives, best match first/ }),
     ).toBeVisible();

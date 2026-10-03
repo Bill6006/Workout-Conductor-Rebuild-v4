@@ -3,6 +3,7 @@ import {
   MAX_PROMPT_SNOOZE_DAYS,
   convertWeight,
   emptyMaxes,
+  enteredE1rm,
   enteredMaxFor,
   maxFromSet,
   maxPromptHidden,
@@ -15,14 +16,37 @@ import { estimateOneRepMax } from './progression';
 const NOW = '2026-09-10T12:00:00.000Z';
 
 describe('entered maxes', () => {
-  it('turns a remembered set into a max the same way the progression engine does', () => {
+  it('turns a remembered set into a max with Epley, every rep counted up to thirty', () => {
     expect(maxFromSet(135, 8)).toBe(171);
     expect(maxFromSet(135, 8)).toBe(estimateOneRepMax(135, 8));
-    // Reps past twelve add nothing: the formula stops being useful there.
-    expect(maxFromSet(100, 20)).toBe(140);
+    // Maintenance 25, the owner's item 36: a set of 20 or 25 is not a set of 12. Reps count up to
+    // thirty, as far as a light set run to its reserve is asked for (docs/research/entered-maxes.md).
+    expect(maxFromSet(100, 20)).toBe(166.7);
+    expect(maxFromSet(20, 25)).toBe(36.7);
+    expect(maxFromSet(100, 30)).toBe(200);
+    expect(maxFromSet(100, 45)).toBe(200);
+    expect(maxFromSet(20, 20)).not.toBe(maxFromSet(20, 15));
     expect(convertWeight(100, 'kg', 'lb')).toBe(220.5);
     expect(convertWeight(220.5, 'lb', 'kg')).toBe(100);
     expect(convertWeight(100, 'lb', 'lb')).toBe(100);
+  });
+
+  it('reads a set entered before Maintenance 25 by today’s rule, and a typed max as typed', () => {
+    // Saved with the old cap: 20 lb for 20 reps was stored as 28.
+    const saved = parseStrengthMaxes({
+      maxes: {
+        'incline-dumbbell-press': {
+          e1rm: 28,
+          units: 'lb',
+          enteredAt: NOW,
+          from: { weight: 20, reps: 20 },
+        },
+        'barbell-bench-press': { e1rm: 225, units: 'lb', enteredAt: NOW, from: null },
+      },
+    });
+    expect(enteredMaxFor(saved, 'incline-dumbbell-press', 'lb')).toBe(33.3);
+    expect(enteredE1rm(saved.maxes['incline-dumbbell-press']!)).toBe(33.3);
+    expect(enteredMaxFor(saved, 'barbell-bench-press', 'lb')).toBe(225);
   });
 
   it('records a max from a set or a number, in the units of the day, and reads it back in any units', () => {
@@ -81,5 +105,29 @@ describe('entered maxes', () => {
     expect(Object.keys(parsed.maxes)).toEqual(['good']);
     expect(parsed.maxes.good?.from).toEqual({ weight: 120, reps: 8 });
     expect(parsed.prompts).toEqual({ snoozed: { until: NOW }, never: { until: null } });
+  });
+});
+
+describe('a saved recent set that says nothing (Maintenance 25)', () => {
+  it('leaves the saved max standing: no weight or no reps is no set', () => {
+    for (const from of [
+      { weight: 0, reps: 20 },
+      { weight: -50, reps: 5 },
+      { weight: 100, reps: 0 },
+      { weight: Number.NaN, reps: 8 },
+    ]) {
+      const maxes = parseStrengthMaxes({
+        maxes: {
+          'barbell-bench-press': {
+            e1rm: 225,
+            units: 'lb',
+            enteredAt: '2026-09-01T00:00:00.000Z',
+            from,
+          },
+        },
+      });
+      expect(maxes.maxes['barbell-bench-press']?.from).toBeNull();
+      expect(enteredMaxFor(maxes, 'barbell-bench-press', 'lb')).toBe(225);
+    }
   });
 });

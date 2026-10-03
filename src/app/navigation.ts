@@ -48,3 +48,16 @@ export function parseRouteId(hash: string): RouteId {
   const segment = hash.replace(/^#\/?/, '').split(/[/?]/)[0]?.trim().toLowerCase();
   return segment && isRouteId(segment) ? segment : DEFAULT_ROUTE_ID;
 }
+
+/**
+ * The part of a screen a link opens (Maintenance 25): "#/settings/schedule" opens the Schedule
+ * row of Settings. Null when the hash names none.
+ */
+export function routeSection(hash: string): string | null {
+  const section = hash.replace(/^#\/?/, '').split(/[?]/)[0]?.split('/')[1]?.trim().toLowerCase();
+  return section ? section : null;
+}
+
+export function sectionHref(id: RouteId, section: string): string {
+  return `#/${id}/${section}`;
+}

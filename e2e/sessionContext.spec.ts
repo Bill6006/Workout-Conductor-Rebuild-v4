@@ -83,15 +83,16 @@ test.describe('session context', () => {
     let found = false;
     for (let index = 1; index < count && !found; index += 1) {
       await rows.nth(index).getByRole('button').click();
-      await page.getByRole('tab', { name: 'How to' }).first().click();
-      const evidence = page.getByTestId('progression-evidence').first();
+      await page.getByTestId('options-tab').first().click();
+      const evidence = page.getByRole('dialog').getByTestId('progression-evidence');
       const text = (await evidence.textContent()) ?? '';
       if (/From your Barbell Bench Press \(about 216 lb max\)/.test(text)) {
         found = true;
         await expect(evidence).toContainText('the first target sits under it');
         await capture(page, testInfo, 'workout-cross-estimate', evidence);
       }
-      await page.getByRole('tab', { name: 'How to' }).first().click();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toBeHidden();
     }
     expect(found).toBe(true);
   });

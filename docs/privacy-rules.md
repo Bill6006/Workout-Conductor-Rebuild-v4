@@ -33,10 +33,12 @@ storage on that device: two copies, in IndexedDB and in local storage, both on t
 - Small settings, active-session metadata, and the second copy of the cloud token with its log:
   localStorage in the user's browser.
 - Backups: exported by the user to a file they control. Never uploaded anywhere by the app.
-- A place's membership barcode (Maintenance 18): the picture and the code read from it stay in
-  the `device` store on the phone they were added on. Never in the cloud copy, a backup, an
-  automatic snapshot, or an export; a restore leaves it as it is. Tests and screenshots use only
-  pictures and codes the tests draw themselves.
+- A place's membership barcode (Maintenance 18): the picture and the code read from it stay on
+  the phone they were added on, twice since Maintenance 25: in the `device` store and in local
+  storage (`wc.v1.barcodes`; a big picture as a smaller copy, or the code alone), so a browser
+  that clears the database brings it back. Never in the cloud copy, a backup, an automatic
+  snapshot, or an export; a restore leaves it as it is. Tests and screenshots use only pictures
+  and codes the tests draw themselves.
 - Sounds and notifications (Maintenance 14): made by the app on the device, with no server and
   no push service behind them. The two switches live in the device's local settings, outside
   backups and the cloud copy.

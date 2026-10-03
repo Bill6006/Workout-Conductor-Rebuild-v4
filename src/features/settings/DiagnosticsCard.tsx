@@ -1,7 +1,6 @@
-import { buildInfo, formatBuiltAt, isRealCommit } from '../../app/buildInfo';
+import { buildInfo, formatBuildMarker, formatBuiltAt, isRealCommit } from '../../app/buildInfo';
 import { CURRENT_PHASE, CURRENT_PHASE_GATE, getPhase } from '../../app/phases';
 import { ACTIONS_URL, REPO_URL, STATUS_URL, commitUrl } from '../../app/projectLinks';
-import { Card } from '../../components/Card/Card';
 import { FactList, type Fact } from '../../components/FactList/FactList';
 import { useAppState } from '../../core/state/useAppStore';
 import { formatDateTime } from '../../core/time/clock';
@@ -38,20 +37,21 @@ export function DiagnosticsCard() {
             ? `Unavailable: ${state.error}`
             : 'Opening…',
     },
+    // The counts and the last verified save live under Storage and save check (Maintenance 25).
     { label: 'Profile', value: state.profile ? 'Saved' : 'Not saved' },
-    { label: 'Places', value: String(state.locations.length) },
-    { label: 'Workouts', value: String(state.workoutCount) },
-    {
-      label: 'Last verified save',
-      value: state.lastReceipt
-        ? `${state.lastReceipt.store} · ${formatDateTime(state.lastReceipt.verifiedAt)} · ${state.lastReceipt.bytes} bytes`
-        : 'none this session',
-    },
     { label: 'Setup completed', value: formatDateTime(state.localSettings.onboardingCompletedAt) },
   ];
 
   return (
-    <Card eyebrow="Diagnostics" title={`Phase ${phase.number} · ${phase.name}`}>
+    <>
+      <p className={styles.aboutPhase}>
+        Phase {phase.number} · {phase.name}
+      </p>
+      {/* The build this app is running, here alone since Maintenance 25: an installed app is
+          checked against the deployed build by it. */}
+      <p className={`${styles.mono} ${styles.buildMarker}`} data-testid="build-marker">
+        {formatBuildMarker(buildInfo)}
+      </p>
       <FactList
         items={[
           {
@@ -96,6 +96,6 @@ export function DiagnosticsCard() {
           Actions
         </a>
       </div>
-    </Card>
+    </>
   );
 }

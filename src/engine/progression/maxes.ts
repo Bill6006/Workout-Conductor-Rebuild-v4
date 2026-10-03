@@ -1,11 +1,14 @@
 import type { UnitSystem } from '../../core/validation/profile';
+import { EFFORT_REPS_CEILING } from './effortCeiling';
 
 /**
  * Maxes the lifter entered by hand, kept in the meta store and backed up.
  * A max is asked for once, on a lift with no history, through one small link
- * on the card; it can be snoozed for a week or declined for good per lift.
- * Once a working set is logged, the running estimate from logged sets takes
- * over and the entered max is only a memory.
+ * on the card; it can be snoozed for a week or declined for good per lift, and
+ * entered or updated from Options on any lift. A lift with no history takes its
+ * first target from it; on a lift with logged sets it counts while it is newer
+ * than the lift's last session (`withEnteredMax` and the return after a break
+ * in `progression.ts`).
  */
 
 export const STRENGTH_MAXES_ID = 'strength-maxes';
@@ -56,8 +59,15 @@ export function parseStrengthMaxes(raw: unknown): StrengthMaxes {
       if (typeof e1rm !== 'number' || !Number.isFinite(e1rm) || e1rm <= 0) continue;
       if (units !== 'lb' && units !== 'kg') continue;
       if (typeof enteredAt !== 'string') continue;
+      // A set with no weight or no reps says nothing (Maintenance 25): the saved estimate stands.
       const set =
-        isRecord(from) && typeof from.weight === 'number' && typeof from.reps === 'number'
+        isRecord(from) &&
+        typeof from.weight === 'number' &&
+        Number.isFinite(from.weight) &&
+        from.weight > 0 &&
+        typeof from.reps === 'number' &&
+        Number.isFinite(from.reps) &&
+        from.reps >= 1
           ? { weight: from.weight, reps: from.reps }
           : null;
       result.maxes[exerciseId] = { e1rm, units, enteredAt, from: set };
@@ -80,9 +90,22 @@ export function convertWeight(weight: number, from: UnitSystem, to: UnitSystem):
   return Math.round(converted * 10) / 10;
 }
 
-/** Epley, with reps capped at twelve where the formula stops being useful (same as the progression engine). */
+/**
+ * The estimated max a recent set gives (Epley), every rep counted up to thirty (Maintenance 25):
+ * the same reach the rules give a light set run to its reserve. Capped at twelve, a set of 20 or
+ * 25 read as 12, and a lifter at light dumbbells could not say how strong they are
+ * (docs/research/entered-maxes.md).
+ */
 export function maxFromSet(weight: number, reps: number): number {
-  return Math.round(weight * (1 + Math.min(Math.max(reps, 1), 12) / 30) * 10) / 10;
+  return Math.round(weight * (1 + Math.min(Math.max(reps, 1), EFFORT_REPS_CEILING) / 30) * 10) / 10;
+}
+
+/**
+ * An entered max's estimate: a recent set read by today's rule (Maintenance 25), so a set entered
+ * before the rule changed counts its every rep too; a max typed as a max as typed.
+ */
+export function enteredE1rm(entry: Pick<EnteredMax, 'e1rm' | 'from'>): number {
+  return entry.from ? maxFromSet(entry.from.weight, entry.from.reps) : entry.e1rm;
 }
 
 /** The entered max for a lift in the requested units, or null. */
@@ -93,7 +116,7 @@ export function enteredMaxFor(
 ): number | null {
   const entry = maxes.maxes[exerciseId];
   if (!entry) return null;
-  return convertWeight(entry.e1rm, entry.units, units);
+  return convertWeight(enteredE1rm(entry), entry.units, units);
 }
 
 export function recordMax(

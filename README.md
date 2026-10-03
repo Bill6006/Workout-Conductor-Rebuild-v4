@@ -64,4 +64,8 @@ safe screenshots. See [docs/privacy-rules.md](docs/privacy-rules.md); the rules 
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+The code is MIT; see [LICENSE](LICENSE). The exercise demonstrations in `public/media/exercises/`
+are not covered by it: each keeps its own licence (public domain, CC BY 3.0, or CC BY-SA 4.0, with
+the adaptations of CC BY-SA originals shared under CC BY-SA 4.0), listed file by file with author,
+source and changes in [docs/media-license-register.md](docs/media-license-register.md) and in
+[public/media/exercises/LICENSE.md](public/media/exercises/LICENSE.md).

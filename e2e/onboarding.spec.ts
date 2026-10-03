@@ -91,7 +91,7 @@ test.describe('onboarding', () => {
 test.describe('settings and plan', () => {
   test('settings changes autosave with verification and survive a reload', async ({ page }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/programming');
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
     const dropSets = page.getByRole('switch', { name: /Allow drop sets/ });
     await expect(dropSets).toHaveAttribute('aria-checked', 'true');
@@ -106,6 +106,8 @@ test.describe('settings and plan', () => {
       'aria-checked',
       'false',
     );
+    // The storage facts are under About (Maintenance 25).
+    await page.getByTestId('row-about').click();
     await expect(page.getByText('IndexedDB ready')).toBeVisible();
   });
 
@@ -130,7 +132,7 @@ test.describe('settings and plan', () => {
 
   test('a Full Backup JSON exports and imports back with a preview', async ({ page }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/backup');
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
     const download = await downloadPromise;

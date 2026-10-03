@@ -17,15 +17,22 @@ export const PULL_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['lat-pulldown', 'chin-up', 'band-lat-pulldown'],
     setup: [
-      'Overhand grip just wider than the shoulders, hanging with straight arms.',
-      'Pull the shoulder blades down before bending the elbows.',
+      'Grip the bar with palms facing away, hands just wider than your shoulders.',
+      'Hang with straight arms and your stomach tight; cross your ankles if it helps.',
     ],
     execution: [
-      'Drive the elbows down and back until the chin clears the bar.',
-      'Lower all the way to a full hang under control.',
-      'Add a weight vest or belt once you pass twelve clean reps.',
+      'Pull your shoulder blades down, away from your ears, before you bend your elbows.',
+      'Drive your elbows down toward your sides until your chin clears the bar.',
+      'Lower yourself slowly to a full hang with straight arms.',
     ],
-    mistakes: ['Kipping or swinging for momentum.', 'Stopping halfway down.'],
+    cues: [
+      'Keep your body nearly vertical under the bar.',
+      "Lead with your chest; don't crane your neck to get over the bar.",
+    ],
+    mistakes: [
+      'Swinging or kicking your legs to bounce up (called kipping).',
+      'Stopping partway down instead of returning to a full hang.',
+    ],
   }),
   defineExercise({
     id: 'chin-up',
@@ -42,14 +49,22 @@ export const PULL_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['pull-up', 'lat-pulldown'],
     setup: [
-      'Underhand grip at shoulder width from a full hang.',
-      'Set the shoulders down before pulling.',
+      'Grip the bar with palms facing you, hands about shoulder-width apart.',
+      'Hang with straight arms, legs still and stomach tight.',
     ],
     execution: [
-      'Pull until the chin is over the bar, elbows finishing by the ribs.',
-      'Lower slowly to a full hang.',
+      'Pull your shoulder blades down, then bend your elbows to pull yourself up.',
+      'Keep pulling until your chin is over the bar and your elbows are by your ribs.',
+      'Lower slowly until your arms are fully straight again.',
     ],
-    mistakes: ['Craning the neck to clear the bar.', 'Cutting the range short at the bottom.'],
+    cues: [
+      'Keep your elbows in front of your body as they drive down.',
+      'Keep your chest up toward the bar.',
+    ],
+    mistakes: [
+      'Craning your neck forward to get your chin over the bar.',
+      'Stopping short of straight arms at the bottom.',
+    ],
   }),
   defineExercise({
     id: 'lat-pulldown',
@@ -64,14 +79,23 @@ export const PULL_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['pull-up', 'band-lat-pulldown', 'chin-up'],
     setup: [
-      'Knees secured under the pad, grip just wider than the shoulders.',
-      'Lean back a few degrees and lift the chest.',
+      'Sit facing the pulley; if there is a thigh pad, set it so your knees are snug under it.',
+      'Grip the bar with palms facing away, hands just wider than your shoulders.',
+      'Sit tall with your chest lifted and lean back slightly from the hips.',
     ],
     execution: [
-      'Pull the bar to the upper chest with the elbows driving down.',
-      'Return until the arms are straight and the lats stretch.',
+      'Pull your shoulder blades down, then pull the bar to your upper chest.',
+      'Drive your elbows down toward your sides as the bar comes in.',
+      'Let the bar rise slowly until your arms are straight and your sides feel stretched.',
     ],
-    mistakes: ['Leaning far back and rowing the bar.', 'Pulling behind the neck.'],
+    cues: [
+      'Stop pulling when your elbows stop moving down and start moving back.',
+      "Keep the lean small and steady; your torso shouldn't rock.",
+    ],
+    mistakes: [
+      'Leaning far back and rowing the bar to your stomach.',
+      'Pulling the bar behind your neck.',
+    ],
   }),
   defineExercise({
     id: 'band-lat-pulldown',
@@ -87,14 +111,24 @@ export const PULL_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['lat-pulldown', 'pull-up', 'band-row'],
     setup: [
-      'Anchor the band high, kneel or sit facing it, arms extended overhead.',
-      'Keep the torso tall.',
+      'Anchor the band high: over the top of a door with a door anchor, or around a high bar.',
+      'Kneel or sit facing it, far enough back that the band is taut with your arms up.',
+      'Hold the handles with straight arms reaching up and slightly forward.',
     ],
     execution: [
-      'Pull the elbows down to the sides until the hands reach the shoulders.',
-      'Return slowly to a full stretch.',
+      'Draw your shoulders down, then pull your elbows down toward your sides.',
+      'Stop when your hands are level with your shoulders, just in front of them.',
+      'Let your arms rise slowly until they are straight again, band still taut.',
     ],
-    mistakes: ['Rounding forward as you pull.', 'Letting the band go slack at the top.'],
+    cues: [
+      'Kneel or sit tall with your chest up; lean back only a little.',
+      'Keep the band in front of your face; never pull it down behind your neck.',
+    ],
+    mistakes: [
+      'Hunching or rounding forward to finish the pull.',
+      'Letting the band go slack when your arms are up.',
+      'Using a nicked or frayed band or a loose anchor: a band that snaps can hit your eyes.',
+    ],
   }),
   defineExercise({
     id: 'barbell-row',
@@ -112,14 +146,25 @@ export const PULL_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['chest-supported-row', 'seated-cable-row', 'dumbbell-row'],
     setup: [
-      'Hinge to about 45 degrees with a flat back, bar hanging under the shoulders.',
-      'Grip just outside the knees.',
+      'Lift the bar off the floor with a flat back, or take it from a rack at mid-thigh.',
+      'Grip it overhand (palms toward you), hands just outside your knees, knees slightly bent.',
+      'Hinge: push your hips back, back flat, until your torso leans about 45 degrees forward.',
     ],
     execution: [
-      'Row the bar to the lower ribs, elbows finishing behind the torso.',
-      'Lower under control without letting the back round.',
+      'With the bar hanging below your shoulders, pull it to your lower ribs.',
+      'Drive your elbows back past your body and pinch your shoulder blades together.',
+      'Lower the bar slowly until your arms are straight, keeping the same body angle.',
     ],
-    mistakes: ['Standing up as the weight gets heavy.', 'Jerking the bar with the hips.'],
+    cues: [
+      'Brace before each pull: breathe in and tighten your stomach as if about to be poked.',
+      'Only your arms and shoulder blades move; your back stays flat and still.',
+      'If your back starts to round, bend your knees a little more or lean forward less.',
+    ],
+    mistakes: [
+      'Standing up taller as the set gets harder.',
+      'Heaving the bar up with a jerk of your hips.',
+      'Rounding your back, especially while lowering the bar.',
+    ],
   }),
   defineExercise({
     id: 'dumbbell-row',
@@ -135,16 +180,22 @@ export const PULL_EXERCISES = [
     unilateral: true,
     substitutions: ['chest-supported-row', 'seated-cable-row', 'barbell-row'],
     setup: [
-      'One hand and knee on a bench or one hand braced on a rack, back flat.',
-      'Dumbbell hanging straight down from the shoulder.',
+      'Put one knee and the same-side hand on a flat bench, hand under your shoulder.',
+      'Or stand leaning forward from your hips, free hand propped on a rack or bench.',
+      'Keep your back flat and level; let the dumbbell hang below your shoulder.',
     ],
     execution: [
-      'Row the dumbbell to the hip, keeping the elbow close.',
-      'Lower to a full stretch without rotating the torso.',
+      'Pull the dumbbell up and back toward your hip, elbow brushing your side.',
+      'Stop when your elbow is just past your back, before your chest starts to turn.',
+      'Lower it slowly until your arm is straight, shoulders still level.',
+    ],
+    cues: [
+      'Keep your shoulders and hips level with the floor; nothing twists.',
+      'Set your shoulder down and back before you pull, away from your ear.',
     ],
     mistakes: [
-      'Twisting the torso open to lift more.',
-      'Rowing toward the shoulder instead of the hip.',
+      'Twisting your chest open to swing the weight up.',
+      'Pulling toward your shoulder or chest instead of your hip.',
     ],
   }),
   defineExercise({
@@ -161,14 +212,23 @@ export const PULL_EXERCISES = [
     joints: { 'lower-back': 'low' },
     substitutions: ['seated-cable-row', 'dumbbell-row', 'barbell-row'],
     setup: [
-      'Lie chest-down on a bench set to about 30 degrees, dumbbells hanging below.',
-      'Toes on the floor for balance.',
+      'Set a bench to about 30 degrees; raise it a notch if the weights touch the floor.',
+      'Lie face down on it, top of your chest at the top of the pad, toes on the floor.',
+      'Let a dumbbell hang straight down from each hand, palms facing each other.',
     ],
     execution: [
-      'Row the elbows up and back until the shoulder blades squeeze.',
-      'Lower to a full stretch each rep.',
+      'Pull your elbows up and back until your shoulder blades squeeze together.',
+      'Hold for a moment with your chest still on the pad.',
+      'Lower the dumbbells slowly until your arms are straight.',
     ],
-    mistakes: ['Lifting the chest off the pad.', 'Shrugging the shoulders toward the ears.'],
+    cues: [
+      'Keep your chest and stomach pressed into the pad the whole set.',
+      'Lead with your elbows; keep your shoulders low, away from your ears.',
+    ],
+    mistakes: [
+      'Lifting your chest off the pad to swing the weights up.',
+      'Shrugging your shoulders up toward your ears.',
+    ],
   }),
   defineExercise({
     id: 'seated-cable-row',
@@ -183,14 +243,23 @@ export const PULL_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['chest-supported-row', 'dumbbell-row', 'band-row'],
     setup: [
-      'Sit tall with the knees slightly bent and the handle at arm’s length.',
-      'Chest up, shoulders down.',
+      'Clip a V-shaped handle to the low pulley and sit facing it, feet firmly planted.',
+      'Keep your knees slightly bent; hold the handle with straight arms and sit tall.',
+      'Lift your chest and let your shoulders relax down.',
     ],
     execution: [
-      'Pull the handle to the lower ribs, squeezing the shoulder blades together.',
-      'Let the arms extend fully without collapsing the torso.',
+      'Pull the handle to your lower ribs, elbows close to your sides.',
+      'Squeeze your shoulder blades together for a moment.',
+      'Let your arms straighten slowly while your torso stays upright.',
     ],
-    mistakes: ['Rocking the torso back and forth.', 'Shrugging into the pull.'],
+    cues: [
+      'Hold your torso upright and still; your arms and shoulder blades do the pulling.',
+      'Keep your shoulders down as you pull, well away from your ears.',
+    ],
+    mistakes: [
+      'Rocking your torso back and forth to move the weight.',
+      'Shrugging up, or rounding forward as your arms straighten.',
+    ],
   }),
   defineExercise({
     id: 'band-row',
@@ -206,14 +275,24 @@ export const PULL_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['seated-cable-row', 'dumbbell-row'],
     setup: [
-      'Sit with the band looped around the feet, or anchor it at chest height and stand.',
-      'Arms straight with tension at the start.',
+      'Seated: legs out, knees slightly bent, band looped around the soles of your feet.',
+      'Standing: anchor the band at chest height and face it, knees slightly bent.',
+      'Hold the handles with straight arms, far enough back that the band is already taut.',
     ],
     execution: [
-      'Row the handles to the lower ribs with the elbows close.',
-      'Return slowly to full extension.',
+      'Pull the handles to your lower ribs, keeping your elbows tucked in.',
+      'Hold briefly with your shoulder blades pinched together.',
+      'Let the band draw your arms slowly back to straight.',
     ],
-    mistakes: ['Leaning back to finish the rep.', 'Short pulls that never reach the torso.'],
+    cues: [
+      'Sit or stand tall and keep your torso from swaying.',
+      'Keep your wrists straight and your shoulders down.',
+    ],
+    mistakes: [
+      'Leaning back to finish the pull.',
+      'Stopping short before your hands reach your body.',
+      'Using a worn band or a loose anchor: check both before you start.',
+    ],
   }),
   defineExercise({
     id: 'inverted-row',
@@ -229,14 +308,20 @@ export const PULL_EXERCISES = [
     reps: { hypertrophy: [8, 15] },
     substitutions: ['seated-cable-row', 'dumbbell-row', 'band-row'],
     setup: [
-      'Hang under a bar or handles with the body straight from heels to head.',
-      'Walk the feet forward to make it harder, back to make it easier.',
+      'Set a bar in a rack or Smith machine about waist high, or hang suspension-trainer handles that high.',
+      'Hang under it with straight arms, feet flat and knees bent, body straight from shoulders to knees.',
+      'To make it harder, straighten your legs onto your heels or lower the bar.',
     ],
     execution: [
-      'Pull the chest to the bar with the shoulder blades squeezing.',
-      'Lower to straight arms without the hips sagging.',
+      'Pinch your shoulder blades together and pull your chest up to the bar or handles.',
+      'Pause for a moment at the top, body still in one straight line.',
+      'Lower yourself slowly until your arms are straight again.',
     ],
-    mistakes: ['Hips dropping as fatigue sets in.', 'Leading with the chin.'],
+    cues: [
+      'Tighten your stomach and buttocks so you move as one stiff plank.',
+      'Pull your elbows back close to your sides, wrists straight.',
+    ],
+    mistakes: ['Letting your hips sag as you tire.', 'Poking your chin up to reach the bar.'],
   }),
   defineExercise({
     id: 'straight-arm-pulldown',
@@ -252,14 +337,23 @@ export const PULL_EXERCISES = [
     compound: false,
     substitutions: ['dumbbell-pullover', 'lat-pulldown'],
     setup: [
-      'High pulley with a bar or rope; step back and hinge slightly.',
-      'Arms straight with a soft elbow bend.',
+      'Set the pulley at its highest point with a straight bar or rope attached.',
+      'Grab it and step back a pace or two; stand tall or lean forward slightly from your hips.',
+      'Bend your knees slightly; arms reach up and forward, elbows a little bent.',
     ],
     execution: [
-      'Sweep the hands down to the thighs in an arc.',
-      'Return overhead until the lats stretch.',
+      'Sweep your hands down in a wide arc until they reach the fronts of your thighs.',
+      'Pause briefly, feeling the muscles along the sides of your back.',
+      'Let your arms rise slowly along the same arc until your armpits feel a stretch.',
     ],
-    mistakes: ['Bending the elbows into a pushdown.', 'Rounding the back on the way up.'],
+    cues: [
+      'Lock in the slight elbow bend; your arms swing from the shoulders like levers.',
+      "Keep your back flat and your torso still; don't bob up and down.",
+    ],
+    mistakes: [
+      'Bending your elbows so it turns into a triceps pushdown.',
+      'Rounding your back as the bar rises.',
+    ],
   }),
   defineExercise({
     id: 'dumbbell-pullover',
@@ -276,17 +370,24 @@ export const PULL_EXERCISES = [
     joints: { shoulder: 'moderate' },
     substitutions: ['straight-arm-pulldown', 'cable-fly'],
     setup: [
-      'Lie across or along a bench holding one dumbbell over the chest with both hands.',
-      'Slight bend in the elbows that stays fixed.',
+      'Lie face up along a flat bench: head, upper back and hips on it, feet flat on the floor.',
+      'Hold one dumbbell upright over your chest, palms cupped under its top end.',
+      'Use a fixed dumbbell, or make sure the plates are locked tight: it passes over your face.',
     ],
     execution: [
-      'Lower the dumbbell behind the head until the lats and chest stretch.',
-      'Pull it back over the chest in an arc.',
+      'With a slight bend in your elbows, lower the weight back over your head in an arc.',
+      'Pull it back up over your chest along the same arc.',
+    ],
+    cues: [
+      'Keep the elbow bend fixed; all the movement happens at your shoulders.',
+      'Keep your lower back on the bench as your arms go back.',
     ],
     mistakes: [
-      'Bending the elbows to turn it into an extension.',
-      'Dropping the weight too far behind the head.',
+      'Bending and straightening your elbows so it becomes a triceps exercise.',
+      'Lowering so far that your back arches off the bench or your shoulders pinch.',
     ],
+    range:
+      'Lower until your upper arms are about in line with your body, or less if shoulders pinch.',
   }),
   defineExercise({
     id: 'dumbbell-shrug',
@@ -301,14 +402,22 @@ export const PULL_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['barbell-shrug', 'farmer-carry'],
     setup: [
-      'Stand tall with the dumbbells at the sides.',
-      'Arms straight, shoulders relaxed down.',
+      'Stand tall, feet hip-width, a dumbbell in each hand at your sides, palms facing in.',
+      'Keep your arms straight and your shoulders relaxed down.',
     ],
     execution: [
-      'Shrug straight up toward the ears and hold for a second.',
-      'Lower slowly to a full stretch.',
+      'Lift your shoulders straight up toward your ears as high as they go.',
+      'Hold the top for about a second.',
+      'Lower your shoulders slowly until they are fully down.',
     ],
-    mistakes: ['Rolling the shoulders in circles.', 'Bending the elbows to help the weight up.'],
+    cues: [
+      "Move straight up and down, like a slow, big 'I don't know' shrug.",
+      'Keep your head level, chin neither poking forward nor tucked down.',
+    ],
+    mistakes: [
+      'Rolling your shoulders forward or back in circles.',
+      'Bending your elbows to help lift the weights.',
+    ],
   }),
   defineExercise({
     id: 'barbell-shrug',
@@ -322,11 +431,23 @@ export const PULL_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['dumbbell-shrug', 'farmer-carry'],
     setup: [
-      'Bar held at the thighs with a shoulder-width grip; straps are fine.',
-      'Stand tall with the knees soft.',
+      'Lift the bar out of a rack set at mid-thigh, or up from the floor with a flat back.',
+      'Grip overhand, hands about shoulder-width; wrist straps are fine if your grip tires first.',
+      'Stand with knees slightly bent and arms straight, bar against your thighs.',
     ],
-    execution: ['Shrug straight up and pause at the top.', 'Lower under control.'],
-    mistakes: ['Using the legs to bounce the bar.', 'Tucking the chin and rounding forward.'],
+    execution: [
+      'Shrug your shoulders straight up toward your ears.',
+      'Pause at the top for a moment.',
+      'Lower them slowly all the way down.',
+    ],
+    cues: [
+      'Only your shoulders move; your arms and knees stay still.',
+      'Keep your chest up and your head in line with your spine.',
+    ],
+    mistakes: [
+      'Bouncing the bar up with a dip of your knees.',
+      'Rolling your shoulders, or dropping your chin and rounding forward.',
+    ],
   }),
   defineExercise({
     id: 'farmer-carry',
@@ -346,13 +467,21 @@ export const PULL_EXERCISES = [
     supersetFriendly: false,
     substitutions: ['dumbbell-shrug', 'plank'],
     setup: [
-      'Pick up a heavy pair of weights with a flat back and stand tall.',
-      'Shoulders down, ribs stacked over the hips.',
+      'Set a dumbbell or kettlebell beside each foot, or stand inside a loaded trap bar.',
+      'Bend your hips and knees with a flat back, grip the handles hard and stand up tall.',
     ],
     execution: [
-      'Walk with short, quick steps for the target seconds.',
-      'Set the weights down with the same flat back.',
+      'Walk with short, quick steps, eyes straight ahead.',
+      'Keep walking for the set time; turn with small steps if you run out of room.',
+      'Stop, then lower the weights by bending your hips and knees, back flat.',
     ],
-    mistakes: ['Leaning to one side.', 'Rushing the setdown and rounding the back.'],
+    cues: [
+      "Stand tall with your shoulders down and back; don't lean.",
+      'Brace lightly (tighten your stomach) and keep your arms straight at your sides.',
+    ],
+    mistakes: [
+      'Leaning to one side or letting the weights swing.',
+      'Rushing the pick-up or set-down, or rounding your back to do it.',
+    ],
   }),
 ];

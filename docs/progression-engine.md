@@ -201,15 +201,23 @@ A lift with no history of its own takes its first target from the first of these
 
 1. **A max the lifter entered** (`StrengthMaxes`, meta record `strength-maxes`, backed up). One
    small "Know your max?" link on the card of a lift in `start`, `estimate`, or `return` mode
-   opens a sheet that takes a recent set (weight and reps, turned into an estimated max with Epley, reps capped at twelve) or a known one-rep max, and
-   shows the first target it would set. The first target is 90 percent of the load the max
-   implies for the top of the rep range at the prescribed RIR. Saving fires the `max` trigger,
-   which re-targets that lift's unlogged, untouched entries in today's session and recalculates
-   their ramps; entries with a logged working set are left alone and the next session starts
-   from the max. "Not now" hides the link for seven days; "Don't ask for this lift" hides it
-   for good; a logged working set hides it because the running estimate takes over. After a
-   break of twenty-one days or more, a max entered since the last session is used at 90 percent
-   (mode `return`).
+   opens a sheet that takes a recent set (weight and reps, turned into an estimated max with
+   Epley, every rep counted up to thirty since Maintenance 25; a set saved before is read the same
+   way from the set it was saved with) or a known one-rep max, and shows the target the save
+   leaves the lift at today: the store runs the save's own rebuild on the session without saving
+   (`previewStrengthMax`), so the preview is the plan's own weight and reps, with the engine's line
+   for the heaviest weight here or the logged sets (docs/research/entered-maxes.md). The first
+   target is 90 percent of the load the max implies for the top of the rep range at the
+   prescribed RIR. Saving fires the `max` trigger, which re-targets that lift's unlogged,
+   untouched entries in today's session and recalculates their ramps; entries with a logged
+   working set are left alone and the next session starts from the max. "Not now" hides the link
+   for seven days; "Don't ask for this lift" hides it for good; a logged working set hides it
+   because the running estimate takes over. After a break of twenty-one days or more, a max
+   entered since the last session counts against the logged sets' start (mode `return`,
+   Maintenance 25): one that says less sets the start at 90 percent of what it implies, since the
+   break may have cost strength; one that says more moves the logged start two steps at most, as
+   on a lift trained lately. The preview says "stays" only when the weight, reps and reserve all
+   stay (`MaxOutcome` `kept`); any move is `moved`.
 2. **A starting estimate from the body** (`estimateStartingMax`). With a bodyweight in
    Settings, the reference max is a fraction of bodyweight per movement pattern and load type
    (bars by pattern; dumbbells per hand at 0.4 of the bar figure; stacks at 0.9; machines,
@@ -314,24 +322,25 @@ the plate line says what to load: "Bar 45 + 45, 10 each side · 155 lb". A weigh
 cannot make names the two they can, "The plates here make 95 or 105, not 100 lb"; there is no
 shortfall in brackets any more.
 
-Progression fits every target through `applyProgression(..., loading)`. When the target would
-pass the cap, `capTarget` holds the load there and raises the rep range by two
-(`NextTarget.capped`, copied to `EntryProgression.capped`) with the reason in the evidence. The
-coach names it once (`source: 'capped'`), offering a harder variation while the reps have room or
-an extra set at the ceiling; `rankAlternatives` adds 12 points to candidates whose starting ratio
-is below the current one (`signals.capLimited`); `tempoCue(..., { capped: true })` slows the
-lowering and adds a pause; a strength set keeps the fast lift (3-1-X-0), every other role reads
-3-1-1-0 (Maintenance 21). Manual weights are never re-fitted. A `loading` recalibration trigger
+Progression fits every target through `applyProgression(..., loading)`. When the target would pass
+the cap, `capTarget` holds the load there and raises the rep range by two (`NextTarget.capped`,
+copied to `EntryProgression.capped`) with the reason in the evidence. The coach names it once
+(`source: 'capped'`), offering a harder variation while the reps have room or an extra set at the
+ceiling; `rankAlternatives` adds 12 points to candidates whose starting ratio is below the current
+one (`signals.capLimited`); `tempoCue(..., { capped: true })` slows the lowering and adds a pause; a
+strength set keeps the fast lift (3-1-X-0), every other role reads 3-1-1-0 (Maintenance 21). A set
+well short of its load runs to its effort instead, at its own tempo (Maintenance 23, a strength set
+too since Maintenance 25). Manual weights are never re-fitted. A `loading` recalibration trigger
 re-fits every unlogged, non-manual entry when a record is saved during a workout, and
-`session.loading.missingPlates` is a session-only note that widens the bar's step without
-touching the place. The generator's `pickForSlot` now gives a preferred exercise that fits the
-slot the slot outright; the score orders the rest. Custom exercises take part in `exercisesByPattern`,
+`session.loading.missingPlates` is a session-only note that widens the bar's step without touching
+the place. The generator's `pickForSlot` now gives a preferred exercise that fits the slot the slot
+outright; the score orders the rest. Custom exercises take part in `exercisesByPattern`,
 `exercisesByMuscle`, and `findExerciseByName`, so a custom machine marked Preferred is picked for
 its slot. The generator fits the first preview through the same `capTarget` and
 `applyProgression(..., loading)` path. `NextTarget.from` records the weight a target moved from;
 when a target snapped onto the place's list would land on or under `from`, `capTarget` holds the
-load and raises the reps by two, naming the next real weight, instead of rounding the increase
-away in silence.
+load and raises the reps by two, naming the next real weight, instead of rounding the increase away
+in silence.
 
 Maintenance 19: a target the weights here cannot make is never passed through. `rackFit` takes it
 down to the weight under it that they make and adds the reps that keep the effort, the estimated
@@ -396,7 +405,11 @@ with logged sets the log is the better evidence, so `withEnteredMax` lets a max 
 movement is known), by `ENTERED_MAX_STEPS` (two) at most, with the reason in the evidence. The
 next logged session is newer than the max, so the log takes over again without anything being
 cleared. The pipeline is `withSessionFatigue(withEnteredMax(recommendBiasedTarget(...)))`. The
-max can be entered or updated from the exercise's Options at any time.
+max can be entered or updated from the exercise's Options at any time. Since Maintenance 25 the
+log's estimate in this comparison reads the last session's best set as an entered set is read,
+every rep counted up to thirty (`loggedLikeEntered`), so one set logged and then entered says the
+same; the rules that set a target from the log keep their own reading. A target the log's estimate
+sets for another rep range (mode `estimate`) counts a max the same way (`MAX_MODES`).
 
 ## Programming styles and the rep-range rule (`src/engine/planning/styles.ts`, `styleAdvice.ts`, Maintenance 15)
 
@@ -497,20 +510,25 @@ max can be entered or updated from the exercise's Options at any time.
   exercise picked up again after a place change. A Dead Bug keeps two reps in reserve under
   every style and role, and its effort row reads "stop 2 clean reps short, before your form
   slips", with no claim that it can go closer to failure.
-- **Sets well short of their load (the owner's item 21, docs/research/lighter-loads.md).** When
-  the weights here make less than 90% of the load asked for (`WELL_SHORT`), a muscle-building set
-  (any role whose rest category is not strength; not a hold) runs to its planned reps in
-  reserve: `extraRepsFor` keeps the estimated-max match without the three-rep cap, never past 30
-  reps, and the line says so: "The weights here make 40, not 50 lb: about 10 more reps, to 2 in
-  reserve." At the heaviest weight a place has: "Held at the heaviest weight here (40 lb): about
-  10 more reps, to 2 in reserve." At no reps in reserve it reads "to the last clean rep"; where
-  the reserve would take more than 30 reps the set stops short of it, and the line promises
-  none: "about 20 more reps, up to 30". A strength set, and a set 10% light or less, keep one to
-  three extra reps. `capTarget` takes the role; the generator, a swap, "weights changed" and
-  "max" pass it. A set run to its effort keeps its role's tempo and time (the slower tempo of
-  the heaviest weight stays for strength sets and small pushes), takes no drop set from the
-  plan or the coach, and the coach's heaviest-weight card offers "Add a set" only once its reps
-  reach 30.
+- **Sets well short of their load (the owner's item 21, docs/research/lighter-loads.md).** When the
+  weights here make less than 90% of the load asked for (`WELL_SHORT`), a set of any role (a
+  strength set too since Maintenance 25; not a hold) runs to its planned reps in reserve:
+  `extraRepsFor` keeps the estimated-max match without the three-rep cap, never past 30 reps, and
+  the line says so: "The weights here make 40, not 50 lb: about 10 more reps, to 2 in reserve." At
+  the heaviest weight a place has: "Held at the heaviest weight here (40 lb): about 10 more reps, to
+  2 in reserve." At no reps in reserve it reads "to the last clean rep"; where the reserve would
+  take more than 30 reps the set stops short of it, and the line promises none: "about 20 more reps,
+  up to 30". A set 10% light or less keeps one to three extra reps. A strength set kept those too
+  until Maintenance 25; at a third of the max that planned an easy set with an untrue reserve, and
+  the owner's main lift at home followed no max entered (docs/research/lighter-loads.md, revised). A
+  target set from an estimate (a max entered, the body, a family, a return, a new rep range) keeps
+  its load before rounding (`exact`), lightened with the load in a deload week; rounded down onto
+  the heaviest weight a place has while it asked for more, it is held there with two more reps at
+  most, like a target over it by less than 10%, and its sets stand in for nothing heavier
+  (Maintenance 25). `capTarget` takes the role; the generator, a swap, "weights changed" and "max"
+  pass it. A set run to its effort keeps its role's tempo and time (the slower tempo of the heaviest
+  weight stays for small pushes), takes no drop set from the plan or the coach, and the coach's
+  heaviest-weight card offers "Add a set" only once its reps reach 30.
 - **A pushed set remembers what it stood in for.** Whenever the weights here make less than
   asked (the heaviest weight or a gap, never a hold), each working set records `asked`: the load
   and range it stands in for (optional in the stored plan and in the logged set, dropped when
@@ -525,19 +543,19 @@ max can be entered or updated from the exercise's Options at any time.
   floor a second line says what it stood in for: "At 20 lb, those reps stood in for 30 lb." The
   finish summary grades each set the same way (`judgedSet`), so "short" and "on target" there
   never disagree with the next target.
-- **A push short of the effort holds the load asked.** A strength set, a small push and a set held
-  at 30 reps add fewer reps than the same effort takes (`pushedShort`), so meeting them shows the
-  reps were met, not that the load asked was: the next target keeps the load asked ("The weights
-  last time made less than 35 lb: the same target again."), and such a session never counts as the
-  top of its range or as a clean session. Missing the reps shown is a miss like any other, and a
-  deload or a reset then comes down from the weight lifted (`missedFrom`): taking 10% off the load
-  asked alone would show the same set again. One that met its reps says nothing either way about the
-  load asked, so the runs that move the load pass over it (sessions at the top, clean strength
-  sessions): a lifter who trains at the gym and at a light home in turn still banks the gym
-  sessions. The run of misses passes over it only between misses of that same load, lifted where the
-  weights made it, so such a lifter still deloads after two misses at the gym; next to a miss of the
-  set it showed, or standing in for less (the deload those misses earned, already served), it ends
-  the run.
+- **A push short of the effort holds the load asked.** A small push and a set held at 30 reps (a
+  strength set too, before Maintenance 25) add fewer reps than the same effort takes
+  (`pushedShort`), so meeting them shows the reps were met, not that the load asked was: the next
+  target keeps the load asked ("The weights last time made less than 35 lb: the same target
+  again."), and such a session never counts as the top of its range or as a clean session. Missing
+  the reps shown is a miss like any other, and a deload or a reset then comes down from the weight
+  lifted (`missedFrom`): taking 10% off the load asked alone would show the same set again. One that
+  met its reps says nothing either way about the load asked, so the runs that move the load pass
+  over it (sessions at the top, clean strength sessions): a lifter who trains at the gym and at a
+  light home in turn still banks the gym sessions. The run of misses passes over it only between
+  misses of that same load, lifted where the weights made it, so such a lifter still deloads after
+  two misses at the gym; next to a miss of the set it showed, or standing in for less (the deload
+  those misses earned, already served), it ends the run.
 - **Light sessions stay out of stalls and notes.** A session with a set lifted under the load asked
   (`light`) says little about a stall at that load, and a stall's remedies move a load the place
   cannot make, so `detectStalls` leaves it out and the history notes stop at it. The rules read

@@ -1,4 +1,5 @@
 import { Card } from '../Card/Card';
+import { keyedLines } from '../../core/screen/keyedLines';
 import styles from './Screen.module.css';
 
 interface ScreenHeaderProps {
@@ -26,8 +27,8 @@ export function PlaceholderCard({ title, arrivesIn, items }: PlaceholderCardProp
   return (
     <Card eyebrow={`Arrives in ${arrivesIn}`} title={title}>
       <ul className={styles.list}>
-        {items.map((item) => (
-          <li key={item}>{item}</li>
+        {keyedLines(items).map(({ key, line }) => (
+          <li key={key}>{line}</li>
         ))}
       </ul>
     </Card>

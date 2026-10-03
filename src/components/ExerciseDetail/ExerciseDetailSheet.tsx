@@ -18,6 +18,8 @@ import { useToast } from '../Toast/useToast';
 import { Sheet } from '../Sheet/Sheet';
 import styles from './ExerciseDetail.module.css';
 import { ExerciseDemo, ExerciseThumb } from './ExerciseMedia';
+import { ExerciseTeaching } from './ExerciseTeaching';
+import { keyedLines } from '../../core/screen/keyedLines';
 
 export interface PreferenceControls {
   preferred: boolean;
@@ -34,6 +36,11 @@ export interface SessionActions {
   pinned: boolean;
   onPin: () => void;
   onBusy: () => void;
+  /**
+   * When set, Equipment busy is greyed out and this says why (Maintenance 25): the exercise is
+   * the last one left to do, so there is nothing to move it behind.
+   */
+  busyDisabledReason?: string | null;
   onUncomfortable: () => void;
   onSkip: () => void;
   /** When set, Skip today is greyed out and this says why. */
@@ -62,6 +69,17 @@ export interface EditActions {
   onSplit: () => void;
 }
 
+/**
+ * Why today's target is what it is, for an exercise in the active workout (Maintenance 25, item 7:
+ * moved here from the card's How to, which now teaches the exercise and nothing else).
+ */
+export interface TargetNotes {
+  /** Last time's best working set, or null with no history. */
+  lastTime: string | null;
+  /** The engine's reasons for the target, then the effort and rest lines. */
+  why: readonly string[];
+}
+
 /** The lifter's own max for this lift: what is saved, and the way to enter or update it. */
 export interface MaxAction {
   /** "216 lb, entered Sep 18" or that none is saved. */
@@ -79,6 +97,7 @@ interface ExerciseDetailSheetProps {
   sessionActions?: SessionActions;
   editActions?: EditActions;
   maxAction?: MaxAction;
+  targetNotes?: TargetNotes;
   /** Set for an exercise that has stopped: said in place of the session's actions. */
   stoppedNote?: string;
 }
@@ -118,6 +137,7 @@ export function ExerciseDetailSheet({
   sessionActions,
   editActions,
   maxAction,
+  targetNotes,
   stoppedNote,
 }: ExerciseDetailSheetProps) {
   const [painJoint, setPainJoint] = useState<Joint>('shoulder');
@@ -262,7 +282,13 @@ export function ExerciseDetailSheet({
             >
               {sessionActions.pinned ? 'Pinned ✓' : 'Pin'}
             </button>
-            <button type="button" className={styles.actionButton} onClick={sessionActions.onBusy}>
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={sessionActions.onBusy}
+              disabled={Boolean(sessionActions.busyDisabledReason)}
+              data-testid="equipment-busy"
+            >
               Equipment busy
             </button>
             <button
@@ -286,6 +312,10 @@ export function ExerciseDetailSheet({
             <p className={styles.text} data-testid="skip-reason">
               {sessionActions.skipDisabledReason}
             </p>
+          ) : sessionActions.busyDisabledReason ? (
+            <p className={styles.text} data-testid="busy-reason">
+              {sessionActions.busyDisabledReason}
+            </p>
           ) : null}
           <div className={styles.painRow}>
             <select
@@ -307,6 +337,22 @@ export function ExerciseDetailSheet({
               Hurts, protect it
             </button>
           </div>
+        </section>
+      ) : null}
+
+      {targetNotes ? (
+        <section className={styles.section} aria-label="Today's target">
+          <h3 className={styles.sectionTitle}>Why this target</h3>
+          {targetNotes.lastTime ? (
+            <p className={styles.text} data-testid="last-time">
+              {targetNotes.lastTime}
+            </p>
+          ) : null}
+          <ul className={styles.list} data-testid="progression-evidence">
+            {keyedLines(targetNotes.why).map(({ key, line }) => (
+              <li key={key}>{line}</li>
+            ))}
+          </ul>
         </section>
       ) : null}
 
@@ -410,28 +456,7 @@ export function ExerciseDetailSheet({
         </section>
       ) : null}
 
-      <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Setup</h3>
-        <ol className={styles.steps}>
-          {exercise.instructions.setup.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        <h3 className={styles.sectionTitle}>Execution</h3>
-        <ol className={styles.steps}>
-          {exercise.instructions.execution.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        <h3 className={styles.sectionTitle}>Breathing</h3>
-        <p className={styles.text}>{exercise.instructions.breathing}</p>
-        <h3 className={styles.sectionTitle}>Common mistakes</h3>
-        <ul className={styles.steps}>
-          {exercise.instructions.mistakes.map((mistake) => (
-            <li key={mistake}>{mistake}</li>
-          ))}
-        </ul>
-      </section>
+      <ExerciseTeaching exercise={exercise} />
 
       {alternatives ? (
         <section className={styles.section} aria-label="Alternatives">

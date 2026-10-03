@@ -119,18 +119,6 @@
   font-weight: 600;
 }
 
-.link {
-  margin: 0 0 4px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--color-accent);
-  font: inherit;
-  font-size: 0.86rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .prRow {
   display: flex;
   align-items: flex-start;
@@ -175,4 +163,36 @@
   color: var(--color-text-subtle);
   font-size: 0.8rem;
   font-style: italic;
+}
+
+/* A lift's trend over its estimated max, on the right of its row (Maintenance 25). */
+.rowValues {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: none;
+}
+
+/* The lift's trend under its estimated max, at the size a row's value has. */
+.rowTrend {
+  color: var(--color-text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Opens the rest of a list: a full-size target under it (Maintenance 25). */
+.more {
+  align-self: flex-start;
+  min-height: 48px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
 }

@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
 /**
  * A stand-in for the database, answered at the browser's network layer, so a
@@ -32,6 +32,8 @@ export interface FakeTurso {
   rows: () => FakeRow[];
   devices: () => FakeDevice[];
   calls: () => number;
+  /** The stand-in's own tables, so a second browser context can answer from the same database. */
+  tables: { rows: Map<string, FakeRow>; devices: Map<string, FakeDevice> };
 }
 
 type WireValue =
@@ -82,6 +84,24 @@ function toWire(value: Arg): WireValue {
   return { type: 'text', value };
 }
 
+/** What the live table says to a row with no body (its body column is NOT NULL). */
+const NOT_NULL_BODY = 'SQLITE_CONSTRAINT: SQLite error: NOT NULL constraint failed: records.body';
+
+/** The row a statement's VALUES list writes, its `?`s filled from the arguments in order. */
+function valuesOf(sql: string, args: Arg[]): Arg[] {
+  const list = /VALUES \(([^)]*)\)/.exec(sql)?.[1];
+  if (list === undefined) throw new Error(`fake turso: no VALUES in ${sql.slice(0, 60)}`);
+  let next = 0;
+  return list.split(',').map((part) => {
+    const token = part.trim();
+    if (token === '?') return args[next++] ?? null;
+    if (token === 'NULL') return null;
+    if (/^'.*'$/.test(token)) return token.slice(1, -1);
+    if (/^-?\d+$/.test(token)) return Number(token);
+    throw new Error(`fake turso: a value it does not read, ${token}`);
+  });
+}
+
 function result(cols: string[], rows: Arg[][], affected = 0): StmtResult {
   return {
     cols: cols.map((name) => ({ name, decltype: null })),
@@ -103,11 +123,12 @@ const RECORD_COLUMNS = [
 ];
 
 export async function installFakeTurso(
-  page: Page,
+  page: Page | BrowserContext,
   host = 'life-record-bill6006.aws-us-east-1.turso.io',
+  shared?: FakeTurso,
 ): Promise<FakeTurso> {
-  const rows = new Map<string, FakeRow>();
-  const devices = new Map<string, FakeDevice>();
+  const rows = shared?.tables.rows ?? new Map<string, FakeRow>();
+  const devices = shared?.tables.devices ?? new Map<string, FakeDevice>();
   /** SQL text the client stored once and refers to by id afterwards. */
   const storedSql = new Map<number, string>();
   let calls = 0;
@@ -148,37 +169,54 @@ export async function installFakeTurso(
       return result([], [], 1);
     }
     if (sql.startsWith('INSERT INTO records')) {
-      const tombstone = sql.includes('NULL, NULL, ?, 1,');
-      const [app, store, id] = [text(args[0]), text(args[1]), text(args[2])];
-      const next: FakeRow = tombstone
-        ? {
-            app,
-            store,
-            id,
-            day: null,
-            body: null,
-            updated_at: text(args[3]),
-            deleted: 1,
-            device_id: text(args[4]),
-            synced_at: text(args[5]),
-          }
-        : {
-            app,
-            store,
-            id,
-            day: typeof args[3] === 'string' ? args[3] : null,
-            body: typeof args[4] === 'string' ? args[4] : null,
-            updated_at: text(args[5]),
-            deleted: 0,
-            device_id: text(args[6]),
-            synced_at: text(args[7]),
-          };
-      const existing = rows.get(key(app, store, id));
+      const [app, store, id, day, body, updatedAt, deleted, deviceId, syncedAt] = valuesOf(
+        sql,
+        args,
+      );
+      // As the live table: body is NOT NULL.
+      if (body === null) throw new Error(NOT_NULL_BODY);
+      const next: FakeRow = {
+        app: text(app),
+        store: text(store),
+        id: text(id),
+        day: typeof day === 'string' ? day : null,
+        body: text(body),
+        updated_at: text(updatedAt),
+        deleted: Number(deleted) === 1 ? 1 : 0,
+        device_id: text(deviceId),
+        synced_at: text(syncedAt),
+      };
+      const k = key(next.app, next.store, next.id);
+      const existing = rows.get(k);
       if (!existing || next.updated_at >= existing.updated_at) {
-        rows.set(key(app, store, id), next);
+        // The conflict's update writes the body too: NULL there is refused the same way.
+        if (existing && /DO UPDATE SET [^;]*\bbody = NULL\b/.test(sql)) {
+          throw new Error(NOT_NULL_BODY);
+        }
+        rows.set(k, next);
         return result([], [], 1);
       }
       return result([], [], 0);
+    }
+    if (sql.includes('FROM records WHERE app = ? AND store = ? AND id = ?')) {
+      const row = rows.get(key(text(args[0]), text(args[1]), text(args[2])));
+      return result(
+        RECORD_COLUMNS,
+        row
+          ? [
+              [
+                row.store,
+                row.id,
+                row.day,
+                row.body,
+                row.updated_at,
+                row.deleted,
+                row.device_id,
+                row.synced_at,
+              ],
+            ]
+          : [],
+      );
     }
     if (sql.startsWith('SELECT store, id, day, body, updated_at, deleted, device_id, synced_at')) {
       const limit = Number(/LIMIT (\d+)/.exec(sql)?.[1] ?? '500');
@@ -194,7 +232,18 @@ export async function installFakeTurso(
             row.app === app &&
             (row.synced_at > cursor || (row.synced_at === cursor && row.id > cursorId)),
         )
-        .sort((a, b) => a.synced_at.localeCompare(b.synced_at) || a.id.localeCompare(b.id))
+        // Plain string order, as SQLite's for this app's ids.
+        .sort((a, b) =>
+          a.synced_at < b.synced_at
+            ? -1
+            : a.synced_at > b.synced_at
+              ? 1
+              : a.id < b.id
+                ? -1
+                : a.id > b.id
+                  ? 1
+                  : 0,
+        )
         .slice(0, limit)
         .map((row) => [
           row.store,
@@ -232,14 +281,25 @@ export async function installFakeTurso(
     }
     if (request.type === 'batch') {
       const steps = (request as { batch: { steps: { stmt: Stmt }[] } }).batch.steps;
-      const stepResults = steps.map((step) => run(step.stmt));
-      return {
-        type: 'ok',
-        response: {
-          type: 'batch',
-          result: { step_results: stepResults, step_errors: steps.map(() => null) },
-        },
-      };
+      // One transaction, as the live server's: a step refused undoes the steps before it.
+      const keptRows = new Map(rows);
+      const keptDevices = new Map([...devices].map(([k, device]) => [k, { ...device }]));
+      try {
+        const stepResults = steps.map((step) => run(step.stmt));
+        return {
+          type: 'ok',
+          response: {
+            type: 'batch',
+            result: { step_results: stepResults, step_errors: steps.map(() => null) },
+          },
+        };
+      } catch (error) {
+        rows.clear();
+        for (const [k, row] of keptRows) rows.set(k, row);
+        devices.clear();
+        for (const [k, device] of keptDevices) devices.set(k, device);
+        throw error;
+      }
     }
     return { type: 'error', error: { message: `fake turso: unsupported ${request.type}` } };
   }
@@ -285,5 +345,6 @@ export async function installFakeTurso(
     rows: () => [...rows.values()].map((row) => ({ ...row })),
     devices: () => [...devices.values()].map((device) => ({ ...device })),
     calls: () => calls,
+    tables: { rows, devices },
   };
 }

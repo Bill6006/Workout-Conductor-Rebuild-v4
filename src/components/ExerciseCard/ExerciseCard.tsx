@@ -1,3 +1,4 @@
+import { keyedLines } from '../../core/screen/keyedLines';
 import { useState, type ReactNode } from 'react';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
@@ -33,7 +34,7 @@ export interface ExerciseCardProps {
   active?: boolean;
   /** Compact personal-record feedback from the logged sets, for example "Weight PR". */
   badge?: string | null;
-  /** Opens the exercise's demonstration and details; the thumbnail is the tap target. */
+  /** Opens How to: the demonstration and how to do it; the thumbnail is the tap target. */
   onShowDetail?: () => void;
   /** The one-time max offer on a lift with no history; absent once a set is logged or it was declined. */
   onKnowMax?: () => void;
@@ -197,10 +198,15 @@ export function ExerciseCard({
             className={styles.thumbButton}
             onClick={onShowDetail}
             disabled={!onShowDetail}
-            aria-label={`How to do ${exercise.name}: demonstration and details`}
+            aria-label={`How to do ${exercise.name}: demonstration and steps`}
             data-testid="card-thumb"
           >
-            <ExerciseThumb exercise={exercise} size="large" customMedia={customMedia} />
+            <ExerciseThumb
+              exercise={exercise}
+              size="large"
+              customMedia={customMedia}
+              play={position?.entryId === entry.id}
+            />
             <span className={styles.thumbLabel}>How to</span>
           </button>
         </div>
@@ -238,11 +244,13 @@ export function ExerciseCard({
           <details className={styles.why} data-testid="tempo-why">
             <summary className={styles.whySummary}>Why: the research</summary>
             <ul className={styles.tempoEvidence} aria-label="Why this tempo, effort, and rest">
-              {research.map((line) => (
-                <li key={line.text}>
-                  <strong>{line.lead}.</strong> {line.text}
-                </li>
-              ))}
+              {keyedLines(research.map((line) => `${line.lead}. ${line.text}`)).map(
+                ({ key }, at) => (
+                  <li key={key}>
+                    <strong>{research[at]?.lead}.</strong> {research[at]?.text}
+                  </li>
+                ),
+              )}
             </ul>
           </details>
         </div>

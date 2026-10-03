@@ -20,7 +20,8 @@ export async function createLibsqlCloudClient(token: string, url: string): Promi
       };
     },
     batch: async (statements) => {
-      await client.batch(statements.map(toArgs), 'write');
+      const results = await client.batch(statements.map(toArgs), 'write');
+      return results.map((result) => result.rowsAffected);
     },
     close: () => client.close(),
   };

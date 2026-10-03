@@ -1,5 +1,4 @@
 import { dropSetWeight } from './dropSet';
-import { EQUIPMENT } from '../../catalog/equipment/equipment';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { holdById, targetText } from '../workout/setText';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
@@ -40,12 +39,24 @@ import {
 } from '../progression/roles';
 import { barWeightFor, hasNoLoad } from '../progression/startingLoad';
 import { interpretFatigue } from '../recovery/fatigue';
+import {
+  holdsOpenLift,
+  isOpenLift,
+  moveEdges,
+  moveNames,
+  postponeBehind,
+  postponeRefusal,
+  rowsWaitingOn,
+  type PostponeRefusal,
+} from '../workout/sequence';
 import { precedingWorkToday } from '../recovery/sessionContext';
 import { DELOAD_LOAD_SCALE, DELOAD_RIR_DELTA } from '../planning/deload';
 import {
   closeAtLogged,
   deloadReason,
   generateWorkout,
+  mainLiftLine,
+  mainLiftName,
   prescriptionForDay,
   rampContextFor,
   sessionConflictContext,
@@ -75,6 +86,9 @@ import { composeSummary, diffWorkouts } from './diff';
 import { TRIGGER_REGISTRY, jointLabel } from './triggers';
 import type {
   CompletedWork,
+  MaxHeldBy,
+  MaxOutcome,
+  Postponed,
   Readiness,
   RecalibrationRequest,
   RecalibrationResult,
@@ -139,6 +153,7 @@ const TECHNIQUE_LABEL = { supersets: 'Supersets', dropSets: 'Drop sets', circuit
 export function emptyConstraints(): SessionConstraints {
   return {
     busyEquipment: [],
+    postponed: [],
     avoidExerciseIds: [],
     painJoints: [],
     endBy: null,
@@ -177,7 +192,8 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult 
   const evaluated = [...TRIGGER_REGISTRY[request.trigger.type].evaluating];
   try {
     const outcome = execute(request, scope);
-    const context = contextFor(request, outcome.constraints);
+    const constraints = outcome.constraints;
+    const context = contextFor(request, constraints);
     validateWorkout(outcome.workout, request, context);
     const changes = diffWorkouts(request.workout, outcome.workout);
     const summary = composeSummary({
@@ -211,11 +227,13 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult 
       scope,
       workout,
       duration: outcome.duration,
-      constraints: outcome.constraints,
+      constraints,
       changes,
       summary,
       evaluated,
       durationMs: Math.round((nowMs() - started) * 10) / 10,
+      ...(outcome.max ? { max: outcome.max } : {}),
+      ...(outcome.maxHeldBy ? { maxHeldBy: outcome.maxHeldBy } : {}),
     };
   } catch (error) {
     return {
@@ -235,7 +253,6 @@ export function contextFor(
 ): ConflictContext {
   return sessionConflictContext(request.profile, request.location, {
     excludeExerciseIds: constraints.avoidExerciseIds,
-    unavailableEquipment: constraints.busyEquipment,
     painJoints: constraints.painJoints,
   });
 }
@@ -249,11 +266,19 @@ interface Outcome {
   /** The headline when the change leaves the workout as it was. */
   unchanged?: string;
   notes: string[];
+  /** A max entered: what it did to the lift today (Maintenance 25). */
+  max?: MaxOutcome;
+  maxHeldBy?: MaxHeldBy;
 }
 
 function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
   return {
     busyEquipment: [...constraints.busyEquipment],
+    postponed: (constraints.postponed ?? []).map((item) => ({
+      exerciseId: item.exerciseId,
+      after: [...item.after],
+      ...(item.was ? { was: [...item.was] } : {}),
+    })),
     avoidExerciseIds: [...constraints.avoidExerciseIds],
     painJoints: [...constraints.painJoints],
     endBy: constraints.endBy,
@@ -375,6 +400,26 @@ function minutesUntil(iso: string, from: string): number | null {
   return Number.isFinite(minutes) ? minutes : null;
 }
 
+/**
+ * The minutes the rest of a session has (Maintenance 25): to an end time set, or, under way, the
+ * chosen length less the time done; as a rebuild fits the plan to them. Null before the start.
+ */
+function minutesLeft(
+  request: RecalibrationRequest,
+  constraints: SessionConstraints,
+): number | null {
+  if (constraints.endBy) {
+    const left = minutesUntil(constraints.endBy, request.timestamp);
+    if (left !== null) return Math.max(MIN_REMAINING_MINUTES, Math.round(left));
+  }
+  if (!hasStarted(request.completed)) return null;
+  const full = resolveTargetMinutes(
+    request.duration,
+    request.profile.schedule.typicalDurationMinutes,
+  );
+  return Math.max(MIN_REMAINING_MINUTES, Math.round(full - request.completed.elapsedSeconds / 60));
+}
+
 function rebuild(
   request: RecalibrationRequest,
   scope: RecalibrationScope,
@@ -404,7 +449,6 @@ function rebuild(
     keep,
     keepBlocks: request.workout.blocks,
     excludeExerciseIds: constraints.avoidExerciseIds,
-    unavailableEquipment: constraints.busyEquipment,
     painJoints: constraints.painJoints,
     templateId: scope === 'full' ? undefined : request.workout.templateId,
     targetMinutesOverride,
@@ -419,7 +463,7 @@ function rebuild(
     sessionLoading: request.loading,
     swaps: request.swaps,
   };
-  return generateWorkout({
+  const workout = generateWorkout({
     profile: request.profile,
     location: request.location,
     history: request.history,
@@ -428,6 +472,329 @@ function rebuild(
     constraints: generation,
     maxes: request.maxes,
   });
+  // The plan puts a kept lift back in its own slot: one moved for busy equipment goes behind what
+  // it gave way to again (Maintenance 25), since the equipment may still be taken.
+  const kept = settleMoves(
+    workout,
+    { ...request, workout, constraints },
+    constraints.postponed,
+    classified.isDone,
+  );
+  constraints.postponed = kept.postponed;
+  // Rows moved take new targets: the plan says the time and the lines its rows now add up to, held
+  // to the length this rebuild picked (a check-in short on time picks one of its own).
+  if (kept.moved) {
+    refresh(workout, { ...request, duration: choice }, constraints, workout.warmup.generalMinutes);
+  }
+  return workout;
+}
+
+/**
+ * Each lift moved for busy equipment behind the lifts it gave way to, as the plan now stands
+ * (Maintenance 25): the rows put in one order that meets every move, kept as they were wherever no
+ * move asks otherwise (the sixth review: moves settled one at a time could miss an order that
+ * existed). The lift in front of the lifter has its equipment: its move ends, and nothing moves it
+ * (a lift moved while under way keeps its move). A move whose lifts given way to are all gone, its
+ * lift leading, waits behind the next row with a set to do that is not waiting on it, since its
+ * equipment may still be taken. Moves that ask for opposite orders (a rebuild can pair against
+ * them) cannot all be met: in each loop, the move holding back its earliest row ends, and that
+ * lift stays where the plan put it. (A busy tap's own move is on no loop: the row it goes behind
+ * never waits on it.) Returns the moves as they now stand, and whether a row moved.
+ */
+function settleMoves(
+  workout: GeneratedWorkout,
+  request: RecalibrationRequest,
+  postponed: readonly Postponed[],
+  isDone: SetDonePredicate,
+): { moved: boolean; postponed: Postponed[] } {
+  const front = workout.blocks.find((block) =>
+    block.entries.some((entry) => entry.id === request.currentEntryId),
+  );
+  // The moves of the lifts in the lifter's row end; a lift stopped earlier holds no move (the
+  // seventh review: a set of one undone put the lifter on it, and moves under its old name ended,
+  // a busy tap's own among them).
+  let moves = postponed.filter(
+    (move) =>
+      !front?.entries.some(
+        (entry) => isOpenLift(entry, isDone) && movedLift(move, entry.exerciseId),
+      ),
+  );
+  let order = workout.blocks.map((_, index) => index);
+  for (let round = 0; round <= postponed.length; round += 1) {
+    const sorted = orderRows(workout, moves, isDone);
+    moves = sorted.moves;
+    order = sorted.order;
+    const fallback = fallbackMove(workout, order, moves, isDone);
+    if (!fallback) break;
+    moves = moves.map((move) => (move === fallback.move ? fallback.next : move));
+  }
+  const moved = order.some((index, at) => index !== at);
+  if (moved) {
+    const before = [...workout.blocks];
+    workout.blocks.splice(0, before.length, ...order.map((index) => before[index] as WorkoutBlock));
+    // Rows whose work before them changed take targets for their places, by the plan's own rule:
+    // the work before a lift today moves its load (docs/research/equipment-busy.md). A row changed
+    // when it moved, or when a row from behind it now comes before it, its own place the same (the
+    // seventh review: such a row kept the target the plan set for its own order). A lift under way
+    // keeps its sets, a lift stopped earlier is left as it is, and every lift keeps the ramps it
+    // has, one added by hand included.
+    let latest = -1;
+    order.forEach((index, at) => {
+      const changed = index !== at || latest >= at;
+      latest = Math.max(latest, index);
+      if (!changed) return;
+      for (const entry of (before[index] as WorkoutBlock).entries) {
+        if (isOpenLift(entry, isDone)) {
+          refitEntry(entry, workout, request, isDone, { keepRamps: true });
+        }
+      }
+    });
+  }
+  return { moved, postponed: moves };
+}
+
+/**
+ * The rows in the order the moves ask, each row as early as they let it (the earliest row free
+ * goes first), with the moves still standing. When the rows left all wait (a loop of moves), the
+ * way back from the earliest row left is walked to a loop, and the moves holding back that loop's
+ * earliest row end: a row left behind a loop, not on it, keeps its move.
+ */
+function orderRows(
+  workout: GeneratedWorkout,
+  postponed: readonly Postponed[],
+  isDone: SetDonePredicate,
+): { order: number[]; moves: Postponed[] } {
+  let moves = [...postponed];
+  const count = workout.blocks.length;
+  for (;;) {
+    const edges = moveEdges(workout, moves, isDone) as Map<Postponed, [number, number][]>;
+    const waitingFor = new Array<number>(count).fill(0);
+    for (const pairs of edges.values())
+      for (const [, to] of pairs) waitingFor[to] = (waitingFor[to] ?? 0) + 1;
+    const placed = new Array<boolean>(count).fill(false);
+    const order: number[] = [];
+    for (;;) {
+      const row = waitingFor.findIndex((left, index) => left === 0 && !placed[index]);
+      if (row < 0) break;
+      placed[row] = true;
+      order.push(row);
+      for (const pairs of edges.values()) {
+        for (const [from, to] of pairs)
+          if (from === row) waitingFor[to] = (waitingFor[to] ?? 0) - 1;
+      }
+    }
+    if (order.length === count) return { order, moves };
+    const holding = (row: number) =>
+      [...edges].flatMap(([move, pairs]) =>
+        pairs.filter(([from, to]) => to === row && !placed[from]).map(([from]) => ({ move, from })),
+      );
+    const path: number[] = [];
+    let row = placed.findIndex((done) => !done);
+    while (!path.includes(row)) {
+      path.push(row);
+      row = (holding(row)[0] as { from: number }).from;
+    }
+    const loop = path.slice(path.indexOf(row));
+    const earliest = Math.min(...loop);
+    const ending = holding(earliest);
+    moves = moves.filter((move) => !ending.some((each) => each.move === move));
+  }
+}
+
+/**
+ * A move whose lifts given way to are all gone (left out, or swapped out of what it knows), its
+ * lift leading in `order`: it waits behind the next row with a set to do that is not waiting on it
+ * and holds a lift other than itself. Null when no move needs it.
+ */
+function fallbackMove(
+  workout: GeneratedWorkout,
+  order: readonly number[],
+  moves: readonly Postponed[],
+  isDone: SetDonePredicate,
+): { move: Postponed; next: Postponed } | null {
+  const live = new Set(
+    allEntries(workout.blocks)
+      .filter((entry) => !isStopped(entry))
+      .map((entry) => entry.exerciseId),
+  );
+  const first = order.find((index) => holdsOpenLift(workout.blocks[index] as WorkoutBlock, isDone));
+  if (first === undefined) return null;
+  const leadingRow = workout.blocks[first] as WorkoutBlock;
+  const edges = moveEdges(workout, moves, isDone);
+  for (const move of moves) {
+    if (move.after.some((id) => live.has(id))) continue;
+    const names = moveNames(move);
+    const leads = leadingRow.entries.some(
+      (entry) => names.includes(entry.exerciseId) && isOpenLift(entry, isDone),
+    );
+    if (!leads) continue;
+    const others = [...edges].filter(([each]) => each !== move).map(([, pairs]) => pairs);
+    const waiting = rowsWaitingOn(others, first);
+    // The next row holding a lift still to do, other than this move's own, not waiting on it.
+    const next = order.slice(order.indexOf(first) + 1).find((index) => {
+      const block = workout.blocks[index] as WorkoutBlock;
+      return (
+        !waiting.has(index) &&
+        block.entries.some(
+          (entry) => isOpenLift(entry, isDone) && !names.includes(entry.exerciseId),
+        )
+      );
+    });
+    if (next === undefined) continue;
+    const after = (workout.blocks[next] as WorkoutBlock).entries
+      .map((entry) => entry.exerciseId)
+      .filter((id) => !names.includes(id));
+    return { move, next: { ...move, after } };
+  }
+  return null;
+}
+
+/** What the engine says when Equipment busy cannot move a lift (Maintenance 25). */
+function busyRefusal(refusal: PostponeRefusal, name: string): string {
+  if (refusal === 'done') return `${name} is done: nothing is left to move.`;
+  if (refusal === 'waiting') {
+    return `Everything left after ${name} is waiting for it, moved there for busy equipment: do it now, skip it today, or finish the workout.`;
+  }
+  return `Nothing after ${name} is left to do: do it now, skip it today, or finish the workout.`;
+}
+
+/**
+ * A lift swapped for another keeps its part in a busy move (Maintenance 25): moved for busy
+ * equipment, the lift swapped in stays where the old one was moved to; given way to, the lift
+ * swapped in is the one the busy lift stays behind. Every swap (by hand, for comfort, for a sore
+ * joint) comes through here, and only a swap gives a name to another lift, so the names are kept
+ * right here: a name another lift takes is never the moved lift's (the fourth and fifth reviews).
+ * A rebuild changes no name: it reads the old ones to hold a lift it brought back.
+ */
+function renamePostponed(
+  constraints: SessionConstraints,
+  from: string,
+  to: string,
+  workout: GeneratedWorkout,
+): void {
+  if (from === to) return;
+  const live = new Set(
+    allEntries(workout.blocks)
+      .filter((entry) => !isStopped(entry))
+      .map((entry) => entry.exerciseId),
+  );
+  constraints.postponed = constraints.postponed.flatMap((item) => {
+    const names = moveNames(item);
+    if (names.includes(from)) {
+      // The moved lift, under its name now or an old one (the sixth review: one a rebuild brought
+      // back), swapped. The old names are kept too: a rebuild can bring one back (a sore joint's
+      // swap undone). It never waits on itself: its new name leaves what it gave way to.
+      const was = [...new Set(names)].filter((id) => id !== to);
+      return [{ ...item, exerciseId: to, was, after: item.after.filter((id) => id !== to) }];
+    }
+    // Another lift takes the moved lift's own name, the moved lift being out of the plan today (a
+    // swap never offers a lift in it): the move goes on under an old name still planned, or ends
+    // (the fifth review: it waited on itself; the sixth: one held by an old name was lost).
+    if (item.exerciseId === to) {
+      const planned = (item.was ?? []).find((id) => id !== to && live.has(id));
+      if (!planned) return [];
+      return [
+        {
+          ...item,
+          exerciseId: planned,
+          was: (item.was ?? []).filter((id) => id !== planned),
+          after: item.after.filter((id) => id !== planned),
+        },
+      ];
+    }
+    // An old name of its own that another lift takes is that lift's now.
+    const was = item.was?.filter((id) => id !== to);
+    const named = was ? { ...item, was } : item;
+    // So is an old name of a lift it gave way to, taken by a lift it did not give way to.
+    if (!named.after.includes(from)) {
+      return [{ ...named, after: named.after.filter((id) => id !== to) }];
+    }
+    return [{ ...named, after: [...new Set([...named.after, to])] }];
+  });
+}
+
+/** Whether a lift is the one a busy move moved, under its name now or before a swap today. */
+function movedLift(item: Postponed, exerciseId: string): boolean {
+  return item.exerciseId === exerciseId || (item.was ?? []).includes(exerciseId);
+}
+
+/**
+ * The busy moves a lift left out today ends (Maintenance 25): its own, and one whose lifts it gave
+ * way to are all gone, a skip of them meaning they are done with.
+ */
+function dropGoneMoves(constraints: SessionConstraints, workout: GeneratedWorkout): void {
+  const present = new Set(
+    allEntries(workout.blocks)
+      .filter((entry) => !isStopped(entry))
+      .map((entry) => entry.exerciseId),
+  );
+  constraints.postponed = constraints.postponed.filter(
+    (item) =>
+      [item.exerciseId, ...(item.was ?? [])].some((id) => present.has(id)) &&
+      item.after.some((id) => present.has(id)),
+  );
+}
+
+/** The maxes had one lift's not been entered (Maintenance 25). */
+function withoutMax(
+  maxes: RecalibrationRequest['maxes'],
+  exerciseId: string,
+): RecalibrationRequest['maxes'] {
+  if (!maxes?.maxes[exerciseId]) return maxes;
+  return {
+    ...maxes,
+    maxes: Object.fromEntries(Object.entries(maxes.maxes).filter(([id]) => id !== exerciseId)),
+  };
+}
+
+/**
+ * Whether two targets ask the same: weight, reps and reserve. At the heaviest weight here a max
+ * moves the reps alone (Maintenance 25).
+ */
+function sameTarget(a: NextTarget, b: NextTarget): boolean {
+  return (
+    a.weight === b.weight && a.reps[0] === b.reps[0] && a.reps[1] === b.reps[1] && a.rir === b.rir
+  );
+}
+
+/** Targets lighter to win back missed reps, which an entered max does not move (Maintenance 25). */
+const EASED_MODES: ReadonlySet<NextTarget['mode']> = new Set(['deload', 'regress']);
+
+/**
+ * Whether a lift moved for busy equipment still comes behind the lifts it gave way to (Maintenance
+ * 25), by the moves' own rule: a lift done, or stopped, holds nothing and waits on nothing. Put back
+ * in front of one still to do by hand, it has its equipment again, and the move lapses (the sixth
+ * review: a finished row after it, which the reorder never touched, ended the move).
+ */
+function stillBehind(
+  workout: GeneratedWorkout,
+  item: Postponed,
+  isDone: SetDonePredicate,
+): boolean {
+  return (moveEdges(workout, [item], isDone).get(item) ?? []).every(([from, to]) => from < to);
+}
+
+/**
+ * The plan's lines that name the order, made true of it again (Maintenance 25): the summary names
+ * the lift that comes first, and the main lift "leads" only while it does. A lift moved for busy
+ * equipment, or moved by hand, would otherwise still be named first.
+ */
+function keepOrderLines(workout: GeneratedWorkout): void {
+  const inPlan = allEntries(workout.blocks).filter((entry) => !isStopped(entry));
+  const first = inPlan[0];
+  if (!first) return;
+  const firstName = requireExercise(first.exerciseId).name;
+  // The line on the main lift, while that lift is in the plan: one gone keeps its line as it was.
+  const reasons = workout.explanation.reasons.map((line) => {
+    const named = mainLiftName(line);
+    const main = inPlan.find((entry) => requireExercise(entry.exerciseId).name === named);
+    return named !== null && main ? mainLiftLine(named, main.role, main === first) : line;
+  });
+  const summary = workout.explanation.summary.replace(
+    /, ([^,]+?) first(?=(?:, fitted to [^.]+)?\.$)/,
+    `, ${firstName} first`,
+  );
+  workout.explanation = { ...workout.explanation, reasons, summary };
 }
 
 function findEntry(
@@ -963,6 +1330,7 @@ function refitEntry(
   workout: GeneratedWorkout,
   request: RecalibrationRequest,
   isDone: SetDonePredicate,
+  options: { keepRamps?: boolean } = {},
 ): boolean {
   if (entry.manual?.weight || isStopped(entry)) return false;
   // A lift with any set done or skipped is fitted in place, so those sets keep their kind and
@@ -990,30 +1358,32 @@ function refitEntry(
   const context = sessionContextFor(request, workout, entry.id, exercise);
   const loading = loadingOf(request, exercise);
   const fitted = fitToday(request, target, loading, exercise, entry.role);
-  const warmupSets = rampSetsFor(
-    exercise,
-    entry.role,
-    workout.duration.targetMinutes,
-    context.ramp,
-    {
-      weight: fitted.weight,
-      step: loading.step,
-      floor: barWeightFor(exercise, request.profile.units),
-    },
+  const floor = barWeightFor(exercise, request.profile.units);
+  const load = { weight: fitted.weight, step: loading.step, floor };
+  // A lift moved for busy equipment keeps the ramps it has, one added by hand included
+  // (Maintenance 25); those past the room under the working weight come first with no weight, as
+  // a ramp added by hand comes.
+  const warmupSets = Math.max(
+    options.keepRamps ? entry.warmupSets : 0,
+    rampSetsFor(exercise, entry.role, workout.duration.targetMinutes, context.ramp, load),
   );
+  const weighed = Math.min(warmupSets, rampRoom(load));
   entry.warmupSets = warmupSets;
-  entry.sets = applyProgression(
-    buildSets(
-      { ...prescription, sets: working, restSeconds: entry.restSeconds },
-      warmupSets,
-      exercise,
+  entry.sets = [
+    ...buildSets({ ...prescription, sets: 0 }, warmupSets - weighed, exercise),
+    ...applyProgression(
+      buildSets(
+        { ...prescription, sets: working, restSeconds: entry.restSeconds },
+        weighed,
+        exercise,
+      ),
+      fitted,
+      loading.step,
+      entry.manual ?? {},
+      floor,
+      loading,
     ),
-    fitted,
-    loading.step,
-    entry.manual ?? {},
-    barWeightFor(exercise, request.profile.units),
-    loading,
-  );
+  ].map((set, index) => ({ ...set, index }));
   // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).
   entry.dropSet = entry.dropSet && exercise.dropSetSafe && !entryPushedToEffort(entry);
   if (entry.dropSet) entry.sets.push(dropSetAt(entry.sets.length));
@@ -1030,6 +1400,8 @@ function loadingOf(request: RecalibrationRequest, exercise: CatalogExercise): Lo
  * Session context for one entry: what the entries before it have done today
  * (all of them, for an entry not yet in the workout), and the ramp it deserves.
  * `through` counts the entry's own logged sets too, for an exercise picking up again.
+ * Sets already logged on lifts that now come after it count too (Maintenance 25): a lift moved
+ * for busy equipment, or a row done out of order, was work done before it all the same.
  */
 function sessionContextFor(
   request: RecalibrationRequest,
@@ -1039,12 +1411,20 @@ function sessionContextFor(
   through = false,
 ): { precedingSets: number; afterBreak: boolean; ramp: RampContext } {
   const before: WorkoutEntry[] = [];
+  const after: WorkoutEntry[] = [];
+  let passed = false;
   for (const entry of allEntries(workout.blocks)) {
-    if (entry.id === entryId && !through) break;
-    before.push(entry);
-    if (entry.id === entryId) break;
+    if (passed) after.push(entry);
+    else if (entry.id === entryId) {
+      passed = true;
+      if (through) before.push(entry);
+    } else before.push(entry);
   }
-  const earlier = sessionWork(before, request.completed.sets, requireExercise);
+  // Only what they have done: none of their sets still to come is before it.
+  const done = sessionWork(after, request.completed.sets, requireExercise)
+    .filter((item) => item.doneAt.length > 0)
+    .map((item) => ({ ...item, planned: item.doneAt.length + item.skipped }));
+  const earlier = [...sessionWork(before, request.completed.sets, requireExercise), ...done];
   const preceding = precedingWorkToday(exercise, earlier, request.timestamp);
   return {
     precedingSets: preceding.sets,
@@ -1650,20 +2030,45 @@ function bestAlternative(
   )?.exercise;
 }
 
+/**
+ * What Equipment busy says it did (Maintenance 25): a pair or circuit is named by its lifts, and
+ * it is the tapped lift's equipment that is busy.
+ */
+function busyHeadline(moving: WorkoutBlock, behind: WorkoutBlock, name: string): string {
+  const names = (block: WorkoutBlock) =>
+    block.entries
+      .map((entry) => requireExercise(entry.exerciseId).name)
+      .join(', ')
+      .replace(/, ([^,]*)$/, ' and $1');
+  const one = moving.entries.length === 1;
+  const whose = one ? 'its equipment' : `the equipment for ${name}`;
+  const passed =
+    behind.kind === 'straight'
+      ? names(behind)
+      : `that ${behind.kind === 'superset' ? 'pair' : 'circuit'}`;
+  return `${names(moving)} moved after ${names(behind)}: ${whose} is busy. ${one ? 'It comes' : 'They come'} up again once ${passed} is done.`;
+}
+
 /** Re-estimates time and compromises after a local edit. */
 function refresh(
   workout: GeneratedWorkout,
   request: RecalibrationRequest,
   constraints: SessionConstraints,
+  // The general warm-up a rebuild just set (a short one on a return after a pause).
+  generalWarmup?: number,
 ): void {
   const { isDone } = classify(request);
+  // Once a set is logged the general warm-up is behind the lifter, as the rebuilds count it; a
+  // rebuild's own short warm-up after a pause counts (the fifth review).
   const time = estimateWorkout(
     workout.blocks,
-    workout.warmup.generalMinutes,
+    generalWarmup ?? (request.completed.sets.length > 0 ? 0 : workout.warmup.generalMinutes),
     requireExercise,
     isDone,
   );
-  const target = workout.duration.targetMinutes;
+  // Under way, or with an end time, the plan is held to the minutes left, as a rebuild fits it.
+  const left = minutesLeft(request, constraints);
+  const target = left ?? workout.duration.targetMinutes;
   const overBy = Math.max(0, Math.round((time.totalMinutes - target) * 10) / 10);
   // The deload line names lighter loads only while a lift has them (Maintenance 24).
   const deload = constraints.deload;
@@ -1672,7 +2077,14 @@ function refresh(
         reason.startsWith('Deload week (') ? deloadReason(workout.blocks, deload) : reason,
       )
     : workout.explanation.reasons;
-  workout.explanation = { ...workout.explanation, time, reasons };
+  // The summary says the exercises the plan has and the minutes its timers add up to
+  // (Maintenance 25).
+  const summary = workout.explanation.summary.replace(
+    /: [0-9]+ exercises in about [0-9]+ min/,
+    `: ${allEntries(workout.blocks).length} exercises in about ${Math.round(time.totalMinutes)} min`,
+  );
+  workout.explanation = { ...workout.explanation, time, reasons, summary };
+  keepOrderLines(workout);
   workout.duration = {
     ...workout.duration,
     estimatedMinutes: Math.round(time.totalMinutes),
@@ -1687,7 +2099,14 @@ function refresh(
     .map((conflict) => conflict.message);
   const structural = workout.compromises.filter((line) => /^(No |Even the leanest)/.test(line));
   // No fit ran after a change to one lift (Maintenance 24): the line says only how far over.
-  const over = overBy > 1 ? [`Runs about ${Math.round(overBy)} min over ${target} min.`] : [];
+  const over =
+    overBy > 1
+      ? [
+          left === null
+            ? `Runs about ${Math.round(overBy)} min over ${target} min.`
+            : `Runs about ${Math.round(overBy)} min over the ${target} min left.`,
+        ]
+      : [];
   workout.compromises = [
     ...new Set([
       ...structural.filter((line) => !line.startsWith('Even the leanest')),
@@ -1702,6 +2121,7 @@ function substituteUnfit(
   workout: GeneratedWorkout,
   request: RecalibrationRequest,
   context: ConflictContext,
+  constraints: SessionConstraints,
   options: { joint?: Joint; forceEntryId?: string } = {},
 ): { replaced: number; removed: number; notes: string[] } {
   const { isDone } = classify(request);
@@ -1721,6 +2141,7 @@ function substituteUnfit(
     });
     if (alternative && (blocked || forced || gentleOn(alternative, options.joint))) {
       applySubstitution(workout, entry, block, alternative, request, false);
+      renamePostponed(constraints, exercise.id, alternative.id, workout);
       replaced += 1;
     } else if (blocked || forced) {
       removeEntry(workout, entry.id);
@@ -1729,11 +2150,6 @@ function substituteUnfit(
     }
   }
   return { replaced, removed, notes };
-}
-
-function equipmentNames(ids: readonly string[]): string {
-  const names = ids.map((id) => EQUIPMENT.find((item) => item.id === id)?.name ?? id);
-  return names.length > 0 ? names.join(' + ') : 'Station';
 }
 
 function formatClock(iso: string): string {
@@ -1798,6 +2214,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       };
     }
     case 'location': {
+      // Busy equipment was busy at the place left behind (Maintenance 25).
+      constraints.postponed = [];
       // Every lift the rebuild keeps goes on at the weights at the new place, as when the weights
       // change (Maintenance 23): one under way or with reps set by hand from what its sets stand
       // in for, one kept but not started (the lift in front, a pinned one) from a fresh target
@@ -1860,6 +2278,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         throw new Error(`${previous.name} is done: nothing is left to swap.`);
       }
       applySubstitution(workout, entry, block, next, request, true);
+      renamePostponed(constraints, previous.id, next.id, workout);
+      // A lift a swap brings back (a lift stopped earlier, swapped back) comes to its old row: the
+      // moves hold again (the sixth review).
+      constraints.postponed = settleMoves(
+        workout,
+        request,
+        constraints.postponed,
+        isDone,
+      ).postponed;
       refresh(workout, request, constraints);
       return {
         ...base,
@@ -1870,25 +2297,75 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
     }
 
     case 'equipment-busy': {
+      // Busy equipment is a wait, not a reason to lose the exercise (Maintenance 25): its row
+      // moves behind the next one with a set to do, and leads again once that one is done. Nothing
+      // is swapped or left out, and the move holds through any rebuild today.
       const workout = cloneWorkout(request.workout);
-      const { entry } = findEntry(workout, trigger.entryId);
-      const exercise = requireExercise(entry.exerciseId);
-      const available = contextFor(request, constraints).availableEquipment;
-      const group =
-        exercise.equipment.find((option) => option.every((id) => available.has(id))) ??
-        exercise.equipment[0] ??
-        [];
-      constraints.busyEquipment = [...new Set([...constraints.busyEquipment, ...group])];
-      const context = contextFor(request, constraints);
-      const outcome = substituteUnfit(workout, request, context, { forceEntryId: entry.id });
-      refresh(workout, request, constraints);
-      return {
-        ...base,
+      const { isDone } = classify(request);
+      const { entry, block: moving } = findEntry(workout, trigger.entryId);
+      const name = requireExercise(entry.exerciseId).name;
+      // The rule both screens read to turn the button off.
+      const refusal = postponeRefusal(workout, entry.id, isDone, constraints.postponed);
+      if (refusal) throw new Error(busyRefusal(refusal, name));
+      // Not refused: there is a row to go behind, passing over the lifts waiting on it.
+      const behind = postponeBehind(
         workout,
-        constraints,
-        prefix: `${equipmentNames(group)} busy`,
-        notes: outcome.notes,
+        entry.id,
+        isDone,
+        constraints.postponed,
+      ) as WorkoutBlock;
+      const after = behind.entries.map((each) => each.exerciseId);
+      // The moves this one replaces are the lift's own: under its name now, or under an old name
+      // when the move's own lift has left the plan. A move of another lift in the plan that knows
+      // this one by an old name stays that lift's, the name now this one's (the eighth review: the
+      // tap took the other lift's move, and the front rule then ended its own).
+      const planned = new Set(
+        allEntries(workout.blocks)
+          .filter((each) => !isStopped(each))
+          .map((each) => each.exerciseId),
+      );
+      const own = (item: Postponed) =>
+        item.exerciseId === entry.exerciseId ||
+        (!planned.has(item.exerciseId) && (item.was ?? []).includes(entry.exerciseId));
+      // The lift's names before a swap today go with its new move, as its old move had them: a
+      // rebuild that brings one back holds it too (the seventh review: they were lost, and the
+      // rebuild put the old lift first). A name another lift in the plan has stays that lift's:
+      // the move would hold it too.
+      const was = [
+        ...new Set(constraints.postponed.filter(own).flatMap((item) => moveNames(item))),
+      ].filter((name) => !planned.has(name));
+      const tapped: Postponed = {
+        exerciseId: entry.exerciseId,
+        after,
+        ...(was.length > 0 ? { was } : {}),
       };
+      const others = constraints.postponed.flatMap((item): Postponed[] => {
+        if (own(item)) return [];
+        const kept = (item.was ?? []).filter((name) => name !== entry.exerciseId);
+        return [
+          {
+            exerciseId: item.exerciseId,
+            after: item.after,
+            ...(kept.length > 0 ? { was: kept } : {}),
+          },
+        ];
+      });
+      // The moves settle with this one among them, and that moves the row: it goes behind the row
+      // it waits on, a lift waiting on it stays behind it, and each row moved takes its target for
+      // its new place. The lift in front is the one the lifter is on, unless it is this one,
+      // leaving the front (the sixth review: a lift under way elsewhere was moved; the fifth: a
+      // lift paired with this one lost its move).
+      const front = moving.entries.some((each) => each.id === request.currentEntryId)
+        ? null
+        : request.currentEntryId;
+      constraints.postponed = settleMoves(
+        workout,
+        { ...request, currentEntryId: front },
+        [...others, tapped],
+        isDone,
+      ).postponed;
+      refresh(workout, request, constraints);
+      return { ...base, workout, constraints, headline: busyHeadline(moving, behind, name) };
     }
 
     case 'pain': {
@@ -1899,10 +2376,11 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         ...new Set([...constraints.avoidExerciseIds, entry.exerciseId]),
       ];
       const context = contextFor(request, constraints);
-      const outcome = substituteUnfit(workout, request, context, {
+      const outcome = substituteUnfit(workout, request, context, constraints, {
         joint: trigger.joint,
         forceEntryId: entry.id,
       });
+      dropGoneMoves(constraints, workout);
       refresh(workout, request, constraints);
       return {
         ...base,
@@ -1928,6 +2406,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       const alternative = bestAlternative(request, workout, entry, block, context);
       if (alternative) {
         applySubstitution(workout, entry, block, alternative, request, false);
+        renamePostponed(constraints, previous.id, alternative.id, workout);
         refresh(workout, request, constraints);
         return {
           ...base,
@@ -1937,6 +2416,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         };
       }
       removeEntry(workout, entry.id);
+      dropGoneMoves(constraints, workout);
       refresh(workout, request, constraints);
       return {
         ...base,
@@ -1964,6 +2444,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       for (const stopped of stoppedBefore(workout.blocks, removed)) {
         stopped.stopped = { owed: stopped.stopped?.owed ?? 0, why: 'skip' };
       }
+      dropGoneMoves(constraints, workout);
       refresh(workout, request, constraints);
       const saved = Math.max(0, before - workout.duration.estimatedMinutes);
       return {
@@ -2162,14 +2643,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       // and so does every other lift never logged, through the cross-exercise estimate.
       const workout = cloneWorkout(request.workout);
       const named = requireExercise(trigger.exerciseId);
-      const weightOf = (entry: WorkoutEntry) =>
-        entry.sets.find((set) => set.kind === 'working')?.targetWeight ?? null;
-      const before = new Map(
-        allEntries(request.workout.blocks).map((entry) => [entry.id, weightOf(entry)]),
-      );
+      // The same plan had this max not been entered: a target the max did not move is kept, however
+      // today's work before the lift has moved it since the plan was made (Maintenance 25).
+      const bare: RecalibrationRequest = { ...request, maxes: withoutMax(request.maxes, named.id) };
       let updated = 0;
       let others = 0;
-      let raised = 0;
+      let moved = 0;
+      let held = 0;
+      let heldBy: MaxHeldBy | undefined;
+      let eased = 0;
       let hasHistory = false;
       for (const entry of allEntries(workout.blocks)) {
         const own = entry.exerciseId === trigger.exerciseId;
@@ -2180,33 +2662,38 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         const touched = request.completed.sets.some((set) => set.entryId === entry.id);
         if (touched || entry.manual?.weight) continue;
         const exercise = requireExercise(entry.exerciseId);
-        const plain = prescriptionToday(request, exercise, entry.role);
         const context = sessionContextFor(request, workout, entry.id, exercise);
         const byHand = entry.manual?.reps === true;
         const handReps = ownReps(entry);
-        const targetFor = (asked: Prescription) =>
-          targetToday(request, workout, entry.id, exercise, entry.role, asked);
-        const plainTarget = targetFor(plain);
-        // The effort the lift carries ("Make it harder" or "easier", a check-in) stays
-        // (Maintenance 24).
-        const prescription = shifted(plain, effortShift(request, entry, plainTarget.rir), exercise);
-        let target = prescription === plain ? plainTarget : targetFor(prescription);
+        const loading = loadingOf(request, exercise);
+        // The lift's target today from the maxes a request holds.
+        const fittedFrom = (from: RecalibrationRequest) => {
+          const plain = prescriptionToday(from, exercise, entry.role);
+          const targetFor = (asked: Prescription) =>
+            targetToday(from, workout, entry.id, exercise, entry.role, asked);
+          const plainTarget = targetFor(plain);
+          // The effort the lift carries ("Make it harder" or "easier", a check-in) stays
+          // (Maintenance 24).
+          const prescription = shifted(plain, effortShift(from, entry, plainTarget.rir), exercise);
+          let target = prescription === plain ? plainTarget : targetFor(prescription);
+          // A load read from an estimate for a rep range, with reps set by hand: the load for those
+          // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
+          const hand = handReps[0];
+          if (byHand && hand && ESTIMATED_MODES.has(target.mode)) {
+            target = targetFor({ ...prescription, reps: hand.reps, rir: hand.rir });
+          }
+          const fitted = fitToday(
+            from,
+            byHand ? ownTarget(target) : target,
+            loading,
+            exercise,
+            entry.role,
+          );
+          return { prescription, target, fitted };
+        };
+        const { prescription, target, fitted } = fittedFrom(request);
         const working =
           entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
-        // A load read from an estimate for a rep range, with reps set by hand: the load for those
-        // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
-        const hand = handReps[0];
-        if (byHand && hand && ESTIMATED_MODES.has(target.mode)) {
-          target = targetFor({ ...prescription, reps: hand.reps, rir: hand.rir });
-        }
-        const loading = loadingOf(request, exercise);
-        const fitted = fitToday(
-          request,
-          byHand ? ownTarget(target) : target,
-          loading,
-          exercise,
-          entry.role,
-        );
         const warmupSets = rampSetsFor(
           exercise,
           entry.role,
@@ -2239,31 +2726,70 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         if (own) {
           updated += 1;
           if (fitted.mode !== 'start') hasHistory = true;
-          const was = before.get(entry.id) ?? null;
-          const now = weightOf(entry);
-          if (was !== null && now !== null && now > was) raised += 1;
+          const without = fittedFrom(bare);
+          if (!sameTarget(fitted, without.fitted)) {
+            moved += 1;
+          } else if (!sameTarget(target, without.target)) {
+            // The max moved the target, and something held it: the heaviest weight here (with
+            // or without reps set by hand), a deload week's lighter loads, or the reps set by hand.
+            held += 1;
+            heldBy ??= fitted.capped
+              ? byHand
+                ? 'hand'
+                : 'weights'
+              : constraints.deload !== null
+                ? 'deload'
+                : byHand
+                  ? 'hand'
+                  : 'weights';
+          } else if (EASED_MODES.has(fitted.mode)) {
+            eased += 1;
+          }
         } else {
           others += 1;
         }
       }
       // The plan's lines follow the loads a max moved, a deload week's among them (Maintenance 24).
       refresh(workout, request, constraints);
+      // What the max did, in one word the max sheet's preview reads too (Maintenance 25).
+      const outcome: MaxOutcome =
+        updated === 0
+          ? request.completed.sets.some((set) => set.exerciseId === named.id && !set.skipped)
+            ? 'logged'
+            : request.completed.sets.some((set) => set.exerciseId === named.id)
+              ? 'under-way'
+              : // Nothing of it done: its weight was set for today (Maintenance 23).
+                'by-hand'
+          : !hasHistory
+            ? 'first'
+            : moved > 0
+              ? 'moved'
+              : held > 0
+                ? 'held'
+                : eased > 0
+                  ? 'eased'
+                  : 'kept';
+      const headlines: Record<MaxOutcome, string> = {
+        logged: `${named.name} already has logged sets today; your max counts from the next session.`,
+        'under-way': `${named.name} is already under way today; your max counts from the next session.`,
+        'by-hand': `Max saved. ${named.name} keeps the weight set for today.`,
+        first: `First target for ${named.name} set from your max.`,
+        moved: `${named.name}: the target moved toward your max.`,
+        held:
+          heldBy === 'deload'
+            ? `Max saved. This deload week holds ${named.name} at this target.`
+            : heldBy === 'hand'
+              ? `Max saved. The weights here and the reps you set hold ${named.name} at this target.`
+              : `Max saved. The weights here hold ${named.name} at this target.`,
+        eased: `Max saved. ${named.name} is lighter today to win back missed reps; a max does not change that.`,
+        kept: `Max saved. Your logged sets already put ${named.name} at this target.`,
+      };
       return {
         ...base,
         workout,
-        headline:
-          updated === 0
-            ? request.completed.sets.some((set) => set.exerciseId === named.id && !set.skipped)
-              ? `${named.name} already has logged sets today; your max counts from the next session.`
-              : request.completed.sets.some((set) => set.exerciseId === named.id)
-                ? `${named.name} is already under way today; your max counts from the next session.`
-                : // Nothing of it done: its weight was set for today (Maintenance 23).
-                  `Max saved. ${named.name} keeps the weight set for today.`
-            : !hasHistory
-              ? `First target for ${named.name} set from your max.`
-              : raised > 0
-                ? `${named.name}: the target moved toward your max.`
-                : `Max saved. Your logged sets already put ${named.name} at this target.`,
+        max: outcome,
+        ...(outcome === 'held' && heldBy ? { maxHeldBy: heldBy } : {}),
+        headline: headlines[outcome],
         notes:
           others > 0
             ? [
@@ -2648,7 +3174,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
 
     case 'reorder': {
       const workout = cloneWorkout(request.workout);
-      const { frozenIds } = classify(request);
+      const { frozenIds, isDone } = classify(request);
       const index = workout.blocks.findIndex((block) =>
         block.entries.some((entry) => entry.id === trigger.entryId),
       );
@@ -2672,6 +3198,11 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
       }
       workout.blocks[index] = other;
       workout.blocks[target] = moving;
+      // Put back in front of what it gave way to by hand, a lift moved for busy equipment has its
+      // equipment again: its move lapses, and no rebuild puts it back (Maintenance 25).
+      constraints.postponed = constraints.postponed.filter((item) =>
+        stillBehind(workout, item, isDone),
+      );
       refresh(workout, request, constraints);
       return { ...base, workout, headline: `Moved ${moving.label} ${trigger.direction}.` };
     }
@@ -2694,8 +3225,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope): Outc
         restBetweenRoundsSeconds: entry.restSeconds,
       }));
       workout.blocks.splice(at, 1, ...straight);
+      // Each lift a row of its own: one moved for busy equipment that was paired with a lift it
+      // gave way to goes behind that lift now (the sixth review).
+      constraints.postponed = settleMoves(
+        workout,
+        request,
+        constraints.postponed,
+        classify(request).isDone,
+      ).postponed;
       refresh(workout, request, constraints);
-      return { ...base, workout, headline: `Split ${block.label} into straight sets.` };
+      return {
+        ...base,
+        workout,
+        constraints,
+        headline: `Split ${block.label} into straight sets.`,
+      };
     }
 
     case 'drop-set': {

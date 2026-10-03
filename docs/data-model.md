@@ -19,6 +19,9 @@ data lives, its schema owner, and the rules that protect it.
 | Outbox                      | IndexedDB `outbox`                   | `src/core/storage/indexedDb.ts`         | Local writes the cloud copy has not received; one entry per record; never in a backup                                                                                                                                    |
 | Cloud copy token and state  | IndexedDB `cloud`                    | `src/core/cloud/cloudSync.ts`           | The pasted token and the sync cursor; this device only; never in a backup                                                                                                                                                |
 | Place barcodes              | IndexedDB `device`                   | `src/core/validation/placeBarcode.ts`   | A place's membership barcode: the picture as added, the code when the phone read it, and the pop-up choice; key `barcode:<place id>`; this device only; never in the cloud copy, a backup or a snapshot (Maintenance 18) |
+| Barcodes' second copy       | localStorage `wc.v1.barcodes`        | `src/core/state/barcodeMirror.ts`       | Each barcode again, its picture when it fits (else a smaller copy, else the code alone); restores a barcode the database lost and is healed from it at every open (Maintenance 25)                                       |
+| Database address copy       | localStorage `wc.v1.cloudUrl`        | `src/core/cloud/tokenVault.ts`          | The cloud copy's address, beside the token's second copy; heals the database's (Maintenance 25)                                                                                                                          |
+| Database birth              | IndexedDB `cloud` (key `birth`)      | `src/core/cloud/cloudSync.ts`           | When this database was made; a cleared phone's own rows from before it come back over setup's defaults (Maintenance 25)                                                                                                  |
 | Small settings              | localStorage `wc.v1.settings`        | `src/core/validation/settings.ts`       | Onboarding completion, last export, last import, the device id for the cloud copy                                                                                                                                        |
 | Unfinished onboarding draft | localStorage `wc.v1.onboardingDraft` | `src/features/profile/draft.ts`         | Removed when setup finishes                                                                                                                                                                                              |
 | Current session             | localStorage `wc.v1.session`         | `src/core/state/session.ts`             | The preview or active workout; never touched by cleanup                                                                                                                                                                  |
@@ -77,8 +80,8 @@ That is what lets a backup written by a newer app version pass through an older 
 Critical saves go through `putVerified` (`src/core/storage/verifiedSave.ts`): write, read back,
 compare structurally, and only then return a receipt (store, id, verifiedAt, bytes). If the
 read-back differs, the previous record is restored and a `SaveVerificationError` is thrown, so
-the app never reports a save that did not land. The last receipt is visible under Settings,
-Diagnostics.
+the app never reports a save that did not land. The last receipt is visible under Settings, Your
+data, Storage and save check.
 
 ## Backup and restore
 

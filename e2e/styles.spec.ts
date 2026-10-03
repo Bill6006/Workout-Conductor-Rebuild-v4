@@ -54,7 +54,7 @@ test.describe('programming styles', () => {
     page,
   }, testInfo) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/programming');
     await expect(styleGroup(page).getByRole('radio')).toHaveCount(8);
     await expect(styleGroup(page).getByRole('radio', { name: /^Hybrid/ })).toBeChecked();
 
@@ -74,8 +74,9 @@ test.describe('programming styles', () => {
     await expect(page.getByText('Auto · Hypertrophy focus')).toBeVisible();
 
     // Losing fat changes what the lifting is for, and the pick with it.
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/goals');
     await page.getByRole('switch', { name: /Losing fat right now/ }).click();
+    await page.getByTestId('row-programming').click();
     await settle(page);
     await expect(page.getByTestId('style-resolved')).toHaveText('Auto picked Lean-down');
     await expect(page.getByTestId('style-why')).toContainText('keep the muscle and strength');
@@ -90,7 +91,7 @@ test.describe('programming styles', () => {
 
   test('a style picked by hand stands, and says where the research is mixed', async ({ page }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/programming');
     await styleGroup(page)
       .getByRole('radio', { name: /^Undulating/ })
       .click();

@@ -3,9 +3,13 @@
 Everything the app knows lives in the browser on the phone: IndexedDB `workout-conductor-v4`
 (profile, places, workouts, notes and cues, custom exercises, your demonstrations, saved
 workouts, meta, automatic backups, a place's membership barcode, and, for the optional cloud copy,
-an outbox and the pasted token)
-and three small localStorage keys (settings, an unfinished onboarding draft, the current session),
-plus, only if a stored workout ever could not be read back, the copies kept for recovery.
+an outbox and the cloud store: the pasted token with its mark and log, the database address,
+the walk's place in the cloud copy, and when this database was made)
+and small localStorage keys: settings (with the device's id for the cloud copy), an unfinished
+onboarding draft and the current session; second copies that outlive a cleared database (the
+cloud token with its mark and log, the database address, and each place's barcode, its picture
+within a budget or else its code); plus, only if a stored workout ever could not be read back,
+the copies kept for recovery.
 Nothing is uploaded anywhere unless the owner pastes a database token into Settings > Cloud copy,
 and then only to the owner's own database at the URL shown there (`docs/cloud-copy.md`). No user
 data is ever committed to this repository.
@@ -24,8 +28,44 @@ automatic backup carries a place's membership barcode either, and a restore leav
 the phone as it is (Maintenance 18).
 
 A restore writes through the same durable-data owner as everything else, so with a token on the
-device the restored records are queued for the cloud copy and records the restore removed are
-queued as deletions. The phone stays the source of truth.
+device the restored records are queued for the cloud copy. Since Maintenance 25 a restore never
+cuts the cloud copy back: the records the backup lacks leave this phone only, with nothing queued
+to delete them there, and each restored record reaches the cloud copy as of its own time, or the
+backup's when it has none. A version the cloud copy changed later stays, and this phone takes it;
+the next sync walks the whole cloud copy again, so anything there that the backup lacks comes back
+too. The preview says so when the cloud copy is on.
+
+## When the browser clears the phone's storage
+
+Chrome on Android can clear an installed app's database (with its cache and service worker) when
+the phone runs short of space, keeping its local storage; it did so on the owner's phone. Since
+Maintenance 25:
+
+- The app asks the browser to keep its storage each time it opens (Settings, Storage shows
+  whether it is kept).
+- The cloud token, the database address and each place's barcode are kept twice, in the database
+  and in local storage, and each copy heals the other when the app opens. A barcode's second copy
+  holds its picture within a budget (local storage is shared by every app on the origin), else its
+  code; a big picture with no code read that cannot be shrunk, or finds the budget spent, has
+  none, and the cloud card says so. Each change touches
+  only its own barcode's entry, so a second window never writes its old list back, and barcode
+  changes and the second copy's upkeep as the app opens or reloads take turns, across the app's
+  windows too where the browser has Web Locks.
+- With the cloud copy on, a phone with an empty database shows "Bringing your data back" in place
+  of setup until its first walk of the copy is done. The first sync pulls everything before it
+  pushes anything, and a sync whose pull fails pushes nothing.
+- Until that first walk is done, a record this phone wrote before the clearing comes back over
+  one made here since, and a change waiting to go for it is dropped: setup's defaults never
+  overwrite the history. This holds for anything changed in that time, so what is set up or
+  changed while waiting (offline, "Set up anyway") is replaced by the cloud copy's records when
+  the walk is done. The walk ends this rule for good; switching databases never wakes it again.
+- A write the cloud copy refuses, because it holds a newer version, is not counted as sent: this
+  phone takes the cloud's version, unless a change made here since waits to go. When the cloud's
+  version cannot be fetched the change stays waiting, so "0 changes waiting" means the two agree.
+- A restart of the walk (a token entered again, a restore, a database switched) made while a
+  sync runs stands: the sync never writes its old place in the walk back over it.
+- Settings, Cloud copy names what the copy never holds: the barcodes and your own demonstrations
+  (in the backups you export).
 
 ## Schema and migration
 

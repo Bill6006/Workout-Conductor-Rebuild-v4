@@ -1,7 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
+import type { ChangeSummary } from '../../engine/recalibration/types';
 import { allEntries, type GeneratedWorkout } from '../../engine/workout/types';
 import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import { TEST_NOW, Providers, createTestStore } from '../../test/testStore';
@@ -34,7 +35,11 @@ function withStoppedBench(): { workout: GeneratedWorkout; benchId: string; logge
   return { workout, benchId: bench.id, logged };
 }
 
-function renderCard(workout: GeneratedWorkout, logged: ReadonlySet<string>) {
+function renderCard(
+  workout: GeneratedWorkout,
+  logged: ReadonlySet<string>,
+  summary: ChangeSummary | null = null,
+) {
   const handle = createTestStore();
   render(
     <Providers store={handle.store}>
@@ -45,10 +50,52 @@ function renderCard(workout: GeneratedWorkout, logged: ReadonlySet<string>) {
         onSelect={() => undefined}
         onDurationChange={() => undefined}
         logged={logged}
+        summary={summary}
       />
     </Providers>,
   );
 }
+
+describe('why this workout on Today', () => {
+  it('shows every line of a list that says one thing twice, each under a key of its own', () => {
+    // Maintenance 25, the owner's item 39: a repeated line was its own key, so React saw two
+    // children with the same key. The engine no longer repeats a line; the list keys stay safe.
+    const workout = generateWorkout({
+      profile: { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
+      location: gym,
+      history: [],
+      now: TEST_NOW,
+      duration: 'default',
+    });
+    const twice = 'Shortened rests toward the realistic minimum.';
+    workout.explanation.reasons = [...workout.explanation.reasons, twice, twice];
+    workout.explanation.fittingSteps = [twice, twice];
+    workout.compromises = ['Runs about 4 min over 60 min.', 'Runs about 4 min over 60 min.'];
+    const changed = 'Replaced Cable Fly with Pec Deck.';
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      renderCard(workout, new Set(), {
+        headline: 'Barbell + plates busy: 2 exercises replaced.',
+        details: [changed, changed],
+        counts: {
+          added: 0,
+          removed: 0,
+          replaced: 2,
+          adjusted: 0,
+          supersetsAdded: 0,
+          supersetsRemoved: 0,
+          setsTrimmed: 0,
+        },
+      });
+      expect(screen.getAllByText(twice)).toHaveLength(4);
+      expect(screen.getAllByText(changed)).toHaveLength(2);
+      expect(screen.getAllByText('Runs about 4 min over 60 min.')).toHaveLength(2);
+      expect(errors.mock.calls.filter((call) => String(call[0]).includes('same key'))).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+});
 
 describe('a stopped exercise on Today', () => {
   it('counts the sets it logged, not the one skipped, and drops the Main lift badge', () => {

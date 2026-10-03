@@ -33,7 +33,7 @@ test.describe('data safety in Settings', () => {
     page,
   }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/backup');
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
 
     const historyDownload = page.waitForEvent('download');
@@ -43,6 +43,7 @@ test.describe('data safety in Settings', () => {
     await page.getByTestId('export-settings').click();
     expect((await settingsDownload).suggestedFilename()).toMatch(/^workout-conductor-settings-/);
 
+    await page.getByTestId('row-automatic-backups').click();
     await expect(page.getByTestId('snapshots-empty')).toBeVisible();
     await page.getByTestId('snapshot-now').click();
     await expect(status(page, 'Backed up on this device')).toBeVisible();
@@ -56,6 +57,7 @@ test.describe('data safety in Settings', () => {
     // Restoring keeps the data from before as another snapshot.
     await expect(page.getByTestId('snapshot-list').locator('li')).toHaveCount(2);
 
+    await page.getByTestId('row-storage').click();
     await page.getByTestId('save-check').click();
     await expect(status(page, /Save check passed/)).toBeVisible();
 
@@ -71,7 +73,7 @@ test.describe('data safety in Settings', () => {
     page,
   }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/older-exports');
     await page.getByTestId('legacy-file-input').setInputFiles({
       name: 'old-history.json',
       mimeType: 'application/json',
@@ -89,7 +91,7 @@ test.describe('data safety in Settings', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Progress' })).toBeVisible();
     await expect(page.getByText('Nothing logged yet.')).toHaveCount(0);
 
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/older-exports');
     await page.getByTestId('legacy-undo').click();
     await expect(status(page, 'Removed 1 imported workout')).toBeVisible();
     await expect(page.getByTestId('legacy-receipts')).toHaveCount(0);

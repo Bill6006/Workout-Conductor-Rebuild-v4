@@ -9,7 +9,7 @@ _Last updated: 2026-09-25_
 | Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                                        |
 | Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                                                   |
 | Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                                       |
-| Current phase          | Plan complete (Phases 0 to 8 GREEN); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, and 24 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, and 21 at their review gates. Maintenance 25 (round G) in progress                                                                                                                                         |
+| Current phase          | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, and 24 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, and 21 at their review gates. Maintenance 25 (round G) in progress                                    |
 | Phase gate             | Maintenance 24 **GREEN** from the owner on 2026-09-25 (issue #25). Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open)                                                                                                                                                                    |
 | Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                  |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                            |
@@ -17,21 +17,21 @@ _Last updated: 2026-09-25_
 | Latest commit          | Maintenance 24 GREEN from the owner; Maintenance 25 (round G) begins (this commit); the live app build is `cb34c58`, the same app code as `4f63e3d`                                                                                                                                                                                                     |
 | Latest deployment      | `4f63e3d` deployed by Deploy Pages run 36198581919 (success); browser suite against the live URL: 315 passed + 14 skipped by design, none failed, on the first run                                                                                                                                                                                      |
 | Test totals            | Unit: 1185 passed (163 files). Browser/mobile: 315 passed + 14 skipped by design, none failed, locally in the gate and against the live URL, each on its first run. Reverts: 359 of 359 caught (185 this round, 174 from Maintenance 23)                                                                                                                |
-| Build marker           | Shown under the header on every screen: `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                                                                            |
+| Build marker           | Under Settings, About this app (since Maintenance 25; before, under every screen's header): `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                        |
 
 ## Phase checklist
 
-| Phase | Name                                                         | Status        |
-| ----- | ------------------------------------------------------------ | ------------- |
-| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner) |
-| 1     | Product Foundation and First Useful Live Preview             | GREEN (owner) |
-| 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner) |
-| 3     | Workout Generation and Duration Engine                       | GREEN (owner) |
-| 4     | Central Recalibration Engine                                 | GREEN (owner) |
-| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner) |
-| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | GREEN (owner) |
-| 7     | Progress, Plan, Coverage, PRs, and Session Summary           | GREEN         |
-| 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | GREEN         |
+| Phase | Name                                                         | Status                                      |
+| ----- | ------------------------------------------------------------ | ------------------------------------------- |
+| 0     | Repository, Live Pages, and Scaffold                         | GREEN (owner)                               |
+| 1     | Product Foundation and First Useful Live Preview             | GREEN (owner)                               |
+| 2     | Exercise Catalog, Media, and Conflict Engine                 | GREEN (owner)                               |
+| 3     | Workout Generation and Duration Engine                       | GREEN (owner)                               |
+| 4     | Central Recalibration Engine                                 | GREEN (owner)                               |
+| 5     | Active Workout, Logging, and Superset Experience             | GREEN (owner)                               |
+| 6     | Adaptive Coach, Progression, Strategy, and Recovery          | GREEN (owner)                               |
+| 7     | Progress, Plan, Coverage, PRs, and Session Summary           | GREEN                                       |
+| 8     | Data Safety, Optional Migration, PWA, Polish, and Acceptance | YELLOW (ready for final Android acceptance) |
 
 ## Phase 7 deliverables
 
@@ -125,15 +125,16 @@ _Last updated: 2026-09-25_
 - Later rounds: RIR and rest targets now carry their evidence (effort and rest lines in the tempo detail and the How to panel; ramp sets labelled warm-up beside their RIR; three hypertrophy rest defaults raised to match the research; header line ends at the reps); the card demonstration plays the same loop as the details and shows your own GIF, photo, or video picked from the details view (on device, 3 MB, Replace and Remove); Pause and Replay are gone; the rating step offers End without saving behind a Discard this workout? confirmation. See `docs/tempo-guidance.md` and `docs/media-license-register.md`.
 - Fix: a larger demonstration (96 × 72) sits at the top right of every card and opens the full demonstration; a tempo chip under it and a one-rep tempo bar in the header (the fill moves like the weight: down at the lowering pace, hold, up at the lifting pace, squeeze) reveal the reason, a one-line form cue, and the evidence on tap (tempo modelled as phases with research-backed reasons, see `docs/tempo-guidance.md`); the equipment line is gone from the card header; logged and current rows stay open while the remaining sets collapse into one expandable line; the right column carries the current set's target load (or "log below"), and each upcoming set's load and rest when expanded.
 
-## Phase 8 deliverables (GREEN)
+## Phase 8 deliverables (YELLOW - ready for final Android acceptance)
 
+- Recorded GREEN on 2026-09-04 (commit `95721cf`). The app has no GREEN state, so no build can certify itself, and it went on reading "YELLOW · awaiting Android review". The owner reopened the acceptance in Maintenance 25 (item 6) for a final check on the phone, above all that the installed app moves to each new build (`docs/reports/maintenance-25.md`, Review on the phone). It stays YELLOW until the owner says otherwise.
 - Full Backup JSON schema 2: profile, places, settings, workouts, notes and cues, custom exercises, your demonstrations, saved workouts, meta; schema 1 files migrate forward; unknown fields kept at every level; history and settings exports on their own (`docs/backup-and-restore.md`).
 - Exact restore with verified writes and a verified rollback; the pre-import state is kept as an automatic backup so any import can be undone; restore reports counts per store.
 - Automatic local backups after each finished workout, before each import, and on demand; the newest three stay on the device; each previews and restores like a file.
 - Storage and save check: usage and quota, persistence, record counts, last verified save, a write/read-back/verify probe, and a request for persistent storage.
 - Safe cleanup, previewed first: only a leftover probe, a finished onboarding draft, and old automatic backups; protected data proven untouched by test.
 - Optional legacy import: a forgiving JSON export shape, previewed with matched and skipped exercises, written with verified saves after a backup, undone exactly from a receipt.
-- Service-worker update safety: Reload is withheld during an active workout; the viewport lets the Android keyboard resize the layout.
+- Service-worker update safety: a new version never takes over silently; the offer waits for a tap on Reload (during a workout too, since Maintenance 11: the logged sets and timers carry on after it). The tap is per release, not per page: with the app open twice, Reload on one lets the release in for both, and a page opened under the old worker where the plugin made the offer loads it again by itself (Maintenance 25). The viewport lets the Android keyboard resize the layout.
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).

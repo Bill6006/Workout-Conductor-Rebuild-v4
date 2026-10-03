@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 /**
  * A tiny clock store so components can read "now" without calling impure
@@ -39,6 +39,21 @@ function getServerSnapshot(): number {
 /** Epoch milliseconds, refreshed about once a minute. */
 export function useNow(): number {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
+/**
+ * Whether the moment `atMs` has come (Maintenance 25), re-rendering once when it does: a running
+ * rest's end, which the minute clock would see up to a minute late. Null is never.
+ */
+export function useMomentReached(atMs: number | null): boolean {
+  const [reached, setReached] = useState<number | null>(null);
+  useEffect(() => {
+    if (atMs === null) return undefined;
+    const wait = Math.max(0, atMs - Date.now());
+    const id = window.setTimeout(() => setReached(atMs), wait);
+    return () => window.clearTimeout(id);
+  }, [atMs]);
+  return atMs !== null && reached === atMs;
 }
 
 export function nowIso(): string {

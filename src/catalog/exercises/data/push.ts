@@ -26,15 +26,24 @@ export const PUSH_EXERCISES = [
     joints: { shoulder: 'moderate' },
     substitutions: ['dumbbell-bench-press', 'machine-chest-press', 'smith-machine-bench-press'],
     setup: [
-      'Lie with eyes under the bar, feet planted, shoulder blades pulled down and together.',
-      'Grip a little wider than shoulder width; unrack to a locked position over the shoulders.',
+      'Lie on the bench with your eyes under the bar and your feet flat on the floor.',
+      'Grip the bar a little wider than your shoulders; squeeze your shoulder blades together and down.',
+      'Lift the bar off the rack and hold it over your shoulders with straight arms.',
     ],
     execution: [
-      'Lower the bar to the lower chest with elbows about 45 degrees from the torso.',
-      'Touch lightly, then press back up and slightly toward the face.',
-      'Keep the hips on the bench through every rep.',
+      'Breathe in and lower the bar under control to your lower chest.',
+      'Touch your chest lightly, without bouncing.',
+      'Press the bar back up over your shoulders, breathing out near the top.',
     ],
-    mistakes: ['Flaring the elbows straight out to the sides.', 'Bouncing the bar off the chest.'],
+    cues: [
+      'Elbows about 45 degrees from your sides, forearms upright under the bar.',
+      'Keep your shoulder blades pinned and your hips on the bench.',
+      'For heavy sets, set the safety arms just below chest height, or have a helper behind you.',
+    ],
+    mistakes: [
+      'Elbows flared straight out to the sides.',
+      'Bouncing the bar off your chest or lifting your hips.',
+    ],
   }),
   defineExercise({
     id: 'incline-barbell-bench-press',
@@ -50,14 +59,24 @@ export const PUSH_EXERCISES = [
     joints: { shoulder: 'moderate' },
     substitutions: ['incline-dumbbell-press', 'band-chest-press'],
     setup: [
-      'Set the bench to 30 degrees; a steeper angle shifts the work to the shoulders.',
-      'Plant the feet, pin the shoulder blades back, and unrack over the collarbones.',
+      'Set the bench to about 30 degrees; a steeper bench shifts the work to your shoulders.',
+      'Lie back, eyes under the bar, feet flat; grip a little wider than your shoulders.',
+      'Squeeze your shoulder blades together and down, then lift the bar off to straight arms.',
     ],
     execution: [
-      'Lower to the upper chest with a controlled tempo.',
-      'Press up and slightly back until the elbows lock.',
+      'Breathe in and lower the bar under control to your upper chest, below your collarbones.',
+      'Touch lightly, without bouncing.',
+      'Press up and slightly back to straight arms over your shoulders; breathe out near the top.',
     ],
-    mistakes: ['Setting the bench too upright.', 'Letting the bar drift toward the neck.'],
+    cues: [
+      'Elbows about 45 degrees from your sides, forearms upright under the bar.',
+      'Keep your hips and upper back on the bench and your feet planted.',
+      'For heavy sets, have a helper behind you, or set the safety arms just below your chest.',
+    ],
+    mistakes: [
+      'Raising the bench so steep that it turns into a shoulder press.',
+      'Letting the bar come down toward your neck instead of your upper chest.',
+    ],
   }),
   defineExercise({
     id: 'close-grip-bench-press',
@@ -73,16 +92,23 @@ export const PUSH_EXERCISES = [
     joints: { elbow: 'moderate', wrist: 'moderate' },
     substitutions: ['diamond-push-up', 'skull-crusher', 'cable-triceps-pushdown'],
     setup: [
-      'Grip the bar about shoulder width, not narrower; wrists stacked over the forearms.',
-      'Same arch and foot drive as a regular bench press.',
+      'Lie on the bench with your eyes under the bar and your feet flat on the floor.',
+      'Grip the bar at shoulder width, no narrower, keeping your wrists straight, not bent back.',
+      'Squeeze your shoulder blades together and down, then lift the bar off to straight arms.',
     ],
     execution: [
-      'Lower to the lower chest keeping the elbows tucked close to the ribs.',
-      'Drive up hard, focusing on the elbows locking out.',
+      'Breathe in and lower the bar to your lower chest.',
+      'Touch your chest lightly, without bouncing.',
+      'Press back up until your arms are straight, breathing out near the top.',
+    ],
+    cues: [
+      'Keep your elbows close to your sides, pointing toward your feet.',
+      'Keep your hips on the bench and your shoulder blades pinned.',
+      'For heavy sets, set the safety arms just below chest height, or have a helper behind you.',
     ],
     mistakes: [
-      'Gripping so narrow that the wrists bend.',
-      'Letting the elbows flare at the bottom.',
+      'Hands so close together that your wrists bend.',
+      'Letting your elbows flare out wide at the bottom.',
     ],
   }),
   defineExercise({
@@ -98,17 +124,24 @@ export const PUSH_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['barbell-bench-press', 'machine-chest-press', 'push-up'],
     setup: [
-      'Sit with the dumbbells on the thighs, then rock back and kick them into position.',
-      'Pin the shoulder blades to the bench with the dumbbells stacked over the shoulders.',
+      'Sit on the end of a flat bench with a dumbbell resting on each thigh.',
+      'Lie back, pushing up with your knees to bring the dumbbells to your chest.',
+      'Plant your feet, squeeze your shoulder blades together and down, and press the weights up.',
     ],
     execution: [
-      'Lower until the elbows are level with or just below the bench.',
-      'Press up and slightly inward without clanking the dumbbells together.',
+      'Lower both dumbbells slowly to the sides of your chest.',
+      'Press them up and slightly inward until your arms are straight over your shoulders.',
+      'After the last rep, lower them to your chest and roll up to sit with them on your thighs.',
+    ],
+    cues: [
+      'Keep your forearms upright under the dumbbells the whole way.',
+      'Keep your shoulder blades pressed into the bench, even at the top.',
     ],
     mistakes: [
-      'Dropping the elbows far below the bench with heavy loads.',
-      'Losing the shoulder blade position at the top.',
+      'Clanking the dumbbells together at the top.',
+      'Bouncing the dumbbells out of the bottom.',
     ],
+    range: 'Lower until your elbows are level with the bench or just below it, no deeper.',
   }),
   defineExercise({
     id: 'incline-dumbbell-press',
@@ -123,14 +156,22 @@ export const PUSH_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['incline-barbell-bench-press', 'band-chest-press'],
     setup: [
-      'Bench at about 30 degrees; dumbbells kicked up to a locked position over the upper chest.',
-      'Feet flat, ribs down, shoulder blades pulled together.',
+      'Set the bench to about 30 degrees and sit with a dumbbell resting on each thigh.',
+      'Lie back, pushing up with your knees to bring the dumbbells to your shoulders.',
+      'Press them to straight arms, feet flat and shoulder blades squeezed together.',
     ],
     execution: [
-      'Lower with the elbows roughly 45 degrees from the torso until you feel a full stretch.',
-      'Press up on a slight arc so the dumbbells finish over the eyes.',
+      'Lower the dumbbells slowly to the sides of your upper chest until you feel a stretch.',
+      'Press up and slightly back so the dumbbells finish over your eyes, arms straight.',
     ],
-    mistakes: ['Pressing straight up instead of on an arc.', 'Bouncing out of the bottom.'],
+    cues: [
+      'Elbows about 45 degrees from your sides, forearms upright under the weights.',
+      "Keep your lower back on the bench; don't arch it to lift your chest.",
+    ],
+    mistakes: [
+      'Pressing straight up over your chest so the weights end in front of your shoulders.',
+      'Bouncing the dumbbells out of the bottom.',
+    ],
   }),
   defineExercise({
     id: 'machine-chest-press',
@@ -145,16 +186,21 @@ export const PUSH_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['dumbbell-bench-press', 'barbell-bench-press', 'push-up'],
     setup: [
-      'Set the seat so the handles line up with the mid chest.',
-      'Sit tall with the back against the pad and shoulder blades down.',
+      'Adjust the seat so the handles line up with the middle of your chest.',
+      'Sit tall with your back against the pad, feet flat, and grip with straight wrists.',
     ],
     execution: [
-      'Press the handles forward until the elbows are almost straight.',
-      'Return slowly, keeping tension rather than resting the weight.',
+      'Press the handles forward until your elbows are almost straight.',
+      'Bring them back slowly until your hands are level with your chest.',
+    ],
+    cues: [
+      'Keep your shoulder blades down and against the pad the whole time.',
+      "Keep the weight moving; don't let it rest on the stack between presses.",
     ],
     mistakes: [
-      'Seat too low so the handles sit at the shoulders.',
-      'Shrugging the shoulders forward at the end of the press.',
+      'Setting the seat so low that the handles sit at your shoulders.',
+      'Rounding your shoulders forward off the pad at the end of each press.',
+      'Letting the handles travel back behind your chest.',
     ],
   }),
   defineExercise({
@@ -174,16 +220,22 @@ export const PUSH_EXERCISES = [
     joints: { shoulder: 'moderate' },
     substitutions: ['barbell-bench-press', 'machine-chest-press'],
     setup: [
-      'Position the bench so the bar touches the lower chest at the bottom.',
-      'Unhook the bar and set the safety stops just below chest height.',
+      'Place a flat bench under the bar so it would touch your lower chest when lowered.',
+      'Set the safety stops just below chest height before you lie down.',
+      'Lie down, grip a little wider than your shoulders, and turn the bar off its hooks.',
     ],
     execution: [
-      'Lower under control to a light touch.',
-      'Press to lockout without letting the shoulders roll forward.',
+      'Lower the bar under control until it lightly touches your lower chest.',
+      'Press up until your arms are straight.',
+      'After the last rep, turn the bar back onto the nearest hooks.',
+    ],
+    cues: [
+      'Squeeze your shoulder blades together and down, and keep them there.',
+      'Elbows about 45 degrees from your sides, forearms upright under the bar.',
     ],
     mistakes: [
-      'Bench placed so the bar path hits the shoulders or belly.',
-      'Relying on the rails and losing the shoulder blade position.',
+      'Placing the bench so the bar comes down on your neck, shoulders or belly.',
+      'Letting your shoulders roll forward off the bench at the top.',
     ],
   }),
   defineExercise({
@@ -200,15 +252,22 @@ export const PUSH_EXERCISES = [
     reps: { hypertrophy: [10, 20] },
     substitutions: ['dumbbell-bench-press', 'band-chest-press'],
     setup: [
-      'Hands just wider than the shoulders, body in one straight line from head to heels.',
-      'Squeeze the glutes and brace the core before the first rep.',
+      'Place your hands on the floor just wider than your shoulders, fingers pointing forward.',
+      'Step your feet back until your body is one straight line from head to heels.',
+      'Squeeze your buttocks and brace: tighten your stomach as if about to be poked.',
     ],
     execution: [
-      'Lower until the chest is a fist away from the floor, elbows about 45 degrees out.',
-      'Press back to a full lockout without letting the hips sag.',
-      'Add a weight vest or elevate the feet when sets pass twenty reps.',
+      "Lower your chest until it is about a fist's height from the floor.",
+      'Press yourself back up until your arms are straight.',
     ],
-    mistakes: ['Hips sagging or piking.', 'Half reps that stop well above the floor.'],
+    cues: [
+      'Angle your elbows about 45 degrees from your body, not straight out to the sides.',
+      'Keep your head in line with your body; look at the floor just ahead of your hands.',
+    ],
+    mistakes: [
+      'Letting your hips sag toward the floor or pike up in the air.',
+      'Stopping well short of the floor.',
+    ],
   }),
   defineExercise({
     id: 'dip',
@@ -227,17 +286,21 @@ export const PUSH_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['close-grip-bench-press', 'machine-chest-press', 'diamond-push-up'],
     setup: [
-      'Support yourself on the bars with straight arms and shoulders pulled down.',
-      'Lean slightly forward for chest, stay upright for triceps.',
+      "Grip the parallel bars and jump or step up until you're supported on straight arms.",
+      'Lean your chest slightly forward to work the chest more, or stay upright for the triceps.',
+      'Bend your knees and cross your ankles so your feet stay clear of the floor.',
     ],
     execution: [
-      'Lower until the upper arms are about parallel to the floor.',
-      'Press back up without swinging the legs.',
+      'Bend your elbows to lower yourself slowly, elbows pointing back.',
+      'Press back up until your arms are straight again.',
     ],
-    mistakes: [
-      'Dropping far below parallel with the shoulders rolled forward.',
-      'Flaring the elbows wide.',
+    cues: [
+      'Keep your shoulders pulled down and back, away from your ears, most of all at the bottom.',
+      'Control the way down; never drop into the bottom.',
     ],
+    mistakes: ['Swinging your legs to help you up.', 'Flaring your elbows out wide.'],
+    range:
+      'Stop when your upper arms are about parallel to the floor; deeper stresses the shoulder.',
   }),
   defineExercise({
     id: 'cable-fly',
@@ -252,17 +315,23 @@ export const PUSH_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['pec-deck', 'dumbbell-fly', 'band-fly'],
     setup: [
-      'Set the pulleys at chest height and take one step forward with a staggered stance.',
-      'Slight bend in the elbows that stays constant.',
+      'Set both pulleys about level with the top of your head and take a handle in each hand.',
+      'Step into a staggered stance (one foot half a step ahead), arms open wide and high.',
+      'Bend your elbows slightly and keep that same bend for the whole set.',
     ],
     execution: [
-      'Bring the hands together in a wide arc in front of the chest.',
-      'Return until you feel a stretch across the chest, then repeat.',
+      'Bring your hands down and together in a wide hugging arc until they meet just below your chest.',
+      'Let your arms rise and open slowly along the same arc until you feel a stretch across your chest.',
+    ],
+    cues: [
+      'Pause for a moment with your hands together, squeezing your chest.',
+      'Keep your torso upright and still; only your arms move.',
     ],
     mistakes: [
-      'Turning it into a press by bending the elbows.',
-      'Letting the shoulders roll forward at the end.',
+      'Bending and straightening your elbows so the fly turns into a press.',
+      'Rounding your shoulders forward as your hands meet.',
     ],
+    range: 'Open until your hands are level with your body, never behind it.',
   }),
   defineExercise({
     id: 'pec-deck',
@@ -276,14 +345,19 @@ export const PUSH_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['cable-fly', 'dumbbell-fly'],
     setup: [
-      'Seat height so the handles sit at chest level with the elbows slightly bent.',
-      'Back flat against the pad, shoulders down.',
+      'Adjust the seat so the handles are at chest height when you grip them.',
+      'Sit with your back flat against the pad, shoulders down, elbows slightly bent.',
     ],
     execution: [
-      'Squeeze the handles together in front of the chest.',
-      'Open slowly to a comfortable stretch, never to the point of shoulder strain.',
+      'Squeeze the handles together in a wide arc until they meet in front of your chest.',
+      'Let the handles open slowly back toward the start.',
     ],
-    mistakes: ['Using momentum from the torso.', 'Opening so wide that the shoulders take over.'],
+    cues: [
+      'Keep the same slight bend in your elbows throughout.',
+      'Keep your back and head against the pad; only your arms move.',
+    ],
+    mistakes: ['Rocking your body forward to swing the handles together.'],
+    range: 'Open only to a comfortable chest stretch, hands no farther back than your body.',
   }),
   defineExercise({
     id: 'dumbbell-fly',
@@ -299,17 +373,20 @@ export const PUSH_EXERCISES = [
     joints: { shoulder: 'moderate' },
     substitutions: ['cable-fly', 'pec-deck', 'band-fly'],
     setup: [
-      'Lie on the bench with dumbbells over the chest, palms facing each other.',
-      'Keep a soft bend in the elbows for the whole set.',
+      'Lie on a flat bench with your feet flat on the floor.',
+      'Press the dumbbells up over your chest, palms facing each other.',
+      'Bend your elbows slightly and keep that bend for the whole set.',
     ],
     execution: [
-      'Open the arms in a wide arc until the chest stretches.',
-      'Squeeze the dumbbells back together over the chest.',
+      'Open your arms out to the sides in a wide arc, lowering the dumbbells slowly.',
+      'Bring them back up along the same arc until they meet over your chest.',
     ],
-    mistakes: [
-      'Going too heavy and letting the elbows collapse.',
-      'Lowering far below the bench line.',
+    cues: [
+      'Picture hugging a large tree: the motion comes from your shoulders.',
+      'Keep your shoulder blades squeezed together and your head and hips on the bench.',
     ],
+    mistakes: ['Bending your elbows more as you lower, which turns the fly into a press.'],
+    range: 'Lower until the dumbbells are about level with your chest; no lower.',
   }),
   defineExercise({
     id: 'band-fly',
@@ -323,16 +400,21 @@ export const PUSH_EXERCISES = [
     hypertrophy: 2,
     substitutions: ['cable-fly', 'dumbbell-fly'],
     setup: [
-      'Anchor the band behind you at chest height, one handle in each hand.',
-      'Step forward until there is tension with the arms open.',
+      'Anchor the band behind you at chest height and hold a handle in each hand.',
+      'Step forward until the band is taut with your arms open wide at chest height.',
+      'Bend your elbows slightly and keep that bend throughout.',
     ],
     execution: [
-      'Bring the hands together in front of the chest with elbows slightly bent.',
-      'Return slowly to the open position.',
+      'Bring your hands together in a wide arc until they meet in front of your chest.',
+      'Let your arms open slowly back to the start, resisting the band.',
+    ],
+    cues: [
+      'Keep the band taut at the start of every rep; step farther forward if it goes slack.',
+      "Stand tall with your stomach tight so the band doesn't pull you backward.",
     ],
     mistakes: [
-      'Losing tension at the start of each rep.',
-      'Bending the elbows to press instead of fly.',
+      'Bending your elbows to push your hands together like a press.',
+      'Letting the band pull your arms back behind your body.',
     ],
   }),
   defineExercise({
@@ -349,16 +431,20 @@ export const PUSH_EXERCISES = [
     reps: { hypertrophy: [10, 20] },
     substitutions: ['push-up', 'dumbbell-bench-press'],
     setup: [
-      'Anchor the band behind you at chest height and hold a handle in each hand at the chest.',
-      'Stagger the stance and lean slightly forward.',
+      'Wrap the band across your upper back, just under your shoulder blades, and hold an end in each hand at your chest.',
+      'Stand tall, feet hip-width apart, stomach tight.',
     ],
     execution: [
-      'Press both hands forward until the arms are straight.',
-      'Return under control while keeping the band taut.',
+      'Press both hands straight forward until your arms are fully extended.',
+      'Bring your hands back to your chest slowly, keeping the band taut.',
+    ],
+    cues: [
+      'Keep your wrists straight and your hands level with your chest as you press.',
+      'Keep the band flat across your upper back, under your armpits.',
     ],
     mistakes: [
-      'Standing so close to the anchor that the band goes slack.',
-      'Shrugging the shoulders during the press.',
+      'Holding the band so loosely that it goes slack at your chest.',
+      'Shrugging your shoulders up as you press.',
     ],
   }),
   defineExercise({
@@ -377,17 +463,24 @@ export const PUSH_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['dumbbell-shoulder-press', 'machine-shoulder-press', 'arnold-press'],
     setup: [
-      'Bar racked at upper-chest height; grip just outside the shoulders with elbows slightly in front of the bar.',
-      'Stand with the glutes squeezed and ribs down.',
+      'Set the bar in a rack at upper-chest height and grip it just outside your shoulders.',
+      'Step back with the bar resting on your collarbones, elbows slightly in front of it.',
+      "Stand with feet hip-width and squeeze your buttocks so your lower back doesn't arch.",
     ],
     execution: [
-      'Press the bar straight up, moving the head back slightly to clear the chin.',
-      'Finish with the bar over the mid-foot and the head pushed through.',
-      'Lower to the collarbones under control.',
+      'Breathe in and brace: tighten your stomach as if about to be poked.',
+      'Press the bar straight up, tipping your head back slightly so it clears your chin.',
+      'Once the bar passes your forehead, move your head forward and lock your arms overhead.',
+      'Breathe out, then lower the bar under control to your collarbones.',
+    ],
+    cues: [
+      'Keep the bar close to your face; finish with it over the middle of your feet.',
+      'For heavy sets, have a helper behind you, or use a rack with safety arms below your shoulders.',
     ],
     mistakes: [
-      'Leaning back and turning it into an incline press.',
-      'Pressing the bar forward around the face.',
+      'Leaning back so the press turns into an incline press.',
+      'Pushing the bar forward around your face instead of straight up.',
+      'Lowering the bar behind your neck.',
     ],
   }),
   defineExercise({
@@ -405,14 +498,21 @@ export const PUSH_EXERCISES = [
     joints: { shoulder: 'moderate' },
     substitutions: ['overhead-press', 'machine-shoulder-press', 'arnold-press'],
     setup: [
-      'Sit on an upright bench or stand tall; dumbbells at shoulder height, palms forward.',
-      'Ribs down, core braced.',
+      'Sit on an upright bench (or stand tall) with a dumbbell at each shoulder, palms forward.',
+      "Brace: tighten your stomach as if about to be poked, so your lower back doesn't arch.",
     ],
     execution: [
-      'Press the dumbbells up and slightly inward to a full lockout.',
-      'Lower until the upper arms are about parallel to the floor.',
+      'Press the dumbbells up and slightly inward until your arms are straight overhead.',
+      'Lower them slowly until your upper arms are about parallel to the floor.',
     ],
-    mistakes: ['Arching the lower back to push through.', 'Stopping well short of lockout.'],
+    cues: [
+      'Keep your elbows slightly in front of your body, not flared straight out to the sides.',
+      'If seated, keep your head, upper back and hips against the backrest.',
+    ],
+    mistakes: [
+      'Arching your lower back to push the weights up.',
+      'Stopping well short of straight arms at the top.',
+    ],
   }),
   defineExercise({
     id: 'arnold-press',
@@ -429,16 +529,20 @@ export const PUSH_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['dumbbell-shoulder-press', 'machine-shoulder-press'],
     setup: [
-      'Start with the dumbbells in front of the shoulders, palms facing you.',
-      'Sit tall on an upright bench.',
+      'Sit tall on an upright bench with your back against the pad and feet flat.',
+      'Hold the dumbbells in front of your shoulders at about chin height, palms facing you.',
     ],
     execution: [
-      'Rotate the palms outward as you press overhead.',
-      'Reverse the rotation on the way down to the starting position.',
+      'Press up while turning your palms outward; they face forward when your arms are straight.',
+      'Lower slowly, turning your palms back toward you as you return to the start.',
+    ],
+    cues: [
+      'Let your elbows swing out to the sides as your palms turn.',
+      "Brace: tighten your stomach as if about to be poked, so your lower back doesn't arch.",
     ],
     mistakes: [
-      'Rushing the rotation with heavy weight.',
-      'Letting the elbows drop below the shoulders at the bottom.',
+      'Rushing the turn; keep it smooth from bottom to top.',
+      'Arching your lower back to finish the press.',
     ],
   }),
   defineExercise({
@@ -456,14 +560,21 @@ export const PUSH_EXERCISES = [
     joints: { shoulder: 'moderate' },
     substitutions: ['dumbbell-shoulder-press', 'overhead-press'],
     setup: [
-      'Seat set so the handles start level with the shoulders.',
-      'Back against the pad, feet flat.',
+      'Adjust the seat so the handles start level with your shoulders.',
+      'Sit with your back against the pad, feet flat, elbows slightly in front of your body.',
     ],
     execution: [
-      'Press to a near lockout without shrugging.',
-      'Lower to shoulder height under control.',
+      'Press the handles up until your arms are almost straight.',
+      'Lower them under control back to shoulder height.',
     ],
-    mistakes: ['Starting with the handles too low.', 'Bouncing at the bottom of each rep.'],
+    cues: [
+      'Keep your shoulders down, away from your ears, as you press.',
+      "Keep your lower back against the pad; don't arch to push.",
+    ],
+    mistakes: [
+      'Setting the seat so high that the handles start below your shoulders.',
+      'Bouncing the weight stack at the bottom of each rep.',
+    ],
   }),
   defineExercise({
     id: 'lateral-raise',
@@ -478,14 +589,23 @@ export const PUSH_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['cable-lateral-raise', 'band-lateral-raise'],
     setup: [
-      'Stand with a slight forward lean and the dumbbells at the sides.',
-      'Soft elbows that stay slightly bent.',
+      'Stand with your feet a little wider than your hips, a dumbbell at each side, palms in.',
+      'Stand tall, chest up, and keep a soft bend in your elbows.',
     ],
     execution: [
-      'Raise the arms out to the sides until the hands reach shoulder height.',
-      'Lead with the elbows and lower slowly.',
+      'Raise the dumbbells out to your sides in a wide arc.',
+      'Lower them slowly back to your sides.',
     ],
-    mistakes: ['Swinging the torso to start the rep.', 'Shrugging the traps up at the top.'],
+    cues: [
+      'At the top, keep your thumbs level or tipped slightly up, never pointing down.',
+      'Lead with your elbows: keep them a little higher than your hands.',
+    ],
+    mistakes: [
+      'Swinging your body to get the weights moving.',
+      'Shrugging your shoulders up toward your ears.',
+    ],
+    range:
+      'Stop when your arms are level with your shoulders; going higher can pinch the shoulder.',
   }),
   defineExercise({
     id: 'cable-lateral-raise',
@@ -500,14 +620,23 @@ export const PUSH_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['lateral-raise', 'band-lateral-raise'],
     setup: [
-      'Set the pulley low and stand side-on, cable crossing in front of the body.',
-      'Hold the handle with the working arm slightly bent.',
+      'Attach a single handle to the low pulley and stand side-on to the machine.',
+      'Hold the handle in your far hand so the cable runs across the front of your body.',
+      'Stand tall with a slight bend in your working elbow.',
     ],
     execution: [
-      'Raise the arm out to the side to shoulder height.',
-      'Lower slowly, keeping tension at the bottom.',
+      'Raise your arm out to the side in a wide arc.',
+      'Lower it slowly, stopping before the weight stack touches down.',
     ],
-    mistakes: ['Leaning away to cheat the weight up.', 'Rotating the thumb down at the top.'],
+    cues: [
+      "Keep your thumb level or tipped slightly up; don't turn it down at the top.",
+      'Keep your body still; hold the machine with your free hand if needed.',
+    ],
+    mistakes: [
+      'Leaning away from the machine to heave the weight up.',
+      'Shrugging your working shoulder up toward your ear.',
+    ],
+    range: 'Stop when your arm is level with your shoulder.',
   }),
   defineExercise({
     id: 'band-lateral-raise',
@@ -520,9 +649,23 @@ export const PUSH_EXERCISES = [
     hypertrophy: 2,
     reps: { hypertrophy: [15, 25] },
     substitutions: ['lateral-raise', 'cable-lateral-raise'],
-    setup: ['Stand on the band with the handles at the sides.', 'Slight bend in the elbows.'],
-    execution: ['Raise both arms to shoulder height.', 'Lower slowly against the band.'],
-    mistakes: ['Choosing a band so heavy the range shrinks.', 'Shrugging at the top.'],
+    setup: [
+      'Stand on the middle of the band, feet hip-width, a handle in each hand at your sides.',
+      'Keep a slight bend in your elbows and your chest up.',
+    ],
+    execution: [
+      'Raise both arms out to your sides in a wide arc.',
+      'Lower slowly, resisting the band all the way down.',
+    ],
+    cues: [
+      'Keep your thumbs level or tipped slightly up, never pointing down.',
+      "Move smoothly; don't jerk the band up.",
+    ],
+    mistakes: [
+      'Shrugging your shoulders up as the band tightens near the top.',
+      'Stopping well short of shoulder height as the band gets tight.',
+    ],
+    range: 'Lift until your arms are level with your shoulders, no higher.',
   }),
   defineExercise({
     id: 'rear-delt-fly',
@@ -537,14 +680,22 @@ export const PUSH_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['reverse-pec-deck', 'face-pull', 'band-pull-apart'],
     setup: [
-      'Hinge at the hips until the torso is near parallel, dumbbells hanging under the shoulders.',
-      'Slight elbow bend, neck neutral.',
+      'Sit on the end of a bench with a dumbbell in each hand, or stand with your knees slightly bent.',
+      'Lean forward from your hips with a flat back until your chest is close to your thighs.',
+      'Let the dumbbells hang below your shoulders, palms facing in, elbows slightly bent.',
     ],
     execution: [
-      'Raise the dumbbells out to the sides, leading with the elbows.',
-      'Pause briefly, then lower under control.',
+      'Raise the dumbbells out to your sides, elbows leading, up to shoulder level.',
+      'Pause briefly, then lower them under control.',
     ],
-    mistakes: ['Standing too upright.', 'Swinging the weights with the torso.'],
+    cues: [
+      'Squeeze your shoulder blades together at the top.',
+      'Keep your neck in line with your back, eyes on the floor below you.',
+    ],
+    mistakes: [
+      'Sitting or standing up out of the bent-over position as you lift.',
+      'Swinging the weights up with your body.',
+    ],
   }),
   defineExercise({
     id: 'reverse-pec-deck',
@@ -558,14 +709,22 @@ export const PUSH_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['rear-delt-fly', 'face-pull'],
     setup: [
-      'Face the pad with the handles set in front of the shoulders.',
-      'Chest against the pad, arms slightly bent.',
+      'Sit facing the machine with your chest against the pad.',
+      'Set the seat so the handles sit at shoulder height, straight in front of you.',
+      'Grip the upright handles, palms facing each other, arms slightly bent.',
     ],
     execution: [
-      'Sweep the arms back until they are in line with the shoulders.',
-      'Return slowly without letting the plates touch.',
+      'Sweep your arms out and back in a wide arc until they are in line with your shoulders.',
+      'Return slowly, stopping before the weight stack touches down.',
     ],
-    mistakes: ['Pulling with the hands and bending the elbows.', 'Over-extending behind the body.'],
+    cues: [
+      'Keep the same slight elbow bend; the movement comes from your shoulders.',
+      'Keep your chest on the pad and your shoulders down, away from your ears.',
+    ],
+    mistakes: [
+      'Bending your elbows to pull the handles back like a row.',
+      'Pushing your arms back behind your body at the end.',
+    ],
   }),
   defineExercise({
     id: 'face-pull',
@@ -582,16 +741,22 @@ export const PUSH_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['rear-delt-fly', 'band-pull-apart', 'reverse-pec-deck'],
     setup: [
-      'Rope or band anchored at upper-chest to face height.',
-      'Step back until the arms are straight with tension.',
+      'Attach a rope to a cable set between upper-chest and face height, or anchor a band there.',
+      'Hold the rope (or band) ends, palms down, and step back until your arms are straight.',
+      'Stand tall, feet hip-width apart, stomach tight.',
     ],
     execution: [
-      'Pull toward the face while spreading the hands apart.',
-      'Finish with the elbows high and the shoulder blades squeezed.',
+      'Pull the rope toward your face, spreading your hands apart as it comes in.',
+      'Finish with your hands beside your ears, elbows high, shoulder blades squeezed.',
+      'Return slowly until your arms are straight again.',
+    ],
+    cues: [
+      'Pull with your elbows high, level with or above your shoulders.',
+      'Keep your shoulders down, away from your ears.',
     ],
     mistakes: [
-      'Pulling to the chest instead of the face.',
-      'Using so much weight that the torso rocks.',
+      'Pulling down to your chest instead of back to your face.',
+      'Rocking your body back to move the weight.',
     ],
   }),
   defineExercise({
@@ -607,16 +772,21 @@ export const PUSH_EXERCISES = [
     reps: { hypertrophy: [15, 25] },
     substitutions: ['face-pull', 'rear-delt-fly'],
     setup: [
-      'Hold the band at shoulder width with straight arms in front of the chest.',
-      'Stand tall with the ribs down.',
+      'Hold the band with both hands, palms down, about shoulder-width apart.',
+      'Raise your arms straight out in front of you at shoulder height.',
+      "Stand tall; don't lean back or arch your lower back.",
     ],
     execution: [
-      'Pull the band apart until it touches the chest.',
-      'Return slowly, keeping the shoulders down.',
+      'Pull your hands apart and out to the sides until the band touches your chest.',
+      'Return slowly to the start, keeping a little tension in the band.',
+    ],
+    cues: [
+      'Keep your arms straight and level with your shoulders as you pull.',
+      'Squeeze your shoulder blades together as the band reaches your chest.',
     ],
     mistakes: [
-      'Shrugging up as the band reaches the chest.',
-      'Bending the elbows to make it easier.',
+      'Shrugging toward your ears at the end of the pull.',
+      'Bending your elbows to make the pull easier.',
     ],
   }),
 ];

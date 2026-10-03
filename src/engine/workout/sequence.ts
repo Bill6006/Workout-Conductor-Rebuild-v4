@@ -1,5 +1,7 @@
 import type { SetDonePredicate } from '../duration/duration';
 import {
+  allEntries,
+  isStopped,
   roundsRun,
   type GeneratedWorkout,
   type SetKind,
@@ -110,6 +112,151 @@ export function nextBlockAfter(
     (item) => item.blockId !== blockId && !isDone(item.entryId, item.setIndex),
   );
   return next ? workout.blocks.find((block) => block.id === next.blockId) : undefined;
+}
+
+/** A lift moved later for busy equipment, as the busy rule reads it (Maintenance 25). */
+export interface WaitingMove {
+  exerciseId: string;
+  after: readonly string[];
+  was?: readonly string[];
+}
+
+/** The names a move knows its lift by: its name now, and its names before a swap today. */
+export function moveNames(move: WaitingMove): string[] {
+  return [move.exerciseId, ...(move.was ?? [])];
+}
+
+/**
+ * A lift the busy moves count (Maintenance 25): still in the plan, with a set to do. A lift done,
+ * or stopped earlier today (a set of it undone included), holds nothing and waits on nothing, and
+ * a row holding no such lift is nothing to move behind (the seventh review: a tap named the
+ * stopped lift and moved nothing).
+ */
+export function isOpenLift(entry: WorkoutEntry, isDone: SetDonePredicate): boolean {
+  return !isStopped(entry) && entry.sets.some((set) => !isDone(entry.id, set.index));
+}
+
+/** Whether a row holds a lift the busy moves count. */
+export function holdsOpenLift(block: WorkoutBlock, isDone: SetDonePredicate): boolean {
+  return block.entries.some((entry) => isOpenLift(entry, isDone));
+}
+
+/**
+ * The order the busy moves ask of the rows (Maintenance 25), as edges between block positions: for
+ * each move, from each row holding a lift it gave way to that still has a set to do, to each other
+ * row holding its lift with a set to do. A lift with nothing left asks nothing and holds nothing;
+ * a move's lift and a lift it gave way to in one row (a pair) ask nothing of each other, the pair
+ * taking them in turn. Each move's edges are kept apart, so a move can end as a whole.
+ */
+export function moveEdges(
+  workout: GeneratedWorkout,
+  moves: readonly WaitingMove[],
+  isDone: SetDonePredicate,
+): Map<WaitingMove, [number, number][]> {
+  const rowsWith = (test: (entry: WorkoutEntry) => boolean) =>
+    workout.blocks.flatMap((block, index) =>
+      block.entries.some((entry) => isOpenLift(entry, isDone) && test(entry)) ? [index] : [],
+    );
+  const edges = new Map<WaitingMove, [number, number][]>();
+  for (const move of moves) {
+    const names = moveNames(move);
+    const held = rowsWith((entry) => names.includes(entry.exerciseId));
+    const after = rowsWith(
+      (entry) => move.after.includes(entry.exerciseId) && !names.includes(entry.exerciseId),
+    );
+    edges.set(
+      move,
+      after.flatMap((from) =>
+        held.filter((to) => to !== from).map((to): [number, number] => [from, to]),
+      ),
+    );
+  }
+  return edges;
+}
+
+/** The rows that must come after a row: waiting on it, or on a row waiting on it. */
+export function rowsWaitingOn(edges: Iterable<[number, number][]>, row: number): Set<number> {
+  const next = new Map<number, number[]>();
+  for (const pairs of edges) {
+    for (const [from, to] of pairs) next.set(from, [...(next.get(from) ?? []), to]);
+  }
+  const waiting = new Set<number>();
+  const stack = [row];
+  while (stack.length > 0) {
+    const at = stack.pop() as number;
+    for (const to of next.get(at) ?? []) {
+      if (waiting.has(to)) continue;
+      waiting.add(to);
+      stack.push(to);
+    }
+  }
+  return waiting;
+}
+
+/**
+ * Where Equipment busy moves an exercise (Maintenance 25): behind the next block after its own
+ * that holds a lift still to do (`holdsOpenLift`), passing over a block that waits on this one, as
+ * the moves stand, for its own busy equipment (by rows: a pair moves whole, so a lift waiting on
+ * the lift beside a waiting one waits too; the sixth review). None when no such block is left: the
+ * exercise is the last of the workout still to do, and it is done, skipped today, or the workout
+ * is finished; or everything after it waits on it.
+ */
+export function postponeBehind(
+  workout: GeneratedWorkout,
+  entryId: string,
+  isDone: SetDonePredicate,
+  moves: readonly WaitingMove[] = [],
+): WorkoutBlock | null {
+  const at = workout.blocks.findIndex((block) =>
+    block.entries.some((entry) => entry.id === entryId),
+  );
+  if (at < 0) return null;
+  const waiting = rowsWaitingOn(moveEdges(workout, moves, isDone).values(), at);
+  const row = workout.blocks.findIndex(
+    (block, index) => index > at && !waiting.has(index) && holdsOpenLift(block, isDone),
+  );
+  return row < 0 ? null : (workout.blocks[row] as WorkoutBlock);
+}
+
+/**
+ * Why Equipment busy cannot move a lift: every set of it done, nothing after it to do, or all that
+ * is after it waiting on it.
+ */
+export type PostponeRefusal = 'done' | 'last' | 'waiting';
+
+/**
+ * Whether Equipment busy can move a lift (Maintenance 25), the one rule the engine and both
+ * screens read: not once every set of it is done, nor with nothing after it left to do, nor with
+ * only lifts waiting on it after it. Null when it can move.
+ */
+export function postponeRefusal(
+  workout: GeneratedWorkout,
+  entryId: string,
+  isDone: SetDonePredicate,
+  moves: readonly WaitingMove[] = [],
+): PostponeRefusal | null {
+  const entry = allEntries(workout.blocks).find((candidate) => candidate.id === entryId);
+  if (!entry) return null;
+  if (entry.sets.every((set) => isDone(entry.id, set.index))) return 'done';
+  if (postponeBehind(workout, entryId, isDone, moves)) return null;
+  // Rows still to do after it, every one waiting on it (the fourth review), or none at all.
+  return postponeBehind(workout, entryId, isDone) ? 'waiting' : 'last';
+}
+
+/**
+ * What the Equipment busy button says when it is off (Maintenance 25). On the Workout tab the
+ * lift can be done now; on Today it comes when its turn does.
+ */
+export function postponeRefusalText(refusal: PostponeRefusal, where: 'workout' | 'today'): string {
+  if (refusal === 'done') return 'Every set of it is done, so there is nothing left to move.';
+  if (refusal === 'waiting') {
+    return where === 'workout'
+      ? 'The exercises left after it are waiting for it, moved there for busy equipment, so there is nothing to move it behind: do it now, skip it today, or finish the workout.'
+      : 'The exercises left after it are waiting for it, moved there for busy equipment, so there is nothing to move it behind: do it when it comes up, or skip it today.';
+  }
+  return where === 'workout'
+    ? 'Nothing after it is left to do, so there is nothing to move it behind: do it now, skip it today, or finish the workout.'
+    : 'Nothing after it is left to do, so there is nothing to move it behind: do it when it comes up, or skip it today.';
 }
 
 /** The set that follows `current` in execution order, done or not. */

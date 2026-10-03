@@ -14,6 +14,8 @@ import {
   durationEfficiency,
   estimatedStrength,
   exerciseProgress,
+  readsMax,
+  sessionMax,
   muscleCoverage,
   painPatterns,
   rankings,
@@ -86,6 +88,9 @@ export function ProgressScreen() {
   const [record, setRecord] = useState<WorkoutRecord | null>(null);
   const [exercise, setExercise] = useState<ExerciseProgress | null>(null);
   const [allMuscles, setAllMuscles] = useState(false);
+  const [allHistory, setAllHistory] = useState(false);
+  const [allLifts, setAllLifts] = useState(false);
+  const [allSessions, setAllSessions] = useState(false);
 
   const analytics = useMemo(() => {
     if (!profile) return null;
@@ -130,6 +135,11 @@ export function ProgressScreen() {
     ),
   };
   const shownCoverage = allMuscles ? coverage : coverage.slice(0, 8);
+  // Each lift once (Maintenance 25): its trend and its estimated max on one row.
+  const estimates = new Map(strength.value.map((item) => [item.exerciseId, item]));
+  const HISTORY_SHOWN = 5;
+  const LIFTS_SHOWN = 12;
+  const SESSIONS_SHOWN = 8;
   const newest = [...history].sort((a, b) =>
     (b.completedAt ?? b.startedAt).localeCompare(a.completedAt ?? a.startedAt),
   );
@@ -181,73 +191,80 @@ export function ProgressScreen() {
         </ul>
         <button
           type="button"
-          className={styles.link}
+          className={styles.more}
           onClick={() => setAllMuscles((value) => !value)}
+          aria-expanded={allMuscles}
         >
           {allMuscles ? 'Show priority muscles only' : `Show all ${coverage.length} muscles`}
         </button>
         <ScorePanel score={coverageScore} />
       </Card>
 
-      <Card eyebrow="Estimated strength" title="Best estimates per lift">
-        {strength.value.length === 0 ? (
-          <p className={styles.muted}>Log weights on your sets and estimates appear here.</p>
-        ) : (
-          <ul className={styles.list}>
-            {strength.value.map((item) => (
-              <li key={item.exerciseId} className={styles.row}>
-                <span className={styles.rowMain}>
-                  <span className={styles.rowName}>{item.name}</span>
-                  <span className={styles.rowMeta}>
-                    {item.weight} {units} × {item.reps} · {item.sessions}{' '}
-                    {item.sessions === 1 ? 'session' : 'sessions'} · {item.confidence} confidence
-                  </span>
-                </span>
-                <span className={styles.rowValue}>
-                  ~{Math.round(item.e1rm)} <span className={styles.rowUnit}>{units}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <ScorePanel score={strength} />
-      </Card>
-
-      <Card eyebrow="Exercise progress" title="Every lift you have logged">
+      <Card eyebrow="Lifts" title="Every lift you have logged">
         {progress.length === 0 ? (
           <p className={styles.muted}>Nothing logged yet.</p>
         ) : (
           <ul className={styles.list}>
-            {progress.slice(0, 12).map((row) => (
-              <li key={row.exerciseId}>
-                <button
-                  type="button"
-                  className={`${styles.row} ${styles.rowButton}`}
-                  onClick={() => setExercise(row)}
-                  data-testid="exercise-progress-row"
-                >
-                  <span className={styles.rowMain}>
-                    <span className={styles.rowName}>{row.name}</span>
-                    <span className={styles.rowMeta}>
-                      {row.sessions} {row.sessions === 1 ? 'session' : 'sessions'}
-                      {row.best.weight !== null
-                        ? ` · best ${row.best.weight} ${units} × ${amountText(row.best.reps, holdById(row.exerciseId))}`
-                        : row.best.reps > 0
-                          ? ` · best ${holdById(row.exerciseId) ? `${row.best.reps} s` : `${row.best.reps} reps`}`
+            {(allLifts ? progress : progress.slice(0, LIFTS_SHOWN)).map((row) => {
+              const estimate = estimates.get(row.exerciseId);
+              return (
+                <li key={row.exerciseId}>
+                  <button
+                    type="button"
+                    className={`${styles.row} ${styles.rowButton}`}
+                    onClick={() => {
+                      setAllSessions(false);
+                      setExercise(row);
+                    }}
+                    data-testid="exercise-progress-row"
+                  >
+                    <span className={styles.rowMain}>
+                      <span className={styles.rowName}>{row.name}</span>
+                      <span className={styles.rowMeta}>
+                        {row.sessions} {row.sessions === 1 ? 'session' : 'sessions'}
+                        {row.best.weight !== null
+                          ? ` · best ${row.best.weight} ${units} × ${amountText(row.best.reps, holdById(row.exerciseId))}`
+                          : row.best.reps > 0
+                            ? ` · best ${holdById(row.exerciseId) ? `${row.best.reps} s` : `${row.best.reps} reps`}`
+                            : ''}
+                        {estimate ? ` · ${estimate.confidence} confidence` : ''}
+                        {row.timesReplaced + row.timesSkipped > 0
+                          ? ` · swapped or skipped ${row.timesReplaced + row.timesSkipped}×`
                           : ''}
-                      {row.timesReplaced + row.timesSkipped > 0
-                        ? ` · swapped or skipped ${row.timesReplaced + row.timesSkipped}×`
-                        : ''}
+                      </span>
                     </span>
-                  </span>
-                  <span className={styles.rowValue}>
-                    {row.trendPct === null ? '' : `${row.trendPct > 0 ? '+' : ''}${row.trendPct}%`}
-                  </span>
-                </button>
-              </li>
-            ))}
+                    <span className={styles.rowValues}>
+                      {estimate ? (
+                        <span className={styles.rowValue} data-testid="lift-estimate">
+                          ~{Math.round(estimate.e1rm)}{' '}
+                          <span className={styles.rowUnit}>{units} max</span>
+                        </span>
+                      ) : null}
+                      {row.trendPct === null ? null : (
+                        <span className={styles.rowTrend}>
+                          {`${row.trendPct > 0 ? '+' : ''}${row.trendPct}%`}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
+        {progress.length > LIFTS_SHOWN ? (
+          <button
+            type="button"
+            className={styles.more}
+            onClick={() => setAllLifts((value) => !value)}
+            aria-expanded={allLifts}
+            data-testid="lifts-more"
+          >
+            {allLifts
+              ? `Show the first ${LIFTS_SHOWN}`
+              : `Show ${progress.length - LIFTS_SHOWN} more`}
+          </button>
+        ) : null}
         {ranked.mostProductive.length > 0 || ranked.frequentlyReplaced.length > 0 ? (
           <FactList
             items={[
@@ -273,9 +290,10 @@ export function ProgressScreen() {
           />
         ) : null}
         <p className={styles.muted}>
-          Trend is the latest estimated one-rep max against the oldest of the last four sessions.
-          Tap a lift for its sessions and notes.
+          Trend is the latest estimated one-rep max against the oldest of the last four sessions;
+          the max is the best set's estimate. Tap a lift for its sessions and notes.
         </p>
+        <ScorePanel score={strength} label="How the estimates are made" />
       </Card>
 
       <Card eyebrow="Personal records" title={prs.length > 0 ? 'Recent records' : 'No records yet'}>
@@ -356,7 +374,7 @@ export function ProgressScreen() {
           <p className={styles.muted}>Finish a workout and it appears here with every set.</p>
         ) : (
           <ul className={styles.list}>
-            {newest.slice(0, 20).map((item) => (
+            {(allHistory ? newest : newest.slice(0, HISTORY_SHOWN)).map((item) => (
               <li key={item.id}>
                 <button
                   type="button"
@@ -383,6 +401,18 @@ export function ProgressScreen() {
             ))}
           </ul>
         )}
+        {newest.length > HISTORY_SHOWN ? (
+          // Every workout a tap away, however many (Maintenance 25).
+          <button
+            type="button"
+            className={styles.more}
+            onClick={() => setAllHistory((value) => !value)}
+            aria-expanded={allHistory}
+            data-testid="history-more"
+          >
+            {allHistory ? 'Show the newest five' : `Show ${newest.length - HISTORY_SHOWN} more`}
+          </button>
+        ) : null}
       </Card>
 
       <HistoryDetailSheet
@@ -407,10 +437,15 @@ export function ProgressScreen() {
                   value: holdById(exercise.exerciseId)
                     ? `${exercise.best.weight !== null ? `${exercise.best.weight} ${units} × ` : ''}${exercise.best.reps} s`
                     : exercise.best.weight !== null
-                      ? `${exercise.best.weight} ${units} × ${exercise.best.reps} (~${Math.round(exercise.best.e1rm ?? 0)} ${units} e1RM)`
+                      ? `${exercise.best.weight} ${units} × ${exercise.best.reps}${
+                          exercise.best.e1rm !== null
+                            ? ` (~${Math.round(exercise.best.e1rm)} ${units} e1RM)`
+                            : ''
+                        }`
                       : `${exercise.best.reps} reps`,
                 },
-                ...(holdById(exercise.exerciseId)
+                // No max, no trend: a hold, or a lift with no load reference.
+                ...(!readsMax(exercise.exerciseId)
                   ? []
                   : [
                       {
@@ -432,30 +467,50 @@ export function ProgressScreen() {
               ]}
             />
             <ul className={styles.list}>
-              {exercise.points.map((point) => (
-                <li key={point.date} className={styles.row}>
-                  <span className={styles.rowMain}>
-                    <span className={styles.rowName}>{formatDateTime(point.date)}</span>
-                    <span className={styles.rowMeta}>
-                      {point.sets
-                        .map((set) =>
-                          holdById(exercise.exerciseId)
-                            ? `${set.weight ?? 'bw'}×${set.reps}s`
-                            : `${set.weight ?? 'bw'}×${set.reps}${set.rir !== null ? `@${set.rir}` : ''}`,
-                        )
-                        .join('  ')}
+              {(allSessions ? exercise.points : exercise.points.slice(0, SESSIONS_SHOWN)).map(
+                (point) => (
+                  <li key={point.date} className={styles.row}>
+                    <span className={styles.rowMain}>
+                      <span className={styles.rowName}>{formatDateTime(point.date)}</span>
+                      <span className={styles.rowMeta}>
+                        {point.sets
+                          .map((set) =>
+                            holdById(exercise.exerciseId)
+                              ? `${set.weight ?? 'bw'}×${set.reps}s`
+                              : `${set.weight ?? 'bw'}×${set.reps}${set.rir !== null ? `@${set.rir}` : ''}`,
+                          )
+                          .join('  ')}
+                      </span>
                     </span>
-                  </span>
-                  <span className={styles.rowValue}>
-                    {point.e1rm !== null ? `~${Math.round(point.e1rm)}` : ''}
-                  </span>
-                </li>
-              ))}
+                    <span className={styles.rowValue}>
+                      {(() => {
+                        const max = sessionMax(point, exercise.exerciseId);
+                        return max !== null ? `~${Math.round(max)}` : '';
+                      })()}
+                    </span>
+                  </li>
+                ),
+              )}
             </ul>
-            {holdById(exercise.exerciseId) ? null : (
+            {exercise.points.length > SESSIONS_SHOWN ? (
+              // Every session a tap away, as many as the count above says (the third review).
+              <button
+                type="button"
+                className={styles.more}
+                onClick={() => setAllSessions((value) => !value)}
+                aria-expanded={allSessions}
+                data-testid="lift-sessions-more"
+              >
+                {allSessions
+                  ? 'Show the newest eight'
+                  : `Show ${exercise.points.length - SESSIONS_SHOWN} more`}
+              </button>
+            ) : null}
+            {!readsMax(exercise.exerciseId) ? null : (
               <p className={styles.muted}>
-                {requireExercise(exercise.exerciseId).name}: e1RM uses Epley on the best completed
-                working set of each session. Warm-ups are never counted.
+                {requireExercise(exercise.exerciseId).name}: e1RM uses Epley on each session&rsquo;s
+                best completed working set, every rep counted up to 30, as the max sheet reads a
+                set. Warm-ups are never counted.
               </p>
             )}
           </>

@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { AppShell } from '../components/AppShell/AppShell';
 import { CalibrationOverlay } from '../components/CalibrationOverlay/CalibrationOverlay';
 import { Card } from '../components/Card/Card';
 import { useWorkoutAlerts } from '../core/alerts/useWorkoutAlerts';
 import { useAppState } from '../core/state/useAppStore';
 import { BarcodeLayer } from '../features/barcode/BarcodeLayer';
+import { RestoringScreen } from '../features/onboarding/RestoringScreen';
 import { type RouteId } from './navigation';
 import { UpdatePrompt } from './pwa/UpdatePrompt';
 import { SessionRecoveryNotice } from './SessionRecoveryNotice';
@@ -23,8 +24,9 @@ export function App() {
   const effectiveRoute: RouteId = needsOnboarding ? 'onboarding' : routeId;
 
   // Keyed on the effective route so finishing setup (hash unchanged) also
-  // starts Today at the top instead of wherever the wizard was scrolled.
-  useEffect(() => {
+  // starts Today at the top instead of wherever the wizard was scrolled. Before the screen's own
+  // effects (Maintenance 25): a Settings row a link names then brings itself into view.
+  useLayoutEffect(() => {
     window.scrollTo({ top: 0 });
   }, [effectiveRoute]);
 
@@ -48,7 +50,12 @@ export function App() {
         </Card>
       ) : null}
       {showNav ? <SessionRecoveryNotice /> : null}
-      <ActiveScreen routeId={effectiveRoute} />
+      {/* Setup waits while the cloud copy brings back a cleared phone's data (Maintenance 25). */}
+      {needsOnboarding && state.restoring ? (
+        <RestoringScreen />
+      ) : (
+        <ActiveScreen routeId={effectiveRoute} />
+      )}
       <CalibrationOverlay />
       <UpdatePrompt />
       <BarcodeLayer />

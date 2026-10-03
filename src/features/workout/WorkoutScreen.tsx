@@ -75,8 +75,9 @@ export function WorkoutScreen() {
           </p>
         ) : (
           <ol className={styles.list} aria-label="Recalibration log" data-testid="calibration-log">
-            {session.log.map((item) => (
-              <li key={`${item.at}-${item.trigger}`} className={styles.row}>
+            {/* A change's time and trigger key it; its place keeps two from one moment apart. */}
+            {session.log.map((item, index) => (
+              <li key={`${index}-${item.at}-${item.trigger}`} className={styles.row}>
                 <span className={styles.rowLabel}>{item.headline}</span>
                 <span className={styles.rowMeta}>
                   {item.label} · {item.scope} · {item.durationMs} ms

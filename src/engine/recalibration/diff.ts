@@ -242,7 +242,13 @@ export interface SummaryInput {
 
 export function composeSummary(input: SummaryInput): ChangeSummary {
   const counts = countChanges(input.previous, input.next, input.changes);
-  const details = [...input.changes.map((change) => change.detail), ...(input.notes ?? [])];
+  const notes = input.notes ?? [];
+  // A note that gives a change's reason says the change too (Maintenance 25): "Left out X: nothing
+  // safe fits right now." in place of "Left out X.", and a line said twice is said once.
+  const said = input.changes
+    .map((change) => change.detail)
+    .filter((detail) => !notes.some((note) => note.startsWith(`${detail.replace(/\.$/, '')}:`)));
+  const details = [...new Set([...said, ...notes])];
   if (input.headline) return { headline: input.headline, details, counts };
   const prefix = input.prefix ?? 'Recalibrated';
   const parts = describeCounts(counts);

@@ -1,6 +1,7 @@
 import { isCompoundPattern, type MovementPatternId } from '../movementPatterns/movementPatterns';
 import type { MuscleId } from '../muscles/muscles';
 import { dropSetSuits } from '../../engine/progression/startingLoad';
+import { DEMONSTRATED_EXERCISE_IDS } from '../media/exerciseMedia';
 import {
   ExerciseSchema,
   type CatalogExercise,
@@ -52,8 +53,11 @@ export interface ExerciseInput {
   substitutions?: string[];
   setup: string[];
   execution: string[];
-  breathing?: string;
+  /** The few cues that matter most while doing it. */
+  cues: string[];
   mistakes: string[];
+  /** How far to go, where that matters. */
+  range?: string;
   warmup?: WarmupRamp;
 }
 
@@ -280,9 +284,9 @@ export function defineExercise(input: ExerciseInput): CatalogExercise {
     instructions: {
       setup: input.setup,
       execution: input.execution,
-      breathing:
-        input.breathing ?? 'Inhale and brace before the hard part, exhale through the effort.',
+      cues: input.cues,
       mistakes: input.mistakes,
+      ...(input.range ? { range: input.range } : {}),
     },
     difficulty: input.difficulty ?? (heavyBarbell ? 'intermediate' : 'beginner'),
     progressionFamily: input.family,
@@ -291,7 +295,8 @@ export function defineExercise(input: ExerciseInput): CatalogExercise {
     load,
     ...(barWeightFor(load) ? { barWeight: barWeightFor(load) } : {}),
     mediaId: input.id,
-    productionEnabled: false,
+    // Ready for production once it has a licensed demonstration of its own (item 7).
+    productionEnabled: DEMONSTRATED_EXERCISE_IDS.has(input.id),
   };
 
   return ExerciseSchema.parse(exercise);

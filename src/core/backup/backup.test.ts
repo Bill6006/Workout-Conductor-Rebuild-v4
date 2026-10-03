@@ -190,6 +190,32 @@ describe('restoreBackup', () => {
     expect(await real.count('workouts')).toBe(0);
   });
 
+  it('puts back the changes that waited for the cloud copy when it rolls back (the tenth review)', async () => {
+    const real = await openDatabase({ factory: new IDBFactory(), name: 'rollback-outbox' });
+    // A saved workout deleted while offline: its deletion waits for the cloud copy.
+    await real.put('savedWorkouts', { id: 's1', createdAt: NOW });
+    await real.delete('savedWorkouts', 's1');
+    await real.put('locations', { id: 'home', name: 'Old home' });
+    const waiting = await real.getAll('outbox');
+    expect(waiting.map((entry) => entry.id).sort()).toEqual(['locations|home', 'savedWorkouts|s1']);
+    // The backup still holds s1, so the restore writes it, then fails at its last store.
+    const backup = sampleBackup();
+    const withSaved = {
+      ...backup,
+      data: { ...backup.data, savedWorkouts: [{ id: 's1', createdAt: NOW }] },
+    } as typeof backup;
+    const flaky: Database = {
+      ...real,
+      put: async (store: StoreName, value, options) => {
+        if (store === 'meta') throw new Error('disk full');
+        await real.put(store, value, options);
+      },
+    };
+    await expect(restoreBackup(flaky, withSaved, { now: () => NOW })).rejects.toThrow('disk full');
+    expect(await real.count('savedWorkouts')).toBe(0);
+    expect(await real.getAll('outbox')).toEqual(waiting);
+  });
+
   it('says so plainly when the rollback itself cannot be verified', async () => {
     const real = await openDatabase({ factory: new IDBFactory(), name: 'rollback-broken' });
     await real.put('locations', { id: 'home', name: 'Old home' });

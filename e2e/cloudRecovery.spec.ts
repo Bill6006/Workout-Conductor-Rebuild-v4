@@ -88,7 +88,7 @@ async function lose(page: Page, what: { workout: boolean; token: boolean }): Pro
 }
 
 async function pasteToken(page: Page): Promise<void> {
-  await page.goto('./#/settings');
+  await page.goto('./#/settings/cloud');
   await page.getByTestId('cloud-token').fill(TOKEN);
   await page.getByTestId('cloud-save-token').click();
   await expect(page.getByText('Saved on this device', { exact: true })).toBeVisible();
@@ -129,7 +129,7 @@ test.describe('getting a device history back', () => {
 
     await lose(page, { workout: true, token: true });
     await page.reload();
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/cloud');
     await expect(page.getByText('Saved on this device', { exact: true })).toBeVisible();
     await expect(page.getByTestId('cloud-notice')).toContainText(
       'database copy of the token was missing',
@@ -141,7 +141,7 @@ test.describe('getting a device history back', () => {
     expect(after).toEqual(pushed);
     expect(turso.rows().every((row) => row.deleted === 0)).toBe(true);
     // The token log is on the Storage card, and it never carries the token.
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/storage');
     await expect(page.getByTestId('token-log')).toContainText('restored');
     expect(await page.getByTestId('token-log').textContent()).not.toContain(TOKEN);
     await capture(page, testInfo, 'settings-storage-token-log', 'token-log');
@@ -154,7 +154,7 @@ test.describe('getting a device history back', () => {
     await lose(page, { workout: true, token: false });
     await page.reload();
     await expectWorkouts(page, 0);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/cloud');
     await expect(page.getByTestId('cloud-notice')).toHaveCount(0);
     await page.getByTestId('cloud-sync-now').click();
     await expect(page.getByText(/Synced: 0 sent, 1 received/)).toBeVisible({ timeout: 15_000 });
@@ -171,7 +171,7 @@ test.describe('getting a device history back', () => {
     await lose(page, { workout: true, token: true });
     await page.evaluate((key) => window.localStorage.removeItem(key), MIRROR_KEY);
     await page.reload();
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/cloud');
     await expect(page.getByText('Missing', { exact: true })).toBeVisible();
     await expect(page.getByTestId('cloud-notice')).toContainText('missing from both');
     await expect(page.getByTestId('cloud-notice')).toContainText('last seen');
@@ -182,5 +182,30 @@ test.describe('getting a device history back', () => {
     await expectWorkouts(page, 1);
     expect(turso.rows().find((row) => row.id === WORKOUT.id)).toEqual(pushed);
     expect(turso.rows().every((row) => row.deleted === 0)).toBe(true);
+  });
+
+  test('sends a place deletion the live table takes, with the change queued beside it (the owner’s decision, 2026-10-03)', async ({
+    page,
+  }) => {
+    const turso = await installFakeTurso(page);
+    await deviceWithHistory(page, turso);
+    const gymRow = () => turso.rows().find((row) => row.store === 'locations' && row.id === 'gym');
+    expect(gymRow()?.deleted).toBe(0);
+    // The Gym, the current place, deleted on Plan: the deletion and the profile's new current
+    // place go up together.
+    await page.goto('./#/plan');
+    const places = page.getByRole('list', { name: 'Saved locations' });
+    await places
+      .getByRole('listitem')
+      .filter({ hasText: 'Gym' })
+      .getByRole('button', { name: 'Edit' })
+      .click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('Place removed')).toBeVisible();
+    await page.goto('./#/settings/cloud');
+    await expect(page.getByText('0 changes waiting')).toBeVisible({ timeout: 15_000 });
+    expect(gymRow()).toMatchObject({ deleted: 1, body: '{}' });
+    const profile = turso.rows().find((row) => row.store === 'profile');
+    expect(JSON.parse(profile!.body!)).toMatchObject({ currentLocationId: 'home' });
   });
 });

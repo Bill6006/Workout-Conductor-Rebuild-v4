@@ -29,9 +29,13 @@ export const OnboardingDraftSchema = z.object({
   step: z.number().int().min(0),
   profile: UserProfileSchema,
   locations: z.array(LocationProfileSchema),
+  /** What the run started from (draftBase); null on a first run, missing in older drafts. */
+  basedOn: z.string().nullable().optional().catch(undefined),
 });
 
 export type OnboardingDraft = z.infer<typeof OnboardingDraftSchema>;
+
+export { setupBase as draftBase } from '../../core/state/setupBase';
 
 export function createDraft(now: string): ProfileDraft {
   const locations = createDefaultLocations({ gymAccess: true }, now);

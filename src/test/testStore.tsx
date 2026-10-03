@@ -24,7 +24,8 @@ export function createTestStore(options: TestStoreOptions = {}): TestStoreHandle
   const factory = options.factory ?? new IDBFactory();
   const storage = options.storage ?? createMemoryStorage();
   const store = new AppStore({
-    openDb: () => openDatabase({ factory, name: 'wc-test' }),
+    // The database's clock is the store's, so a change's queue time is a test time too.
+    openDb: () => openDatabase({ factory, name: 'wc-test', now: options.now ?? (() => TEST_NOW) }),
     storage,
     now: () => TEST_NOW,
     // Tests assert on results, not on the overlay's minimum visible time.

@@ -333,3 +333,125 @@
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
+
+/* Maintenance 25, item 7: a demonstration keeps its own shape, held to part of the screen so the
+   text below it stays in reach; letterboxed on black where the screen is the narrower edge. */
+.demoStage {
+  position: relative;
+  width: 100%;
+  max-height: min(52vh, 420px);
+  background: #000;
+}
+
+.demoVideo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* A demonstration with a control over it: the diagram, or the lifter's own GIF or video. */
+.demoFrame {
+  position: relative;
+}
+
+/* Where an own GIF's first frame is still being made: the frame, empty. */
+.demoBlank {
+  background: var(--color-bg-raised);
+}
+
+.thumbBlank {
+  display: inline-block;
+}
+
+.demoOverlay {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.overlayButton {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 45%);
+  border-radius: var(--radius-pill);
+  background: rgb(0 0 0 / 62%);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.overlayButton[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.demoStatus {
+  padding: 6px 10px 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.demoNote {
+  padding: 0 10px 8px;
+  font-size: 0.8rem;
+  color: var(--color-yellow);
+}
+
+.demoNotice {
+  padding: 0 10px 8px;
+  font-size: 0.7rem;
+  color: var(--color-text-subtle);
+}
+
+.creditDetails {
+  padding: 0 10px 8px;
+  font-size: 0.74rem;
+  color: var(--color-text-subtle);
+}
+
+.creditSummary {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.creditText {
+  overflow-wrap: anywhere;
+}
+
+.creditText a {
+  color: var(--color-accent);
+}
+
+.teaching {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  list-style: disc;
+}
+
+.avoid li::marker {
+  color: var(--color-yellow);
+}
+
+.howTo {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

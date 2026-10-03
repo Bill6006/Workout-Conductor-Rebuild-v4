@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Card } from '../../components/Card/Card';
 import { Toggle } from '../../components/Form/Toggle';
 import { notifyPermission, requestNotifyPermission } from '../../core/alerts/notify';
 import { restSounds } from '../../core/alerts/restSounds';
@@ -28,7 +27,7 @@ export function AlertsCard() {
   };
 
   return (
-    <Card eyebrow="Alerts" title="Sounds and notifications">
+    <>
       <div data-testid="alerts-card">
         <Toggle
           label="Rest timer sounds"
@@ -56,6 +55,6 @@ export function AlertsCard() {
               : 'With the phone locked a notification may come late or not at all: the app cannot wake itself.'}
         </p>
       </div>
-    </Card>
+    </>
   );
 }

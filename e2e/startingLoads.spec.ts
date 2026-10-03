@@ -51,8 +51,8 @@ test.describe('where the first weight comes from', () => {
     await expect(page.getByTestId('logger-weight')).toContainText('155');
     await expect(card.getByTestId('know-max')).toHaveCount(0);
 
-    await page.getByRole('tab', { name: 'How to' }).first().click();
-    await expect(page.getByTestId('progression-evidence').first()).toContainText(
+    await page.getByTestId('options-tab').first().click();
+    await expect(page.getByRole('dialog').getByTestId('progression-evidence')).toContainText(
       'Your max for Barbell Bench Press: 215.8 lb',
     );
   });
@@ -76,7 +76,7 @@ test.describe('where the first weight comes from', () => {
     page,
   }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/units');
     await page.locator('#bodyweight').fill('180');
     await page.locator('#age').fill('30');
     await page
@@ -93,8 +93,8 @@ test.describe('where the first weight comes from', () => {
     // Reference max 1.0 x 180 lb; 85% of what it implies for 4-6 at RIR 2 -> 120 lb.
     await expect(page.getByTestId('workout-entry').first()).toContainText('× 120 × ');
     await page.getByTestId('start-workout').click();
-    await page.getByRole('tab', { name: 'How to' }).first().click();
-    await expect(page.getByTestId('progression-evidence').first()).toContainText(
+    await page.getByTestId('options-tab').first().click();
+    await expect(page.getByRole('dialog').getByTestId('progression-evidence')).toContainText(
       'Starting estimate from your 180 lb bodyweight, intermediate lifter, male, age 30',
     );
   });

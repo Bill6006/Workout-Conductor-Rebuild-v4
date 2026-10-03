@@ -39,3 +39,24 @@ Both papers were checked on PubMed (E-utilities) on 2026-09-24.
    a lighter day barely matters to it (Schoenfeld 2017; Robinson 2024).
 3. A set 10% light or less keeps the old rule too: the few extra reps already keep the effort.
 4. The 10% line is a judgement that applies these findings; no study set it.
+
+## Revised in Maintenance 25 (item 36): a strength set well short runs to its reserve too
+
+Point 2 above kept a strength set to one to three extra reps. At a place whose heaviest weight is
+far under a strength lift's load, that planned an easy set with an untrue reserve: the owner's
+dumbbell bench press at 20 lb read 20 lb × 6-8 "at RIR 2" for any max from 40 to 100, some twenty
+reps short of failure, and no entry moved it.
+
+A controlled trial answers what such a set is worth. In 25 untrained men, knee extensions at 30% of
+the max stopped short of failure (about 20 reps) grew the quadriceps 2.8%, not a significant
+change, where sets to failure at the same load (about 34 reps) grew them 7.8%, as much as heavy
+sets; strength rose about 16-18% at 30% either way, against about 33% at 80% (Lasevicius,
+Schoenfeld and colleagues, 2022, Journal of Strength and Conditioning Research, PMID 31895290,
+checked on PubMed on 2026-09-25). So at a light load the effort is what trains the muscle, and the
+strength gain is limited by the load, not raised by stopping short.
+
+The rule now: a set more than 10% under the load asked runs to its planned reps in reserve whatever
+its role, a strength set too, never past 30 reps; it takes its own tempo, not the slower one of the
+heaviest weight, and no drop set. A strength set 10% light or less keeps two extra reps and the
+slower tempo (Maintenance 21). The cost is time: such sets are longer, so short sessions at light
+places keep fewer moves (measured in docs/research/entered-maxes.md).

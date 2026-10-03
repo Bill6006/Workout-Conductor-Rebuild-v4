@@ -4,6 +4,7 @@ import { openDatabase, type Database } from '../storage/indexedDb';
 import { createMemoryStorage, type KeyValueStorage } from '../storage/localSettings';
 import { CLOUD_TOKEN_ID } from './model';
 import {
+  liveNotice,
   TOKEN_LOG_KEY,
   TOKEN_MARK_ID,
   TOKEN_MARK_KEY,
@@ -198,5 +199,18 @@ describe('the token on the device', () => {
     expect(storage.getItem(TOKEN_MIRROR_KEY)).toBeNull();
     expect(await readTokenLog(db, storage)).toEqual([]);
     db.close();
+  });
+});
+
+describe('a notice about the token (Maintenance 25)', () => {
+  const HEALED = { at: '2026-10-01T08:00:00.000Z', kind: 'restored' as const, detail: 'Healed.' };
+  const GONE = { at: '2026-10-01T08:00:00.000Z', kind: 'missing' as const, detail: 'Gone.' };
+
+  it('settles a healed copy once a sync has finished after it, and keeps a missing token in view', () => {
+    expect(liveNotice(HEALED, null)).toEqual(HEALED);
+    expect(liveNotice(HEALED, '2026-09-30T08:00:00.000Z')).toEqual(HEALED);
+    expect(liveNotice(HEALED, '2026-10-01T08:05:00.000Z')).toBeNull();
+    expect(liveNotice(GONE, '2026-10-01T08:05:00.000Z')).toEqual(GONE);
+    expect(liveNotice(null, '2026-10-01T08:05:00.000Z')).toBeNull();
   });
 });

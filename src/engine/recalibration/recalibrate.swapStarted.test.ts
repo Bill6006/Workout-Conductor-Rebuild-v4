@@ -393,25 +393,18 @@ describe('a later change after a swap', () => {
     expect(after(later.workout, bench.id)?.exerciseId).toBe('dumbbell-bench-press');
   });
 
-  it('keeps a lift swapped out for busy equipment stopped while the equipment stays busy', () => {
+  it('moves a lift under way behind the next one when its equipment is busy, its logged set kept', () => {
+    // Maintenance 25, the owner's item 37: nothing is stopped or swapped; the sets left come later.
     const workout = gymWorkout();
     const bench = allEntries(workout.blocks)[0]!;
     const completed = logged(bench, ramps(bench) + 1);
     const busy = run({ type: 'equipment-busy', entryId: bench.id }, workout, completed);
-    expect(isStopped(find(busy.workout, bench.id)!)).toBe(true);
-    const stand = after(busy.workout, bench.id);
-    expect(stand?.exerciseId).not.toBe('barbell-bench-press');
-    const later = run(
-      { type: 'duration', choice: 45 },
-      busy.workout,
-      { ...completed, currentEntryId: null },
-      gym,
-      busy.constraints,
-    );
-    expect(isStopped(find(later.workout, bench.id)!)).toBe(true);
-    expect(requireExercise(after(later.workout, bench.id)!.exerciseId).movementPattern).toBe(
-      'horizontal-push',
-    );
+    const moved = find(busy.workout, bench.id)!;
+    expect(isStopped(moved)).toBe(false);
+    expect(moved.exerciseId).toBe('barbell-bench-press');
+    // Its sets, the logged one among them, are the ones it had: a lift under way keeps its sets.
+    expect(moved.sets).toEqual(bench.sets);
+    expect(busy.workout.blocks[1]?.entries.map((entry) => entry.id)).toContain(bench.id);
     expect(home).toBeDefined();
   });
 });
@@ -528,7 +521,12 @@ describe('after a swap, what the next change may not undo', () => {
     )!;
     expect(row.slot).toBeUndefined();
     const completed = logged(row, 1, 95);
-    const busy = run({ type: 'equipment-busy', entryId: row.id }, added.workout, completed);
+    // Swapped out after a set (Equipment busy swapped it before Maintenance 25; a swap still does).
+    const busy = run(
+      { type: 'replace', entryId: row.id, exerciseId: 'chest-supported-row' },
+      added.workout,
+      completed,
+    );
     const stand = after(busy.workout, row.id)!;
     expect(stand.locked).toBe(true);
     const later = run(

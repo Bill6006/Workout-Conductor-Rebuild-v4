@@ -28,7 +28,7 @@ const STALLED_BENCH = Buffer.from(
 
 /** Four bench sessions at the same load and effort, imported as older history. */
 async function importStalledBench(page: Page): Promise<void> {
-  await page.goto('./#/settings');
+  await page.goto('./#/settings/older-exports');
   await page.getByTestId('legacy-file-input').setInputFiles({
     name: 'old-history.json',
     mimeType: 'application/json',
@@ -40,6 +40,7 @@ async function importStalledBench(page: Page): Promise<void> {
     page.locator('[role="status"]').filter({ hasText: 'Imported and verified 4 workouts' }),
   ).toBeVisible();
   // A fresh backup, so the coach's save reminder does not outrank the stall.
+  await page.getByTestId('row-backup').click();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
   await download;
@@ -101,9 +102,12 @@ test.describe('adaptive coach', () => {
     await ensureProfile(page);
     await page.getByTestId('start-workout').click();
     await expect(page.getByTestId('workout-stats')).toBeVisible();
-    await page.getByRole('tab', { name: 'How to' }).first().click();
-    const evidence = page.getByTestId('progression-evidence').first();
+    // The target's reasons are in Options (Maintenance 25, item 7).
+    await page.getByTestId('options-tab').first().click();
+    const evidence = page.getByRole('dialog').getByTestId('progression-evidence');
     await expect(evidence).toContainText('First time logged');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
     await skipWarmupIfShown(page);
     await page.getByTestId('logger-weight').click();
     await page.getByRole('spinbutton', { name: 'Weight' }).fill('185');

@@ -16,6 +16,7 @@ import type {
 } from '../../engine/recalibration/types';
 import { allEntries, type DurationChoice, type GeneratedWorkout } from '../../engine/workout/types';
 import { GeneratedWorkoutSchema } from '../../engine/workout/workoutSchema';
+import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
 import { readJson, removeKey, writeJson, type KeyValueStorage } from '../storage/localSettings';
 import type { LocationProfile } from '../validation/location';
 import type { UserProfile } from '../validation/profile';
@@ -231,6 +232,16 @@ const ReadinessSchema = z.looseObject({
 
 const ConstraintsSchema = z.looseObject({
   busyEquipment: z.array(z.string()),
+  // Maintenance 25: a session saved before has none; one that fails to read keeps none.
+  postponed: z
+    .array(
+      z.looseObject({
+        exerciseId: z.string().min(1),
+        after: z.array(z.string().min(1)),
+        was: z.array(z.string().min(1)).optional().catch(undefined),
+      }),
+    )
+    .catch([]),
   avoidExerciseIds: z.array(z.string()),
   painJoints: z.array(z.enum(JOINTS)),
   endBy: z.iso.datetime().nullable(),
@@ -440,10 +451,18 @@ function everyExerciseKnown(workout: GeneratedWorkout): boolean {
 export function readSession(storage: KeyValueStorage): WorkoutSession | null {
   const parsed = readJson(SESSION_KEY, SessionSchema, storage);
   if (!parsed) return null;
-  const session = parsed as unknown as WorkoutSession;
-  if (!everyExerciseKnown(session.workout)) return null;
-  if (session.previous && !everyExerciseKnown(session.previous.workout)) return null;
-  return session;
+  const stored = parsed as unknown as WorkoutSession;
+  if (!everyExerciseKnown(stored.workout)) return null;
+  if (stored.previous && !everyExerciseKnown(stored.previous.workout)) return null;
+  // A plan kept from before Maintenance 25 said a fitting step once per pass: read back, each
+  // line is said once.
+  return {
+    ...stored,
+    workout: explanationOnce(stored.workout),
+    previous: stored.previous
+      ? { ...stored.previous, workout: explanationOnce(stored.previous.workout) }
+      : stored.previous,
+  };
 }
 
 /** Where a stored workout that could not be read back is kept, newest first, so nothing writes over it. */

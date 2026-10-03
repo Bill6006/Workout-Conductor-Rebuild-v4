@@ -234,17 +234,6 @@ export function barWeightFor(
   return exercise.barWeight?.[units] ?? (units === 'lb' ? 45 : 20);
 }
 
-/** A bar lift never targets less than the empty bar. */
-export function floorToBar(
-  weight: number | null,
-  exercise: Pick<CatalogExercise, 'load' | 'barWeight'>,
-  units: UnitSystem,
-): number | null {
-  const bar = barWeightFor(exercise, units);
-  if (bar === null || weight === null) return weight;
-  return Math.max(weight, bar);
-}
-
 /**
  * Converts an estimated max between two exercises in the same family by their
  * reference ratios, so 60 lb per hand on a dumbbell press does not become a

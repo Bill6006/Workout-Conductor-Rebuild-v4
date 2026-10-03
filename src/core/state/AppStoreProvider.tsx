@@ -9,7 +9,11 @@ interface AppStoreProviderProps {
 
 export function AppStoreProvider({ store, children }: AppStoreProviderProps) {
   useEffect(() => {
-    void store.hydrate().then(() => store.startCloud());
+    void store.hydrate().then(() => {
+      store.startCloud();
+      // Asks the browser to keep this app's storage, once per open (Maintenance 25).
+      void store.ensurePersistence();
+    });
     return () => store.stopCloud();
   }, [store]);
 

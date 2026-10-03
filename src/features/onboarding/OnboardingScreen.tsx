@@ -1,9 +1,12 @@
+import { SetupInterruptedError } from '../../core/state/setupBase';
+import { keyedLines } from '../../core/screen/keyedLines';
 import { useState } from 'react';
 import { Button } from '../../components/Button/Button';
 import { Card } from '../../components/Card/Card';
 import { ProgressBar } from '../../components/ProgressBar/ProgressBar';
 import { useToast } from '../../components/Toast/useToast';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
+import { HOME_LOCATION_ID, type LocationProfile } from '../../core/validation/location';
 import {
   ONBOARDING_DRAFT_KEY,
   defaultStorage,
@@ -11,10 +14,11 @@ import {
   writeJson,
 } from '../../core/storage/localSettings';
 import { nowIso, useNow } from '../../core/time/clock';
-import { routeHref } from '../../app/navigation';
+import { routeHref, sectionHref } from '../../app/navigation';
 import {
   OnboardingDraftSchema,
   createDraft,
+  draftBase,
   draftFromState,
   type ProfileDraft,
 } from '../profile/draft';
@@ -39,9 +43,15 @@ interface WizardState {
   draft: ProfileDraft;
 }
 
-function loadInitialState(nowValue: string, existing: ProfileDraft | null): WizardState {
+function loadInitialState(
+  nowValue: string,
+  existing: ProfileDraft | null,
+  base: string | null,
+): WizardState {
   const saved = readJson(ONBOARDING_DRAFT_KEY, OnboardingDraftSchema, defaultStorage());
-  if (saved) {
+  // A run left part-way is resumed only from where it began: the profile and places as they
+  // still stand (a first run's draft, once a profile has come, is not).
+  if (saved && (saved.basedOn ?? null) === base) {
     return {
       step: Math.min(saved.step, STEP_COUNT - 1),
       draft: { profile: saved.profile, locations: saved.locations },
@@ -50,10 +60,33 @@ function loadInitialState(nowValue: string, existing: ProfileDraft | null): Wiza
   return { step: 0, draft: existing ?? createDraft(nowValue) };
 }
 
-function persist(state: WizardState) {
+/**
+ * Default answers over the places stored, when the profile cannot be read: Finish then keeps the
+ * owner's places and their equipment (the tenth review's eighth re-check).
+ */
+function overStoredPlaces(draft: ProfileDraft, locations: LocationProfile[]): ProfileDraft {
+  if (locations.length === 0) return draft;
+  const kept = (id: string) => locations.some((location) => location.id === id);
+  const current = kept(draft.profile.currentLocationId)
+    ? draft.profile.currentLocationId
+    : kept(HOME_LOCATION_ID)
+      ? HOME_LOCATION_ID
+      : locations[0]!.id;
+  return {
+    profile: { ...draft.profile, currentLocationId: current },
+    locations: structuredClone(locations),
+  };
+}
+
+function persist(state: WizardState, base: string | null) {
   writeJson(
     ONBOARDING_DRAFT_KEY,
-    { step: state.step, profile: state.draft.profile, locations: state.draft.locations },
+    {
+      step: state.step,
+      profile: state.draft.profile,
+      locations: state.draft.locations,
+      basedOn: base,
+    },
     defaultStorage(),
   );
 }
@@ -92,8 +125,19 @@ export function OnboardingScreen() {
   const toast = useToast();
   const nowEpoch = useNow();
   const nowValue = new Date(nowEpoch || 0).toISOString();
-  const existing = appState.profile ? draftFromState(appState.profile, appState.locations) : null;
-  const [wizard, setWizard] = useState<WizardState>(() => loadInitialState(nowValue, existing));
+  // Without a readable profile, setup starts from default answers over the places stored, if any
+  // (the tenth review's eighth and ninth re-checks).
+  const existing = appState.profile
+    ? draftFromState(appState.profile, appState.locations)
+    : overStoredPlaces(createDraft(nowValue), appState.locations);
+  // What this run starts from, fixed for the run.
+  const [base, setBase] = useState(() => draftBase(appState.profile, appState.locations));
+  // The places this run began from: Use defaults keeps them, never this run's own part-way writes
+  // (the thirteenth re-check: after a cut-off it kept Home and never made the Gym).
+  const [startPlaces, setStartPlaces] = useState(() => appState.locations);
+  const [wizard, setWizard] = useState<WizardState>(() =>
+    loadInitialState(nowValue, existing, base),
+  );
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -106,14 +150,14 @@ export function OnboardingScreen() {
     const next = { ...wizard, draft };
     setWizard(next);
     setProblems([]);
-    persist(next);
+    persist(next, base);
   }
 
   function goTo(stepIndex: number) {
     const next = { ...wizard, step: stepIndex };
     setWizard(next);
     setProblems([]);
-    persist(next);
+    persist(next, base);
     window.scrollTo({ top: 0 });
   }
 
@@ -126,13 +170,40 @@ export function OnboardingScreen() {
     setBusy(true);
     try {
       const stamp = nowIso();
-      await store.completeOnboarding(
+      const outcome = await store.completeOnboarding(
         { ...draft.profile, createdAt: appState.profile?.createdAt ?? stamp, updatedAt: stamp },
         draft.locations,
+        { base },
       );
-      toast.show('Profile saved and verified on this device', 'success');
+      toast.show(
+        outcome === 'restored'
+          ? 'Your data changed while setup was open: what is saved now is shown'
+          : 'Profile saved and verified on this device',
+        'success',
+      );
+      if (outcome === 'restored') {
+        // Setup stays on screen when it is still needed (the profile on disk cannot be read): it
+        // starts again from what is there now, so the next Finish is not refused for the same
+        // change (the tenth review's seventh re-check).
+        const after = store.getSnapshot();
+        setBase(draftBase(after.profile, after.locations));
+        setStartPlaces(after.locations);
+        setProblems([]);
+        setWizard({
+          step: 0,
+          draft: after.profile
+            ? draftFromState(after.profile, after.locations)
+            : overStoredPlaces(createDraft(nowIso()), after.locations),
+        });
+      }
       window.location.hash = routeHref('today');
     } catch (error) {
+      if (error instanceof SetupInterruptedError) {
+        // Cut off part-way: what it wrote stays, and setup starts from that now, the answers kept,
+        // so Finish again goes through, and so does a reopened setup (the eleventh re-check).
+        setBase(error.left);
+        persist(wizard, error.left);
+      }
       toast.show(error instanceof Error ? error.message : 'Saving failed', 'error');
     } finally {
       setBusy(false);
@@ -170,14 +241,17 @@ export function OnboardingScreen() {
       </div>
 
       <Card>
-        <StepEditor id={step.id} draft={wizard.draft} onChange={setDraft} />
+        {/* Held while Finish saves: an answer changed then would show and never be saved. */}
+        <fieldset className={styles.fields} disabled={busy}>
+          <StepEditor id={step.id} draft={wizard.draft} onChange={setDraft} />
+        </fieldset>
       </Card>
 
       {problems.length > 0 ? (
         <Card>
           <ul className={styles.problems} role="alert">
-            {problems.map((problem) => (
-              <li key={problem}>{problem}</li>
+            {keyedLines(problems).map(({ key, line }) => (
+              <li key={key}>{line}</li>
             ))}
           </ul>
         </Card>
@@ -188,7 +262,7 @@ export function OnboardingScreen() {
           type="button"
           className={styles.skip}
           disabled={busy}
-          onClick={() => void finish(createDraft(nowIso()))}
+          onClick={() => void finish(overStoredPlaces(createDraft(nowIso()), startPlaces))}
         >
           Use defaults and skip setup
         </button>
@@ -198,7 +272,9 @@ export function OnboardingScreen() {
         <Button
           variant="secondary"
           onClick={() =>
-            isFirst ? (window.location.hash = routeHref('settings')) : goTo(wizard.step - 1)
+            isFirst
+              ? (window.location.hash = sectionHref('settings', 'setup'))
+              : goTo(wizard.step - 1)
           }
           disabled={busy || (isFirst && !restarting)}
         >

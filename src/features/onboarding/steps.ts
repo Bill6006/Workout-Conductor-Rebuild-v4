@@ -78,6 +78,11 @@ export function validateStep(id: OnboardingStepId, draft: ProfileDraft): string[
       ) {
         problems.push('Bodyweight must be a positive number.');
       }
+      // The profile takes an age from 13 to 100: a typo is caught here, in words, not at Finish
+      // (the tenth review's eleventh re-check).
+      if (profile.age !== undefined && !(profile.age >= 13 && profile.age <= 100)) {
+        problems.push('Age must be from 13 to 100.');
+      }
       break;
     }
     default:

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { routeHref } from '../../app/navigation';
+import { routeHref, sectionHref } from '../../app/navigation';
 import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
 import { useToast } from '../../components/Toast/useToast';
 import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
@@ -28,8 +28,15 @@ import { GOAL_OPTIONS, labelFor, styleLabel } from '../profile/labels';
 import { LocationSheet } from './LocationSheet';
 import { ReadinessSheet } from './ReadinessSheet';
 import { WorkoutPreviewCard } from './WorkoutPreviewCard';
+import { doneKeys } from '../../core/state/session';
+import { postponeRefusal, postponeRefusalText } from '../../engine/workout/sequence';
 import styles from './TodayScreen.module.css';
 import { useTodayWorkout } from './useTodayWorkout';
+
+/** What the Equipment busy button says when it is off on Today (Maintenance 25). */
+function busyReason(refusal: ReturnType<typeof postponeRefusal>): string | null {
+  return refusal ? postponeRefusalText(refusal, 'today') : null;
+}
 
 interface Selection {
   entry: WorkoutEntry;
@@ -81,6 +88,8 @@ export function TodayScreen() {
       .filter((set) => !set.skipped)
       .map((set) => `${set.entryId}:${set.setIndex}`),
   );
+  // Every set done or skipped, as the engine counts them.
+  const done = doneKeys(session.completed);
   // A stopped exercise has nothing left to change: its sheet says so in place of its actions.
   const selectedStopped = selected !== null && isStopped(selected.entry);
   const alternatives =
@@ -146,7 +155,17 @@ export function TodayScreen() {
         });
         break;
       case 'rest':
-        store.adjustRest(action.deltaSeconds);
+        // The rest gets its seconds and the offer is marked as taken for that rest, so the button
+        // never comes back for it (Maintenance 25).
+        try {
+          if (store.takeCoachRest(signal, action.deltaSeconds)) {
+            toast.show(`Added ${action.deltaSeconds} s to this rest.`, 'success');
+          } else {
+            toast.show('Already added to this rest.', 'info');
+          }
+        } catch (error) {
+          toast.show(error instanceof Error ? error.message : 'The rest could not change', 'error');
+        }
         break;
       case 'readiness':
         setCheckingIn(true);
@@ -160,7 +179,8 @@ export function TodayScreen() {
         break;
       }
       case 'backup':
-        window.location.hash = routeHref('settings');
+        // Straight to Export and import, open, in view (Maintenance 25).
+        window.location.hash = sectionHref('settings', 'backup');
         break;
       case 'finish':
         // The sheet lives on the workout screen: go there and have it open.
@@ -288,6 +308,16 @@ export function TodayScreen() {
                 onPin: () =>
                   act({ type: 'pin', entryId: selected.entry.id, pinned: !selected.entry.pinned }),
                 onBusy: () => act({ type: 'equipment-busy', entryId: selected.entry.id }),
+                // Moved behind the next exercise with a set to do (Maintenance 25), by the
+                // engine's own rule.
+                busyDisabledReason: busyReason(
+                  postponeRefusal(
+                    workout,
+                    selected.entry.id,
+                    (entryId, index) => done.has(`${entryId}:${index}`),
+                    state.session?.constraints.postponed,
+                  ),
+                ),
                 onUncomfortable: () => act({ type: 'uncomfortable', entryId: selected.entry.id }),
                 onSkip: () => act({ type: 'skip', entryId: selected.entry.id }),
                 onPain: (joint) => act({ type: 'pain', entryId: selected.entry.id, joint }),

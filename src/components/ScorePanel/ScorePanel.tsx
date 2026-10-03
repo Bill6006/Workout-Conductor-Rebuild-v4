@@ -1,4 +1,5 @@
 import type { Score } from '../../engine/scoring/analytics';
+import { keyedLines } from '../../core/screen/keyedLines';
 import styles from './ScorePanel.module.css';
 
 interface ScorePanelProps {
@@ -24,8 +25,8 @@ export function ScorePanel({ score, label = 'How this is calculated' }: ScorePan
       <p className={styles.explanation}>{score.explanation}</p>
       {score.data.length > 0 ? (
         <ul className={styles.data}>
-          {score.data.map((line) => (
-            <li key={line}>{line}</li>
+          {keyedLines(score.data).map(({ key, line }) => (
+            <li key={key}>{line}</li>
           ))}
         </ul>
       ) : null}

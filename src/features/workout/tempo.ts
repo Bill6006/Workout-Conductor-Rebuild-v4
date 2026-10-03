@@ -58,6 +58,13 @@ export function notation(phases: readonly TempoPhase[]): string {
 export function truncate(text: string, max = 72): string {
   const clean = text.trim();
   if (clean.length <= max) return clean;
+  // A whole first part of the cue reads better than a sentence cut in its middle (the ninth
+  // review): up to the last semicolon, colon or comma that leaves at least 20 characters.
+  const stops = [...clean.slice(0, max).matchAll(/[;:,] /g)]
+    .map((match) => match.index)
+    .filter((at) => at >= 20);
+  const stop = stops[stops.length - 1];
+  if (stop !== undefined) return `${clean.slice(0, stop)}.`;
   const cut = clean.slice(0, max - 1);
   return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 40))}…`;
 }
@@ -84,9 +91,9 @@ export function tempoCue(
   exercise: CatalogExercise,
   options: { capped?: boolean } = {},
 ): TempoCue {
-  const cue = exercise.instructions.execution[0]
-    ? truncate(exercise.instructions.execution[0])
-    : null;
+  // The form cue is the exercise's first key cue (Maintenance 25, item 7), or its first step.
+  const first = exercise.instructions.cues[0] ?? exercise.instructions.execution[0];
+  const cue = first ? truncate(first) : null;
   const lower = (seconds: number) => phase('lower', seconds, 'Lower');
   const hold = (seconds: number) => phase('hold', seconds, 'Hold');
   const lift = (seconds: number, fast = false) => phase('lift', seconds, 'Lift', fast);

@@ -156,6 +156,11 @@
     background 0.15s ease;
 }
 
+.toggle[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .toggle[aria-checked='true'] .track {
   background: var(--color-accent);
   border-color: var(--color-accent);

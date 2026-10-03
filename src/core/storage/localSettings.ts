@@ -6,9 +6,12 @@ import {
 } from '../validation/settings';
 
 /**
- * localStorage is used only for small settings and active-session metadata
- * (for example an unfinished onboarding draft). Every read is validated and
- * falls back to defaults, so a corrupt value can never break startup.
+ * localStorage holds small settings and active-session metadata (for example an
+ * unfinished onboarding draft), and the second copies a cleared database is
+ * rebuilt from: the cloud token and database address, and each place's barcode
+ * with its picture within a budget (Maintenance 25). It is shared by every app on
+ * this origin, so what goes there stays small. Every read is validated and falls
+ * back to defaults, so a corrupt value can never break startup.
  */
 
 export const LOCAL_SETTINGS_KEY = 'wc.v1.settings';

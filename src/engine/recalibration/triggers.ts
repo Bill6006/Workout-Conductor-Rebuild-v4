@@ -48,7 +48,7 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
   'equipment-busy': {
     label: 'Equipment busy',
     scope: 'local',
-    evaluating: ['Ranking alternatives', 'Keeping the same muscles and role', CONFLICTS],
+    evaluating: ['Moving it after the next exercise', 'Setting targets for the new order'],
   },
   replace: {
     label: 'Exercise replaced',
@@ -174,7 +174,6 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
 export interface TriggerContext {
   exerciseName?: string;
   locationName?: string;
-  equipment?: string;
 }
 
 export function jointLabel(joint: Joint): string {
@@ -195,7 +194,7 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
     case 'equipment':
       return `Checking the equipment at ${place}`;
     case 'equipment-busy':
-      return `Working around a busy ${context.equipment ?? 'station'}`;
+      return `Moving ${name} later`;
     case 'replace':
       return `Swapping in ${name}`;
     case 'skip':

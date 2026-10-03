@@ -6,9 +6,11 @@ import type { LocationProfile } from '../../core/validation/location';
 import type { ProgramStyle, UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { remainingMinutes } from '../duration/duration';
+import { blockSequence } from '../workout/sequence';
 import { fitWeight, loadingFor, type SessionLoading } from '../loading/loading';
 import { weightStep } from '../plateMath/plateMath';
 import type {
+  CompletedSet,
   CompletedWork,
   RecalibrationTrigger,
   SessionConstraints,
@@ -127,6 +129,12 @@ export interface CoachSignal {
    * and a new one still shows.
    */
   concern?: string;
+  /**
+   * The one occasion an offer is about, when the same offer can rightly come again for a new one
+   * (Maintenance 25): the longer rest names the rest after one logged set. Taking it puts away
+   * that occasion only.
+   */
+  occasion?: string;
 }
 
 /** Declined offers, kept in the meta store: key `source|exerciseId` (or `*`). */
@@ -185,9 +193,16 @@ export function isSetAside(accepted: readonly string[] | undefined, signal: Coac
   );
 }
 
-/** What identifies an offer once it has been taken: where it came from, and what it said. */
-export function acceptKey(signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'headline'>): string {
-  return `${declineKey(signal)}|${signal.headline}`;
+/**
+ * What identifies an offer once it has been taken: where it came from, and what it said, and the
+ * occasion when it names one (Maintenance 25).
+ */
+export function acceptKey(
+  signal: Pick<CoachSignal, 'source' | 'exerciseId' | 'headline'> &
+    Partial<Pick<CoachSignal, 'occasion'>>,
+): string {
+  const key = `${declineKey(signal)}|${signal.headline}`;
+  return signal.occasion ? `${key}|${signal.occasion}` : key;
 }
 
 /**
@@ -243,6 +258,8 @@ export interface CoachInput {
   cloudCurrent?: boolean;
   /** Offers already taken this session (see `acceptKey`): they are not made twice. */
   accepted?: readonly string[];
+  /** The rest now: when it ends, or what is left of it while paused (Maintenance 25). */
+  rest?: RestNow | null;
   /** The workout clock, so the room left today is what the clock has not already used. */
   elapsedSeconds?: number;
   workoutCount: number;
@@ -780,7 +797,6 @@ function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction | 
       location: input.location,
       constraints: {
         excludeExerciseIds: input.constraints.avoidExerciseIds,
-        unavailableEquipment: input.constraints.busyEquipment,
         painJoints: jointsToProtect(input),
       },
       history: input.history,
@@ -895,7 +911,6 @@ function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | n
   const today = new Set(allEntries(input.workout.blocks).map((candidate) => candidate.exerciseId));
   const context = sessionConflictContext(input.profile, input.location, {
     excludeExerciseIds: input.constraints.avoidExerciseIds,
-    unavailableEquipment: input.constraints.busyEquipment,
     painJoints: jointsToProtect(input),
   });
   // Never one the lifter swapped out for weeks.
@@ -1060,35 +1075,167 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
   return signals;
 }
 
-function restSignals(input: CoachInput): CoachSignal[] {
-  if (input.status !== 'active') return [];
-  const entryId = input.completed.currentEntryId;
-  if (!entryId) return [];
-  const logged = input.completed.sets.filter(
+/** A rest as the coach reads it: the set it follows, when it ends, or what is left of it while paused. */
+export interface RestNow {
+  /** The lift and the set the rest follows, and when it began (Maintenance 25). */
+  entryId: string;
+  setIndex: number;
+  startedAt: string;
+  endsAt: string;
+  pausedRemaining: number | null;
+}
+
+/** Whether a rest is still running at `now` (Maintenance 25): paused with time left, or not over. */
+export function restRunning(
+  rest: Pick<RestNow, 'endsAt' | 'pausedRemaining'>,
+  now: string,
+): boolean {
+  return rest.pausedRemaining !== null
+    ? rest.pausedRemaining > 0
+    : Date.parse(rest.endsAt) > Date.parse(now);
+}
+
+/** A lift's working sets lifted today, in the order logged: a skip lifts nothing. */
+function liftedSets(completed: CompletedWork, entryId: string): CompletedSet[] {
+  return completed.sets.filter(
     (set) => set.entryId === entryId && set.kind === 'working' && !set.skipped,
   );
-  if (logged.length < 2) return [];
-  const [previous, latest] = logged.slice(-2) as [(typeof logged)[number], (typeof logged)[number]];
+}
+
+/**
+ * What a longer-rest offer is about (Maintenance 25): the set that fell short, as it was logged,
+ * and the rest it lengthens. A set corrected keeps its time; a set undone and lifted again is a
+ * new set; a rest started again (the partner's set undone and logged again) is a new rest.
+ */
+export function restOccasion(
+  set: Pick<CompletedSet, 'entryId' | 'setIndex' | 'completedAt'>,
+  rest: Pick<RestNow, 'startedAt'>,
+): string {
+  return `${set.entryId}#${set.setIndex}@${set.completedAt}~${rest.startedAt}`;
+}
+
+/**
+ * The lifts a running rest comes before (Maintenance 25): those of the row whose set it follows,
+ * while the next set to do is in that row, each with a set still to do. For a lift on its own that
+ * is its next set; in a pair or a circuit the rest runs after the round, before the next set of each
+ * lift in it. A rest before another row's set (the lift moved behind it for busy equipment) is not
+ * before this lift's next set: the whole row between rests it far longer.
+ */
+function liftsRestedFor(
+  workout: GeneratedWorkout,
+  completed: CompletedWork,
+  rest: Pick<RestNow, 'entryId' | 'setIndex'>,
+): WorkoutEntry[] {
+  const block = workout.blocks.find((candidate) =>
+    candidate.entries.some((entry) => entry.id === rest.entryId),
+  );
+  const next = completed.currentEntryId;
+  if (!block || next === null || !block.entries.some((entry) => entry.id === next)) return [];
+  const done = new Set(completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
+  return block.entries.filter((entry) =>
+    entry.sets.some((set) => set.kind === 'working' && !done.has(`${entry.id}:${set.index}`)),
+  );
+}
+
+/**
+ * The set each lift lifted in the round a running rest follows (Maintenance 25), with the one it
+ * lifted before it: on its own, the set the rest follows; in a pair or a circuit, each lift's set of
+ * that round. A lift that skipped its set of the round says nothing about this rest, and a rest
+ * after a warm-up says nothing about any.
+ */
+function roundLifts(
+  workout: GeneratedWorkout,
+  completed: CompletedWork,
+  rest: Pick<RestNow, 'entryId' | 'setIndex'>,
+): { latest: CompletedSet; previous: CompletedSet | undefined }[] {
+  const lifts = liftsRestedFor(workout, completed, rest);
+  const block = workout.blocks.find((candidate) =>
+    candidate.entries.some((entry) => entry.id === rest.entryId),
+  );
+  if (!block || lifts.length === 0) return [];
+  const sequence = blockSequence(block);
+  const after = sequence.find(
+    (item) => item.entryId === rest.entryId && item.setIndex === rest.setIndex,
+  );
+  if (!after || after.kind !== 'working') return [];
+  return lifts.flatMap((entry) => {
+    const position = sequence.find(
+      (item) => item.entryId === entry.id && item.kind === 'working' && item.round === after.round,
+    );
+    const lifted = liftedSets(completed, entry.id);
+    const at = position ? lifted.findIndex((set) => set.setIndex === position.setIndex) : -1;
+    return at < 0 ? [] : [{ latest: lifted[at] as CompletedSet, previous: lifted[at - 1] }];
+  });
+}
+
+/** A set that fell short, as a longer rest reads it: two reps or more fewer, nothing in reserve. */
+function fellShort(latest: CompletedSet, previous: CompletedSet | undefined): boolean {
   // A shorter second hold is how holds go; it says nothing about the rest.
-  if (isHold(requireExercise(latest.exerciseId))) return [];
-  if (previous.reps - latest.reps >= 2 && (latest.rir ?? 1) <= 0) {
-    const name = requireExercise(latest.exerciseId).name;
-    return [
-      {
-        domain: 'rest',
-        headline: `Rest 30 s longer before the next ${name} set`,
-        why: [
-          `Reps fell from ${previous.reps} to ${latest.reps} with nothing in reserve.`,
-          'A longer rest keeps the next set in range instead of grinding.',
-        ],
-        action: { kind: 'rest', deltaSeconds: 30, label: 'Add 30 s to this rest' },
-        confidence: 'medium',
-        severity: 2,
-        source: 'in-session reps',
-      },
-    ];
-  }
-  return [];
+  if (!previous || isHold(requireExercise(latest.exerciseId))) return false;
+  return previous.reps - latest.reps >= 2 && (latest.rir ?? 1) <= 0;
+}
+
+/**
+ * Whether a longer-rest offer still stands (Maintenance 25): the rest running comes before the next
+ * set of the lift it is about, and that lift's last set lifted is still the one that fell short.
+ */
+export function restOfferStands(
+  workout: GeneratedWorkout,
+  completed: CompletedWork,
+  rest: Pick<RestNow, 'entryId' | 'setIndex' | 'startedAt'>,
+  occasion: string,
+): boolean {
+  return roundLifts(workout, completed, rest).some(
+    ({ latest }) => restOccasion(latest, rest) === occasion,
+  );
+}
+
+/**
+ * Whether the coach already lengthened the rest running (Maintenance 25): an offer taken for the
+ * last set of a lift it comes before. A rest is lengthened once; taken for one lift of a pair, it
+ * is longer for the whole round.
+ */
+export function restLengthened(
+  workout: GeneratedWorkout,
+  completed: CompletedWork,
+  rest: Pick<RestNow, 'entryId' | 'setIndex' | 'startedAt'>,
+  accepted: readonly string[] | undefined,
+): boolean {
+  return roundLifts(workout, completed, rest).some(({ latest }) =>
+    (accepted ?? []).some((key) => key.endsWith(`|${restOccasion(latest, rest)}`)),
+  );
+}
+
+function restSignals(input: CoachInput): CoachSignal[] {
+  if (input.status !== 'active') return [];
+  // The offer lengthens the rest running now, so it stands only while that rest runs (Maintenance
+  // 25), and only for the lifts it comes before.
+  const rest = input.rest;
+  if (!rest || !restRunning(rest, input.now)) return [];
+  if (restLengthened(input.workout, input.completed, rest, input.accepted)) return [];
+  // The lift whose drop is newest: the set just lifted, or its partner's this round.
+  const drops = roundLifts(input.workout, input.completed, rest)
+    .filter(({ latest, previous }) => fellShort(latest, previous))
+    .sort((a, b) => Date.parse(b.latest.completedAt) - Date.parse(a.latest.completedAt));
+  const drop = drops[0];
+  if (!drop?.previous) return [];
+  const { previous, latest } = drop;
+  const name = requireExercise(latest.exerciseId).name;
+  return [
+    {
+      domain: 'rest',
+      headline: `Rest 30 s longer before the next ${name} set`,
+      why: [
+        `Reps fell from ${previous.reps} to ${latest.reps} with nothing in reserve.`,
+        'A longer rest keeps the next set in range instead of grinding.',
+      ],
+      action: { kind: 'rest', deltaSeconds: 30, label: 'Add 30 s to this rest' },
+      confidence: 'medium',
+      severity: 2,
+      source: 'in-session reps',
+      occasion: restOccasion(latest, rest),
+    },
+  ];
 }
 
 /** A muscle under this share of its weekly target counts as a gap. */
@@ -1154,7 +1301,6 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
             location: input.location,
             constraints: {
               excludeExerciseIds: input.constraints.avoidExerciseIds,
-              unavailableEquipment: input.constraints.busyEquipment,
               painJoints: jointsToProtect(input),
             },
             history: input.history,

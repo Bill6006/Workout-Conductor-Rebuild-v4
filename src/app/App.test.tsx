@@ -33,13 +33,56 @@ async function seededStore() {
 }
 
 describe('App', () => {
-  it('shows the shell brand, phase chip, and build marker while loading and after', async () => {
+  it('shows the shell brand while loading and after, with the build kept out of it', async () => {
     const { store } = createTestStore();
     renderApp(store);
     expect(screen.getByText('Workout Conductor')).toBeInTheDocument();
-    expect(screen.getByTestId('phase-chip')).toHaveTextContent('Phase 8');
-    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 8$/);
+    // Maintenance 25: the build and the phase live under Settings, About, not in every header.
+    expect(screen.queryByTestId('phase-chip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('build-marker')).not.toBeInTheDocument();
     await screen.findByRole('heading', { level: 1, name: 'What are you training for?' });
+  });
+
+  it('shows the phase and the build under Settings, About', async () => {
+    const { store } = await seededStore();
+    const user = userEvent.setup();
+    window.location.hash = '#/settings';
+    renderApp(store);
+    await screen.findByRole('heading', { level: 1, name: 'Settings' });
+    const about = screen.getByTestId('row-about');
+    expect(about).toHaveTextContent(/Phase 8 · awaiting Android review · build \S+/);
+    await user.click(about);
+    expect(screen.getByTestId('build-marker')).toHaveTextContent(/^Build \S+ · .+ · Phase 8$/);
+  });
+
+  it('brings a Settings row a link names into view after the move to the top (Maintenance 25)', async () => {
+    const { store } = await seededStore();
+    const calls: string[] = [];
+    const scrollTo = window.scrollTo;
+    window.scrollTo = (() => calls.push('top')) as typeof window.scrollTo;
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value(this: Element) {
+        calls.push(this.querySelector('[data-testid^="row-"]')?.getAttribute('data-testid') ?? '');
+      },
+    });
+    try {
+      window.location.hash = '#/plan';
+      renderApp(store);
+      await screen.findByRole('heading', { level: 1, name: 'Plan' });
+      calls.length = 0;
+      // "Change days ›" on Plan, as the lifter taps it.
+      setHash('#/settings/schedule');
+      await screen.findByRole('heading', { level: 1, name: 'Settings' });
+      // The page goes to the top for the new tab first, and the row the link names comes into
+      // view last, where it stays.
+      await waitFor(() => expect(calls.at(-1)).toBe('row-schedule'));
+      expect(calls).toContain('top');
+      expect(calls.indexOf('top')).toBeLessThan(calls.lastIndexOf('row-schedule'));
+    } finally {
+      window.scrollTo = scrollTo;
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    }
   });
 
   it('starts with onboarding on first run and hides the tab bar', async () => {
@@ -142,6 +185,7 @@ describe('App', () => {
     window.location.hash = '#/settings';
     renderApp(store);
     await screen.findByRole('heading', { level: 1, name: 'Settings' });
+    await user.click(screen.getByTestId('row-programming'));
     await user.click(screen.getByRole('switch', { name: /Allow drop sets/ }));
     await waitFor(() => expect(store.getSnapshot().profile?.techniques.dropSets).toBe(false), {
       timeout: 3000,

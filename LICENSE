@@ -19,3 +19,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+The MIT License above covers the source code. It does not cover the exercise demonstrations in
+public/media/exercises/: each is under its own licence (public domain, CC BY 3.0, or CC BY-SA 4.0),
+as listed in docs/media-license-register.md and public/media/exercises/LICENSE.md.

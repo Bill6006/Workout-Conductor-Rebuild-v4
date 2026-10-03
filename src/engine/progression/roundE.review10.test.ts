@@ -284,11 +284,11 @@ describe('reps set by hand, swapped out and back, then the gym', () => {
     const atGym = act(gym, back, { ...done, currentEntryId: picked.id }, { type: 'location' });
     const moved = allEntries(atGym.blocks).find((entry) => entry.exerciseId === row);
     if (!moved) throw new Error('lost');
+    // However many sets the time left it (Maintenance 25: a strength set at light dumbbells runs
+    // to its effort, and takes longer), each asks what the gym makes.
     const left = toCome(moved, done).filter((set) => set.kind === 'working');
-    expect(left.map((set) => [set.targetWeight, set.targetReps])).toEqual([
-      [30, [6, 10]],
-      [30, [6, 10]],
-    ]);
+    expect(left.length).toBeGreaterThan(0);
+    for (const set of left) expect([set.targetWeight, set.targetReps]).toEqual([30, [6, 10]]);
   });
 });
 
@@ -573,12 +573,55 @@ describe('a max entered once a lift has begun', () => {
     );
   });
 
-  it('counts after a long break too, from the max', () => {
+  it('counts after a long break too: a higher max two steps at most over the logged start', () => {
     const { saved, maxes } = day('2026-09-10T12:02:00.000Z', true);
     const later = '2026-10-08T12:00:00.000Z';
     const withMax = next(saved, maxes, later);
+    const without = next(saved, null, later);
     expect(withMax.mode).toBe('return');
-    expect(withMax.evidence.at(-1)).toMatch(/starting from the max you entered \(80 lb\)/);
+    expect(without.mode).toBe('return');
+    // Maintenance 25: the sheet and the docs say two steps at most, and the break path does too.
+    const step = without.increment;
+    expect(withMax.weight ?? 0).toBeGreaterThan(without.weight ?? 0);
+    expect(withMax.weight ?? 0).toBeLessThanOrEqual((without.weight ?? 0) + 2 * step);
+    expect(withMax.evidence.at(-2)).toMatch(/^[0-9]+ days since the last session: back at 90%/);
+    expect(withMax.evidence.at(-1)).toMatch(
+      /^Your max of 80 lb, entered after you began this lift last time, says more than your logged sets: up (a step|2 steps) toward it\. Your next logged session takes over\.$/,
+    );
+  });
+
+  it('starts from a lower max after a long break: the break may have cost strength', () => {
+    const { saved } = day('2026-09-10T12:02:00.000Z', true);
+    const later = '2026-10-08T12:00:00.000Z';
+    const lower = maxOf(incline, 40, '2026-09-10T12:02:00.000Z');
+    const withMax = next(saved, lower, later);
+    expect(withMax.mode).toBe('return');
+    expect(withMax.weight ?? 0).toBeLessThan(next(saved, null, later).weight ?? 0);
+    expect(withMax.evidence.at(-1)).toMatch(/starting from the max you entered \(40 lb\)/);
+  });
+
+  it('leaves the logged start after a long break for a max that says no more', () => {
+    const { saved } = day('2026-09-10T12:02:00.000Z', true);
+    const later = '2026-10-08T12:00:00.000Z';
+    const without = next(saved, null, later);
+    // The day's best set as logged, entered as a recent set: it says as much as the log.
+    const best = (saved.entries.find((entry) => entry.exerciseId === incline)?.sets ?? [])
+      .flatMap((set) =>
+        set.kind === 'working' && set.completed && set.weight !== null
+          ? [{ weight: set.weight, reps: set.reps }]
+          : [],
+      )
+      .sort((a, b) => b.weight * (30 + b.reps) - a.weight * (30 + a.reps))[0];
+    if (!best) throw new Error('no logged set');
+    const same = recordMax(
+      emptyMaxes(),
+      incline,
+      { kind: 'set', weight: best.weight, reps: best.reps },
+      'lb',
+      '2026-09-10T12:20:00.000Z',
+    );
+    const withMax = next(saved, same, later);
+    expect([withMax.weight, withMax.reps]).toEqual([without.weight, without.reps]);
   });
 
   it('is not counted again once it set the day’s target', () => {

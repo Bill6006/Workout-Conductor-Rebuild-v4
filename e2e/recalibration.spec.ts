@@ -61,8 +61,11 @@ test.describe('recalibration', () => {
     await page.getByTestId('workout-entry').first().click();
     await page.getByRole('button', { name: 'Equipment busy' }).click();
     const summary = page.getByTestId('recalibration-summary');
-    await expect(summary).toContainText(/busy: 1 exercise replaced\./);
-    expect((await exerciseIds(page))[0]).not.toBe(before[0]);
+    // Maintenance 25: busy equipment moves the lift behind the next one; nothing is swapped out.
+    await expect(summary).toContainText(/moved after .+: its equipment is busy\./);
+    const moved = await exerciseIds(page);
+    expect(moved[1]).toBe(before[0]);
+    expect([...moved].sort()).toEqual([...before].sort());
 
     await page.getByTestId('workout-entry').nth(2).click();
     await page.getByRole('button', { name: 'Skip today' }).click();

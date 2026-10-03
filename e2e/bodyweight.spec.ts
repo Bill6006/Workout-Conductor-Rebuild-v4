@@ -27,7 +27,7 @@ async function capture(page: Page, testInfo: TestInfo, name: string, target?: Lo
 
 /** A fresh backup, so the coach's save reminder does not outrank what the test is about. */
 async function backUp(page: Page): Promise<void> {
-  await page.goto('./#/settings');
+  await page.goto('./#/settings/backup');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
   await download;
@@ -138,7 +138,7 @@ async function chinUpFirst(page: Page): Promise<void> {
 }
 
 async function openSheet(card: Locator): Promise<Locator> {
-  await card.getByTestId('card-thumb').click();
+  await card.getByTestId('options-tab').click();
   const sheet = card.page().getByRole('dialog');
   await expect(sheet.getByRole('heading', { name: 'Sets and order' })).toBeVisible();
   return sheet;
@@ -161,7 +161,7 @@ async function startAtGym(page: Page): Promise<void> {
 
 /** A bodyweight in Settings, so a dumbbell lift starts past what light dumbbells make. */
 async function setBodyweight(page: Page): Promise<void> {
-  await page.goto('./#/settings');
+  await page.goto('./#/settings/units');
   await page.locator('#bodyweight').fill('180');
   await expect(page.getByTestId('settings-save-status')).toHaveText(
     'Saved and verified on this device',
@@ -394,7 +394,7 @@ test.describe('dumbbells well short of the target', () => {
   }, testInfo) => {
     // Maintenance 23, the owner's item 21, set up the way the owner would at home.
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/units');
     await page.locator('#bodyweight').fill('180');
     await expect(page.getByTestId('settings-save-status')).toHaveText(
       'Saved and verified on this device',
@@ -430,8 +430,9 @@ test.describe('dumbbells well short of the target', () => {
     await expect(card.getByText(/more sets · [0-9]+-[0-9]+ reps @ RIR/)).toHaveText(
       /sets · (1[6-9]|2[0-9])-(2[0-9]|30) reps @ RIR/,
     );
-    await card.getByRole('tab', { name: 'How to' }).click();
-    const evidence = card.getByTestId('progression-evidence');
+    // The target's reasons are in Options (Maintenance 25, item 7).
+    await card.getByTestId('options-tab').click();
+    const evidence = page.getByRole('dialog').getByTestId('progression-evidence');
     await expect(evidence).toContainText(
       /Held at the heaviest weight here \(20 lb\): about \d+ more reps, (to \d in reserve|up to 30)\./,
     );
@@ -501,8 +502,8 @@ test.describe('changes mid-workout (Maintenance 23)', () => {
     await setDumbbells(card, [5, 20, 5]);
     await expect(card.getByTestId('weight-hint')).toHaveText('Target 20 lb');
     await expect(card.getByTestId('reps-hint')).toHaveText('Target 12-15');
-    await card.getByRole('tab', { name: 'How to' }).click();
-    await expect(card.getByTestId('progression-evidence')).toContainText(
+    await card.getByTestId('options-tab').click();
+    await expect(page.getByRole('dialog').getByTestId('progression-evidence')).toContainText(
       'Held at the heaviest weight here (20 lb).',
     );
   });
@@ -526,8 +527,8 @@ test.describe('changes mid-workout (Maintenance 23)', () => {
     await setDumbbells(card, [5, 50, 5]);
     await expect(card.getByTestId('weight-hint')).toHaveText(target);
     await expect(card.getByTestId('reps-hint')).toHaveText('Target 12-15');
-    await card.getByRole('tab', { name: 'How to' }).click();
-    await expect(card.getByTestId('progression-evidence')).not.toContainText(
+    await card.getByTestId('options-tab').click();
+    await expect(page.getByRole('dialog').getByTestId('progression-evidence')).not.toContainText(
       'Held at the heaviest weight here (20 lb)',
     );
   });

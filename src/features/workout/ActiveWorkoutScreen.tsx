@@ -1,3 +1,4 @@
+import { sectionHref } from '../../app/navigation';
 import { useEffect, useState } from 'react';
 import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
@@ -12,7 +13,12 @@ import { ExerciseCard } from '../../components/ExerciseCard/ExerciseCard';
 import {
   ExerciseDetailSheet,
   type EditActions,
+  type TargetNotes,
 } from '../../components/ExerciseDetail/ExerciseDetailSheet';
+import { HowToSheet } from '../../components/ExerciseDetail/HowToSheet';
+import { PlateLine } from '../../components/PlateStack/PlateStack';
+import { isCoreStability } from '../../catalog/movementPatterns/movementPatterns';
+import { effortGuidance, restGuidance } from './effort';
 import { ProgressBar } from '../../components/ProgressBar/ProgressBar';
 import { RestTimer } from '../../components/RestTimer/RestTimer';
 import { ScreenHeader } from '../../components/Screen/Screen';
@@ -42,11 +48,17 @@ import { remainingMinutes } from '../../engine/duration/duration';
 import { plateMath } from '../../engine/plateMath/plateMath';
 import { dropSetWeight } from '../../engine/recalibration/dropSet';
 import { fitWeight, loadingFor, loadingKeyFor, specFor } from '../../engine/loading/loading';
-import { maxPromptHidden } from '../../engine/progression/maxes';
+import { enteredE1rm, maxPromptHidden } from '../../engine/progression/maxes';
 import { hasNoLoad, startRatio } from '../../engine/progression/startingLoad';
 import { contextFor } from '../../engine/recalibration/recalibrate';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
-import { currentPosition, nextBlockAfter, workoutProgress } from '../../engine/workout/sequence';
+import {
+  currentPosition,
+  nextBlockAfter,
+  postponeRefusal,
+  postponeRefusalText,
+  workoutProgress,
+} from '../../engine/workout/sequence';
 import {
   allEntries,
   isStopped,
@@ -63,6 +75,7 @@ import { describeSetPosition } from './setFormat';
 import { RatingSheet } from './RatingSheet';
 import { MaxSheet } from './MaxSheet';
 import { previousPerformance } from './previousPerformance';
+import { liveWeightOn, type LiveWeight } from './liveWeight';
 
 interface Editing {
   entryId: string;
@@ -168,6 +181,8 @@ export function ActiveWorkoutScreen() {
   const soundsOn = useAppSelector((state) => state.localSettings.restSounds);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [selected, setSelected] = useState<Selection | null>(null);
+  // How to opens on its own (Maintenance 25, item 7): the demonstration and the steps.
+  const [howTo, setHowTo] = useState<Selection | null>(null);
   // Today can ask for the end-of-workout sheet; it opens here and the request is cleared.
   const [finishing, setFinishing] = useState<'idle' | 'rating' | 'discard'>(() =>
     store.getSnapshot().finishRequested ? 'rating' : 'idle',
@@ -185,7 +200,11 @@ export function ActiveWorkoutScreen() {
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
   const strengthMaxes = useAppSelector((state) => state.strengthMaxes);
   /** Weight currently shown in a logger, so Plate Math follows it before the set is logged. */
-  const [liveWeights, setLiveWeights] = useState<Record<string, number | null>>({});
+  /**
+   * The weight the dial has been turned to, per exercise, with the dial it was turned on: a dial
+   * that starts again (a new target, say) starts from its own value (the ninth review).
+   */
+  const [liveWeights, setLiveWeights] = useState<Record<string, LiveWeight>>({});
   /** A block opened from the Whole workout list, to edit its sets; null shows the current one. */
   const [viewingBlockId, setViewingBlockId] = useState<string | null>(null);
   /** Why the last save did not go through, in plain words; the session stays until it does. */
@@ -263,6 +282,12 @@ export function ActiveWorkoutScreen() {
     entry.sets.every((set) => isDone(entry.id, set.index))
       ? 'Every set is logged. Edit a set from its row instead.'
       : null;
+  // Equipment busy moves an exercise behind the next one with a set to do (Maintenance 25), by
+  // the engine's own rule.
+  const busyReasonFor = (entry: WorkoutEntry) => {
+    const refusal = postponeRefusal(workout, entry.id, isDone, session.constraints.postponed);
+    return refusal ? postponeRefusalText(refusal, 'workout') : null;
+  };
 
   const act = (trigger: RecalibrationTrigger) => {
     setSelected(null);
@@ -331,7 +356,17 @@ export function ActiveWorkoutScreen() {
         });
         break;
       case 'rest':
-        store.adjustRest(action.deltaSeconds);
+        // The rest gets its seconds and the offer is marked as taken for that rest, so the button
+        // never comes back for it (Maintenance 25).
+        try {
+          if (store.takeCoachRest(signal, action.deltaSeconds)) {
+            toast.show(`Added ${action.deltaSeconds} s to this rest.`, 'success');
+          } else {
+            toast.show('Already added to this rest.', 'info');
+          }
+        } catch (error) {
+          toast.show(error instanceof Error ? error.message : 'The rest could not change', 'error');
+        }
         break;
       case 'readiness':
         setCheckingIn(true);
@@ -345,7 +380,8 @@ export function ActiveWorkoutScreen() {
         break;
       }
       case 'backup':
-        window.location.hash = '#/settings';
+        // Straight to Export and import, open, in view (Maintenance 25).
+        window.location.hash = sectionHref('settings', 'backup');
         break;
       case 'finish':
         setEndedEarly(true);
@@ -410,6 +446,11 @@ export function ActiveWorkoutScreen() {
       ? entry.sets.find((set) => set.index === editingHere.setIndex)
       : undefined;
     const currentHere = position && position.entryId === entry.id ? position : null;
+    // The logger in front of the lifter: a new target starts it again from its own value.
+    const dialKey = currentHere
+      ? `log-${entry.id}-${currentHere.setIndex}-${currentHere.set.targetWeight ?? 'none'}`
+      : null;
+    const liveWeight = liveWeightOn(liveWeights[entry.id], dialKey);
     const workingLogged = logged.some((set) => set.kind === 'working' && !set.skipped);
     // One rule for the dial and the plate line: the dial's own starting value, or the weight
     // the dial has been turned to, or, with no set in front of you, the last working weight
@@ -448,16 +489,17 @@ export function ActiveWorkoutScreen() {
     const draftWeight =
       editingHere && editingSet
         ? loggedValues(session, entry.id, editingSet.index).weight
-        : (liveWeights[entry.id] ??
+        : (liveWeight ??
           dial?.weight ??
           lastWorkingWeight ??
           // An exercise being looked at, not worked: its planned working weight.
           entry.sets.find((set) => set.kind === 'working')?.targetWeight ??
           null);
+    // The plates for the weight on the dial, drawn as on the Plates panel (Maintenance 25, item 8).
     const helper =
-      draftWeight !== null && draftWeight !== undefined && draftWeight > 0
-        ? plateMath(exercise, draftWeight, units, loading.perSide ?? undefined).line
-        : null;
+      draftWeight !== null && draftWeight !== undefined && draftWeight > 0 ? (
+        <PlateLine result={plateMath(exercise, draftWeight, units, loading.perSide ?? undefined)} />
+      ) : null;
 
     return (
       <>
@@ -498,7 +540,7 @@ export function ActiveWorkoutScreen() {
         ) : currentHere ? (
           <>
             <SetLogger
-              key={`log-${entry.id}-${currentHere.setIndex}-${currentHere.set.targetWeight ?? 'none'}`}
+              key={dialKey ?? undefined}
               units={units}
               target={{
                 kind: currentHere.kind,
@@ -558,7 +600,10 @@ export function ActiveWorkoutScreen() {
                   : undefined
               }
               onChange={(values) =>
-                setLiveWeights((current) => ({ ...current, [entry.id]: values.weight }))
+                setLiveWeights((current) => ({
+                  ...current,
+                  [entry.id]: { dial: dialKey ?? '', weight: values.weight },
+                }))
               }
             />
             {currentHere.kind === 'warmup' ? (
@@ -590,7 +635,6 @@ export function ActiveWorkoutScreen() {
           exercise={exercise}
           units={units}
           currentWeight={draftWeight}
-          previous={previous}
           loading={loading}
           spec={specFor(currentLocation?.loading, exercise)}
           placeName={currentLocation?.name ?? 'this place'}
@@ -606,6 +650,7 @@ export function ActiveWorkoutScreen() {
           }
           instruction={instructions.find((item) => item.exerciseId === entry.exerciseId)}
           onSaveNotes={(notes, cues) => store.saveExerciseNotes(entry.exerciseId, { notes, cues })}
+          onHowTo={() => setHowTo({ entry, block })}
           onOptions={() => setSelected({ entry, block })}
         />
       </>
@@ -626,7 +671,7 @@ export function ActiveWorkoutScreen() {
           previous={previousPerformance(history, entry.exerciseId)}
           availableEquipment={context.availableEquipment}
           badge={prBadge(entry)}
-          onShowDetail={() => setSelected({ entry, block })}
+          onShowDetail={() => setHowTo({ entry, block })}
           onKnowMax={knowMaxFor(entry, block)}
           restStyle={profile.restStyle}
         >
@@ -658,7 +703,7 @@ export function ActiveWorkoutScreen() {
             prefix={block.kind === 'superset' ? `A${index + 1}` : `${index + 1}`}
             active={position?.entryId === entry.id}
             badge={prBadge(entry)}
-            onShowDetail={() => setSelected({ entry, block })}
+            onShowDetail={() => setHowTo({ entry, block })}
             onKnowMax={knowMaxFor(entry, block)}
             restStyle={profile.restStyle}
           >
@@ -670,6 +715,36 @@ export function ActiveWorkoutScreen() {
   };
 
   const selectedExercise = selected ? requireExercise(selected.entry.exerciseId) : null;
+  // Why the target is what it is, in Options (Maintenance 25, item 7: moved from How to).
+  const targetNotes = (entry: WorkoutEntry): TargetNotes => {
+    const exercise = requireExercise(entry.exerciseId);
+    const previous = previousPerformance(history, entry.exerciseId);
+    const lastTime = previous
+      ? exercise.measure === 'seconds'
+        ? `Last time: ${previous.weight === null ? '' : `${previous.weight} ${units} × `}${previous.reps} s, ${previous.sets} working sets.`
+        : `Last time: ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}${previous.rir === null ? '' : ` @ RIR ${previous.rir}`}, ${previous.sets} working sets.`
+      : null;
+    return {
+      lastTime,
+      why: [
+        ...(entry.progression?.evidence ?? []),
+        ...(entry.manual?.weight || entry.manual?.reps
+          ? ['You set this by hand; the engines keep your values.']
+          : []),
+        ...effortGuidance(
+          'working',
+          entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
+          entry.role,
+          exercise.measure === 'seconds',
+          isCoreStability(exercise.movementPattern),
+        ).evidence,
+        ...restGuidance(entry.role, entry.restSeconds).evidence,
+      ],
+    };
+  };
+  const howToInstruction = howTo
+    ? instructions.find((item) => item.exerciseId === howTo.entry.exerciseId)
+    : undefined;
   // A stopped exercise has nothing left to change: its sheet says so in place of its actions.
   const selectedStopped = selected !== null && isStopped(selected.entry);
   const alternatives =
@@ -984,9 +1059,16 @@ export function ActiveWorkoutScreen() {
         </ol>
       </details>
 
+      <HowToSheet
+        exercise={howTo ? requireExercise(howTo.entry.exerciseId) : null}
+        onClose={() => setHowTo(null)}
+        own={howToInstruction}
+      />
+
       <ExerciseDetailSheet
         exercise={selectedExercise}
         onClose={() => setSelected(null)}
+        targetNotes={selected && !selectedStopped ? targetNotes(selected.entry) : undefined}
         availableEquipment={context.availableEquipment}
         alternatives={alternatives}
         stoppedNote={
@@ -1012,6 +1094,7 @@ export function ActiveWorkoutScreen() {
                 onUncomfortable: () => act({ type: 'uncomfortable', entryId: selected.entry.id }),
                 onSkip: () => act({ type: 'skip', entryId: selected.entry.id }),
                 skipDisabledReason: skipReasonFor(selected.entry),
+                busyDisabledReason: busyReasonFor(selected.entry),
                 onPain: (joint) => act({ type: 'pain', entryId: selected.entry.id, joint }),
                 onUseAlternative: (exerciseId, keep) => {
                   const entryId = selected.entry.id;
@@ -1040,7 +1123,7 @@ export function ActiveWorkoutScreen() {
                 line: (() => {
                   const saved = strengthMaxes.maxes[selectedExercise.id];
                   return saved
-                    ? `${Math.round(saved.e1rm)} ${saved.units}, entered ${new Date(saved.enteredAt).toLocaleDateString()}.`
+                    ? `${Math.round(enteredE1rm(saved))} ${saved.units}, entered ${new Date(saved.enteredAt).toLocaleDateString()}.`
                     : 'None entered. The target comes from your logged sets.';
                 })(),
                 label: strengthMaxes.maxes[selectedExercise.id]

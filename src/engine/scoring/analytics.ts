@@ -2,7 +2,10 @@ import { getExercise } from '../../catalog/exercises/catalog';
 import { MUSCLE_IDS, muscleName, type MuscleId } from '../../catalog/muscles/muscles';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { isHold } from '../../catalog/exercises/exerciseSchema';
+import { maxFromSet } from '../progression/maxes';
 import { performanceHistory, type PerformancePoint } from '../progression/progression';
+import { hasNoLoad } from '../progression/startingLoad';
 import { restCategory } from '../progression/roles';
 import { qualifyingSessions } from '../strategy/strategy';
 import { computeWeeklyVolume, goalWeights, weeklyTargets } from '../volume/weeklyVolume';
@@ -258,6 +261,67 @@ export interface ExerciseProgress {
   points: PerformancePoint[];
 }
 
+/**
+ * Whether Progress reads a max for a lift (Maintenance 25): where the max sheet takes one. A hold's
+ * reps are seconds, and a lift with no load reference (bodyweight, a band) has no max of its own:
+ * the weight added to a pull-up is not one.
+ */
+export function readsMax(exerciseId: string): boolean {
+  const exercise = getExercise(exerciseId);
+  return exercise !== undefined && !isHold(exercise) && !hasNoLoad(exercise);
+}
+
+/**
+ * A session's best set as the max sheet reads a set, every rep counted up to thirty (Maintenance
+ * 25): Progress and the max sheet give one set one estimate. A set with no weight says nothing of
+ * a max.
+ */
+function sessionBest(
+  point: PerformancePoint,
+  max: boolean,
+): { weight: number; reps: number; e1rm: number } | null {
+  if (!max) return null;
+  let best: { weight: number; reps: number; e1rm: number } | null = null;
+  for (const set of point.sets) {
+    if (set.weight === null || set.weight <= 0 || set.reps <= 0) continue;
+    const e1rm = maxFromSet(set.weight, set.reps);
+    if (!best || e1rm > best.e1rm) best = { weight: set.weight, reps: set.reps, e1rm };
+  }
+  return best;
+}
+
+/** A session's estimated max as Progress reads it, for its lines (Maintenance 25). */
+export function sessionMax(point: PerformancePoint, exerciseId: string): number | null {
+  return sessionBest(point, readsMax(exerciseId))?.e1rm ?? null;
+}
+
+interface LiftedSet {
+  weight: number | null;
+  reps: number;
+}
+
+/**
+ * The order of sets where no max is read: the most load times reps (or seconds), then the most
+ * reps. One order within a session and across sessions, so the best named is the same set however
+ * the sets fall into sessions (the fourth review).
+ */
+function outranks(set: LiftedSet, other: LiftedSet): boolean {
+  const load = (each: LiftedSet) => (each.weight ?? 0) * each.reps;
+  return load(set) > load(other) || (load(set) === load(other) && set.reps > other.reps);
+}
+
+/**
+ * A session's top set where no max is read, as the set was lifted, so its weight and its reps are
+ * one set's (the third review).
+ */
+function sessionTop(point: PerformancePoint): LiftedSet {
+  const top = point.sets.reduce<LiftedSet | null>(
+    (found, set) => (found === null || outranks(set, found) ? set : found),
+    null,
+  );
+  return { weight: top?.weight ?? null, reps: top?.reps ?? 0 };
+}
+
 export function exerciseProgress(history: readonly WorkoutRecord[]): ExerciseProgress[] {
   const ids = new Set<string>();
   const replaced = new Map<string, number>();
@@ -276,37 +340,41 @@ export function exerciseProgress(history: readonly WorkoutRecord[]): ExercisePro
   for (const exerciseId of ids) {
     const exercise = getExercise(exerciseId);
     if (!exercise) continue;
-    const points = performanceHistory(history, exercise, 8).filter((point) => !point.viaFamily);
+    // Every session of the lift, newest first: the best reads them all, the trend the newest four
+    // (the third review).
+    const points = performanceHistory(history, exercise, Number.POSITIVE_INFINITY).filter(
+      (point) => !point.viaFamily,
+    );
+    const max = readsMax(exerciseId);
+    const maxOf = (point: PerformancePoint | undefined) =>
+      point ? (sessionBest(point, max)?.e1rm ?? null) : null;
     const best = points.reduce<ExerciseProgress['best'] | null>((current, point) => {
-      const candidate = {
-        weight: point.bestWeight,
-        reps: point.bestReps,
-        e1rm: point.e1rm,
-        date: point.date,
-      };
+      const weighed = sessionBest(point, max);
+      const candidate = weighed
+        ? { ...weighed, date: point.date }
+        : { ...sessionTop(point), e1rm: null, date: point.date };
       if (!current) return candidate;
-      if ((candidate.e1rm ?? 0) > (current.e1rm ?? 0)) return candidate;
-      if (candidate.e1rm === null && current.e1rm === null && candidate.reps > current.reps)
-        return candidate;
-      return current;
+      if (candidate.e1rm !== null || current.e1rm !== null) {
+        return (candidate.e1rm ?? 0) > (current.e1rm ?? 0) ? candidate : current;
+      }
+      return outranks(candidate, current) ? candidate : current;
     }, null);
     const latest = points[0];
     const oldest = points[Math.min(3, points.length - 1)];
+    const latestMax = maxOf(latest);
+    const oldestMax = maxOf(oldest);
     const trendPct =
-      latest &&
-      oldest &&
-      latest !== oldest &&
-      latest.e1rm !== null &&
-      oldest.e1rm !== null &&
-      oldest.e1rm > 0
-        ? Math.round(((latest.e1rm - oldest.e1rm) / oldest.e1rm) * 1000) / 10
+      latest !== oldest && latestMax !== null && oldestMax !== null && oldestMax > 0
+        ? Math.round(((latestMax - oldestMax) / oldestMax) * 1000) / 10
         : null;
     rows.push({
       exerciseId,
       name: exercise.name,
+      // Every session of the lift, not only the four the trend reads (Maintenance 25): its points
+      // are every session with a working set done.
       sessions: points.length,
       best: best ?? { weight: null, reps: 0, e1rm: null, date: '' },
-      latestE1rm: latest?.e1rm ?? null,
+      latestE1rm: latestMax,
       trendPct,
       lastDate: latest?.date ?? '',
       timesReplaced: replaced.get(exerciseId) ?? 0,
@@ -327,6 +395,12 @@ export interface StrengthEstimate {
   confidence: Confidence;
 }
 
+/** The middle value, or the lower of the two middle values. */
+function lowerMedian(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
+}
+
 export function estimatedStrength(
   progress: readonly ExerciseProgress[],
   units: string,
@@ -342,22 +416,23 @@ export function estimatedStrength(
       sessions: row.sessions,
       confidence: confidenceFor(row.sessions),
     }))
-    .sort((a, b) => b.e1rm - a.e1rm)
-    .slice(0, 6);
+    .sort((a, b) => b.e1rm - a.e1rm);
   const samples = estimates.reduce((sum, item) => sum + item.sessions, 0);
   return {
     value: estimates,
     definition:
-      'Estimated one-rep max from the best completed working set of each exercise, using Epley: weight × (1 + reps ÷ 30), reps capped at 12.',
+      'Estimated one-rep max from the best completed working set of each exercise, using Epley: weight × (1 + reps ÷ 30), every rep counted up to 30, as the max sheet reads a recent set.',
     samples,
+    // The typical lift's (the lower median of the session counts): each lift carries its own,
+    // and one lift done once no longer marks every estimate low (Maintenance 25).
     confidence:
       estimates.length === 0
         ? 'none'
-        : confidenceFor(Math.min(...estimates.map((item) => item.sessions))),
+        : confidenceFor(lowerMedian(estimates.map((item) => item.sessions))),
     explanation:
       estimates.length === 0
         ? 'Log weights on your sets and estimates appear here.'
-        : 'An estimate, not a test. Sets of 12 or more reps say little about a true max, so they are capped. Confidence follows how many sessions each exercise has.',
+        : 'An estimate, not a test: up to 20 reps it lands within about 6% of a tested max, and past 20 it tends to read low. Confidence follows how many sessions each exercise has.',
     data: estimates.map(
       (item) =>
         `${item.name}: ${item.weight} ${units} × ${item.reps} → about ${Math.round(item.e1rm)} ${units} (${item.sessions} ${item.sessions === 1 ? 'session' : 'sessions'})`,

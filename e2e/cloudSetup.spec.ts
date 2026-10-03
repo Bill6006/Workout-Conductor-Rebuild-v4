@@ -20,7 +20,7 @@ test.describe('one database per person', () => {
     page,
   }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/cloud');
     await expect(page.getByTestId('cloud-url')).toHaveValue(
       'libsql://life-record-bill6006.aws-us-east-1.turso.io',
     );
@@ -45,10 +45,13 @@ test.describe('one database per person', () => {
     await ensureProfile(page);
     const link = `./#/setup?db=${encodeURIComponent(OTHER)}&token=${encodeURIComponent(TOKEN)}`;
     await page.goto(link);
-    // It lands on Settings with the link already scrubbed, whatever the outcome.
+    // It lands on Settings, its Cloud copy row open, with the link already scrubbed, whatever
+    // the outcome.
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-    await expect(page).toHaveURL(/#\/settings$/);
+    await expect(page).toHaveURL(/#\/settings\/cloud$/);
     expect(page.url()).not.toContain(TOKEN);
+    // On screen, not open somewhere below it (Maintenance 25).
+    await expect(page.getByTestId('row-cloud')).toBeInViewport();
     // The host is blocked in this test, so the card reports why rather than pretending.
     await expect(page.getByText(/Could not reach that database/)).toBeVisible({ timeout: 15_000 });
 

@@ -62,14 +62,22 @@ test.describe('accessibility', () => {
     await page.getByTestId('start-workout').click();
     await expect(page.getByTestId('workout-stats')).toBeVisible();
     await checkPage(page, 'active workout');
-    await page.getByTestId('exercise-card').first().getByTestId('card-thumb').click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
-    // The sheet fades and slides in; axe must sample the settled colours, not the transition.
-    await expect
-      .poll(() => dialog.evaluate((el) => getComputedStyle(el).opacity), { timeout: 5_000 })
-      .toBe('1');
-    await page.waitForTimeout(400);
-    await checkPage(page, 'exercise details');
+    // How to (Maintenance 25, item 7), then Options.
+    for (const [opener, name] of [
+      ['card-thumb', 'how to'],
+      ['options-tab', 'exercise details'],
+    ] as const) {
+      await page.getByTestId('exercise-card').first().getByTestId(opener).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      // The sheet fades and slides in; axe must sample the settled colours, not the transition.
+      await expect
+        .poll(() => dialog.evaluate((el) => getComputedStyle(el).opacity), { timeout: 5_000 })
+        .toBe('1');
+      await page.waitForTimeout(400);
+      await checkPage(page, name);
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+    }
   });
 });

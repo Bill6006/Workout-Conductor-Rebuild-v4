@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '../../components/Button/Button';
-import { Card } from '../../components/Card/Card';
 import { FactList, type Fact } from '../../components/FactList/FactList';
 import { Sheet } from '../../components/Sheet/Sheet';
 import { useToast } from '../../components/Toast/useToast';
@@ -8,6 +7,7 @@ import type { CleanupResult, SaveCheckResult, StorageDiagnostic } from '../../co
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { formatDateTime } from '../../core/time/clock';
 import { formatBytes } from './format';
+import { keyedLines } from '../../core/screen/keyedLines';
 import styles from './Settings.module.css';
 
 /**
@@ -164,7 +164,7 @@ export function StorageCard() {
     : [{ label: 'Storage', value: 'Looking…' }];
 
   return (
-    <Card eyebrow="Storage" title="Storage and save check">
+    <>
       <FactList items={facts} />
       <div className={styles.buttonRow}>
         <Button
@@ -222,19 +222,19 @@ export function StorageCard() {
             <p className={styles.body}>Nothing temporary is on this device.</p>
           ) : (
             <ul className={styles.plainList} data-testid="cleanup-removed">
-              {cleanupPreview.removed.map((line) => (
-                <li key={line}>{line}</li>
+              {keyedLines(cleanupPreview.removed).map(({ key, line }) => (
+                <li key={key}>{line}</li>
               ))}
             </ul>
           )}
           <h3 className={styles.sheetHeading}>Kept</h3>
           <ul className={styles.plainList} data-testid="cleanup-kept">
-            {cleanupPreview.kept.map((line) => (
-              <li key={line}>{line}</li>
+            {keyedLines(cleanupPreview.kept).map(({ key, line }) => (
+              <li key={key}>{line}</li>
             ))}
           </ul>
         </Sheet>
       ) : null}
-    </Card>
+    </>
   );
 }

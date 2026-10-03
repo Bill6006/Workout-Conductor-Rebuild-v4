@@ -1,5 +1,6 @@
 import { IDBFactory } from 'fake-indexeddb';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readCloudState } from '../../core/cloud/cloudSync';
 import { CLOUD_APP, DEFAULT_CLOUD_URL } from '../../core/cloud/model';
 import { TEST_NOW, createTestStore } from '../../test/testStore';
 import { createFakeCloud, type FakeCloud } from '../../test/fakeCloud';
@@ -7,7 +8,7 @@ import { openDatabase, type Identified } from '../storage/indexedDb';
 import { createMemoryStorage } from '../storage/localSettings';
 import { createDefaultLocations } from '../validation/location';
 import { createDefaultProfile } from '../validation/profile';
-import type { AppStore } from './appStore';
+import { CLOUD_OFFLINE, type AppStore } from './appStore';
 
 const stores: AppStore[] = [];
 
@@ -108,6 +109,69 @@ describe('cloud copy in the store', () => {
     expect(handle.store.getSnapshot().cloud.pending).toBeGreaterThan(0);
   });
 
+  it('leaves no failed attempt behind once the token is removed, reopened or not (Maintenance 25)', async () => {
+    const cloud = createFakeCloud();
+    const handle = storeWith(cloud);
+    await onboard(handle.store);
+    await handle.store.setCloudToken('test-token');
+    await handle.store.flushPendingWork();
+    cloud.fail(1);
+    await handle.store.saveProfile({ ...handle.store.getSnapshot().profile!, units: 'kg' });
+    await handle.store.syncNow({ pull: false, force: true });
+    expect(handle.store.getSnapshot().cloud.lastError).not.toBeNull();
+
+    await handle.store.clearCloudToken();
+    expect(handle.store.getSnapshot().cloud).toMatchObject({ configured: false, lastError: null });
+    // Nothing of the failure stays on the device either: no error, count or wait for a token
+    // saved later to find.
+    expect(await readCloudState(await handle.store.getDatabase())).toMatchObject({
+      lastError: null,
+      failures: 0,
+      nextAttemptAt: null,
+    });
+    // Opened again, the error from before the removal does not come back.
+    const reopened = storeWith(cloud, { factory: handle.factory, storage: handle.storage });
+    await reopened.store.hydrate();
+    expect(reopened.store.getSnapshot().cloud).toMatchObject({
+      configured: false,
+      lastError: null,
+    });
+  });
+
+  it('reads an old error as a wait when it opens offline with a token (Maintenance 25)', async () => {
+    const cloud = createFakeCloud();
+    const handle = storeWith(cloud);
+    await onboard(handle.store);
+    await handle.store.setCloudToken('test-token');
+    await handle.store.flushPendingWork();
+    const db = await handle.store.getDatabase();
+    const state = (await db.get<Identified & Record<string, unknown>>('cloud', 'state')) ?? {
+      id: 'state',
+    };
+    await db.put('cloud', { ...state, lastError: 'Failed to fetch', failures: 1 });
+    const offline = storeWith(cloud, {
+      factory: handle.factory,
+      storage: handle.storage,
+      online: false,
+    });
+    await offline.store.hydrate();
+    expect(offline.store.getSnapshot().cloud).toMatchObject({
+      configured: true,
+      lastError: CLOUD_OFFLINE,
+    });
+  });
+
+  it('reads no error kept from before for a copy with no token', async () => {
+    const cloud = createFakeCloud();
+    const handle = storeWith(cloud);
+    await onboard(handle.store);
+    const db = await handle.store.getDatabase();
+    // A device whose token went before this round's fix: its last error is still on disk.
+    await db.put('cloud', { id: 'state', cursor: null, lastError: 'Failed to fetch', failures: 3 });
+    await handle.store.hydrate();
+    expect(handle.store.getSnapshot().cloud).toMatchObject({ configured: false, lastError: null });
+  });
+
   it('keeps the device id out of exports and never restores one from a backup', async () => {
     const cloud = createFakeCloud();
     const handle = storeWith(cloud);
@@ -161,5 +225,116 @@ describe('cloud copy in the store', () => {
     expect(state.pending).toBeGreaterThan(0);
     expect(state.lastError).toMatch(/Offline/);
     expect(cloud.calls()).toBe(0);
+  });
+
+  it('keeps a setup link’s failure through a read and a sync, and clears it with the token removed or saved (the third review)', async () => {
+    const cloud = createFakeCloud();
+    const handle = storeWith(cloud);
+    await onboard(handle.store);
+    handle.store.noteSetupLinkFailure('Could not reach that database: Failed to fetch');
+    await handle.store.hydrate();
+    await handle.store.syncNow();
+    expect(handle.store.getSnapshot().cloud.linkError).toBe(
+      'Could not reach that database: Failed to fetch',
+    );
+    await handle.store.clearCloudToken();
+    expect(handle.store.getSnapshot().cloud.linkError).toBeNull();
+    handle.store.noteSetupLinkFailure('Connect to the internet to set up a different database.');
+    await handle.store.setCloudToken('test-token');
+    await handle.store.flushPendingWork();
+    expect(handle.store.getSnapshot().cloud.linkError).toBeNull();
+  });
+
+  /** A copy whose requests wait while `held` says so: the sync under way stays under way. */
+  function heldCopy(cloud: FakeCloud) {
+    const hold: { on: boolean; reached: number; release: () => void } = {
+      on: true,
+      reached: 0,
+      release: () => undefined,
+    };
+    let opened = new Promise<void>((resolve) => {
+      hold.release = () => {
+        hold.on = false;
+        resolve();
+      };
+    });
+    const client = {
+      ...cloud.client,
+      execute: async (statement: Parameters<typeof cloud.client.execute>[0]) => {
+        if (hold.on) {
+          hold.reached += 1;
+          await opened;
+        }
+        return cloud.client.execute(statement);
+      },
+    };
+    const arm = () => {
+      hold.on = true;
+      opened = new Promise<void>((resolve) => {
+        hold.release = () => {
+          hold.on = false;
+          resolve();
+        };
+      });
+    };
+    return { copy: { ...cloud, client }, hold, arm };
+  }
+
+  it('lets a request that joins a queued sync add what it asks for: Sync now still walks (seventh re-check)', async () => {
+    const cloud = createFakeCloud();
+    const { copy, hold, arm } = heldCopy(cloud);
+    hold.release();
+    const handle = storeWith(copy);
+    await onboard(handle.store);
+    await handle.store.setCloudToken('test-token');
+    await handle.store.flushPendingWork();
+    // A pull after the push: the cursor is past this phone's own rows now.
+    await handle.store.syncNow({ pull: true });
+    expect((await readCloudState(await handle.store.getDatabase())).cursor).toBe(TEST_NOW);
+    // Another device's workout, filed before this phone's cursor: only a walk from the start
+    // finds it.
+    cloud.seed({
+      store: 'workouts',
+      id: 'w-other',
+      device_id: 'other-phone',
+      updated_at: '2026-09-01T08:00:00.000Z',
+      synced_at: '2026-09-01T08:00:00.000Z',
+      body: JSON.stringify({ id: 'w-other', startedAt: '2026-09-30T07:00:00.000Z' }),
+    });
+    arm();
+    const first = handle.store.syncNow({ pull: false });
+    await vi.waitFor(() => expect(hold.reached).toBeGreaterThan(0));
+    const queued = handle.store.syncNow({ pull: false });
+    const walk = handle.store.syncNow({ pull: true, full: true });
+    expect(walk).toBe(queued);
+    hold.release();
+    await first;
+    await walk;
+    const db = await handle.store.getDatabase();
+    expect(await db.get('workouts', 'w-other')).toBeDefined();
+  });
+
+  it('runs a sync asked for after Finish after setup, so it sends what setup saved (seventh re-check)', async () => {
+    const cloud = createFakeCloud();
+    const { copy, hold, arm } = heldCopy(cloud);
+    hold.release();
+    const handle = storeWith(copy);
+    await onboard(handle.store);
+    await handle.store.setCloudToken('test-token');
+    await handle.store.flushPendingWork();
+    arm();
+    const first = handle.store.syncNow({ pull: false });
+    await vi.waitFor(() => expect(hold.reached).toBeGreaterThan(0));
+    const queued = handle.store.syncNow({ pull: false });
+    const setup = handle.store.completeOnboarding(
+      { ...createDefaultProfile(TEST_NOW), units: 'kg' },
+      createDefaultLocations({ gymAccess: true }, TEST_NOW),
+    );
+    const later = handle.store.syncNow({ pull: false });
+    expect(later).not.toBe(queued);
+    hold.release();
+    await Promise.all([first, queued]);
+    expect(await setup).toBe('saved');
+    expect((await later)?.pushed).toBeGreaterThan(0);
   });
 });

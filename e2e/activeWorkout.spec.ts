@@ -120,8 +120,13 @@ test.describe('active workout', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('logger-weight')).toContainText('185');
     await page.getByTestId('plates-tab').click();
-    await expect(page.getByTestId('plate-math')).toContainText(
-      'Bar 45 + 45, 25 each side · 185 lb',
+    // The plates drawn as they sit on the sleeve, the 45 against the collar and the 25 outside it,
+    // the bar's own weight on the bar, and the sum under them (item 8).
+    const stack = page.getByTestId('plate-math').getByTestId('plate-stack');
+    await expect(stack.locator('[data-plate]')).toHaveText(['25', '45']);
+    await expect(stack.getByTestId('bar-weight')).toHaveText('45 lb');
+    await expect(page.getByTestId('plate-caption')).toHaveText(
+      '185 lb = 45 lb bar + 70 lb of plates each side',
     );
     await page.getByTestId('notes-tab').click();
     await page.getByLabel('Notes for Barbell Bench Press').fill('Bench 4, feet back');

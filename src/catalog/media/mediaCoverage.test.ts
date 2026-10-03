@@ -25,7 +25,7 @@ describe('demonstration coverage', () => {
     expect(EXERCISES.length).toBeGreaterThan(20);
   });
 
-  it('has a placeholder pair for every movement pattern, and every loop animates', () => {
+  it('has a diagram pair for every movement pattern, and every loop animates', () => {
     const problems: string[] = [];
     for (const pattern of MOVEMENT_PATTERN_IDS) {
       const poster = join(PUBLIC, 'media', 'placeholders', `${pattern}.svg`);
@@ -37,8 +37,11 @@ describe('demonstration coverage', () => {
       }
       const svg = readFileSync(loop, 'utf8');
       if (!/<animate/.test(svg)) problems.push(`${pattern}: loop has no animation`);
-      if (!/PLACEHOLDER/i.test(svg))
-        problems.push(`${pattern}: loop is not labelled as a placeholder`);
+      // Shown where an exercise has no demonstration, so it is a diagram, never a "placeholder".
+      if (!svg.includes('aria-label="Diagram: '))
+        problems.push(`${pattern}: loop is not labelled as a diagram`);
+      if (/placeholder/i.test(svg.replace(/media\/placeholders/g, '')))
+        problems.push(`${pattern}: loop still says placeholder`);
     }
     expect(problems).toEqual([]);
   });

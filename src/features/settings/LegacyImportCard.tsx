@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getExercise } from '../../catalog/exercises/catalog';
 import { Button } from '../../components/Button/Button';
-import { Card } from '../../components/Card/Card';
 import { FactList } from '../../components/FactList/FactList';
 import { Sheet } from '../../components/Sheet/Sheet';
 import { useToast } from '../../components/Toast/useToast';
@@ -112,7 +111,7 @@ export function LegacyImportCard() {
   const plan = preview.open ? preview.plan : null;
 
   return (
-    <Card eyebrow="Older exports" title="Import history from another app">
+    <>
       <p className={styles.body}>
         Optional. If you have a JSON export of past workouts, it can be added to your history here:
         previewed first, written with verified saves after an automatic backup, and undone exactly
@@ -226,6 +225,6 @@ export function LegacyImportCard() {
           </p>
         </Sheet>
       ) : null}
-    </Card>
+    </>
   );
 }

@@ -7,11 +7,16 @@ import { TABS, ensureProfile, expectNoHorizontalOverflow } from './helpers';
  */
 
 test.describe('app shell', () => {
-  test('renders brand, current phase, and a visible build marker', async ({ page }) => {
+  test('renders the brand, and the phase and build under Settings, About', async ({ page }) => {
     await page.goto('./');
     await expect(page.getByText('Workout Conductor', { exact: true })).toBeVisible();
     await expect(page.getByText('Adaptive Strength + Hypertrophy')).toBeVisible();
-    await expect(page.getByTestId('phase-chip')).toHaveText(/Phase 8/);
+    await expectNoHorizontalOverflow(page);
+    // Maintenance 25: developer facts out of every screen's first lines, into Settings, About.
+    await expect(page.getByTestId('phase-chip')).toHaveCount(0);
+    await ensureProfile(page);
+    await page.goto('./#/settings/about');
+    await expect(page.getByTestId('row-about')).toContainText(/Phase 8 · awaiting Android review/);
     await expect(page.getByTestId('build-marker')).toHaveText(
       /^Build \S+ · \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC · Phase 8$/,
     );

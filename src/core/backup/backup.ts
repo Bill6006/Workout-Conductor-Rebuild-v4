@@ -208,10 +208,11 @@ export const RESTORED_STORES = [
 
 export type RestoredStore = (typeof RESTORED_STORES)[number];
 
-type StoreSnapshot = Record<RestoredStore, Identified[]>;
+/** The restored stores as they were, and the changes then waiting for the cloud copy. */
+type StoreSnapshot = Record<RestoredStore, Identified[]> & { outbox: Identified[] };
 
 async function snapshotStores(db: Database): Promise<StoreSnapshot> {
-  const snapshot = {} as StoreSnapshot;
+  const snapshot = { outbox: await db.getAll('outbox') } as StoreSnapshot;
   for (const store of RESTORED_STORES) {
     snapshot[store] = await db.getAll(store);
   }
@@ -230,11 +231,16 @@ export class RestoreRollbackError extends Error {
 /** Puts every store back exactly as snapshotted, then proves it by reading each store again. */
 async function restoreSnapshot(db: Database, snapshot: StoreSnapshot): Promise<string | null> {
   for (const store of RESTORED_STORES) {
-    await db.clear(store);
+    // On this phone only: putting the old data back deletes nothing from the cloud copy.
+    await db.clear(store, { cloud: 'keep' });
     for (const record of snapshot[store]) {
       await db.put(store, record);
     }
   }
+  // The changes that waited for the cloud copy before the restore wait again, exactly as they
+  // were: a deletion among them is never lost to the restore's own writes (the tenth review).
+  await db.clear('outbox');
+  for (const entry of snapshot.outbox) await db.put('outbox', entry);
   for (const store of RESTORED_STORES) {
     const readBack = await db.getAll(store);
     const expected = [...snapshot[store]].sort((a, b) => a.id.localeCompare(b.id));
@@ -278,6 +284,13 @@ function recordsFor(backup: Backup, store: RestoredStore): Identified[] {
  * reports how many records each store received. On any failure the pre-import
  * snapshot is restored and verified before the error is rethrown; if even the
  * rollback cannot be verified, a RestoreRollbackError says so plainly.
+ *
+ * The cloud copy is never cut back by a restore (Maintenance 25). Records the
+ * backup lacks leave this phone only, with nothing queued to delete them there,
+ * and each restored record reaches the cloud copy as of its own time, or the
+ * backup's when it has none: a version the cloud copy changed later stays, and
+ * this phone takes it. A restore with the cloud copy on adds back what was lost
+ * and never undoes later work.
  */
 export async function restoreBackup(
   db: Database,
@@ -288,10 +301,10 @@ export async function restoreBackup(
   const counts = {} as RestoreCounts;
   try {
     for (const store of RESTORED_STORES) {
-      await db.clear(store);
+      await db.clear(store, { cloud: 'keep' });
       const records = recordsFor(backup, store);
       for (const record of records) {
-        await putVerified(db, store, record, options);
+        await putVerified(db, store, record, { ...options, effectiveAt: backup.exportedAt });
       }
       counts[store] = records.length;
     }

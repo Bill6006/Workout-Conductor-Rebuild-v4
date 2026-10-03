@@ -119,6 +119,24 @@
   background: #ffffff;
 }
 
+/* A barcode kept as its code alone: the code drawn small, on white, as its preview. */
+.thumbDrawn {
+  display: grid;
+  place-items: center;
+  max-height: 140px;
+  padding: 10px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111827;
+  font-weight: 700;
+}
+
+.thumbDrawn svg {
+  width: 100%;
+  max-height: 120px;
+}
+
 .note {
   margin: 0;
   font-size: 0.82rem;

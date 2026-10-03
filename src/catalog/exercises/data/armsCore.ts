@@ -17,16 +17,22 @@ export const ARM_CORE_EXERCISES = [
     reps: { hypertrophy: [8, 12] },
     substitutions: ['ez-bar-curl', 'dumbbell-curl', 'cable-curl'],
     setup: [
-      'Shoulder-width underhand grip, bar at the thighs, elbows by the ribs.',
-      'Stand tall with the knees soft.',
+      'Stand tall, feet hip-width, knees slightly bent, holding the bar at your thighs.',
+      'Grip it with palms facing forward, hands shoulder-width apart.',
+      'Rest your upper arms against your sides, elbows by your ribs.',
     ],
     execution: [
-      'Curl the bar to shoulder height without moving the elbows forward.',
-      'Lower slowly to full extension.',
+      'Bend your elbows to curl the bar up to the front of your shoulders.',
+      'Lower it slowly until your arms are fully straight.',
+    ],
+    cues: [
+      'Only your forearms move; your upper arms stay still at your sides.',
+      'Keep your wrists straight, in line with your forearms.',
+      'Keep your chest up and your body still from start to finish.',
     ],
     mistakes: [
-      'Swinging the torso to start the rep.',
-      'Letting the elbows drift forward at the top.',
+      'Swinging your body or leaning back to get the bar moving.',
+      'Letting your elbows drift forward as the bar rises.',
     ],
   }),
   defineExercise({
@@ -43,11 +49,23 @@ export const ARM_CORE_EXERCISES = [
     reps: { hypertrophy: [8, 12] },
     substitutions: ['barbell-curl', 'dumbbell-curl', 'cable-curl'],
     setup: [
-      'Grip the angled handles so the wrists sit comfortably.',
-      'Elbows pinned to the sides.',
+      'Stand tall with the EZ-bar at your thighs, knees slightly bent.',
+      'Hold the angled grips palms-forward, on the bends that feel easiest on your wrists.',
+      'Keep your elbows pinned to your sides.',
     ],
-    execution: ['Curl to shoulder height and squeeze.', 'Lower under control to straight arms.'],
-    mistakes: ['Leaning back to finish reps.', 'Half reps that skip the stretch.'],
+    execution: [
+      'Curl the bar up toward your shoulders by bending only your elbows.',
+      'Squeeze your biceps briefly at the top.',
+      'Lower under control until your arms are completely straight.',
+    ],
+    cues: [
+      'Your upper arms stay still; only your forearms travel.',
+      'Keep your wrists firm and straight rather than curling them in.',
+    ],
+    mistakes: [
+      'Leaning back to finish a lift.',
+      'Stopping short at the bottom so you skip the stretch.',
+    ],
   }),
   defineExercise({
     id: 'dumbbell-curl',
@@ -62,14 +80,23 @@ export const ARM_CORE_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['ez-bar-curl', 'cable-curl', 'hammer-curl'],
     setup: [
-      'Dumbbells at the sides, palms forward or turning as you lift.',
-      'Elbows close to the torso.',
+      'Stand tall with a dumbbell in each hand, arms hanging at your sides.',
+      'Start with palms forward, or facing your thighs and turning forward as you lift.',
+      'Keep your elbows close to your body.',
     ],
     execution: [
-      'Curl one or both dumbbells to shoulder height, turning the little finger up at the top.',
-      'Lower slowly to a full stretch.',
+      'Curl one or both dumbbells up toward your shoulders.',
+      'At the top, turn your little finger slightly upward and squeeze.',
+      'Lower slowly until your arm is fully straight.',
     ],
-    mistakes: ['Swinging the elbows forward.', 'Rushing the lowering phase.'],
+    cues: [
+      'Only your forearm moves; your elbow stays at your side.',
+      'Keep your wrist straight, neither bent back nor curled in.',
+    ],
+    mistakes: [
+      'Swinging your elbows forward to lift the weight.',
+      'Letting the dumbbells drop quickly on the way down.',
+    ],
   }),
   defineExercise({
     id: 'incline-dumbbell-curl',
@@ -83,14 +110,22 @@ export const ARM_CORE_EXERCISES = [
     joints: { shoulder: 'moderate' },
     substitutions: ['dumbbell-curl', 'preacher-curl'],
     setup: [
-      'Bench at about 45 degrees, arms hanging straight down behind the torso.',
-      'Palms facing forward.',
+      'Set a bench to about 45 degrees and sit back with your head and shoulders on it.',
+      'Let your arms hang straight down behind your body, a dumbbell in each hand.',
+      'Turn your palms to face forward.',
     ],
     execution: [
-      'Curl without letting the upper arms move forward.',
-      'Lower all the way to a deep stretch.',
+      'Curl the dumbbells up while your upper arms keep hanging straight down.',
+      'Lower slowly until your arms are completely straight and stretched.',
     ],
-    mistakes: ['Letting the upper arms swing forward.', 'Bench too upright, losing the stretch.'],
+    cues: [
+      "Keep your shoulders back on the bench; don't let them roll forward or shrug.",
+      'Hold your wrists firm and straight, not bent back.',
+    ],
+    mistakes: [
+      'Letting your upper arms swing forward as you curl.',
+      'Sitting too upright, which takes away the stretch at the bottom.',
+    ],
   }),
   defineExercise({
     id: 'hammer-curl',
@@ -104,11 +139,23 @@ export const ARM_CORE_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['dumbbell-curl', 'reverse-curl', 'cable-curl'],
     setup: [
-      'Dumbbells at the sides with the palms facing each other.',
-      'Elbows pinned to the torso.',
+      'Stand tall holding dumbbells at your sides, palms facing your thighs.',
+      'Brace: tighten your stomach as if about to be poked, and pin your elbows to your sides.',
     ],
-    execution: ['Curl straight up keeping the thumbs on top.', 'Lower slowly to straight arms.'],
-    mistakes: ['Rotating the wrists during the rep.', 'Using the shoulders to swing.'],
+    execution: [
+      'Curl the dumbbells up with your thumbs on top, like lifting a hammer.',
+      'Stop when they are near the front of your shoulders.',
+      'Lower slowly until your arms are straight.',
+    ],
+    cues: [
+      'Your palms keep facing each other the whole way.',
+      'Keep your torso upright and still; only your forearms move.',
+      'Stand with one foot a half step ahead if it helps you stay steady.',
+    ],
+    mistakes: [
+      'Twisting your wrists as you lift.',
+      'Using your shoulders or back to swing the weights up.',
+    ],
   }),
   defineExercise({
     id: 'preacher-curl',
@@ -122,12 +169,25 @@ export const ARM_CORE_EXERCISES = [
     hypertrophy: 3,
     joints: { elbow: 'moderate' },
     substitutions: ['incline-dumbbell-curl', 'cable-curl', 'ez-bar-curl'],
-    setup: ['Upper arms flat on the pad, armpits at the top edge.', 'Grip at shoulder width.'],
-    execution: [
-      'Curl until the forearms are just short of vertical.',
-      'Lower slowly, stopping just before the elbows lock.',
+    setup: [
+      "Machine: set the seat so your elbows line up with the machine's pivot point.",
+      'Bench: set the back rest steep, kneel behind it and lay your arms over the top.',
+      'Rest the backs of your upper arms flat on the pad; grip palms up, shoulder-width.',
     ],
-    mistakes: ['Slamming into full lockout at the bottom.', 'Lifting the elbows off the pad.'],
+    execution: [
+      'Curl up while your upper arms stay flat on the pad.',
+      'Lower slowly, slowing even more as your arms near straight.',
+    ],
+    cues: [
+      'The bottom is the hardest part; control it rather than dropping into it.',
+      'Keep your shoulders down and back, away from your ears.',
+    ],
+    mistakes: [
+      'Dropping fast into a hard, straight-armed stop at the bottom.',
+      'Lifting your elbows or shoulders off the pad to finish the curl.',
+    ],
+    range:
+      'Top: forearms just short of vertical. Bottom: arms nearly straight, never snapped locked.',
   }),
   defineExercise({
     id: 'cable-curl',
@@ -142,14 +202,19 @@ export const ARM_CORE_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['dumbbell-curl', 'ez-bar-curl', 'band-curl'],
     setup: [
-      'Low pulley with a straight or EZ bar attachment; stand a step back.',
-      'Elbows by the ribs.',
+      'Attach a straight or EZ bar to the low pulley; grip it palms forward, shoulder-width.',
+      'Stand tall about a step back from the machine, elbows by your ribs.',
     ],
     execution: [
-      'Curl to the shoulders, keeping constant tension.',
-      'Lower under control without letting the stack rest.',
+      'Curl the bar up toward your shoulders, bending only at the elbows.',
+      'Lower under control until your arms are straight.',
+      'Stop just before the weight plates touch down, so the cable stays tight.',
     ],
-    mistakes: ['Leaning back to lift more.', 'Elbows traveling forward.'],
+    cues: [
+      'Your upper arms stay still at your sides the whole time.',
+      'Keep your wrists locked straight rather than curling them.',
+    ],
+    mistakes: ['Leaning back to help the bar up.', 'Letting your elbows travel forward.'],
   }),
   defineExercise({
     id: 'band-curl',
@@ -162,14 +227,22 @@ export const ARM_CORE_EXERCISES = [
     hypertrophy: 2,
     reps: { hypertrophy: [12, 20] },
     substitutions: ['dumbbell-curl', 'cable-curl'],
-    setup: ['Stand on the band, handles at the sides with palms forward.', 'Elbows pinned.'],
+    setup: [
+      'Check the band for nicks and your soles for grit, then stand on its middle, feet hip-width.',
+      'Hold a handle in each hand, arms straight at your sides, palms forward.',
+      'Tuck your elbows in against your sides.',
+    ],
     execution: [
-      'Curl to the shoulders and squeeze against the band.',
-      'Lower slowly, keeping tension.',
+      'Curl the handles up to your shoulders and squeeze against the band.',
+      'Lower slowly, keeping some stretch on the band at the bottom.',
+    ],
+    cues: [
+      'Only your forearms move; your elbows stay still.',
+      'A wider stance adds tension; a narrower one reduces it.',
     ],
     mistakes: [
-      'Stepping too narrow so the band is slack at the bottom.',
-      'Bending the wrists back.',
+      'A stance so narrow that the band goes slack at the bottom.',
+      'Bending your wrists back as you curl.',
     ],
   }),
   defineExercise({
@@ -184,9 +257,22 @@ export const ARM_CORE_EXERCISES = [
     hypertrophy: 2,
     joints: { wrist: 'moderate' },
     substitutions: ['hammer-curl', 'wrist-curl'],
-    setup: ['Overhand grip at shoulder width, bar at the thighs.', 'Wrists straight and locked.'],
-    execution: ['Curl to shoulder height with the knuckles up.', 'Lower slowly to straight arms.'],
-    mistakes: ['Letting the wrists bend back under the load.', 'Going too heavy and swinging.'],
+    setup: [
+      'Hold an EZ-bar, barbell or two dumbbells palms down, hands shoulder-width apart.',
+      'Stand tall with the weight at your thighs and your elbows at your sides.',
+    ],
+    execution: [
+      'Curl the weight up to shoulder height, knuckles leading the way.',
+      'Lower slowly back to straight arms.',
+    ],
+    cues: [
+      'Keep your wrists straight and firm, in line with your forearms.',
+      'Your elbows stay by your sides; only your forearms move.',
+    ],
+    mistakes: [
+      'Letting your wrists bend back under the weight.',
+      'Swinging your body to get the weight moving.',
+    ],
   }),
   defineExercise({
     id: 'wrist-curl',
@@ -202,14 +288,22 @@ export const ARM_CORE_EXERCISES = [
     reps: { hypertrophy: [12, 20] },
     substitutions: ['reverse-curl', 'farmer-carry'],
     setup: [
-      'Forearms resting on the thighs or a bench with the wrists hanging free.',
-      'Palms up holding a dumbbell.',
+      'Sit and rest your forearms on your thighs or a bench, wrists just past the edge.',
+      'Hold a dumbbell palms up in one or both hands, fingers wrapped around it.',
     ],
     execution: [
-      'Let the wrist extend, then curl it up as far as possible.',
-      'Keep the forearms still.',
+      'Let your wrist bend back slowly so the dumbbell lowers toward the floor.',
+      'Curl your wrist up as far as it goes, keeping your forearm down.',
+      'Pause at the top, then lower under control.',
     ],
-    mistakes: ['Lifting the forearms off the support.', 'Using so much weight the range shrinks.'],
+    cues: [
+      'Only your wrist moves; your forearm stays on its support.',
+      'Keep a firm grip so the dumbbell never rolls down to your fingertips.',
+    ],
+    mistakes: [
+      'Lifting your forearm off the support to help.',
+      'Cutting the movement short at the top or the bottom.',
+    ],
   }),
   defineExercise({
     id: 'skull-crusher',
@@ -233,17 +327,24 @@ export const ARM_CORE_EXERCISES = [
       'close-grip-bench-press',
     ],
     setup: [
-      'Lie on the bench with the bar held over the forehead, upper arms angled slightly back.',
-      'Grip inside shoulder width.',
+      'Lie on a flat bench and press the bar up from your chest, or have a helper hand it to you.',
+      'Hold the EZ-bar or barbell palms toward your feet, hands a little inside shoulder-width.',
+      'Straighten your arms, then tilt them slightly back so the bar is above your forehead.',
     ],
     execution: [
-      'Bend only at the elbows to lower the bar toward the forehead or just behind it.',
-      'Extend back to the start without letting the elbows flare.',
+      'Bend only your elbows to lower the bar slowly toward your head.',
+      'Straighten your arms back to the start, keeping your upper arms where they are.',
+    ],
+    cues: [
+      'Keep your elbows about shoulder-width apart, pointing up rather than out.',
+      'Keep your grip firm and the pace slow; the bar travels toward your face.',
+      'For heavy sets, have a helper kneel behind your head, ready to take the bar.',
     ],
     mistakes: [
-      'Moving the upper arms like a pullover.',
-      'Locking the elbows hard with heavy weight.',
+      'Letting your upper arms swing back and forth; only the elbows should bend.',
+      'Snapping your elbows straight hard at the top.',
     ],
+    range: 'Lower until the bar is just above your forehead or slightly behind your head.',
   }),
   defineExercise({
     id: 'overhead-triceps-extension',
@@ -259,14 +360,26 @@ export const ARM_CORE_EXERCISES = [
     joints: { elbow: 'moderate', shoulder: 'moderate' },
     substitutions: ['cable-overhead-triceps-extension', 'skull-crusher', 'cable-triceps-pushdown'],
     setup: [
-      'Hold one dumbbell overhead with both hands cupping the top plate.',
-      'Elbows pointing forward, ribs down.',
+      'Sit tall on a bench with a back rest, or stand with one foot a half step ahead.',
+      'Hold one dumbbell overhead with both hands cupped under its top end.',
+      'First make sure any plates and their clips on the dumbbell are tight.',
     ],
     execution: [
-      'Lower the dumbbell behind the head until the triceps stretch.',
-      'Extend back to straight arms without flaring the elbows.',
+      'Start with your arms straight overhead and your elbows pointing forward.',
+      'Bend your elbows to lower the dumbbell slowly behind your head.',
+      'Straighten your arms to press it back overhead.',
     ],
-    mistakes: ['Arching the lower back.', 'Elbows flaring wide at the bottom.'],
+    cues: [
+      'Keep your elbows close to your head; only your forearms move.',
+      "Keep your stomach tight so your lower back doesn't arch.",
+      'Lower with care so the dumbbell never touches your head or neck.',
+    ],
+    mistakes: [
+      'Arching your lower back as you press up.',
+      'Elbows flaring out wide at the bottom.',
+    ],
+    range:
+      'Lower until the backs of your arms stretch, elbows at about a right angle or a bit more.',
   }),
   defineExercise({
     id: 'cable-overhead-triceps-extension',
@@ -282,14 +395,23 @@ export const ARM_CORE_EXERCISES = [
     joints: { elbow: 'moderate', shoulder: 'moderate' },
     substitutions: ['overhead-triceps-extension', 'cable-triceps-pushdown'],
     setup: [
-      'Rope on a low or mid pulley, face away, hands behind the head.',
-      'Staggered stance, slight forward lean.',
+      'Attach a rope to a pulley set at head height or higher, face away, and hold it behind your head.',
+      'Step one foot ahead of the other (a split stance) and lean slightly forward.',
     ],
     execution: [
-      'Extend the arms forward and up until straight.',
-      'Return until the triceps stretch behind the head.',
+      'Straighten your arms forward and up until they are fully straight.',
+      'Bend your elbows slowly to let the rope return behind your head.',
     ],
-    mistakes: ['Letting the elbows drift apart.', 'Rounding the back as the weight goes up.'],
+    cues: [
+      'Your upper arms stay fixed beside your head; only your forearms move.',
+      'Keep your chest up and your back flat as your arms straighten.',
+      'Keep your elbows pointing forward, about shoulder-width apart.',
+    ],
+    mistakes: [
+      'Letting your elbows drift apart.',
+      'Rounding your back or crunching forward to finish the press.',
+    ],
+    range: 'Let the rope return until your elbows bend to about a right angle or a little more.',
   }),
   defineExercise({
     id: 'cable-triceps-pushdown',
@@ -303,14 +425,22 @@ export const ARM_CORE_EXERCISES = [
     hypertrophy: 3,
     substitutions: ['band-triceps-pushdown', 'skull-crusher', 'diamond-push-up'],
     setup: [
-      'High pulley with a rope or bar, elbows pinned to the sides.',
-      'Slight forward lean, feet staggered.',
+      'Attach a rope or straight bar to the high pulley and grip it, standing close.',
+      'Stand with one foot a half step back and lean forward slightly.',
+      'Pin your elbows to your sides with your forearms about level with the floor.',
     ],
     execution: [
-      'Push down until the arms are straight and squeeze.',
-      'Return until the forearms pass parallel, keeping the elbows still.',
+      'Push down until your arms are straight, then squeeze the backs of your arms.',
+      'Let your hands rise slowly until your forearms are just past level.',
     ],
-    mistakes: ['Elbows flaring out and forward.', 'Leaning on the weight with the whole body.'],
+    cues: [
+      'Your elbows stay glued to your sides; only your forearms move.',
+      "Keep your wrists straight as you press; don't bend them back.",
+    ],
+    mistakes: [
+      'Elbows drifting forward or out, which shifts the work away from your triceps.',
+      'Leaning your body weight onto the handle to push it down.',
+    ],
   }),
   defineExercise({
     id: 'band-triceps-pushdown',
@@ -323,9 +453,23 @@ export const ARM_CORE_EXERCISES = [
     hypertrophy: 2,
     reps: { hypertrophy: [12, 20] },
     substitutions: ['cable-triceps-pushdown', 'diamond-push-up'],
-    setup: ['Anchor the band overhead and hold it with the elbows at the sides.', 'Stand tall.'],
-    execution: ['Push down until the arms are straight.', 'Return slowly with the elbows still.'],
-    mistakes: ['Letting the elbows drift forward.', 'Choosing a band that goes slack at the top.'],
+    setup: [
+      'Anchor the band high on something sturdy, such as a door anchor in a closed door.',
+      'Check the band for nicks or tears and the anchor for a firm hold.',
+      'Face the anchor and stand tall, holding the band with your elbows at your sides.',
+    ],
+    execution: [
+      'Push your hands down until your arms are straight.',
+      'Let your hands rise slowly until your forearms are about level with the floor.',
+    ],
+    cues: [
+      'Keep your elbows at your sides; only your forearms move.',
+      'Hold your wrists straight, knuckles in line with your forearms.',
+    ],
+    mistakes: [
+      'Letting your elbows drift forward.',
+      'Standing so close that the band goes slack as your hands rise.',
+    ],
   }),
   defineExercise({
     id: 'diamond-push-up',
@@ -343,14 +487,20 @@ export const ARM_CORE_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['push-up', 'cable-triceps-pushdown', 'close-grip-bench-press'],
     setup: [
-      'Hands together under the chest forming a diamond, body in one line.',
-      'Brace the core and squeeze the glutes.',
+      'Place your hands under your chest, thumbs and index fingers touching in a diamond.',
+      'Step your feet back until your body is straight from head to heels.',
+      'Brace: tighten your stomach as if about to be poked, and squeeze your buttocks.',
     ],
     execution: [
-      'Lower with the elbows tucked until the chest nearly touches the hands.',
-      'Press back to a full lockout.',
+      'Lower your chest toward your hands, elbows sliding back close to your body.',
+      'Push the floor away until your arms are straight.',
     ],
-    mistakes: ['Elbows flaring wide.', 'Hips sagging toward the floor.'],
+    cues: [
+      'Move as one rigid piece, like a plank tilting up and down.',
+      'Point your elbows back toward your feet, not out to the sides.',
+    ],
+    mistakes: ['Elbows flaring out wide.', 'Hips sagging toward the floor or poking up.'],
+    range: 'Chest to just above your hands, or only as low as your wrists and shoulders allow.',
   }),
   defineExercise({
     id: 'bench-dip',
@@ -367,14 +517,23 @@ export const ARM_CORE_EXERCISES = [
     reps: { hypertrophy: [10, 20] },
     substitutions: ['cable-triceps-pushdown', 'diamond-push-up', 'dip'],
     setup: [
-      'Hands on the bench edge behind you, legs extended in front.',
-      'Shoulders pulled down and back.',
+      'Sit on the edge of a bench and grip it beside your hips, fingers over the edge.',
+      'Slide your hips off the front and walk your feet out until your legs are straight.',
     ],
     execution: [
-      'Bend the elbows to lower the hips until the upper arms are near parallel.',
-      'Press back up to straight arms.',
+      'Bend your elbows to lower your hips straight down, close to the bench.',
+      'Press through your palms to straighten your arms.',
     ],
-    mistakes: ['Dropping so low the shoulders roll forward.', 'Flaring the elbows out.'],
+    cues: [
+      'Pull your shoulders down and back, away from your ears, throughout.',
+      'Keep your back close to the bench and your elbows pointing straight back.',
+      'Push up with your arms, not your legs.',
+    ],
+    mistakes: [
+      'Dropping so low that your shoulders roll forward or ache at the front.',
+      'Letting your elbows splay out to the sides.',
+    ],
+    range: 'Stop when your upper arms are level with the floor, or higher if your shoulders hurt.',
   }),
   defineExercise({
     id: 'plank',
@@ -393,15 +552,20 @@ export const ARM_CORE_EXERCISES = [
     dropSetSafe: false,
     substitutions: ['dead-bug', 'ab-wheel-rollout'],
     setup: [
-      'Forearms on the floor under the shoulders, feet together.',
-      'Squeeze the glutes and tuck the ribs so the back is flat.',
+      'Lie face down, then prop yourself on your forearms, elbows under your shoulders.',
+      'Straighten your legs with your feet together and toes tucked under.',
     ],
     execution: [
-      'Hold the position for the target seconds, breathing steadily.',
-      'Stop the set when the hips start to sag.',
+      'Squeeze your buttocks and tighten your stomach, then lift your body off the floor.',
+      'Hold a straight line from head to heels.',
+      'Stop when your hips start to sag, then lower your knees to the floor.',
     ],
-    mistakes: ['Hips sagging or piking up.', 'Holding the breath.'],
-    breathing: 'Breathe steadily through the hold; never hold the breath.',
+    cues: [
+      'Tuck your tailbone slightly under so your lower back stays flat.',
+      "Push the floor away with your forearms; don't let your shoulders sink or shrug.",
+      "Breathe steadily the whole time; don't hold your breath.",
+    ],
+    mistakes: ['Hips sagging toward the floor or lifting up into a tent shape.'],
   }),
   defineExercise({
     id: 'dead-bug',
@@ -417,15 +581,25 @@ export const ARM_CORE_EXERCISES = [
     reps: { hypertrophy: [8, 12] },
     substitutions: ['plank', 'pallof-press'],
     setup: [
-      'Lie on the back with the arms straight up and the knees over the hips.',
-      'Press the lower back gently into the floor.',
+      'Lie on your back with your arms pointing straight up at the ceiling.',
+      'Lift your legs so your knees are over your hips, bent to a right angle.',
+      'Gently press your lower back into the floor.',
     ],
     execution: [
-      'Extend one arm overhead and the opposite leg out while the back stays flat.',
-      'Return and switch sides.',
+      'Slowly reach one arm back overhead and straighten the opposite leg out.',
+      'Bring them back to the start.',
+      'Repeat with the other arm and leg.',
     ],
-    mistakes: ['Lower back arching off the floor.', 'Rushing the reps.'],
-    breathing: 'Exhale slowly as the limbs extend, inhale as they return.',
+    cues: [
+      "Keep breathing slowly; don't hold your breath while you move.",
+      'Move slowly; the aim is to keep your middle perfectly still.',
+    ],
+    mistakes: [
+      'Your lower back arching up off the floor.',
+      'Rushing, or swinging your arm and leg.',
+    ],
+    range:
+      'Lower the arm and leg only as far as your back stays flat, stopping just off the floor.',
   }),
   defineExercise({
     id: 'ab-wheel-rollout',
@@ -443,14 +617,22 @@ export const ARM_CORE_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['plank', 'dead-bug'],
     setup: [
-      'Kneel with the wheel under the shoulders and the ribs tucked.',
-      'Squeeze the glutes before rolling.',
+      'Kneel on a mat and hold the wheel on the floor below your shoulders, arms straight.',
+      'Tighten your stomach and squeeze your buttocks before you move.',
     ],
     execution: [
-      'Roll forward as far as the flat back allows.',
-      'Pull back with the abs, not the hips.',
+      'Roll the wheel slowly forward, letting your hips travel forward with your body.',
+      'Pull the wheel back under your shoulders with your stomach, arms still straight.',
     ],
-    mistakes: ['Lower back sagging into an arch.', 'Piking the hips to make it easier.'],
+    cues: [
+      'Keep a straight line from knees to shoulders throughout.',
+      'Roll slowly both ways so the wheel never runs away from you.',
+    ],
+    mistakes: [
+      'Letting your lower back sag into an arch.',
+      'Pushing your hips back first to make the return easier.',
+    ],
+    range: 'Roll out only as far as you can keep your back from sagging, then return.',
   }),
   defineExercise({
     id: 'hanging-leg-raise',
@@ -468,14 +650,20 @@ export const ARM_CORE_EXERCISES = [
     difficulty: 'intermediate',
     substitutions: ['cable-crunch', 'dead-bug'],
     setup: [
-      'Hang from the bar with the shoulders pulled down.',
-      'Start with bent knees; straighten the legs as it gets easier.',
+      'Hang from a pull-up bar with a full grip, thumbs around the bar, arms straight.',
+      'Pull your shoulders down away from your ears so you are not hanging loose.',
+      'Start with bent knees; switch to straight legs only when that feels easy.',
     ],
     execution: [
-      'Curl the pelvis up and raise the knees or legs toward the chest.',
-      'Lower slowly without swinging.',
+      'Curl your pelvis up and raise your knees, or straight legs, toward your chest.',
+      'Pause briefly, then lower slowly until your legs hang still.',
     ],
-    mistakes: ['Swinging to build momentum.', 'Lifting the legs without curling the pelvis.'],
+    cues: [
+      'Think of tucking your tailbone under, not just lifting your legs.',
+      'Brace: tighten your stomach as if about to be poked, to keep your body from swinging.',
+    ],
+    mistakes: ['Swinging to build momentum.', 'Lifting your legs without curling your pelvis.'],
+    range: 'Lift until your thighs pass level with the floor and your pelvis tilts up.',
   }),
   defineExercise({
     id: 'cable-crunch',
@@ -491,14 +679,21 @@ export const ARM_CORE_EXERCISES = [
     reps: { hypertrophy: [10, 15] },
     substitutions: ['hanging-leg-raise', 'ab-wheel-rollout'],
     setup: [
-      'Kneel facing the high pulley holding a rope beside the head.',
-      'Hips stay still for the whole set.',
+      'Attach a rope to the high pulley and kneel facing it, a little way back from the machine.',
+      'Hold the rope ends beside your head, hips up over your knees.',
     ],
     execution: [
-      'Crunch the ribs toward the hips, rounding the upper back.',
-      'Return slowly to a tall kneel.',
+      'Curl your ribs down toward your hips, rounding your upper back.',
+      'Uncurl slowly back to a tall kneel.',
     ],
-    mistakes: ['Pulling with the arms.', 'Hinging at the hips instead of flexing the spine.'],
+    cues: [
+      'Your hips stay still the whole time; only your spine curls.',
+      'Keep your hands fixed beside your head; your stomach does the pulling.',
+    ],
+    mistakes: [
+      'Pulling the rope down with your arms.',
+      'Sitting back at the hips instead of curling your spine.',
+    ],
   }),
   defineExercise({
     id: 'pallof-press',
@@ -515,17 +710,22 @@ export const ARM_CORE_EXERCISES = [
     reps: { hypertrophy: [10, 15] },
     substitutions: ['dead-bug', 'plank'],
     setup: [
-      'Stand side-on to a cable or band at chest height, handle held at the sternum.',
-      'Feet shoulder width, knees soft.',
+      'Set a cable or band at chest height and stand side-on to it, a step or two away.',
+      'Hold the handle with both hands at the middle of your chest.',
+      'Stand with feet shoulder-width apart and knees slightly bent.',
     ],
     execution: [
-      'Press the handle straight out in front of the chest and hold.',
-      'Return to the sternum without letting the torso rotate.',
+      'Press the handle straight out in front of your chest.',
+      'Hold it there while the pull tries to twist you toward the anchor.',
+      'Bring it back to your chest slowly, still facing forward.',
+    ],
+    cues: [
+      'Brace: tighten your stomach as if about to be poked, and keep it tight.',
+      'Your chest and hips face straight ahead the whole time.',
     ],
     mistakes: [
-      'Letting the hips twist toward the anchor.',
-      'Standing so close there is no tension.',
+      'Letting your hips or shoulders turn toward the anchor.',
+      'Standing so close that there is hardly any pull.',
     ],
-    breathing: 'Exhale as the arms extend, inhale as they return.',
   }),
 ];

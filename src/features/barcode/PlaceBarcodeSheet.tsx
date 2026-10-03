@@ -1,14 +1,38 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/Button/Button';
 import { Toggle } from '../../components/Form/Toggle';
 import { Sheet } from '../../components/Sheet/Sheet';
 import { useToast } from '../../components/Toast/useToast';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import type { LocationProfile } from '../../core/validation/location';
+import type { BarcodeCode } from '../../core/validation/placeBarcode';
+import { BarcodeGraphicSvg } from './BarcodeGraphic';
 import { barcodeFromFile } from './barcodeFile';
+import { encodeBarcode, type BarcodeGraphic } from './encode';
 import { useBackCloses } from './useBackCloses';
 import styles from './Barcode.module.css';
 import formStyles from '../../components/Form/Form.module.css';
+
+/** A barcode kept as its code alone, drawn small as its preview (Maintenance 25). */
+function DrawnThumb({ code, label }: { code: BarcodeCode; label: string }) {
+  const [graphic, setGraphic] = useState<BarcodeGraphic | null>(null);
+  useEffect(() => {
+    let live = true;
+    encodeBarcode(code)
+      .then((drawn) => {
+        if (live) setGraphic(drawn);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [code]);
+  return (
+    <span className={styles.thumbDrawn} data-testid="barcode-thumb-drawn">
+      {graphic ? <BarcodeGraphicSvg graphic={graphic} label={label} /> : code.value}
+    </span>
+  );
+}
 
 /**
  * A place's membership barcode on a popup of its own, apart from the place's
@@ -26,6 +50,10 @@ export function PlaceBarcodeSheet({
   const toast = useToast();
   const barcode = useAppSelector((state) =>
     state.barcodes.find((item) => item.locationId === location.id),
+  );
+  // Brought back from the phone's second copy when the app opened (Maintenance 25).
+  const restored = useAppSelector((state) =>
+    barcode ? state.restoredBarcodes.includes(barcode.id) : false,
   );
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -88,18 +116,32 @@ export function PlaceBarcodeSheet({
               aria-label="Show it full screen"
               data-testid="barcode-thumb"
             >
-              <img
-                className={styles.thumb}
-                src={barcode.image.dataUrl}
-                alt={`${location.name} barcode picture`}
-              />
+              {barcode.image ? (
+                <img
+                  className={styles.thumb}
+                  src={barcode.image.dataUrl}
+                  alt={`${location.name} barcode picture`}
+                />
+              ) : barcode.code ? (
+                <DrawnThumb code={barcode.code} label={`${location.name} barcode`} />
+              ) : null}
             </button>
+            {restored ? (
+              <p className={styles.note} data-testid="barcode-restored">
+                Brought back from this phone's second copy after the browser cleared its storage.
+              </p>
+            ) : null}
             <p className={styles.note} data-testid="barcode-read">
-              {barcode.code ? 'Code read. Tap it for full screen.' : 'Tap it for full screen.'}
+              {!barcode.image
+                ? 'Brought back as the code read from your picture. Tap it for full screen.'
+                : barcode.code
+                  ? 'Code read. Tap it for full screen.'
+                  : 'Tap it for full screen.'}
             </p>
             <Toggle
               label="Show when I start a workout here"
               checked={barcode.autoShow}
+              disabled={busy}
               onChange={(autoShow) =>
                 void run(
                   () => store.setBarcodeAutoShow(location.id, autoShow),

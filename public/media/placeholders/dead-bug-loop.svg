@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-label="Diagram: Dead bug">
+  <rect width="320" height="240" rx="18" fill="#171a1e"/>
+  <circle cx="92" cy="174" r="10" stroke="#f4f6f7" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M102 176 H196 M120 176 V112 M196 176 V132 H236" stroke="#f4f6f7" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M60 190 H260" stroke="#6a7380" stroke-width="4" stroke-linecap="round"/>
+  <g><animateTransform attributeName="transform" type="translate" values="0 0; -34 30; 0 0" keyTimes="0; 0.5; 1" dur="1.8s" calcMode="spline" keySplines="0.4 0 0.6 1; 0.4 0 0.6 1" repeatCount="indefinite"/><circle cx="120" cy="104" r="9" fill="#c6f542"/></g>
+  <text x="304" y="222" text-anchor="end" font-family="system-ui, sans-serif" font-size="12" fill="#6a7380">Dead bug · loop</text>
+</svg>

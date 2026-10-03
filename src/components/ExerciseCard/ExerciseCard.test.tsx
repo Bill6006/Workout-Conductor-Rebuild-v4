@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
 import { allEntries } from '../../engine/workout/types';
+import { workoutSequence } from '../../engine/workout/sequence';
 import { DUMBBELLS_KEY } from '../../engine/loading/loading';
 import { generateWorkout } from '../../engine/workoutGenerator/generate';
 import { ExerciseCard } from './ExerciseCard';
@@ -77,6 +78,51 @@ describe('ExerciseCard', () => {
     expect(onShowDetail).toHaveBeenCalledTimes(1);
   });
 
+  // Maintenance 25, item 7: only the exercise under way plays its clip on the workout; the other
+  // cards show their still, so a session never downloads every clip at once.
+  it('plays the clip only on the card of the exercise under way', async () => {
+    const fetched: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        fetched.push(url);
+        return { ok: true, status: 200, blob: async () => new Blob(['mp4']) };
+      }),
+    );
+    URL.createObjectURL = vi.fn(() => 'blob:clip');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const [second] = allEntries(workout.blocks).slice(1);
+      const card = (current: boolean) => (
+        <ExerciseCard
+          entry={entry}
+          block={block}
+          units="lb"
+          position={
+            workoutSequence(workout).find(
+              (item) => item.entryId === (current ? entry.id : second?.id),
+            ) ?? null
+          }
+          logged={[]}
+          previous={null}
+          availableEquipment={new Set(gym?.equipment ?? [])}
+        >
+          <div>rows</div>
+        </ExerciseCard>
+      );
+      const { rerender } = render(card(false));
+      expect(screen.getByTestId('exercise-thumb').getAttribute('src')).toMatch(/\.webp$/);
+      expect(fetched).toEqual([]);
+      rerender(card(true));
+      await waitFor(() => expect(screen.getByTestId('exercise-thumb').tagName).toBe('VIDEO'));
+      expect(fetched).toEqual([
+        expect.stringMatching(/media\/exercises\/[a-z-]+\.[0-9a-f]{8}\.mp4$/),
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('says what X means once, in the reason itself', async () => {
     // Maintenance 23, the owner's item 27: "drive up as fast as you can; X is as fast as you can".
     const user = userEvent.setup();
@@ -107,7 +153,12 @@ describe('ExerciseCard', () => {
 
 describe('ExerciseCard for sets the place changed', () => {
   /** The card for one exercise of a plan, its tempo details open. */
-  async function cardFor(templateId: string, exerciseId: string, top: number | null) {
+  async function cardFor(
+    templateId: string,
+    exerciseId: string,
+    top: number | null,
+    extra: { from: number; to: number; step: number }[] = [],
+  ) {
     if (!home) throw new Error('no home');
     const place =
       top === null
@@ -117,7 +168,7 @@ describe('ExerciseCard for sets the place changed', () => {
             loading: {
               [DUMBBELLS_KEY]: {
                 kind: 'dumbbells' as const,
-                ranges: [{ from: 5, to: top, step: 5 }],
+                ranges: [{ from: 5, to: top, step: 5 }, ...extra],
               },
             },
           };
@@ -153,13 +204,25 @@ describe('ExerciseCard for sets the place changed', () => {
     return { view, item };
   }
 
-  it('keeps a set run to its effort at its own tempo, and a strength set at the slower one', async () => {
-    // Maintenance 23: at the heaviest weight a slower tempo adds effort; the reps already do.
+  it('keeps a set run to its effort at its own tempo, a strength set too', async () => {
+    // Maintenance 23: at the heaviest weight a slower tempo adds effort; the reps already do. Since
+    // Maintenance 25 a strength set well short runs to its effort as well, at its own tempo.
     const { view, item } = await cardFor('push-arms', 'incline-dumbbell-press', 20);
     expect(item.progression?.capped).toEqual({ at: 20 });
     expect(screen.getByTestId('tempo-line')).toHaveTextContent('3-0-1-0');
     view.unmount();
-    await cardFor('push-arms', 'dumbbell-bench-press', 20);
+    const bench = await cardFor('push-arms', 'dumbbell-bench-press', 20);
+    expect(bench.item.progression?.capped).toEqual({ at: 20 });
+    expect(screen.getByTestId('tempo-line')).toHaveTextContent('2-1-X-0');
+  });
+
+  it('keeps the slower tempo for a strength set held at the heaviest weight, not well short', async () => {
+    // The bench asks 40 lb; dumbbells to 37.5 are within a tenth of that, so the reps go up two
+    // and the tempo adds the rest of the effort (Maintenance 21).
+    const { item } = await cardFor('push-arms', 'dumbbell-bench-press', 35, [
+      { from: 37.5, to: 37.5, step: 2.5 },
+    ]);
+    expect(item.progression?.capped).toEqual({ at: 37.5 });
     expect(screen.getByTestId('tempo-line')).toHaveTextContent('3-1-X-0');
   });
 

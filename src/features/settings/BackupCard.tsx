@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { buildInfo } from '../../app/buildInfo';
 import { Button } from '../../components/Button/Button';
-import { Card } from '../../components/Card/Card';
 import { FactList } from '../../components/FactList/FactList';
 import { useToast } from '../../components/Toast/useToast';
 import {
@@ -96,7 +95,7 @@ export function BackupCard() {
   }
 
   return (
-    <Card eyebrow="Backup" title="Export and import">
+    <>
       <p className={styles.body}>
         A Full Backup JSON holds your profile, places, settings, workout history, notes and cues,
         custom exercises, your own demonstrations, and saved workouts. Files are saved to your
@@ -152,6 +151,6 @@ export function BackupCard() {
         onCancel={() => setPreview({ open: false })}
         onConfirm={() => void applyImport()}
       />
-    </Card>
+    </>
   );
 }

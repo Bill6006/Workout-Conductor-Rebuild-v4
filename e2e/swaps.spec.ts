@@ -46,7 +46,7 @@ test.describe('swaps you can trust', () => {
   }, testInfo) => {
     await ensureProfile(page);
     // A bodyweight gives every lift a starting weight, as on the owner's phone.
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/units');
     await page.locator('#bodyweight').fill('180');
     await expect(page.getByTestId('settings-save-status')).toHaveText(
       'Saved and verified on this device',
@@ -112,7 +112,7 @@ test.describe('swaps you can trust', () => {
       .click();
     await page
       .locator('[data-testid="exercise-card"][aria-label^="Barbell Bench Press,"]')
-      .getByTestId('card-thumb')
+      .getByTestId('options-tab')
       .click();
     const workoutSheet = page.getByRole('dialog');
     await expect(workoutSheet.getByTestId('stopped-note')).toContainText(

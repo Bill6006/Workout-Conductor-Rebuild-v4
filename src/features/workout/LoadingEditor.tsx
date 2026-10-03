@@ -55,10 +55,11 @@ function parseRows(rows: Row[]): LoadingRange[] | null {
 }
 
 /**
- * Records what this place can load, from the Plates panel, once: a machine's
- * stack or the dumbbells as ranges with a step, or which plates the rack has.
- * A plate missing today is a session-only note. Every target then lands on a
- * weight that exists here. Nothing is applied without the Save tap.
+ * Records what this place can load, from the Plates panel: a machine's stack or the dumbbells as
+ * ranges with a step, saved with the Save tap; or, for a bar, the plates in two modes that apply
+ * each tap at once (Maintenance 25, item 8): Today, a plate missing for this workout only, and
+ * Default, the plates this place keeps, saved for it. Every target then lands on a weight that
+ * exists here.
  */
 export function LoadingEditor({
   exercise,
@@ -74,8 +75,8 @@ export function LoadingEditor({
   const kind: 'stack' | 'dumbbells' | 'plates' =
     key === PLATES_KEY ? 'plates' : key === DUMBBELLS_KEY ? 'dumbbells' : 'stack';
   const [editing, setEditing] = useState(false);
-  /** The rack of plates is edited rarely; a plate missing today is the everyday case. */
-  const [editingRack, setEditingRack] = useState(false);
+  /** Today is the everyday case, a plate missing for this workout; Default is the place's rack. */
+  const [plateMode, setPlateMode] = useState<'today' | 'default'>('today');
   const [rows, setRows] = useState<Row[]>(() => rowsFrom(spec, kind === 'plates' ? 'stack' : kind));
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -97,6 +98,7 @@ export function LoadingEditor({
     const rack = spec?.kind === 'plates' ? spec.perSide : inventory;
     const onRack = new Set(rack);
     const missing = new Set(missingPlates);
+    const isDefault = plateMode === 'default';
     const togglePlate = (plate: number) => {
       const next = inventory.filter((size) =>
         size === plate ? !onRack.has(size) : onRack.has(size),
@@ -114,40 +116,50 @@ export function LoadingEditor({
       void run(() => onSetMissingPlates(next));
     };
     const gone = rack.filter((plate) => missing.has(plate));
-    const note = editingRack
-      ? `Tap a plate ${placeName} does not have.`
-      : gone.length > 0
-        ? `No ${gone.join(' or ')} today: the bar moves by ${loading.step} ${units}. Back next workout.`
-        : `The bar moves by ${loading.step} ${units}.`;
-    // One row, two plain meanings. Every day: tap the plate you cannot find, for this workout
-    // only. Once per place: Edit rack, and tap what the place never has.
+    // With every plate the place keeps missing today, nothing goes on the bar: it does not move.
+    const none = gone.length === rack.length;
+    const note = isDefault
+      ? `Saved for ${placeName}: tap a plate it never has.`
+      : none
+        ? 'No plates today: the bar stays empty. Back next workout.'
+        : gone.length > 0
+          ? `No ${gone.join(' or ')} today: the bar moves by ${loading.step} ${units}. Back next workout.`
+          : `The bar moves by ${loading.step} ${units}.`;
+    // Two modes, each change applied at once (Maintenance 25, item 8). Today: a plate you cannot
+    // find, for this workout only. Default: the plates this place keeps, saved for it.
     return (
-      <div
-        data-testid="loading-editor"
-        data-kind="plates"
-        data-mode={editingRack ? 'rack' : 'today'}
-      >
-        <div className={styles.panelHead}>
-          <p className={styles.panelLabel}>
-            {editingRack ? `Plates at ${placeName}` : 'Missing a plate today? Tap it'}
-          </p>
-          <button
-            type="button"
-            className={styles.textButton}
-            onClick={() => setEditingRack((current) => !current)}
-            data-testid="rack-edit"
-          >
-            {editingRack ? 'Done' : 'Edit rack'}
-          </button>
+      <div data-testid="loading-editor" data-kind="plates" data-mode={plateMode}>
+        <div className={styles.modeSwitch} role="group" aria-label="Which plates to change">
+          {(
+            [
+              ['today', 'Today'],
+              ['default', 'Default'],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              className={styles.modeButton}
+              aria-pressed={plateMode === mode}
+              onClick={() => setPlateMode(mode)}
+              data-testid={`plates-mode-${mode}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+        <p className={styles.panelLabel} data-testid="plates-mode-hint">
+          {isDefault ? `Plates at ${placeName}` : 'Missing a plate today? Tap it'}
+        </p>
         <div
-          className={styles.chips}
+          className={styles.plateButtons}
           role="group"
-          aria-label={editingRack ? `Plates at ${placeName}` : 'Plates missing today'}
+          aria-label={isDefault ? `Plates at ${placeName}` : 'Plates missing today'}
+          data-testid="plate-buttons"
         >
-          {(editingRack ? inventory : rack).map((plate) => {
-            const off = editingRack ? !onRack.has(plate) : missing.has(plate);
-            const state = editingRack
+          {(isDefault ? inventory : rack).map((plate) => {
+            const off = isDefault ? !onRack.has(plate) : missing.has(plate);
+            const state = isDefault
               ? off
                 ? `not at ${placeName}`
                 : `at ${placeName}`
@@ -160,17 +172,22 @@ export function LoadingEditor({
                 type="button"
                 className={styles.plateChip}
                 data-state={off ? 'off' : 'on'}
-                aria-pressed={editingRack ? !off : off}
+                aria-pressed={isDefault ? !off : off}
                 aria-label={`${plate} ${units}, ${state}`}
-                onClick={() => (editingRack ? togglePlate(plate) : toggleMissing(plate))}
+                onClick={() => (isDefault ? togglePlate(plate) : toggleMissing(plate))}
                 disabled={busy}
-                data-testid={editingRack ? `plate-${plate}` : `missing-${plate}`}
+                data-testid={isDefault ? `plate-${plate}` : `missing-${plate}`}
               >
                 {plate}
               </button>
             );
           })}
-          {editingRack && rack.length < inventory.length ? (
+        </div>
+        <div className={styles.plateNoteRow}>
+          <p className={styles.panelNote} data-testid="loading-note">
+            {note}
+          </p>
+          {isDefault && rack.length < inventory.length ? (
             <button
               type="button"
               className={styles.textButton}
@@ -182,10 +199,11 @@ export function LoadingEditor({
             </button>
           ) : null}
         </div>
-        <p className={styles.panelNote} data-testid="loading-note">
-          {note}
-        </p>
-        {problem ? <p className={styles.panelNote}>{problem}</p> : null}
+        {problem ? (
+          <p className={styles.panelNote} role="alert">
+            {problem}
+          </p>
+        ) : null}
       </div>
     );
   }

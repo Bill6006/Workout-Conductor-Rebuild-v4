@@ -81,7 +81,22 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        // The demonstrations' stills (WebP) install with the app, so every exercise shows its own
+        // still offline (Maintenance 25, item 7); a clip is kept the first time it plays.
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,webmanifest}'],
+        runtimeCaching: [
+          {
+            // Each clip is named by its content (the ninth review): a corrected clip has a new
+            // address, so a phone that kept the old one fetches it, and the old one ages out.
+            urlPattern: /\/media\/exercises\/[a-z0-9-]+\.[0-9a-f]{8}\.mp4$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'exercise-clips',
+              expiration: { maxEntries: 120, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
         navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
         clientsClaim: false,

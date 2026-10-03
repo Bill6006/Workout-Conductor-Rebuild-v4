@@ -32,9 +32,10 @@ The database is shared with another of the owner's apps. This app writes only ro
 `app = 'workout-conductor'` and reads only those. A row is one record: `store` is the IndexedDB
 store name, `id` the record id, `body` the record as JSON, `day` the workout date for workout
 records, `updated_at` the record's own timestamp (profile, places, custom exercises, notes:
-`updatedAt`; workouts: `completedAt` or `startedAt`; saved workouts: `createdAt`) or the sync
-time for meta records, `deleted = 1` for a tombstone, `device_id` the writer, `synced_at` the
-time the writer pushed it.
+`updatedAt`; workouts: `completedAt` or `startedAt`; saved workouts: `createdAt`) or, for meta
+records, the time the change was made, `deleted = 1` for a tombstone (its body `'{}'`: the table's body is NOT
+NULL, and every reader skips a tombstone's body; its `updated_at` the time the deletion was made,
+not sent), `device_id` the writer, `synced_at` the time the writer pushed it.
 
 ## Which stores are mirrored
 
@@ -53,16 +54,20 @@ removes. A record that arrives from the cloud is written with `applyRemote` or
 ## Push
 
 `pushOutbox` in `src/core/cloud/cloudSync.ts` sends the outbox oldest first in batches of 50 as
-one libSQL write batch: an upsert for a record that still exists, a tombstone for one that does
-not. The upsert's `ON CONFLICT ... WHERE excluded.updated_at >= records.updated_at` keeps a
-newer row from another device. An outbox entry is removed only if it is still exactly what was
-sent, so a write that landed during the push stays queued. Pushes run about 1.5 seconds after
-the last local write, on every scheduled pull, and on "Sync now".
+one libSQL write batch (one transaction: a row the table refuses refuses the batch). A sync's
+first request may take 30 seconds; once the copy has answered, each batch or page may take five
+minutes, so a slow connection still gets them. Each batch holds an upsert for a record that
+still exists, a tombstone for one that does not. The upsert's
+`ON CONFLICT ... WHERE excluded.updated_at >= records.updated_at` keeps a newer row from another
+device. An outbox entry is removed only if it is still exactly
+what was sent, so a write that landed during the push stays queued. Pushes run about 1.5 seconds
+after the last local write, on every scheduled pull, and on "Sync now".
 
 ## Pull
 
 `pullRemote` walks rows of this app newer than a cursor (`synced_at`, then `id`), 500 per page,
-or every row when the cursor is empty or the caller asks for the whole walk. On a device that
+or every row when the cursor is empty or the caller asks for the whole walk; a walk that has not
+reached a short page after 1,000 pages fails rather than ending as done. On a device that
 has never pulled, every row wins, including over onboarding defaults the device just wrote,
 whose outbox entries are dropped; that is how a fresh install with a token restores everything.
 On every other walk a pending local change wins, then the newer of the two timestamps;

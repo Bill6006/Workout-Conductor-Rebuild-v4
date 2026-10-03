@@ -80,6 +80,44 @@ export interface OutboxEntry extends Identified {
   recordId: string;
   op: 'put' | 'delete';
   queuedAt: string;
+  /** Written by a restore: when its backup was made (see WriteOptions). */
+  effectiveAt?: string;
+  /**
+   * Different for every change queued: two saves in the same millisecond are still two changes,
+   * so "still the change that was sent" never mistakes one for the other (the tenth review).
+   */
+  stamp?: string;
+}
+
+/** Whether a queued change is still exactly the one read before. */
+export function sameQueuedChange(
+  a: Pick<OutboxEntry, 'queuedAt' | 'op' | 'stamp'>,
+  b: Pick<OutboxEntry, 'queuedAt' | 'op' | 'stamp'>,
+): boolean {
+  return a.queuedAt === b.queuedAt && a.op === b.op && (a.stamp ?? null) === (b.stamp ?? null);
+}
+
+let stamps = 0;
+function nextStamp(): string {
+  stamps += 1;
+  return `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}.${stamps}`;
+}
+
+export interface WriteOptions {
+  /**
+   * For a restore: when its backup was made. A record with no time of its own reaches the cloud
+   * copy as of then, so a version the cloud copy changed later stays (Maintenance 25).
+   */
+  effectiveAt?: string;
+}
+
+export interface ClearOptions {
+  /**
+   * 'keep': empties the store on this phone only. Nothing is queued for the cloud copy and a
+   * change waiting for a record removed here is dropped, so the cloud copy keeps every record
+   * (a restore, Maintenance 25).
+   */
+  cloud?: 'keep';
 }
 
 export function outboxKey(store: SyncedStore, recordId: string): string {
@@ -91,16 +129,28 @@ export interface Database {
   get<T extends Identified>(store: StoreName, key: string): Promise<T | undefined>;
   getAll<T extends Identified>(store: StoreName): Promise<T[]>;
   /** A local write. On a synced store it also queues the record for the cloud copy. */
-  put<T extends Identified>(store: StoreName, value: T): Promise<void>;
+  put<T extends Identified>(store: StoreName, value: T, options?: WriteOptions): Promise<void>;
   /** A local delete. On a synced store it also queues a tombstone for the cloud copy. */
   delete(store: StoreName, key: string): Promise<void>;
-  /** Empties a store. On a synced store every record present queues a tombstone. */
-  clear(store: StoreName): Promise<void>;
+  /** Empties a store. On a synced store every record present queues a tombstone, unless kept. */
+  clear(store: StoreName, options?: ClearOptions): Promise<void>;
   count(store: StoreName): Promise<number>;
   /** Writes a record that arrived from the cloud copy. No outbox entry. */
   applyRemote<T extends Identified>(store: SyncedStore, value: T): Promise<void>;
   /** Removes a record the cloud copy deleted. No outbox entry. */
   applyRemoteDelete(store: SyncedStore, key: string): Promise<void>;
+  /**
+   * Takes the cloud copy's version of a record whose write it refused (Maintenance 25, the tenth
+   * review), in one transaction and only while the record's queued change is still `expected`, so
+   * a save made since is never overwritten. The queued change goes with it. `value` null removes
+   * the record; undefined only drops the queued change. Says what it did.
+   */
+  takeRemoteIfQueued(
+    store: SyncedStore,
+    key: string,
+    value: Identified | null | undefined,
+    expected: Pick<OutboxEntry, 'id' | 'queuedAt' | 'op' | 'stamp'>,
+  ): Promise<'applied' | 'removed' | 'dropped' | 'skipped'>;
   /** Called after any write to the outbox, so the app can schedule a push. */
   watchOutbox(listener: () => void): () => void;
   close(): void;
@@ -290,23 +340,30 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
     notifyOutbox();
   }
 
-  const entry = (store: SyncedStore, recordId: string, op: OutboxEntry['op']): OutboxEntry => ({
+  const entry = (
+    store: SyncedStore,
+    recordId: string,
+    op: OutboxEntry['op'],
+    effectiveAt?: string,
+  ): OutboxEntry => ({
     id: outboxKey(store, recordId),
     store,
     recordId,
     op,
     queuedAt: now(),
+    stamp: nextStamp(),
+    ...(effectiveAt ? { effectiveAt } : {}),
   });
 
   return {
     name,
     get: (store, key) => run(store, 'readonly', (objectStore) => objectStore.get(key)),
     getAll: (store) => run(store, 'readonly', (objectStore) => objectStore.getAll()),
-    put: async (store, value) => {
+    put: async (store, value, options = {}) => {
       if (isSyncedStore(store)) {
         await runWithOutbox(store, (objectStore, outbox) => {
           objectStore.put(value);
-          outbox.put(entry(store, value.id, 'put'));
+          outbox.put(entry(store, value.id, 'put', options.effectiveAt));
         });
         return;
       }
@@ -322,12 +379,15 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
       }
       await run(store, 'readwrite', (objectStore) => objectStore.delete(key));
     },
-    clear: async (store) => {
+    clear: async (store, options = {}) => {
       if (isSyncedStore(store)) {
         await runWithOutbox(store, (objectStore, outbox) => {
           const keys = objectStore.getAllKeys();
           keys.onsuccess = () => {
-            for (const key of keys.result) outbox.put(entry(store, String(key), 'delete'));
+            for (const key of keys.result) {
+              if (options.cloud === 'keep') outbox.delete(outboxKey(store, String(key)));
+              else outbox.put(entry(store, String(key), 'delete'));
+            }
             objectStore.clear();
           };
         });
@@ -341,6 +401,32 @@ export async function openDatabase(options: OpenDatabaseOptions = {}): Promise<D
     },
     applyRemoteDelete: async (store, key) => {
       await run(store, 'readwrite', (objectStore) => objectStore.delete(key));
+    },
+    takeRemoteIfQueued: async (store, key, value, expected) => {
+      let outcome: 'applied' | 'removed' | 'dropped' | 'skipped' = 'skipped';
+      await withConnection(async () => {
+        outcome = 'skipped';
+        const transaction = db.transaction([store, 'outbox'], 'readwrite', STRICT);
+        const outbox = transaction.objectStore('outbox');
+        const records = transaction.objectStore(store);
+        const queued = outbox.get(expected.id);
+        queued.onsuccess = () => {
+          const current = queued.result as OutboxEntry | undefined;
+          if (!current || !sameQueuedChange(current, expected)) return;
+          outbox.delete(expected.id);
+          if (value === null) {
+            records.delete(key);
+            outcome = 'removed';
+          } else if (value !== undefined) {
+            records.put(value);
+            outcome = 'applied';
+          } else {
+            outcome = 'dropped';
+          }
+        };
+        await transactionDone(transaction);
+      });
+      return outcome;
     },
     watchOutbox: (listener) => {
       outboxListeners.add(listener);

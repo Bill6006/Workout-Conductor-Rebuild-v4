@@ -6,6 +6,8 @@ import {
   isRouteId,
   parseRouteId,
   routeHref,
+  routeSection,
+  sectionHref,
 } from './navigation';
 
 describe('parseRouteId', () => {
@@ -69,5 +71,23 @@ describe('navigation model', () => {
   it('recognises route ids', () => {
     expect(isRouteId('today')).toBe(true);
     expect(isRouteId('history')).toBe(false);
+  });
+});
+
+describe('a section of a tab (Maintenance 25)', () => {
+  it('reads the part after the tab, and nothing when there is none', () => {
+    expect(routeSection('#/settings/schedule')).toBe('schedule');
+    expect(routeSection('#/plan/places')).toBe('places');
+    expect(routeSection('#/settings/Cloud?from=setup')).toBe('cloud');
+    expect(routeSection('#/settings')).toBeNull();
+    expect(routeSection('#/settings/')).toBeNull();
+    expect(routeSection('')).toBeNull();
+  });
+
+  it('builds a section link that reads back to its tab and section', () => {
+    const href = sectionHref('settings', 'backup');
+    expect(href).toBe('#/settings/backup');
+    expect(parseRouteId(href)).toBe('settings');
+    expect(routeSection(href)).toBe('backup');
   });
 });

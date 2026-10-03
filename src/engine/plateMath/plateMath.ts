@@ -24,6 +24,11 @@ export interface PlateMathResult {
   perSide: number[];
   /** How far a weight these plates cannot make sits above the nearest one they can. */
   remainder: number;
+  /**
+   * For a weight these plates cannot make, the nearest one under it that they can, and its
+   * plates per side (Maintenance 25, item 8: the stack shows what to load instead).
+   */
+  nearestBelow?: { total: number; perSide: number[] };
   /** One readable line, for example "Bar 45 + 45, 25 each side · 185 lb". */
   line: string;
 }
@@ -114,6 +119,8 @@ export function plateMath(
     case 'trap-bar':
     case 'smith': {
       const barWeight = exercise.barWeight?.[units] ?? (units === 'lb' ? 45 : 20);
+      // A number and its unit never part at a line's end (the tenth review's re-check).
+      const amount = (value: number) => `${value}\u00a0${units}`;
       if (target <= barWeight) {
         return {
           ...base,
@@ -121,8 +128,8 @@ export function plateMath(
           barWeight,
           line:
             target === barWeight
-              ? `Empty bar · ${barWeight} ${units}`
-              : `Below the empty bar (${barWeight} ${units}); use a lighter bar`,
+              ? `Empty bar · ${amount(barWeight)}`
+              : `Below the empty bar (${amount(barWeight)}); use a lighter bar`,
         };
       }
       const side = round((target - barWeight) / 2);
@@ -133,7 +140,7 @@ export function plateMath(
           kind: 'bar',
           barWeight,
           perSide,
-          line: `Bar ${barWeight} + ${perSide.join(', ')} each side · ${target} ${units}`,
+          line: `Bar ${barWeight} + ${perSide.join(', ')} each side · ${amount(target)}`,
         };
       }
       // A weight these plates cannot make: the ones they make either side of it, never a shortfall.
@@ -148,10 +155,14 @@ export function plateMath(
         kind: 'bar',
         barWeight,
         remainder: round(target - below),
+        nearestBelow: {
+          total: below,
+          perSide: platesFor(round((below - barWeight) / 2), inventory) ?? [],
+        },
         line:
           above === undefined
-            ? `The plates here make ${below}, not ${target} ${units}`
-            : `The plates here make ${below} or ${above}, not ${target} ${units}`,
+            ? `The plates here make ${below}, not ${amount(target)}`
+            : `The plates here make ${below} or ${above}, not ${amount(target)}`,
       };
     }
     case 'dumbbell-each':
@@ -160,14 +171,14 @@ export function plateMath(
         ...base,
         kind: 'each-hand',
         barWeight: null,
-        line: `${target} ${units} in each hand (2 × ${target})`,
+        line: `${target}\u00a0${units} in each hand (2 × ${target})`,
       };
     case 'stack':
       return {
         ...base,
         kind: 'stack',
         barWeight: null,
-        line: `Pin the stack at ${target} ${units}`,
+        line: `Pin the stack at ${target}\u00a0${units}`,
       };
     case 'band':
       return { ...base, kind: 'band', barWeight: null, line: 'Band tension; note the band colour' };
@@ -176,7 +187,7 @@ export function plateMath(
         ...base,
         kind: 'bodyweight',
         barWeight: null,
-        line: target > 0 ? `Bodyweight plus ${target} ${units}` : 'Bodyweight',
+        line: target > 0 ? `Bodyweight plus ${target}\u00a0${units}` : 'Bodyweight',
       };
   }
 }

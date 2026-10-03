@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react';
-import { buildInfo, formatBuildMarker } from '../../app/buildInfo';
 import type { RouteId } from '../../app/navigation';
-import { CURRENT_PHASE, getPhase } from '../../app/phases';
 import { BottomNav } from '../BottomNav/BottomNav';
 import styles from './AppShell.module.css';
 
@@ -13,9 +11,11 @@ interface AppShellProps {
   children: ReactNode;
 }
 
+/**
+ * The shell: the app's name, the screen, the tabs. The build and the phase live under Settings,
+ * About (Maintenance 25, the owner's item 5): developer facts out of every screen's first lines.
+ */
 export function AppShell({ activeRoute, showNav = true, children }: AppShellProps) {
-  const phase = getPhase(CURRENT_PHASE);
-
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -26,19 +26,7 @@ export function AppShell({ activeRoute, showNav = true, children }: AppShellProp
             <p className={styles.brandTagline}>Adaptive Strength + Hypertrophy</p>
           </div>
         </div>
-        <span
-          className={styles.phaseChip}
-          data-testid="phase-chip"
-          title={phase.name}
-          aria-label={`Current phase: Phase ${phase.number}, ${phase.name}`}
-        >
-          <span className={styles.phaseDot} aria-hidden="true" />
-          Phase {phase.number}
-        </span>
       </header>
-      <p className={styles.buildMarker} data-testid="build-marker">
-        {formatBuildMarker(buildInfo)}
-      </p>
       <main className={styles.main} id="main">
         {children}
       </main>

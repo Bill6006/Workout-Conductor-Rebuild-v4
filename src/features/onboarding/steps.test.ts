@@ -22,6 +22,15 @@ describe('onboarding steps', () => {
     expect(validateAll(createDraft(NOW))).toEqual([]);
   });
 
+  it('checks the age on the units step, in words (eleventh re-check)', () => {
+    const aged = (age: number | undefined) =>
+      updateProfile(createDraft(NOW), (profile) => ({ ...profile, age }));
+    expect(validateStep('units', aged(12))).toEqual(['Age must be from 13 to 100.']);
+    expect(validateStep('units', aged(101))).toEqual(['Age must be from 13 to 100.']);
+    expect(validateStep('units', aged(30))).toEqual([]);
+    expect(validateStep('units', aged(undefined))).toEqual([]);
+  });
+
   it('flags a frequency above the available days', () => {
     const draft = updateProfile(createDraft(NOW), (profile) => ({
       ...profile,

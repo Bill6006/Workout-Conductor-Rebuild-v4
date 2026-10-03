@@ -7,7 +7,7 @@ import {
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { coachingPolicy, policyLabel } from '../coach/experience';
-import { enteredMaxFor, type StrengthMaxes } from './maxes';
+import { enteredMaxFor, maxFromSet, type StrengthMaxes } from './maxes';
 import { overrideBias } from './overrides';
 import {
   ENTERED_FRACTION,
@@ -20,8 +20,9 @@ import {
   startRatio,
 } from './startingLoad';
 import { weightStep } from '../plateMath/plateMath';
+import { EFFORT_REPS_CEILING } from './effortCeiling';
 import { estimateFromOtherLifts } from './crossEstimate';
-import { fatigueSteps, precedingWorkInRecord } from '../recovery/sessionContext';
+import { fatigueSteps, precedingWorkInRecord, sessionStepLine } from '../recovery/sessionContext';
 import { fitWeight, snapDown, type Loading } from '../loading/loading';
 import { platesFor } from '../plateMath/plateMath';
 import type {
@@ -117,6 +118,12 @@ export interface NextTarget {
   reference?: { recordId: string; exerciseId: string; clean: boolean };
   /** The weights here made less than asked: the load and range its sets stand in for. */
   asked?: SetPrescription['asked'];
+  /**
+   * The load an estimate asked for before it was rounded to a step (Maintenance 25). Rounding can
+   * land it on the heaviest weight a place has when it asks for more; the place judges it from
+   * this while the target still stands at that rounding.
+   */
+  exact?: number;
 }
 
 export function estimateOneRepMax(weight: number, reps: number): number {
@@ -442,6 +449,15 @@ function breakBetween(
   );
 }
 
+/**
+ * Load for a rep target at a given reserve from an estimated one-rep max (Epley, inverted), before
+ * it is rounded to a step (Maintenance 25).
+ */
+function exactLoadFromEstimate(e1rm: number, reps: number, rir: number, fraction: number): number {
+  const effective = Math.min(reps + rir, 12);
+  return (e1rm / (1 + effective / 30)) * fraction;
+}
+
 /** Load for a rep target at a given reserve from an estimated one-rep max (Epley, inverted). */
 export function loadFromEstimate(
   e1rm: number,
@@ -450,8 +466,22 @@ export function loadFromEstimate(
   fraction: number,
   step: number,
 ): number {
-  const effective = Math.min(reps + rir, 12);
-  return roundToStep((e1rm / (1 + effective / 30)) * fraction, step);
+  return roundToStep(exactLoadFromEstimate(e1rm, reps, rir, fraction), step);
+}
+
+/**
+ * A target's load from an estimate, rounded to its step, with the load before rounding kept
+ * (`exact`): at the heaviest weight a place has, the push is judged from that (Maintenance 25).
+ */
+function estimated(
+  e1rm: number,
+  reps: number,
+  rir: number,
+  fraction: number,
+  step: number,
+): { weight: number; exact: number } {
+  const exact = exactLoadFromEstimate(e1rm, reps, rir, fraction);
+  return { weight: roundToStep(exact, step), exact };
 }
 
 /** Modes that follow the lifter's own habit of lifting above or below the suggestion. */
@@ -482,15 +512,39 @@ function withSessionFatigue(target: NextTarget, input: NextTargetInput): NextTar
   if (before === null) return target;
   const { steps, line } = fatigueSteps(session.precedingSets, before, reference.clean);
   if (steps === 0 || line === null) return target;
-  return floorTarget(
-    {
-      ...target,
-      weight: roundToStep(target.weight + steps * target.increment, target.increment),
-      evidence: [...target.evidence, line],
-      nudged: (target.nudged ?? 0) + steps,
-    },
+  return stepped(
+    target,
+    steps,
+    (taken) => sessionStepLine(session.precedingSets, before, taken),
     input,
   );
+}
+
+/**
+ * A target moved some steps with the line that says why, never under the empty bar (Maintenance
+ * 25): a step the bar cancels outright moves nothing, so it says nothing either, and a step the bar
+ * cuts short is said for the steps the load took. `line` words it for that many steps.
+ */
+function stepped(
+  target: NextTarget,
+  steps: number,
+  line: (taken: number) => string,
+  input: NextTargetInput,
+): NextTarget {
+  if (target.weight === null) return target;
+  const moved = floorTarget(
+    { ...target, weight: roundToStep(target.weight + steps * target.increment, target.increment) },
+    input,
+  );
+  if (moved.weight === null || moved.weight === target.weight) return target;
+  const delta = (moved.weight - target.weight) / target.increment;
+  const taken = Math.sign(delta) * Math.max(1, Math.round(Math.abs(delta)));
+  return {
+    ...moved,
+    // The step's line, then the bar's when the bar stopped it.
+    evidence: [...target.evidence, line(taken), ...moved.evidence.slice(target.evidence.length)],
+    nudged: (target.nudged ?? 0) + taken,
+  };
 }
 
 /** A typed max outweighs the log only when it says at least this much more. */
@@ -502,7 +556,26 @@ export const ENTERED_MAX_STEPS = 2;
  * target on a lift never done stays more careful (`ENTERED_FRACTION`); here the movement is known
  * and the step limit is the safety.
  */
-export const ENTERED_WITH_HISTORY_FRACTION = 0.95;
+const ENTERED_WITH_HISTORY_FRACTION = 0.95;
+
+/**
+ * A logged session read by the rule a recent set entered on the max sheet is read by
+ * (Maintenance 25): its best set's estimated max, every rep counted up to thirty. An entered max
+ * is judged against this, so one set logged and entered says the same; the rules that set a
+ * target from the log keep their own reading. Null without a weighed set.
+ */
+function loggedLikeEntered(point: PerformancePoint): number | null {
+  const maxes = point.sets.flatMap((set) =>
+    set.weight === null || set.weight <= 0 ? [] : [maxFromSet(set.weight, set.reps)],
+  );
+  return maxes.length > 0 ? Math.max(...maxes) : null;
+}
+
+/**
+ * The targets an entered max can move on a lift with logged sets: those the log sets, at today's
+ * range or read from the log's estimate at another range (Maintenance 25).
+ */
+const MAX_MODES: ReadonlySet<ProgressionMode> = new Set([...FATIGUE_MODES, 'estimate']);
 
 /**
  * A max entered on a lift that already has logged sets. The log is the better
@@ -529,7 +602,7 @@ function liftBegan(history: readonly WorkoutRecord[], point: PerformancePoint): 
 
 function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget {
   const maxes = input.maxes ?? null;
-  if (!maxes || target.weight === null || !FATIGUE_MODES.has(target.mode)) return target;
+  if (!maxes || target.weight === null || !MAX_MODES.has(target.mode)) return target;
   const entry = maxes.maxes[input.exercise.id];
   if (!entry) return target;
   const last = performanceHistory(input.history, input.exercise, 1)[0];
@@ -537,7 +610,9 @@ function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget 
   if (!(Date.parse(entry.enteredAt) > Date.parse(liftBegan(input.history, last)))) return target;
   const units = input.profile.units;
   const entered = enteredMaxFor(maxes, input.exercise.id, units);
-  if (entered === null || entered < last.e1rm * ENTERED_MAX_MARGIN) return target;
+  // Judged against the log read as the max was: the same set logged and entered says the same.
+  const logged = loggedLikeEntered(last);
+  if (entered === null || logged === null || entered < logged * ENTERED_MAX_MARGIN) return target;
   const step = target.increment;
   const implied = loadFromEstimate(
     entered,
@@ -671,26 +746,23 @@ function recommendBiasedTarget(input: NextTargetInput): NextTarget {
   const target = isHold(input.exercise) ? withHoldSeconds(base, input) : base;
   if (target.weight === null || !BIASABLE.has(target.mode)) return target;
   const bias = overrideBias(input.history, input.exercise.id, target.increment);
-  if (bias.steps === 0 || !bias.evidence) return target;
-  return floorTarget(
-    {
-      ...target,
-      weight: roundToStep(target.weight + bias.steps * target.increment, target.increment),
-      evidence: [...target.evidence, bias.evidence],
-      nudged: (target.nudged ?? 0) + bias.steps,
-    },
-    input,
-  );
+  const evidence = bias.evidence;
+  if (bias.steps === 0 || !evidence) return target;
+  return stepped(target, bias.steps, () => evidence, input);
 }
 
-/** A bar lift never targets less than the empty bar, whatever the mode said. */
+/**
+ * A bar lift never targets less than the empty bar, whatever the mode said. Its line comes once:
+ * a step the bar then cancels adds nothing (`stepped`, Maintenance 25).
+ */
 function floorTarget(target: NextTarget, input: NextTargetInput): NextTarget {
   const bar = barWeightFor(input.exercise, input.profile.units);
   if (bar === null || target.weight === null || target.weight >= bar) return target;
+  const line = `Never below the empty bar (${bar} ${input.profile.units}).`;
   return {
     ...target,
     weight: bar,
-    evidence: [...target.evidence, `Never below the empty bar (${bar} ${input.profile.units}).`],
+    evidence: target.evidence.includes(line) ? target.evidence : [...target.evidence, line],
   };
 }
 
@@ -792,13 +864,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       ...base,
       viaFamily: false,
       mode: 'start',
-      weight: loadFromEstimate(
-        entered,
-        prescription.reps[1],
-        prescription.rir,
-        ENTERED_FRACTION,
-        step,
-      ),
+      ...estimated(entered, prescription.reps[1], prescription.rir, ENTERED_FRACTION, step),
       confidence: 'low',
       evidence: [
         `Your max for ${exercise.name}: ${entered} ${units}. The first target is ${Math.round(ENTERED_FRACTION * 100)}% of what it implies for ${prescription.reps[0]}-${prescription.reps[1]} reps at RIR ${prescription.rir}; log a set and the target follows.`,
@@ -819,13 +885,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       return {
         ...base,
         mode: 'start',
-        weight: loadFromEstimate(
-          cross.e1rm,
-          prescription.reps[1],
-          prescription.rir,
-          START_FRACTION,
-          step,
-        ),
+        ...estimated(cross.e1rm, prescription.reps[1], prescription.rir, START_FRACTION, step),
         confidence: cross.confidence,
         evidence: [cross.evidence],
       };
@@ -835,13 +895,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       return {
         ...base,
         mode: 'start',
-        weight: loadFromEstimate(
-          estimate.e1rm,
-          prescription.reps[1],
-          prescription.rir,
-          START_FRACTION,
-          step,
-        ),
+        ...estimated(estimate.e1rm, prescription.reps[1], prescription.rir, START_FRACTION, step),
         confidence: 'low',
         evidence: [estimate.evidence],
       };
@@ -998,13 +1052,14 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     const estimate =
       familyMax === null
         ? null
-        : loadFromEstimate(familyMax.e1rm, prescription.reps[1], prescription.rir, 0.9, step);
+        : estimated(familyMax.e1rm, prescription.reps[1], prescription.rir, 0.9, step);
     return result(
       'estimate',
-      estimate,
+      estimate?.weight ?? null,
       familyMax === null
         ? 'New variation with no load history in its family: log a set and the target follows.'
         : `New variation: 90% of the family estimate (${familyMax.e1rm} ${units} max${familyMax.converted ? `, converted from ${source?.name ?? 'the family lift'}` : ''}) for ${prescription.reps[0]}-${prescription.reps[1]} reps at RIR ${prescription.rir}; log a set and the target follows.`,
+      estimate ? { exact: estimate.exact } : {},
     );
   }
   const daysSince = input.now
@@ -1019,19 +1074,60 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   ) {
     const fresh = enteredMaxFor(maxes, exercise.id, units);
     if (fresh !== null) {
-      return result(
-        'return',
-        loadFromEstimate(fresh, prescription.reps[1], prescription.rir, ENTERED_FRACTION, step),
-        `${daysSince} days since the last session: starting from the max you entered (${fresh} ${units}) at ${Math.round(ENTERED_FRACTION * 100)}%; log a set and the target follows.`,
+      // After a break the logged sets are old (Maintenance 25). A max that says less counts, since
+      // the break may have cost strength: the start is the lighter of the two. One that says more
+      // moves the start toward it two steps at most over where the logged sets put it, as on a
+      // lift trained lately (docs/research/entered-maxes.md).
+      const fraction = daysSince >= LONG_BREAK_DAYS ? 0.85 : 0.9;
+      const fromMax = estimated(
+        fresh,
+        prescription.reps[1],
+        prescription.rir,
+        ENTERED_FRACTION,
+        step,
       );
+      const fromSets =
+        last.e1rm === null
+          ? null
+          : estimated(last.e1rm, prescription.reps[1], prescription.rir, fraction, step);
+      if (fromSets === null || fromMax.weight < fromSets.weight) {
+        return result(
+          'return',
+          fromMax.weight,
+          `${daysSince} days since the last session: starting from the max you entered (${fresh} ${units}) at ${Math.round(ENTERED_FRACTION * 100)}%; log a set and the target follows.`,
+          { exact: fromMax.exact },
+        );
+      }
+      const logged = loggedLikeEntered(last);
+      const says = logged !== null && fresh >= logged * ENTERED_MAX_MARGIN;
+      const top = says
+        ? roundToStep(fromSets.weight + ENTERED_MAX_STEPS * step, step)
+        : fromSets.weight;
+      const weight = Math.min(fromMax.weight, top);
+      const steps = Math.round((weight - fromSets.weight) / step);
+      const back = `${daysSince} days since the last session: back at ${Math.round(fraction * 100)}% of the estimated max (${last.e1rm} ${units}) and rebuilding from there.`;
+      if (steps > 0) {
+        return result('return', weight, back, {
+          // The start sits at the max's own estimate only when the two steps reach it.
+          ...(weight === fromMax.weight ? { exact: fromMax.exact } : {}),
+          evidence: [
+            `Your max of ${Math.round(fresh)} ${units}, entered after you began this lift last time, says more than your logged sets: up ${
+              steps === 1 ? 'a step' : `${steps} steps`
+            } toward it. Your next logged session takes over.`,
+          ],
+        });
+      }
+      return result('return', fromSets.weight, back, { exact: fromSets.exact });
     }
   }
   if (daysSince >= RETURN_AFTER_DAYS && last.e1rm !== null) {
     const fraction = daysSince >= LONG_BREAK_DAYS ? 0.85 : 0.9;
+    const back = estimated(last.e1rm, prescription.reps[1], prescription.rir, fraction, step);
     return result(
       'return',
-      loadFromEstimate(last.e1rm, prescription.reps[1], prescription.rir, fraction, step),
+      back.weight,
       `${daysSince} days since the last session: back at ${Math.round(fraction * 100)}% of the estimated max (${last.e1rm} ${units}) and rebuilding from there.`,
+      { exact: back.exact },
     );
   }
   // At bodyweight nothing comes off after a break (Maintenance 23): the first session back starts
@@ -1056,10 +1152,12 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   }
   if (newToZone && last.e1rm !== null) {
     const range = last.sets.find((set) => set.targetReps !== null)?.targetReps ?? null;
+    const zone = estimated(last.e1rm, prescription.reps[1], prescription.rir, ZONE_FRACTION, step);
     return result(
       'estimate',
-      loadFromEstimate(last.e1rm, prescription.reps[1], prescription.rir, ZONE_FRACTION, step),
+      zone.weight,
       `${range ? `Last run at ${range[0]}-${range[1]} reps` : 'Last run at a different rep range'}; today is ${prescription.reps[0]}-${prescription.reps[1]}. The weight follows the reps: ${Math.round(ZONE_FRACTION * 100)}% of what your estimated max (${last.e1rm} ${units}) implies for ${prescription.reps[0]}-${prescription.reps[1]} at RIR ${prescription.rir}; log a set and the target follows.`,
+      { exact: zone.exact },
     );
   }
   // At bodyweight there is no weight to take off: the target stays, and the coach offers fewer
@@ -1342,8 +1440,8 @@ const EXTRA_WORDS = ['', 'one extra rep', 'two extra reps', 'three extra reps'] 
  * then runs to its reps in reserve rather than stopping three reps on (docs/research/lighter-loads.md).
  */
 export const WELL_SHORT = 0.9;
-/** The most reps a set run to its reserve is asked for. */
-export const EFFORT_REPS_CEILING = 30;
+/** The most reps a set run to its reserve is asked for (shared with a recent set's estimate). */
+export { EFFORT_REPS_CEILING };
 
 /** Whether a muscle-building set at this load runs to its reserve (see `WELL_SHORT`). */
 function toReserve(asked: number, loaded: number, reserve: number | null): boolean {
@@ -1398,13 +1496,12 @@ function reserveWords(extra: number, reserve: number, ceiling: boolean): string 
 
 /**
  * A set the weights at the place pushed to its planned effort (Maintenance 23): well short of the
- * load asked, on a muscle-building role. Its reps bring the effort, so it takes neither the slower
- * tempo of the heaviest weight nor a drop set. Reps the lifter set by hand (`own`) are not such
- * a push.
+ * load asked, on any role since Maintenance 25. Its reps bring the effort, so it takes neither the
+ * slower tempo of the heaviest weight nor a drop set. Reps the lifter set by hand (`own`) are not
+ * such a push.
  */
 export function pushedToEffort(
   set: Pick<SetPrescription, 'kind'> & Partial<Pick<SetPrescription, 'asked' | 'targetWeight'>>,
-  role: TrainingRole,
   own = false,
 ): boolean {
   return (
@@ -1412,7 +1509,6 @@ export function pushedToEffort(
     set.kind === 'working' &&
     set.asked !== undefined &&
     typeof set.targetWeight === 'number' &&
-    restCategory(role) !== 'strength' &&
     set.targetWeight < set.asked.weight * WELL_SHORT
   );
 }
@@ -1424,7 +1520,7 @@ export function entryPushedToEffort(entry: {
   manual?: { reps?: boolean };
 }): boolean {
   const own = entry.manual?.reps === true;
-  return entry.sets.some((set) => pushedToEffort(set, entry.role, own));
+  return entry.sets.some((set) => pushedToEffort(set, own));
 }
 
 function plateNames(plates: readonly number[]): string {
@@ -1496,11 +1592,13 @@ export function capTarget(
   target: NextTarget,
   loading: Loading | null,
   units: string,
-  /** The entry's role: a muscle-building set well short of its load runs to its reserve. */
+  /**
+   * The entry's role. A set well short of its load runs to its reserve, a strength set too since
+   * Maintenance 25: at a load that light only the effort trains it (docs/research/lighter-loads.md).
+   */
   role?: TrainingRole,
 ): NextTarget {
-  const reserve =
-    role === undefined || restCategory(role) === 'strength' || target.hold ? null : target.rir;
+  const reserve = role === undefined || target.hold ? null : target.rir;
   return settleHold(fitToPlace(target, loading, units, reserve), units);
 }
 
@@ -1524,6 +1622,22 @@ function settleHold(target: NextTarget, units: string): NextTarget {
       ...target.evidence.slice(1),
     ],
   };
+}
+
+/**
+ * An estimate rounded down onto the heaviest weight a place has, that asked for more than it
+ * (Maintenance 25). Rounded to a 5 lb step, an estimate asking 22 lb lands on 20: at 20 lb
+ * dumbbells it read as met, and every estimate between 17.5 and 22.5 lb gave the same plain set.
+ * `exact` counts only while the target still stands at its rounding.
+ */
+function roundedOntoCap(target: NextTarget, cap: number): boolean {
+  const { weight, exact, increment } = target;
+  if (weight === null || exact === undefined || target.hold) return false;
+  return (
+    Math.abs(weight - cap) < 1e-6 &&
+    exact > cap + 1e-6 &&
+    Math.abs(roundToStep(exact, increment) - weight) < 1e-6
+  );
 }
 
 function fitToPlace(
@@ -1575,6 +1689,18 @@ function fitToPlace(
       ),
       ...asked,
     };
+  }
+  // The estimate asked for more than the heaviest weight, and rounding hid it: held there, the
+  // reps go up a little, as for any target over it by a step or less (Maintenance 25). The sets
+  // stand in for nothing heavier: they read as they show.
+  if (loading.cap !== null && roundedOntoCap(target, loading.cap)) {
+    return holdAndPushReps(
+      loading.cap,
+      `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
+        shift === 0 ? ', and they are already at the top' : ''
+      }.`,
+      { at: loading.cap },
+    );
   }
   const fit = rackFit(target.weight, target.reps, loading, units, target.hold === true, reserve);
   if (!fit) return target;

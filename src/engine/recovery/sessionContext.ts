@@ -164,13 +164,23 @@ export function fatigueSteps(
   referenceClean: boolean,
 ): FatigueSteps {
   const diff = today - reference;
+  if (diff >= 6) return { steps: -2, line: sessionStepLine(today, reference, -2) };
+  if (diff >= 3) return { steps: -1, line: sessionStepLine(today, reference, -1) };
+  if (diff <= -3 && referenceClean) {
+    return { steps: 1, line: sessionStepLine(today, reference, 1) };
+  }
+  return { steps: 0, line: null };
+}
+
+/**
+ * The line for the steps the work before a lift today moved its load (Maintenance 25): the empty
+ * bar can stop two steps down after one, and the line says the one the load took.
+ */
+export function sessionStepLine(today: number, reference: number, steps: number): string {
   const stem = `${SESSION_LINE}about ${fmt(today)} sets on these muscles, against ${fmt(
     reference,
   )} on the day the target was set`;
-  if (diff >= 6) return { steps: -2, line: `${stem}${DOWN_TWO}` };
-  if (diff >= 3) return { steps: -1, line: `${stem}${DOWN_ONE}` };
-  if (diff <= -3 && referenceClean) return { steps: 1, line: `${stem}${UP_ONE}` };
-  return { steps: 0, line: null };
+  return `${stem}${steps <= -2 ? DOWN_TWO : steps < 0 ? DOWN_ONE : UP_ONE}`;
 }
 
 /**

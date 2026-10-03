@@ -12,7 +12,7 @@ test.describe('the coach round', () => {
     page,
   }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/goals');
     const primary = page.getByRole('radiogroup', { name: 'Primary goal' });
     await expect(primary.getByRole('radio')).toHaveCount(5);
     await expect(primary.getByRole('radio', { name: /Balanced development/ })).toHaveCount(0);

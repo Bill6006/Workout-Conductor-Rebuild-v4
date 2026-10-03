@@ -250,13 +250,22 @@ describe('coach conductor', () => {
     expect(position).not.toBeNull();
     expect(signals.some((signal) => signal.source === 'superset evidence')).toBe(false);
 
+    const completed = logged(base.workout, 'e1', [
+      [6, 1],
+      [3, 0],
+    ]);
     const fading = input([], {
       status: 'active',
-      completed: logged(base.workout, 'e1', [
-        [6, 1],
-        [3, 0],
-      ]),
+      completed,
       workoutCount: 0,
+      // The rest after the set that fell short is running (Maintenance 25).
+      rest: {
+        entryId: 'e1',
+        setIndex: (completed.sets[1] as CompletedSet).setIndex,
+        startedAt: NOW,
+        endsAt: new Date(Date.parse(NOW) + 150_000).toISOString(),
+        pausedRemaining: null,
+      },
     });
     const rest = gatherSignals(fading).find((signal) => signal.domain === 'rest');
     expect(rest?.action).toMatchObject({ kind: 'rest', deltaSeconds: 30 });

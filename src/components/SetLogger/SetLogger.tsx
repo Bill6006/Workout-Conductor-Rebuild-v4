@@ -41,7 +41,8 @@ interface SetLoggerProps {
   onDelete?: () => void;
   disabled?: boolean;
   /** Plate Math or a per-hand clarification for the current weight. */
-  helper?: string | null;
+  /** What to load for the weight on the dial: the plates, or a line of text. */
+  helper?: ReactNode;
   /** Replaces the line under the weight, for example "Bodyweight" on a bodyweight move. */
   weightHint?: string;
   /** The weights this place can load, ascending; the nudges move through them. Null: any step. */
@@ -115,6 +116,15 @@ export function SetLogger({
     setValues(next);
     onChange?.(next);
   };
+
+  // A logger that starts (again) says its own value at once: the screen draws the plates for the
+  // weight it last heard, and a target that moves and comes back would otherwise bring back a
+  // weight turned on an earlier logger (Maintenance 25, the tenth review).
+  useEffect(() => {
+    onChange?.(values);
+    // Once, as the logger starts: every later change is reported by update().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // A countdown that ends, or is stopped, writes its seconds into the dial. Only the seconds
   // change, so the weight (and the screen's plate line that follows it) stays as it was.
@@ -327,7 +337,11 @@ export function SetLogger({
         <span className={styles.label} data-testid="target-line">
           {mode === 'edit' ? `Editing ${target.label}` : target.label}
         </span>
-        {helper ? <span className={styles.helper}>{helper}</span> : null}
+        {helper ? (
+          <span className={styles.helper} data-testid="logger-helper">
+            {helper}
+          </span>
+        ) : null}
       </div>
       <div className={styles.dials} data-count={hold ? 2 : 3}>
         {dial(

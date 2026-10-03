@@ -674,11 +674,9 @@ describe('the re-check of the fourth review', () => {
     const completed = logThrough(lift, 1);
     const isDone = (entryId: string, setIndex: number) =>
       completed.sets.some((set) => set.entryId === entryId && set.setIndex === setIndex);
+    // A set is logged: the general warm-up is behind the lifter (Maintenance 25).
     const estimated = (after: GeneratedWorkout) =>
-      Math.round(
-        estimateWorkout(after.blocks, after.warmup.generalMinutes, requireExercise, isDone)
-          .totalMinutes,
-      );
+      Math.round(estimateWorkout(after.blocks, 0, requireExercise, isDone).totalMinutes);
     const atGym = act(gym, workout, completed, { type: 'location' });
     expect(atGym.duration.estimatedMinutes).toBe(estimated(atGym));
     const lighter = act(at({ from: 5, to: 15, step: 5 }), workout, completed, { type: 'loading' });

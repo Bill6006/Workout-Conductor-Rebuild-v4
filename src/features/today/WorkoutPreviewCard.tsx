@@ -16,6 +16,7 @@ import {
   type WorkoutEntry,
 } from '../../engine/workout/types';
 import { holdById, stoppedText } from '../../engine/workout/setText';
+import { keyedLines } from '../../core/screen/keyedLines';
 import styles from './TodayScreen.module.css';
 
 interface WorkoutPreviewCardProps {
@@ -241,8 +242,8 @@ export function WorkoutPreviewCard({
               <details className={styles.summaryDetails}>
                 <summary>What changed</summary>
                 <ul>
-                  {summary.details.map((detail) => (
-                    <li key={detail}>{detail}</li>
+                  {keyedLines(summary.details).map(({ key, line }) => (
+                    <li key={key}>{line}</li>
                   ))}
                 </ul>
               </details>
@@ -325,15 +326,15 @@ export function WorkoutPreviewCard({
       <details className={styles.why}>
         <summary className={styles.whySummary}>Why this workout</summary>
         <ul className={styles.whyList}>
-          {workout.explanation.reasons.map((reason) => (
-            <li key={reason}>{reason}</li>
+          {keyedLines(workout.explanation.reasons).map(({ key, line }) => (
+            <li key={key}>{line}</li>
           ))}
-          {workout.explanation.fittingSteps.map((step) => (
-            <li key={step}>{step}</li>
+          {keyedLines(workout.explanation.fittingSteps).map(({ key, line }) => (
+            <li key={key}>{line}</li>
           ))}
-          {workout.compromises.map((compromise) => (
-            <li key={compromise} className={styles.compromise}>
-              {compromise}
+          {keyedLines(workout.compromises).map(({ key, line }) => (
+            <li key={key} className={styles.compromise}>
+              {line}
             </li>
           ))}
           <li>

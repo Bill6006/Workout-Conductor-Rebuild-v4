@@ -9,14 +9,6 @@
   color: var(--color-text-subtle);
 }
 
-.inlineLink {
-  align-self: flex-start;
-  color: var(--color-accent);
-  font-size: 0.88rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-
 .buttonRow {
   display: flex;
   flex-direction: column;
@@ -118,4 +110,72 @@
   color: var(--color-text);
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+/* The phase's name, at the size a card's title has. */
+.aboutPhase {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.buildMarker {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* A row's value that needs a look (a cloud copy that failed) reads in the warning colour. */
+.rowStatus[data-attention='true'] {
+  color: var(--color-yellow);
+  font-weight: 600;
+}
+
+/* Maintenance 25, item 7: the demonstrations' credits. */
+.credits {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.creditGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.creditHeading {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.creditHeading a,
+.creditList a {
+  color: var(--color-accent);
+}
+
+.creditAuthor {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.creditList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+}
+
+.creditList li {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
 }

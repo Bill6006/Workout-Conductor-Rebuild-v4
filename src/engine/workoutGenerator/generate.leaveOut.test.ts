@@ -71,12 +71,15 @@ describe('a session too long for its length', () => {
     // fly and curl pair goes: the chin-ups train the biceps in full and the rows half, the rows give
     // the rear delts half a set a set, and the hammer curl's forearms get the least, half a set for
     // each chin-up set.
+    // Since Maintenance 25 the row runs to its effort at the 20 lb dumbbells and takes longer, so
+    // the hammer curl goes too, by the same order: before the shrugs, the day's only trap work.
     const workout = plan(lightHome, 'pull-arms', 30);
     expect(names(workout)).toEqual(
-      expect.arrayContaining(['Chest-Supported Row', 'Chin-Up', 'Hammer Curl', 'Dumbbell Shrug']),
+      expect.arrayContaining(['Chest-Supported Row', 'Chin-Up', 'Dumbbell Shrug']),
     );
     expect(leftOut(workout)).toEqual([
       'Left out A1 Rear Delt Fly + A2 Dumbbell Curl so the session fits 30 min.',
+      'Left out Hammer Curl so the session fits 30 min.',
     ]);
     expect(workout.duration.estimatedMinutes).toBeLessThanOrEqual(31);
   });
@@ -175,44 +178,51 @@ describe('a session too long for its length', () => {
   });
 
   it('brings back a move the row cap left out when the minutes fit it', () => {
-    // Dumbbells to 15 lb and a bench: nothing to hang from, and long sets at the light weights.
+    // Dumbbells to 15 lb and a bench, no pairs: the row cap leaves the curl out of 30 minutes; the
+    // long sets at the light weights then leave three lifts out, and the minutes left fit the curl.
     const small: LocationProfile = {
       ...lightHome,
       equipment: ['adjustable-dumbbells', 'adjustable-bench'],
       loading: { [DUMBBELLS_KEY]: { kind: 'dumbbells', ranges: [{ from: 5, to: 15, step: 5 }] } },
     };
-    const workout = plan(small, 'pull-arms', 15);
-    expect(names(workout)).toEqual(['Chest-Supported Row', 'Hammer Curl']);
+    const workout = plan(small, 'full-body', 30, {
+      techniques: { supersets: false, dropSets: false, circuits: false },
+    });
+    expect(names(workout)).toEqual(['Goblet Squat', 'Dumbbell Bench Press', 'Dumbbell Curl']);
     expect(workout.explanation.fittingSteps).toEqual(
       expect.arrayContaining([
-        'Left out Hammer Curl to fit 15 min.',
-        'Kept Hammer Curl on its own: the minutes left fit it.',
+        'Left out Dumbbell Curl to fit 30 min.',
+        'Kept Dumbbell Curl on its own: the minutes left fit it.',
       ]),
     );
     expect(workout.duration.overByMinutes).toBeLessThanOrEqual(1);
   });
 
-  it('tries a move in place at fewer sets, so the second press gives way to one that fits', () => {
-    // Two presses at the light dumbbells run 17 minutes; a curl at two sets fits beside the first.
-    const workout = plan(lightHome, 'push-arms', 15, {
+  it('tries a move in place at fewer sets, so a main lift gives way to one that fits', () => {
+    // The squat at the light dumbbells, run to its effort, leaves no room for a second main lift in
+    // 15 minutes; a triceps extension at two sets fits beside it.
+    const workout = plan(lightHome, 'full-body', 15, {
+      bodyweight: 150,
       techniques: { supersets: false, dropSets: false, circuits: false },
     });
-    expect(names(workout)).toEqual(['Dumbbell Bench Press', 'Dumbbell Curl']);
-    const curl = allEntries(workout.blocks)[1]!;
-    expect(curl.sets.filter((set) => set.kind === 'working')).toHaveLength(2);
+    expect(names(workout)).toEqual(['Goblet Squat', 'Overhead Triceps Extension']);
+    const extension = allEntries(workout.blocks)[1]!;
+    expect(extension.sets.filter((set) => set.kind === 'working')).toHaveLength(2);
     expect(workout.explanation.fittingSteps).toEqual(
       expect.arrayContaining([
-        'Left out Incline Dumbbell Press so the session fits 15 min.',
-        'Kept Dumbbell Curl on its own at 2 sets: the minutes left fit it.',
+        'Left out Dumbbell Bench Press so the session fits 15 min.',
+        'Kept Overhead Triceps Extension on its own at 2 sets: the minutes left fit it.',
       ]),
     );
     expect(workout.duration.overByMinutes).toBeLessThanOrEqual(1);
   });
 
   it('brings a move back at the shortest rest the plan runs by then', () => {
-    // At its first rest the curl does not fit the 30 minutes; at the plan's shortest it does.
-    const workout = plan(lightHome, 'full-body', 30, {
+    // At its first rest the curl does not fit the 15 minutes beside the squat run to its effort; at
+    // the plan's shortest it does.
+    const workout = plan(lightHome, 'full-body', 15, {
       ...strength,
+      bodyweight: 150,
       techniques: { supersets: true, dropSets: true, circuits: false },
     });
     expect(names(workout)).toContain('Dumbbell Curl');
@@ -534,7 +544,7 @@ describe('a session shortened with a lift the fit cannot shorten', () => {
     // Two presses run over the 11 minutes left; the main lift alone fits them, and takes back the
     // set the fit trimmed from it, since the minutes are its own.
     const workout = plan(gym, 'push-arms', 15);
-    for (const place of [home, lightHome]) {
+    for (const place of [home]) {
       const result = recalibrate({
         trigger: { type: 'location' },
         workout,
@@ -558,6 +568,31 @@ describe('a session shortened with a lift the fit cannot shorten', () => {
         'Gave Dumbbell Bench Press back a set: the minutes left fit it.',
       );
     }
+    // At the light dumbbells the bench runs to its effort (Maintenance 25): its longer sets fit
+    // the 11 minutes at three, and nothing is given back.
+    const light = recalibrate({
+      trigger: { type: 'location' },
+      workout,
+      completed: { ...emptyCompleted(), startedAt: NOW, elapsedSeconds: 240 },
+      lockedEntryIds: [],
+      currentEntryId: null,
+      duration: 15,
+      profile: { ...base, bodyweight: 185 },
+      location: lightHome,
+      history: [],
+      constraints: emptyConstraints(),
+      reason: 'test',
+      timestamp: NOW,
+    });
+    if (!light.ok) throw new Error(light.error);
+    expect(names(light.workout)).toEqual(['Dumbbell Bench Press']);
+    expect(light.workout.duration.overByMinutes).toBeLessThanOrEqual(1);
+    expect(
+      allEntries(light.workout.blocks)[0]!.sets.filter((set) => set.kind === 'working'),
+    ).toHaveLength(3);
+    expect(light.workout.explanation.fittingSteps.some((step) => step.startsWith('Gave '))).toBe(
+      false,
+    );
     // Eight minutes in, the 7 minutes left do not fit the set back: it stays trimmed.
     const later = recalibrate({
       trigger: { type: 'location' },

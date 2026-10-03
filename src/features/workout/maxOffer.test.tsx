@@ -147,8 +147,10 @@ describe('the offer, after changes to the lift before it starts', () => {
     expect(lift.manual?.weight).toBeUndefined();
     const card = await cardOf(store, lift);
     expect(within(card).queryByTestId('know-max')).not.toBeNull();
-    await userEvent.setup().click(within(card).getByRole('tab', { name: /how to/i }));
-    expect(within(card).getByTestId('progression-evidence').textContent ?? '').not.toMatch(
+    // The target's reasons are in Options (Maintenance 25, item 7).
+    await userEvent.setup().click(within(card).getByTestId('options-tab'));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByTestId('progression-evidence').textContent ?? '').not.toMatch(
       /You set this by hand/,
     );
   });
@@ -162,7 +164,7 @@ describe('the offer, after changes to the lift before it starts', () => {
     expect([set?.targetWeight, set?.targetReps]).toEqual([145, [10, 12]]);
   });
 
-  it('names the range a pushed set stands in for, never the push’s extra reps', async () => {
+  it('shows the target the plan will have at the heaviest pair, weight and reps from one set', async () => {
     const store = await onboarded('home');
     await store.saveLoading('home', DUMBBELLS_KEY, {
       kind: 'dumbbells',
@@ -180,9 +182,13 @@ describe('the offer, after changes to the lift before it starts', () => {
     const asked = pushed.asked.reps;
     expect(pushed.targetReps).not.toEqual(asked);
     const { preview, set } = await enterThroughOffer(store, lift, '150');
-    expect(preview).toContain(`× ${asked[0]}-${asked[1]} reps at RIR`);
-    // What it promised is the target the set now stands in for, at the heaviest pair here.
-    const promised = Number(/First target: (\d+) lb/.exec(preview)?.[1]);
-    expect([set?.targetWeight, set?.asked]).toEqual([20, { weight: promised, reps: asked }]);
+    // Maintenance 25, the owner's item 36: the preview is the save's own result, the heaviest
+    // pair here and the reps the plan asks at it, and the line that says why; never a load the
+    // place cannot make beside the reps of another (the plan's set stands in for that load).
+    const [, weight, low, high] = /First target: (\d+) lb × (\d+)-(\d+) reps/.exec(preview) ?? [];
+    expect(Number(weight)).toBe(20);
+    expect([set?.targetWeight, set?.targetReps]).toEqual([20, [Number(low), Number(high)]]);
+    expect(preview).toContain('Held at the heaviest weight here (20 lb)');
+    expect(set?.asked?.weight).toBeGreaterThan(20);
   });
 });

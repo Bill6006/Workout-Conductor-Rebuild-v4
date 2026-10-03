@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '../../components/Button/Button';
-import { Card } from '../../components/Card/Card';
 import { useToast } from '../../components/Toast/useToast';
 import {
   SNAPSHOTS_KEPT,
@@ -84,7 +83,7 @@ export function SnapshotsCard() {
   }
 
   return (
-    <Card eyebrow="Automatic backups" title="Kept on this device">
+    <>
       <p className={styles.body}>
         A verified copy of everything is kept after each finished workout and before each import.
         The newest {SNAPSHOTS_KEPT} stay; they never leave this phone, so export a file too if you
@@ -138,6 +137,6 @@ export function SnapshotsCard() {
         onCancel={() => setSelected(null)}
         onConfirm={() => void restore()}
       />
-    </Card>
+    </>
   );
 }

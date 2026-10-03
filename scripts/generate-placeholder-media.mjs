@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Generates original diagram-style placeholder demonstrations, one poster and
- * one looping SVG per movement pattern, into public/media/placeholders/.
- *
- * These are development placeholders only. They contain no third-party
- * material; see docs/media-license-register.md. Run: npm run media:placeholders
+ * Generates the original diagrams, one still and one looping SVG per movement
+ * pattern, into public/media/placeholders/, and one for each exercise whose
+ * pattern's diagram would show the wrong body position (Dead Bug lies on its
+ * back). They stand in where an exercise has no licensed demonstration, and for
+ * a still that cannot load. They contain no third-party material; see
+ * docs/media-license-register.md. Run: npm run media:placeholders
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -185,6 +186,9 @@ function figure(pose) {
       return `<circle cx="92" cy="176" r="10" ${s}/><path d="M102 172 L160 156 L190 176 L196 196" ${s}/><path d="M60 196 H260" stroke="${MUTED}" stroke-width="4" stroke-linecap="round"/>`;
     case 'seated':
       return `<circle cx="132" cy="96" r="10" ${s}/><path d="M132 106 V156 L182 156" ${s}/><path d="M118 156 V196 M100 196 H220" stroke="${MUTED}" stroke-width="4" stroke-linecap="round"/>`;
+    case 'supine':
+      // On the back: arms straight up over the shoulders, hips and knees bent to right angles.
+      return `<circle cx="92" cy="174" r="10" ${s}/><path d="M102 176 H196 M120 176 V112 M196 176 V132 H236" ${s}/><path d="M60 190 H260" stroke="${MUTED}" stroke-width="4" stroke-linecap="round"/>`;
     case 'plank':
       return `<circle cx="92" cy="140" r="10" ${s}/><path d="M102 146 L220 168 M118 150 L110 184 M220 168 L236 186" ${s}/><path d="M60 190 H260" stroke="${MUTED}" stroke-width="4" stroke-linecap="round"/>`;
     default:
@@ -218,18 +222,30 @@ function svg(id, config, animate) {
   const motion = animate
     ? `<animateTransform attributeName="transform" type="translate" values="0 0; ${config.dx} ${config.dy}; 0 0" keyTimes="0; 0.5; 1" dur="1.8s" calcMode="spline" keySplines="0.4 0 0.6 1; 0.4 0 0.6 1" repeatCount="indefinite"/>`
     : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-label="Placeholder demonstration: ${config.name}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-label="Diagram: ${config.name}">
   <rect width="320" height="240" rx="18" fill="${BG}"/>
   ${figure(config.pose)}
   <g>${motion}${load(config.load, config.at)}</g>
-  <text x="16" y="222" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="${LINE}" letter-spacing="1.2">PLACEHOLDER</text>
   <text x="304" y="222" text-anchor="end" font-family="system-ui, sans-serif" font-size="12" fill="${MUTED}">${config.name}${animate ? ' · loop' : ''}</text>
 </svg>
 `;
 }
 
+/** Exercises with a diagram of their own; keep in step with EXERCISE_DIAGRAMS in mediaManifest.ts. */
+const EXERCISES = {
+  'dead-bug': {
+    name: 'Dead bug',
+    pose: 'supine',
+    load: 'body',
+    // A hand reaching back past the head as the opposite leg straightens.
+    at: [120, 104],
+    dx: -34,
+    dy: 30,
+  },
+};
+
 let count = 0;
-for (const [id, config] of Object.entries(PATTERNS)) {
+for (const [id, config] of [...Object.entries(PATTERNS), ...Object.entries(EXERCISES)]) {
   writeFileSync(path.join(OUT, `${id}.svg`), svg(id, config, false));
   writeFileSync(path.join(OUT, `${id}-loop.svg`), svg(id, config, true));
   count += 2;

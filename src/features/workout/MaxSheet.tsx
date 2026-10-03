@@ -1,18 +1,14 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { Button } from '../../components/Button/Button';
 import { Sheet } from '../../components/Sheet/Sheet';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import type { UnitSystem } from '../../core/validation/profile';
-import { weightStep } from '../../engine/plateMath/plateMath';
-import { maxFromSet, type MaxInput } from '../../engine/progression/maxes';
-import {
-  ENTERED_WITH_HISTORY_FRACTION,
-  loadFromEstimate,
-} from '../../engine/progression/progression';
-import { ENTERED_FRACTION, floorToBar, loadClass } from '../../engine/progression/startingLoad';
+import { enteredE1rm, type MaxInput } from '../../engine/progression/maxes';
+import { loadClass } from '../../engine/progression/startingLoad';
 import type { WorkoutEntry } from '../../engine/workout/types';
 import styles from './MaxSheet.module.css';
+import { previewText } from './maxPreviewText';
 
 interface MaxSheetProps {
   exercise: CatalogExercise;
@@ -36,9 +32,9 @@ function parse(raw: string): number | null {
 
 /**
  * The one-time max entry for a lift with no history: a set the lifter
- * remembers (converted with Epley) or a max they know. Shows the first target
- * it would set before saving. "Not now" brings the link back in a week;
- * "Don't ask for this lift" keeps it away for good.
+ * remembers (converted with Epley, every rep counted up to thirty) or a max they know. Shows the
+ * target the save leaves the lift at today, as the plan will have it, before saving. "Not now"
+ * brings the link back in a week; "Don't ask for this lift" keeps it away for good.
  */
 export function MaxSheet({
   exercise,
@@ -58,14 +54,6 @@ export function MaxSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const working = entry.sets.find((set) => set.kind === 'working');
-  // The range the first target is for: reps set by hand as they are, else the range a pushed set
-  // stands in for, never the push's extra reps (Maintenance 23).
-  const range = working
-    ? entry.manual?.reps
-      ? working.targetReps
-      : (working.asked?.reps ?? working.targetReps)
-    : null;
   const perHand = loadClass(exercise.load) === 'each' ? ' per hand' : '';
   const input: MaxInput | null =
     mode === 'set'
@@ -75,29 +63,15 @@ export function MaxSheet({
       : parse(max) !== null
         ? { kind: 'max', e1rm: parse(max) as number }
         : null;
-  const e1rm =
-    input === null
-      ? null
-      : input.kind === 'max'
-        ? input.e1rm
-        : maxFromSet(input.weight, input.reps);
-  const firstTarget =
-    e1rm !== null && working && range
-      ? floorToBar(
-          loadFromEstimate(
-            e1rm,
-            range[1],
-            working.targetRir,
-            // A lift with logged history is asked for a little more of what the max implies.
-            !offer && entry.progression && entry.progression.mode !== 'start'
-              ? ENTERED_WITH_HISTORY_FRACTION
-              : ENTERED_FRACTION,
-            weightStep(exercise, units),
-          ),
-          exercise,
-          units,
-        )
-      : null;
+  // The save's own rebuild, run without saving: the preview is the target the plan will have
+  // (Maintenance 25), never a second copy of the rule that sets it.
+  const session = useAppSelector((state) => state.session);
+  const preview = useMemo(
+    () => (input && session ? store.previewStrengthMax(exercise.id, entry.id, input) : null),
+    // `input` is rebuilt each render from the fields; its parts are what change the preview.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, session, exercise.id, entry.id, mode, weight, reps, max],
+  );
 
   const save = async () => {
     if (!input || busy) return;
@@ -155,11 +129,11 @@ export function MaxSheet({
       <p className={styles.note}>
         {offer
           ? 'No max attempt needed. Enter a recent set you did, weight and reps, and the app estimates your one-rep max from it and sets today’s first target under that estimate. Used once: after your first logged set, the targets follow what you actually lift.'
-          : 'No max attempt needed: a recent best set works. A max that is newer than your last session and says more than your logged sets moves the target toward it, two steps at most. Your next logged session takes over again.'}
+          : 'No max attempt needed: a recent best set works. A max that is newer than your last session and says more than your logged sets moves the target toward it, two steps at most, as far as the weights here allow, unless the lift is lighter today to win back missed reps; after three weeks or more away, a lower one counts too. Your next logged session takes over again.'}
       </p>
       {!offer && saved ? (
         <p className={styles.note} data-testid="max-saved">
-          Saved now: {Math.round(saved.e1rm)} {saved.units}
+          Saved now: {Math.round(enteredE1rm(saved))} {saved.units}
           {perHand}, entered {new Date(saved.enteredAt).toLocaleDateString()}.
         </p>
       ) : null}
@@ -234,11 +208,11 @@ export function MaxSheet({
         </div>
       )}
       <p className={styles.preview} data-testid="max-preview" aria-live="polite">
-        {e1rm !== null && working && range && firstTarget !== null
-          ? `${mode === 'set' ? `Estimated max about ${Math.round(e1rm)} ${units}${perHand} from that set` : `Max ${Math.round(e1rm)} ${units}${perHand}`}. ${offer ? 'First target' : 'On its own it puts the target at'}: ${firstTarget} ${units} × ${range[0]}-${range[1]} reps at RIR ${working.targetRir}.`
+        {preview
+          ? previewText(preview, mode, exercise.name, units, perHand, offer)
           : mode === 'set'
-            ? 'Type a set you did, for example 135 for 8, and the first target appears here.'
-            : 'Type your max and the first target appears here.'}
+            ? 'Type a set you did, for example 135 for 8, and the target appears here.'
+            : 'Type your max and the target appears here.'}
       </p>
       {error ? (
         <p className={styles.error} role="alert">

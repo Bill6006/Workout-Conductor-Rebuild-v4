@@ -1,17 +1,13 @@
 import { useState } from 'react';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
-import { isCoreStability } from '../../catalog/movementPatterns/movementPatterns';
-import { ExerciseDemo } from '../../components/ExerciseDetail/ExerciseMedia';
 import type { CustomInstruction } from '../../core/validation/customExercise';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { Loading, LoadingSpec } from '../../engine/loading/loading';
 import { plateMath } from '../../engine/plateMath/plateMath';
 import type { WorkoutBlock, WorkoutEntry } from '../../engine/workout/types';
-import { useCustomMedia } from '../library/useCustomMedia';
 import styles from './ActiveWorkout.module.css';
-import { effortGuidance, restGuidance } from './effort';
 import { LoadingEditor } from './LoadingEditor';
-import type { PreviousPerformance } from './previousPerformance';
+import { PlateStack } from '../../components/PlateStack/PlateStack';
 
 export interface EntryPanelsProps {
   entry: WorkoutEntry;
@@ -20,9 +16,10 @@ export interface EntryPanelsProps {
   units: UnitSystem;
   /** Weight the logger currently shows, for Plate Math. */
   currentWeight: number | null;
-  previous: PreviousPerformance | null;
   instruction: CustomInstruction | undefined;
   onSaveNotes: (notes: string, cues: string[]) => Promise<void>;
+  /** Opens How to: the demonstration and the steps, in a sheet (Maintenance 25, item 7). */
+  onHowTo: () => void;
   onOptions: () => void;
   /** What this place can load for the exercise today, and the record behind it. */
   loading: Loading;
@@ -35,12 +32,12 @@ export interface EntryPanelsProps {
   openRequest?: { panel: 'plates'; at: number } | null;
 }
 
-type Panel = 'howto' | 'notes' | 'plates' | null;
+type Panel = 'notes' | 'plates' | null;
 
 /**
- * Compact expandable panels under the current exercise: demonstration and
- * instructions, per-exercise notes and cue memory, Plate Math, and the
- * options sheet. Nothing here scrolls the whole screen away from the set.
+ * Compact expandable panels under the current exercise: per-exercise notes and cue memory and
+ * Plate Math, with How to and the options sheet beside them. How to opens its own sheet, so the
+ * card never grows by the demonstration. Nothing here scrolls the whole screen away from the set.
  */
 export function EntryPanels({
   entry,
@@ -48,9 +45,9 @@ export function EntryPanels({
   exercise,
   units,
   currentWeight,
-  previous,
   instruction,
   onSaveNotes,
+  onHowTo,
   onOptions,
   loading,
   spec,
@@ -64,7 +61,6 @@ export function EntryPanels({
   const [notes, setNotes] = useState(instruction?.notes ?? '');
   const [cues, setCues] = useState((instruction?.cues ?? []).join('\n'));
   const [saved, setSaved] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const customMedia = useCustomMedia(exercise.id);
   const plates =
     currentWeight !== null && currentWeight > 0
       ? plateMath(exercise, currentWeight, units, loading.perSide ?? undefined)
@@ -101,38 +97,40 @@ export function EntryPanels({
   return (
     <div className={styles.panels}>
       <div className={styles.panelTabs}>
-        <div className={styles.tabGroup} role="tablist" aria-label="Exercise panels">
+        <div className={styles.tabGroup}>
           <button
             type="button"
-            role="tab"
-            aria-selected={open === 'howto'}
             className={styles.panelTab}
-            onClick={() => toggle('howto')}
+            onClick={onHowTo}
+            aria-haspopup="dialog"
+            data-testid="howto-button"
           >
             How to
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={open === 'notes'}
-            className={styles.panelTab}
-            onClick={() => toggle('notes')}
-            data-testid="notes-tab"
-          >
-            Notes{instruction && (instruction.notes || instruction.cues.length > 0) ? ' •' : ''}
-          </button>
-          {plates || canLoad ? (
+          <div className={styles.tabGroup} role="tablist" aria-label="Exercise panels">
             <button
               type="button"
               role="tab"
-              aria-selected={open === 'plates'}
+              aria-selected={open === 'notes'}
               className={styles.panelTab}
-              onClick={() => toggle('plates')}
-              data-testid="plates-tab"
+              onClick={() => toggle('notes')}
+              data-testid="notes-tab"
             >
-              Plates
+              Notes{instruction && (instruction.notes || instruction.cues.length > 0) ? ' •' : ''}
             </button>
-          ) : null}
+            {plates || canLoad ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={open === 'plates'}
+                className={styles.panelTab}
+                onClick={() => toggle('plates')}
+                data-testid="plates-tab"
+              >
+                Plates
+              </button>
+            ) : null}
+          </div>
         </div>
         <button
           type="button"
@@ -143,69 +141,6 @@ export function EntryPanels({
           Options
         </button>
       </div>
-
-      {open === 'howto' ? (
-        <div className={styles.panelBody} role="tabpanel">
-          <ExerciseDemo exercise={exercise} customMedia={customMedia} />
-          {previous ? (
-            <p className={styles.panelNote}>
-              {exercise.measure === 'seconds'
-                ? `Last time: ${previous.weight === null ? '' : `${previous.weight} ${units} × `}${previous.reps} s`
-                : `Last time: ${previous.weight === null ? 'bodyweight' : `${previous.weight} ${units}`} × ${previous.reps}${previous.rir === null ? '' : ` @ RIR ${previous.rir}`}`}
-              , {previous.sets} working sets.
-            </p>
-          ) : null}
-          <h4 className={styles.panelTitle}>Why this target</h4>
-          <ul className={styles.panelList} data-testid="progression-evidence">
-            {(entry.progression?.evidence ?? []).map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-            {entry.manual?.weight || entry.manual?.reps ? (
-              <li>You set this by hand; the engines keep your values.</li>
-            ) : null}
-            {[
-              ...effortGuidance(
-                'working',
-                entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
-                entry.role,
-                exercise.measure === 'seconds',
-                isCoreStability(exercise.movementPattern),
-              ).evidence,
-              ...restGuidance(entry.role, entry.restSeconds).evidence,
-            ].map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-          <h4 className={styles.panelTitle}>Setup</h4>
-          <ol className={styles.panelList}>
-            {(instruction?.setup.length ? instruction.setup : exercise.instructions.setup).map(
-              (step) => (
-                <li key={step}>{step}</li>
-              ),
-            )}
-          </ol>
-          <h4 className={styles.panelTitle}>Execution</h4>
-          <ol className={styles.panelList}>
-            {(instruction?.execution.length
-              ? instruction.execution
-              : exercise.instructions.execution
-            ).map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-          {instruction && instruction.cues.length > 0 ? (
-            <>
-              <h4 className={styles.panelTitle}>Your cues</h4>
-              <ul className={styles.panelList}>
-                {instruction.cues.map((cue) => (
-                  <li key={cue}>{cue}</li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-          <p className={styles.panelNote}>{exercise.instructions.breathing}</p>
-        </div>
-      ) : null}
 
       {open === 'notes' ? (
         <div className={styles.panelBody} role="tabpanel">
@@ -261,27 +196,20 @@ export function EntryPanels({
       {open === 'plates' ? (
         <div className={styles.panelBody} role="tabpanel" data-testid="plate-math">
           {plates ? (
-            <>
-              <p className={styles.plateLine}>{plates.line}</p>
-              {plates.kind === 'bar' && plates.perSide.length > 0 ? (
-                <div className={styles.plateRow} aria-label="Plates per side">
-                  {plates.perSide.map((plate, index) => (
-                    <span key={`${plate}-${index}`} className={styles.plate} data-size={plate}>
-                      {plate}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              <p className={styles.panelNote}>
-                {plates.kind === 'bar'
-                  ? `Bar ${plates.barWeight} ${units}; the plates at ${placeName}. Same on both sides.`
-                  : plates.kind === 'each-hand'
+            plates.kind === 'bar' ? (
+              <PlateStack result={plates} />
+            ) : (
+              <>
+                <p className={styles.plateText}>{plates.line}</p>
+                <p className={styles.panelNote}>
+                  {plates.kind === 'each-hand'
                     ? 'Dumbbell and kettlebell loads are per hand.'
                     : block.kind === 'superset'
                       ? 'Set the pin before the round starts.'
                       : 'No plates to load.'}
-              </p>
-            </>
+                </p>
+              </>
+            )
           ) : null}
           <LoadingEditor
             exercise={exercise}

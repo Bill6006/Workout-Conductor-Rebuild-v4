@@ -45,9 +45,11 @@ function BarcodeView({
   onClose: () => void;
 }) {
   const code = barcode.code;
+  // A barcode brought back from the phone's second copy may have its code alone (Maintenance 25).
+  const picture = barcode.image;
   const [graphic, setGraphic] = useState<BarcodeGraphic | null>(null);
   // Without a read code the picture is all there is; with one, the drawing comes first.
-  const [showPicture, setShowPicture] = useState(!code);
+  const [showPicture, setShowPicture] = useState(!code && picture !== undefined);
   useWakeLock();
   const close = useBackCloses('barcodeOverlay', onClose);
 
@@ -56,24 +58,25 @@ function BarcodeView({
     let live = true;
     // A drawing slow to arrive is not waited on: the picture shows, and the switch offers the
     // drawing once it is ready, so the screen never changes under the scanner by itself.
+    const hasPicture = picture !== undefined;
     const slow = window.setTimeout(() => {
-      if (live) setShowPicture(true);
+      if (live && hasPicture) setShowPicture(true);
     }, DRAWING_WAIT_MS);
     encodeBarcode(code)
       .then((drawn) => {
         if (!live) return;
         if (drawn) setGraphic(drawn);
-        else setShowPicture(true);
+        else if (hasPicture) setShowPicture(true);
       })
       .catch(() => {
-        if (live) setShowPicture(true);
+        if (live && hasPicture) setShowPicture(true);
       })
       .finally(() => window.clearTimeout(slow));
     return () => {
       live = false;
       window.clearTimeout(slow);
     };
-  }, [code]);
+  }, [code, picture]);
 
   useEffect(() => {
     // Caught before a sheet underneath sees it, so Escape closes only the barcode.
@@ -97,11 +100,11 @@ function BarcodeView({
         </p>
       </>
     );
-  } else if (showPicture) {
+  } else if (showPicture && picture) {
     body = (
       <img
         className={styles.picture}
-        src={barcode.image.dataUrl}
+        src={picture.dataUrl}
         alt={`${place} barcode`}
         data-testid="barcode-picture"
       />
@@ -130,7 +133,7 @@ function BarcodeView({
       <div className={styles.body} aria-busy={body === null}>
         {body}
       </div>
-      {graphic !== null && code ? (
+      {graphic !== null && code && picture ? (
         <button
           type="button"
           className={styles.switch}

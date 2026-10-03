@@ -34,8 +34,8 @@ describe('trigger registry', () => {
       'Protecting your lower back',
     );
     expect(
-      triggerTitle({ type: 'equipment-busy', entryId: 'e1' }, { equipment: 'cable station' }),
-    ).toBe('Working around a busy cable station');
+      triggerTitle({ type: 'equipment-busy', entryId: 'e1' }, { exerciseName: 'Cable Fly' }),
+    ).toBe('Moving Cable Fly later');
     const described = describeTrigger({ type: 'technique', technique: 'supersets' });
     expect(described).toMatchObject({
       title: 'Re-pairing exercises',

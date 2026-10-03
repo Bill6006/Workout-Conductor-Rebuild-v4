@@ -335,7 +335,7 @@ describe('the record of what a set stands in for, through the workout', () => {
     expect(working.length).toBe(lift.sets.filter((set) => set.kind === 'working').length + 1);
     for (const set of working) {
       expect(set.asked).toEqual({ weight: 30, reps: [6, 10] });
-      expect(pushedToEffort(set, more.role)).toBe(true);
+      expect(pushedToEffort(set)).toBe(true);
     }
   });
 
@@ -508,7 +508,7 @@ describe('a drop set on a lift the weights here now push to its effort', () => {
   }
   const tenPound = at({ from: 5, to: 10, step: 5 });
   const dropped = (entry: WorkoutEntry) => {
-    expect(entry.sets.some((set) => pushedToEffort(set, entry.role))).toBe(true);
+    expect(entry.sets.some((set) => pushedToEffort(set))).toBe(true);
     expect(entry.dropSet).toBe(false);
     expect(entry.sets.some((set) => set.kind === 'drop')).toBe(false);
   };
@@ -563,7 +563,7 @@ describe('a drop set carried by a swap onto a lift the weights here push', () =>
     return { workout, curl };
   }
   const noDrop = (entry: WorkoutEntry) => {
-    expect(entry.sets.some((set) => pushedToEffort(set, entry.role))).toBe(true);
+    expect(entry.sets.some((set) => pushedToEffort(set))).toBe(true);
     expect(entry.sets.some((set) => set.kind === 'drop')).toBe(false);
   };
   const byExercise = (workout: GeneratedWorkout, exerciseId: string) => {
@@ -846,7 +846,7 @@ describe('the third review', () => {
       act(at({ from: 5, to: 10, step: 5 }), workout, completed, { type: 'loading' }),
       curl.id,
     );
-    expect(after.sets.some((set) => pushedToEffort(set, after.role))).toBe(true);
+    expect(after.sets.some((set) => pushedToEffort(set))).toBe(true);
     expect(after.dropSet).toBe(false);
     expect(after.sets.some((set) => set.kind === 'drop')).toBe(false);
   });

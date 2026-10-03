@@ -15,9 +15,11 @@ test.describe('your own demonstration', () => {
     await expect(thumb()).toHaveAttribute('data-animated', 'true');
     await expect(thumb()).toHaveAttribute('data-custom', 'false');
 
-    await firstCard().getByTestId('card-thumb').click();
+    // Picked in Options; the bench press shows its own licensed clip until then.
+    await firstCard().getByTestId('options-tab').click();
     const sheet = page.getByRole('dialog');
-    await expect(sheet.getByText('Placeholder · tap it to use your own GIF')).toBeVisible();
+    await expect(sheet.getByTestId('demo-credit')).toHaveText('Video: FitnessScape · CC BY 3.0');
+    await expect(sheet.getByRole('button', { name: 'Your GIF' })).toBeVisible();
     await sheet.getByTestId('demo-file-input').setInputFiles({
       name: 'bench.gif',
       mimeType: 'image/gif',
@@ -36,7 +38,7 @@ test.describe('your own demonstration', () => {
     await expect(page.getByTestId('workout-stats')).toBeVisible();
     await expect(thumb()).toHaveAttribute('data-custom', 'true');
 
-    await firstCard().getByTestId('card-thumb').click();
+    await firstCard().getByTestId('options-tab').click();
     await page.getByRole('dialog').getByRole('button', { name: 'Remove', exact: true }).click();
     await expect(page.getByRole('dialog').getByTestId('exercise-demo')).toBeVisible();
     await page.keyboard.press('Escape');

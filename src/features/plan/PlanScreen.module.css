@@ -111,35 +111,6 @@
   font-size: 0.8rem;
 }
 
-.targetList {
-  display: grid;
-  gap: 10px;
-  margin: 0 0 10px;
-  padding: 0;
-  list-style: none;
-}
-
-.targetRow {
-  display: grid;
-  gap: 4px;
-}
-
-.targetName {
-  display: flex;
-  justify-content: space-between;
-  color: var(--color-text);
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
-.bandLabel {
-  color: var(--color-text-muted);
-  font-size: 0.74rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
 .saveRow {
   display: flex;
   gap: 8px;
@@ -156,4 +127,128 @@
   background: var(--color-bg);
   color: var(--color-text);
   font: inherit;
+}
+
+/* The week's days in a line, with the way to change them (Maintenance 25). */
+.days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 0.92rem;
+  color: var(--color-text-muted);
+}
+
+/* A link in a line, still a full-size target to tap (Maintenance 25). */
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--color-accent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* The week's priority muscles in a line: Progress holds every muscle's bars. */
+.priority {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.16);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--color-text);
+}
+
+.priorityLabel {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.priorityList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.priorityRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* A priority muscle's name, at the size and weight the weekly targets had. */
+.priorityName {
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.priorityValue {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* One column for every state's label, as wide as the widest in whatever font the phone has, so
+   the muscle names line up and no label runs past its column (Maintenance 25). */
+.recoveryList {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recoveryRow {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  column-gap: 10px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.recoveryState {
+  justify-self: start;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-raised);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.recoveryState[data-state='ready'] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.recoveryState[data-state='recovering'] {
+  background: var(--color-yellow-soft);
+  color: var(--color-yellow);
+}
+
+.recoveryMuscles {
+  color: var(--color-text);
+}
+
+/* A card a link lands on sits a little below the top edge. */
+.anchor {
+  scroll-margin-top: 12px;
 }

@@ -44,7 +44,14 @@ A fresh plan at a default length of 60 or 75 minutes fits every exercise in all 
 checked; one that does not, most likely with light dumbbells, follows the order. A 45-minute default
 is a 45-minute session and follows it, as does any rebuild that must leave something out.
 
-Every step is recorded in `explanation.fittingSteps` and shown under "Why this workout". When
+Every step is recorded in `explanation.fittingSteps` and shown under "Why this workout", each
+step once (`FittingLog`, Maintenance 25): the fit runs in passes, and a step it takes again
+counts on its first line ("Trimmed 2 sets from Chin-Up.", one "Shortened rests toward the
+realistic minimum."), never as another line. The steps keep the order the fit took them, so a set
+trimmed can be given back later, or its lift left out, and both steps are said. A plan stored before
+this (a session in progress, a saved workout) is read back with its steps merged the same way
+(`explanationOnce`), and "What changed" says a line once, a removal with its reason where a note
+gives one. When
 even the leanest plan runs over, `duration.overByMinutes` is set and the card says the session
 may run a few minutes over (the End-by-exact-time mode arrives with recalibration in Phase 4).
 

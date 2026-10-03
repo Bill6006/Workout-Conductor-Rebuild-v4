@@ -1,0 +1,143 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The group's name sits over its surface, as the cards' eyebrows do. */
+.heading {
+  padding: 0 6px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.surface {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-elevated);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-border);
+}
+
+/* A row brought into view by a link sits a little below the top edge. */
+.row {
+  scroll-margin-top: 12px;
+}
+
+.rowButton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 13px 16px 13px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.rowButton:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.rowButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -3px;
+  border-radius: 14px;
+}
+
+.row[data-open='true'] > .rowButton {
+  background: rgba(198, 245, 66, 0.045);
+}
+
+.rowText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.rowSummary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+}
+
+.chevron {
+  flex: none;
+  color: var(--color-text-subtle);
+  transition: transform 160ms ease;
+}
+
+.chevron[data-open='true'] {
+  transform: rotate(90deg);
+  color: var(--color-accent);
+}
+
+/* The editor opens under its row, on a slightly deeper surface. Closed, it stays in the page. */
+.panel[hidden] {
+  display: none;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--color-border);
+  background: rgba(0, 0, 0, 0.16);
+  animation: open 160ms ease-out;
+}
+
+.plain {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+@keyframes open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+
+  .chevron {
+    transition: none;
+  }
+}

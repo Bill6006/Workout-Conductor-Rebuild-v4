@@ -25,7 +25,7 @@ describe('tempo cues', () => {
     expect(isolation.totalSeconds).toBe(5);
   });
 
-  it('carries evidence for every choice and the exercise’s first execution step as the cue', () => {
+  it('carries evidence for every choice and the exercise’s first key cue as the cue', () => {
     const strength = tempoCue('primary-strength', 'working', bench);
     expect(strength.evidence).toContain(TEMPO_EVIDENCE.intent);
     expect(
@@ -33,9 +33,29 @@ describe('tempo cues', () => {
     ).toBe(true);
     expect(tempoCue('isolation', 'working', fly).evidence[0]).toBe(TEMPO_EVIDENCE.squeeze);
     const cue = strength.cue;
-    expect(cue).toBe(truncate(bench.instructions.execution[0] as string));
+    expect(cue).toBe(truncate(bench.instructions.cues[0] as string));
     expect(cue?.length).toBeLessThanOrEqual(72);
     expect(truncate('short')).toBe('short');
+  });
+
+  it('takes the first step as the cue for an exercise with no key cue (the ninth review)', () => {
+    const plain = { ...bench, instructions: { ...bench.instructions, cues: [] } };
+    expect(tempoCue('primary-strength', 'working', plain).cue).toBe(
+      truncate(bench.instructions.execution[0] as string),
+    );
+  });
+
+  it('keeps a whole first part of a long cue rather than cutting a sentence in its middle', () => {
+    expect(
+      truncate(
+        'Keep the bar close to your face; finish with it over the middle of your head, arms long.',
+      ),
+    ).toBe('Keep the bar close to your face.');
+    // With no place to stop, it ends at a word with a mark that it goes on.
+    const plainLong =
+      'Drive the floor away and keep pressing until your arms are straight and your elbows lock out';
+    expect(truncate(plainLong)).toMatch(/^Drive the floor away .*…$/);
+    expect(truncate(plainLong).length).toBeLessThanOrEqual(72);
   });
 });
 

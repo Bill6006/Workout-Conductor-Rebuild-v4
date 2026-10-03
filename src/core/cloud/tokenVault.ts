@@ -1,7 +1,14 @@
 import type { Database, Identified } from '../storage/indexedDb';
 import type { KeyValueStorage } from '../storage/localSettings';
 import { putVerified } from '../storage/verifiedSave';
-import { CLOUD_TOKEN_ID, type CloudToken } from './model';
+import {
+  CLOUD_CONFIG_ID,
+  CLOUD_TOKEN_ID,
+  DEFAULT_CLOUD_URL,
+  looksLikeLibsqlUrl,
+  type CloudConfig,
+  type CloudToken,
+} from './model';
 
 /**
  * The token's home on the device: two independent copies, and the evidence of
@@ -25,6 +32,8 @@ export const TOKEN_MIRROR_KEY = 'wc.v1.cloudToken';
 export const TOKEN_MARK_KEY = 'wc.v1.cloudTokenMark';
 export const TOKEN_LOG_KEY = 'wc.v1.cloudTokenLog';
 export const TOKEN_MARK_ID = 'tokenMark';
+/** The database address's second copy, beside the token's (Maintenance 25). Not a secret. */
+export const URL_MIRROR_KEY = 'wc.v1.cloudUrl';
 export const TOKEN_LOG_ID = 'tokenLog';
 const LOG_LIMIT = 8;
 
@@ -204,6 +213,19 @@ async function appendEvent(
   return event;
 }
 
+/**
+ * A notice still worth a look: a copy healed is settled once a sync has finished after it (the
+ * Storage card's log keeps it), while a token missing from both copies stays until one is pasted
+ * (Maintenance 25: a heal used to keep the row at "Needs a look" for good).
+ */
+export function liveNotice(
+  notice: TokenEvent | null,
+  lastSyncAt: string | null,
+): TokenEvent | null {
+  if (notice?.kind === 'restored' && lastSyncAt !== null && lastSyncAt > notice.at) return null;
+  return notice;
+}
+
 /** The newest event, when the last thing that happened to the token was a loss. */
 export function latestNotice(log: readonly TokenEvent[]): TokenEvent | null {
   const last = log[log.length - 1];
@@ -328,7 +350,7 @@ export async function resolveToken(
       at: now,
       kind: 'restored',
       detail:
-        "The database copy of the token was missing and was written again from the phone's local copy. Everything in the cloud copy was pulled back.",
+        "The database copy of the token was missing and was written again from the phone's local copy. The next sync brings back everything in the cloud copy.",
     });
     return { ...none, token: local, healed: 'database', recover: true, notice: event };
   }
@@ -348,4 +370,37 @@ export async function resolveToken(
           lastSeenAt: mark.lastSeenAt,
         });
   return { ...none, lost: mark, notice: event };
+}
+
+// ---------------------------------------------------------------- the database address
+
+/**
+ * The database this device syncs with, found in either of its two homes and healed into the
+ * other (Maintenance 25): the address saved with a token for a database of one's own lived only in
+ * the phone's database, so a clearing that kept the token's local copy sent that token to the
+ * shipped address. A copy that cannot be healed never stops the app.
+ */
+export async function resolveCloudUrl(
+  db: Database,
+  storage: KeyValueStorage,
+  now: string,
+): Promise<string> {
+  const record = await db.get<CloudConfig>('cloud', CLOUD_CONFIG_ID);
+  const saved =
+    record && typeof record.url === 'string' && record.url.length > 0 ? record.url : null;
+  const mirrored = readLocal(storage, URL_MIRROR_KEY);
+  if (saved !== null) {
+    if (mirrored !== saved) writeLocal(storage, URL_MIRROR_KEY, saved);
+    return saved;
+  }
+  if (mirrored !== null && looksLikeLibsqlUrl(mirrored)) {
+    const config: CloudConfig = { id: CLOUD_CONFIG_ID, url: mirrored, savedAt: now };
+    try {
+      await db.put('cloud', config);
+    } catch {
+      // the local copy still answers
+    }
+    return mirrored;
+  }
+  return DEFAULT_CLOUD_URL;
 }

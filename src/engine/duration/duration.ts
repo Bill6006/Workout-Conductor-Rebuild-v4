@@ -91,7 +91,7 @@ export function workSecondsFor(
   if (hold) return set.targetReps[0] + overhead;
   if (set.kind === 'warmup') return reps * REP_SECONDS.warmup + overhead;
   const perRep =
-    entry.progression?.capped && !pushedToEffort(set, entry.role, entry.manual?.reps === true)
+    entry.progression?.capped && !pushedToEffort(set, entry.manual?.reps === true)
       ? REP_SECONDS.capped
       : REP_SECONDS[category];
   return reps * perRep + overhead;

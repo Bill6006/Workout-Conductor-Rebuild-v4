@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { App } from '../../app/App';
 import type { AppStore } from '../../core/state/appStore';
 import { GYM_LOCATION_ID, createDefaultLocations } from '../../core/validation/location';
@@ -184,6 +184,55 @@ describe('adding the barcode to a place', () => {
 
     await user.click(within(sheet).getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(popup()).not.toBeInTheDocument());
+  });
+
+  it('holds the pop-up switch while a removal it would race is being saved (the re-check)', async () => {
+    const store = await seeded(PICKED);
+    let finish!: () => void;
+    const remove = vi.spyOn(store, 'removeBarcode').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    renderApp(store, '#/plan');
+    const gym = await placeRow('Gym');
+    await user.click(within(gym).getByRole('button', { name: 'Barcode' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Gym barcode' });
+    const toggle = within(sheet).getByRole('switch', { name: /Show when I start a workout here/ });
+    expect(toggle).not.toHaveAttribute('aria-disabled');
+    await user.click(within(sheet).getByTestId('barcode-remove'));
+    await user.click(within(sheet).getByTestId('barcode-remove-confirm'));
+    expect(remove).toHaveBeenCalled();
+    // Held, not disabled: a press does nothing, and the switch can still hold the focus.
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle).toBeEnabled();
+    const turn = vi.spyOn(store, 'setBarcodeAutoShow');
+    await user.click(toggle);
+    expect(turn).not.toHaveBeenCalled();
+    await act(async () => {
+      finish();
+    });
+    await waitFor(() => expect(toggle).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('keeps the keyboard focus on the switch while its own change is saved (re-check)', async () => {
+    const store = await seeded(PICKED);
+    const user = userEvent.setup();
+    renderApp(store, '#/plan');
+    const gym = await placeRow('Gym');
+    await user.click(within(gym).getByRole('button', { name: 'Barcode' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Gym barcode' });
+    const toggle = within(sheet).getByRole('switch', { name: /Show when I start a workout here/ });
+    toggle.focus();
+    await user.keyboard(' ');
+    await waitFor(() => expect(store.getSnapshot().barcodes[0]?.autoShow).toBe(false));
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle).toBeEnabled();
+    // And a second press turns it back.
+    await user.keyboard(' ');
+    await waitFor(() => expect(store.getSnapshot().barcodes[0]?.autoShow).toBe(true));
   });
 
   it('is not offered for Home, and the place editor stays about the place', async () => {

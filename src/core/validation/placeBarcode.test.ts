@@ -28,7 +28,7 @@ describe('a saved place barcode', () => {
   it('keeps the barcode when a code in it cannot be used, losing only the drawn version', () => {
     const parsed = PlaceBarcodeSchema.parse(stored({ code: { format: 'maxicode', value: 'X' } }));
     expect(parsed.code).toBeUndefined();
-    expect(parsed.image.dataUrl).toMatch(/^data:image\//);
+    expect(parsed.image?.dataUrl).toMatch(/^data:image\//);
   });
 
   it('never takes a picture that is not an image', () => {

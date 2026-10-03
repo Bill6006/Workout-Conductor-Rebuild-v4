@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Button } from '../../components/Button/Button';
-import { Card } from '../../components/Card/Card';
 import { FactList } from '../../components/FactList/FactList';
 import formStyles from '../../components/Form/Form.module.css';
 import { useToast } from '../../components/Toast/useToast';
-import { CloudOccupiedError } from '../../core/state/appStore';
+import { CLOUD_OFFLINE, CloudOccupiedError } from '../../core/state/appStore';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import { formatDateTime } from '../../core/time/clock';
 import styles from './Settings.module.css';
@@ -16,6 +15,14 @@ import styles from './Settings.module.css';
  * to a database it has not used, the app checks the tables are there and that
  * the database is not already carrying somebody else's history.
  */
+/**
+ * A reason as a sentence of its own: some end on the words of the database's reply ("Failed to
+ * fetch") or on an address, with no stop, and another sentence follows (the fourth review).
+ */
+function asSentence(text: string): string {
+  return /[.!?…]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
+}
+
 export function CloudCopyCard() {
   const store = useAppStore();
   const state = useAppState();
@@ -28,6 +35,28 @@ export function CloudCopyCard() {
   const [occupied, setOccupied] = useState<string | null>(null);
 
   const open = !cloud.configured || editing;
+  // What the cloud copy never holds, so "0 changes waiting" is not read as covering it
+  // (Maintenance 25): the barcodes, each said to have a second copy only where one reads back,
+  // and your own demonstrations.
+  const phoneOnly = [
+    ...state.barcodes.flatMap((barcode) => {
+      const place = state.locations.find((location) => location.id === barcode.locationId);
+      if (!place) return [];
+      const copy = state.barcodeCopies[barcode.id] ?? 'none';
+      return [
+        copy === 'none'
+          ? `${place.name} barcode, on this phone once (too big for a second copy)`
+          : `${place.name} barcode, with a second copy on this phone`,
+      ];
+    }),
+    ...(state.customCounts.media > 0
+      ? [
+          `${state.customCounts.media} ${
+            state.customCounts.media === 1 ? 'demonstration' : 'demonstrations'
+          } of your own, in backups you export`,
+        ]
+      : []),
+  ];
 
   const save = async (acceptExisting = false) => {
     setBusy(true);
@@ -79,12 +108,11 @@ export function CloudCopyCard() {
     }
   };
 
-  // A problem is worth saying even while the copy is off, because a setup link
-  // that could not be used leaves it off and owes an explanation.
+  // A problem with the copy, from its last attempt.
   const status = cloud.syncing
     ? 'Syncing…'
     : cloud.lastError
-      ? cloud.configured
+      ? cloud.configured && cloud.lastError !== CLOUD_OFFLINE
         ? `Last attempt failed: ${cloud.lastError}`
         : cloud.lastError
       : !cloud.configured
@@ -101,7 +129,7 @@ export function CloudCopyCard() {
     : null;
 
   return (
-    <Card eyebrow="Cloud copy" title="Cloud copy">
+    <>
       <p className={styles.body}>
         An optional copy of your data in a database of your own. It is off until you paste its
         address and token here. Both stay on this device in the app's own storage and are never part
@@ -121,11 +149,23 @@ export function CloudCopyCard() {
           },
           { label: 'Status', value: status },
           { label: 'Pending', value: pending },
+          ...(phoneOnly.length > 0
+            ? [{ label: 'Not in the copy', value: phoneOnly.join(' · ') }]
+            : []),
         ]}
       />
       {notice ? (
         <p className={styles.warning} role="status" data-testid="cloud-notice">
           {notice}
+        </p>
+      ) : null}
+      {cloud.linkError ? (
+        // A setup link leaves no trace in the address bar, so why it was not used is said here,
+        // whether the copy is off or still going to the database it had (Maintenance 25).
+        <p className={styles.warning} role="status" data-testid="cloud-link-error">
+          {`The setup link was not used: ${asSentence(cloud.linkError)}${
+            cloud.configured ? ' This device still uses the database above.' : ''
+          }`}
         </p>
       ) : null}
 
@@ -238,6 +278,6 @@ export function CloudCopyCard() {
           </Button>
         </div>
       )}
-    </Card>
+    </>
   );
 }

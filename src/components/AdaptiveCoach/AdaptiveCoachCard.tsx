@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CoachAction, CoachCard, CoachSignal } from '../../engine/coach/coachConductor';
 import type { CoachingPolicy } from '../../engine/coach/experience';
 import type { FatigueSignal } from '../../engine/recovery/fatigue';
+import { keyedLines } from '../../core/screen/keyedLines';
 import styles from './AdaptiveCoachCard.module.css';
 
 interface AdaptiveCoachCardProps {
@@ -106,9 +107,11 @@ export function AdaptiveCoachCard({
         {signal ? signal.headline : 'Follow today’s plan'}
       </h3>
       <ul className={styles.why} aria-label="Why">
-        {(signal ? signal.why : fatigue.evidence).slice(0, policy.whyLines).map((line) => (
-          <li key={line}>{line}</li>
-        ))}
+        {keyedLines((signal ? signal.why : fatigue.evidence).slice(0, policy.whyLines)).map(
+          ({ key, line }) => (
+            <li key={key}>{line}</li>
+          ),
+        )}
       </ul>
       {/* Every card can be put away, including one with nothing to tap (Maintenance 21). */}
       {action || (signal && onDismiss) ? (

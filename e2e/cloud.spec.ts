@@ -19,7 +19,7 @@ test.describe('cloud copy', () => {
     page,
   }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/cloud');
     await expect(page.getByText('Off until you paste a token.')).toBeVisible();
     await expect(
       page.getByText('libsql://life-record-bill6006.aws-us-east-1.turso.io'),
@@ -45,11 +45,12 @@ test.describe('cloud copy', () => {
 
   test('a backup carries neither the token nor the device id', async ({ page }) => {
     await ensureProfile(page);
-    await page.goto('./#/settings');
+    await page.goto('./#/settings/cloud');
     await page.getByTestId('cloud-token').fill(TOKEN);
     await page.getByTestId('cloud-save-token').click();
     await expect(page.getByText('Saved on this device', { exact: true })).toBeVisible();
 
+    await page.goto('./#/settings/backup');
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Full Backup JSON' }).click();
     const download = await downloadPromise;

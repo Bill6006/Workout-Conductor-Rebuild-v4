@@ -33,20 +33,30 @@ export const BarcodeCodeSchema = z.looseObject({
 });
 export type BarcodeCode = z.infer<typeof BarcodeCodeSchema>;
 
-export const PlaceBarcodeSchema = z.looseObject({
-  id: z.string().min(1),
-  locationId: z.string().min(1),
-  image: z.looseObject({
-    mimeType: z.string().regex(/^image\//),
-    dataUrl: z.string().regex(/^data:image\//),
-  }),
-  /** Advisory: a code this copy cannot use costs the drawn version, never the barcode. */
-  code: BarcodeCodeSchema.optional().catch(undefined),
-  /** Pops up when a workout starts at this place. */
-  autoShow: z.boolean(),
-  addedAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
+export const BarcodePictureSchema = z.looseObject({
+  mimeType: z.string().regex(/^image\//),
+  dataUrl: z.string().regex(/^data:image\//),
 });
+
+export const PlaceBarcodeSchema = z
+  .looseObject({
+    id: z.string().min(1),
+    locationId: z.string().min(1),
+    /**
+     * The picture as it was added. Left out only where a barcode was brought back from the
+     * phone's second copy without it (Maintenance 25): the read code then draws it.
+     */
+    image: BarcodePictureSchema.optional(),
+    /** Advisory: a code this copy cannot use costs the drawn version, never the barcode. */
+    code: BarcodeCodeSchema.optional().catch(undefined),
+    /** Pops up when a workout starts at this place. */
+    autoShow: z.boolean(),
+    addedAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .refine((barcode) => barcode.image !== undefined || barcode.code !== undefined, {
+    message: 'A barcode needs its picture or its code.',
+  });
 export type PlaceBarcode = z.infer<typeof PlaceBarcodeSchema>;
 
 export const BARCODE_ID_PREFIX = 'barcode:';

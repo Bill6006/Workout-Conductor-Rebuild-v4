@@ -101,10 +101,28 @@ export interface CompletedWork {
   sets: CompletedSet[];
 }
 
+/**
+ * A lift moved later because its equipment was busy (Maintenance 25): it stays behind the lifts
+ * it gave way to through any rebuild today. Catalog ids, since a rebuild can give a row a new id.
+ */
+export interface Postponed {
+  exerciseId: string;
+  /** The lifts of the row it moved behind, with any each was swapped from or to today. */
+  after: string[];
+  /** What the moved lift was before a swap today: a rebuild may bring it back (Maintenance 25). */
+  was?: string[];
+}
+
 /** Session-only constraints. None of these touch the saved profile or place. */
 export interface SessionConstraints {
-  /** Equipment ids reported busy this session. */
+  /**
+   * Equipment marked busy by the app before Maintenance 25, which took every lift needing it out
+   * of the plan. Nothing sets or reads it now: Equipment busy moves the lift later instead. It
+   * stays so a session saved before still reads, and so older copies of the app read this one.
+   */
   busyEquipment: string[];
+  /** Lifts moved later today for busy equipment, in the order they moved (Maintenance 25). */
+  postponed: Postponed[];
   /** Catalog ids skipped, reported painful, or marked uncomfortable this session. */
   avoidExerciseIds: string[];
   /** Joints reported painful this session, on top of the profile's pain areas. */
@@ -169,6 +187,21 @@ export interface ChangeSummary {
   counts: ChangeCounts;
 }
 
+/** What held a target a max moved (Maintenance 25): the weights here, reps set by hand, or a deload week. */
+export type MaxHeldBy = 'weights' | 'hand' | 'deload';
+
+/**
+ * What a max entered for a lift did to today's plan (Maintenance 25), so the max sheet's preview
+ * and the summary after the save say the same: a first target set from it; the target moved, its
+ * weight, reps or reserve; the target held where it was (by the weights here, reps set by hand, or
+ * a deload week's lighter loads), though the max asks for more; the target lighter today to win
+ * back missed reps, which a max does not change; the target kept as it was, the logged sets already
+ * saying as much; or nothing moved today, the lift's weight being set by hand, a set of it logged,
+ * or the lift under way.
+ */
+export type MaxOutcome =
+  'first' | 'moved' | 'held' | 'eased' | 'kept' | 'by-hand' | 'logged' | 'under-way';
+
 export interface RecalibrationSuccess {
   ok: true;
   scope: RecalibrationScope;
@@ -181,6 +214,10 @@ export interface RecalibrationSuccess {
   /** What the engine evaluated, for the calibration overlay. */
   evaluated: string[];
   durationMs: number;
+  /** A max entered: what it did to the lift today (Maintenance 25). */
+  max?: MaxOutcome;
+  /** With `max` 'held': what held the target. */
+  maxHeldBy?: MaxHeldBy;
 }
 
 export interface RecalibrationFailure {

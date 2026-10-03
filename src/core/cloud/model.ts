@@ -22,6 +22,11 @@ export const REQUIRED_TABLES = ['records', 'devices'] as const;
 export const CLOUD_APP = 'workout-conductor';
 export const PUSH_BATCH = 50;
 export const PULL_PAGE = 500;
+/**
+ * Pages a walk may take before it is taken as cut short, not done: 500,000 rows at full pages
+ * (the tenth review's eighth re-check: a walk stopped here used to count as finished).
+ */
+export const PULL_MAX_PAGES = 1000;
 export const PULL_INTERVAL_MS = 15 * 60_000;
 /** Retry delays after a failed sync: 30 s, 1 min, 2 min, ... capped at 10 min. */
 export const BACKOFF_BASE_MS = 30_000;
@@ -42,8 +47,11 @@ export interface CloudResult {
 /** The only surface the sync engine talks to; the libsql adapter and the test fake both implement it. */
 export interface CloudClient {
   execute(statement: CloudStatement): Promise<CloudResult>;
-  /** Runs every statement in one write transaction. */
-  batch(statements: CloudStatement[]): Promise<void>;
+  /**
+   * Runs every statement in one write transaction and says how many rows each one changed, in
+   * order: 0 for a write the cloud refused because it holds a newer version.
+   */
+  batch(statements: CloudStatement[]): Promise<number[]>;
   close(): void;
 }
 
@@ -61,6 +69,23 @@ export interface RemoteRow {
 export const CLOUD_TOKEN_ID = 'token';
 export const CLOUD_STATE_ID = 'state';
 export const CLOUD_CONFIG_ID = 'config';
+/**
+ * When this phone's database was made (Maintenance 25). A row this device wrote before then was
+ * lost here, so on the walk that restores it the cloud's copy wins over one made since: setup's
+ * defaults on a cleared phone never overwrite the history they stand in for.
+ */
+export const DATABASE_BIRTH_ID = 'birth';
+
+export interface DatabaseBirth extends Identified {
+  id: typeof DATABASE_BIRTH_ID;
+  /** Null for a database made before births were recorded: nothing in it was lost. */
+  at: string | null;
+  /**
+   * When the first walk of the cloud copy since then finished: the rule above ends there, and
+   * only there, so switching databases and back never wakes it again (the tenth review).
+   */
+  walkedAt?: string | null;
+}
 
 /** The database this device syncs with. Not a secret, but not in the bundle either once changed. */
 export interface CloudConfig extends Identified {
@@ -113,6 +138,11 @@ export interface CloudState extends Identified {
   lastError: string | null;
   failures: number;
   nextAttemptAt: string | null;
+  /**
+   * Counts restarts of the walk (a token entered again, a restore, a database switched). A sync
+   * that read the state before one never writes its old cursor back over it (the tenth review).
+   */
+  epoch: number;
 }
 
 export function emptyCloudState(): CloudState {
@@ -125,6 +155,7 @@ export function emptyCloudState(): CloudState {
     lastError: null,
     failures: 0,
     nextAttemptAt: null,
+    epoch: 0,
   };
 }
 
@@ -158,11 +189,17 @@ export function recordDay(store: SyncedStore, record: Loose): string | null {
   return stamp ? stamp.slice(0, 10) : null;
 }
 
+/**
+ * A record for the cloud copy. `updated_at` is the record's own time; one without a time takes
+ * `effectiveAt`, the time the change was made (a restore's: its backup's), else now. The cloud
+ * keeps the newer of two versions.
+ */
 export function upsertStatement(
   store: SyncedStore,
   record: Identified,
   deviceId: string,
   now: string,
+  effectiveAt?: string,
 ): CloudStatement {
   return {
     sql:
@@ -177,37 +214,66 @@ export function upsertStatement(
       record.id,
       recordDay(store, record as unknown as Loose),
       JSON.stringify(record),
-      recordTimestamp(store, record as unknown as Loose) ?? now,
+      recordTimestamp(store, record as unknown as Loose) ?? effectiveAt ?? now,
       deviceId,
       now,
     ],
   };
 }
 
+/**
+ * The body a deletion carries. The live table's body column is NOT NULL, and a write batch with
+ * one row it refuses is refused whole, so a deletion with no body held back every upload queued
+ * with or after it (Maintenance 25: Life Mirror's uploads stopped this way on 2026-10-02). Every
+ * reader takes `deleted` first and never reads it.
+ */
+export const TOMBSTONE_BODY = '{}';
+
+/** A deletion for the cloud copy, as of now or `effectiveAt`; a version changed later stays. */
 export function tombstoneStatement(
   store: SyncedStore,
   id: string,
   deviceId: string,
   now: string,
+  effectiveAt?: string,
 ): CloudStatement {
   return {
     sql:
       'INSERT INTO records (app, store, id, day, body, updated_at, deleted, device_id, synced_at) ' +
-      'VALUES (?, ?, ?, NULL, NULL, ?, 1, ?, ?) ' +
-      'ON CONFLICT(app, store, id) DO UPDATE SET day = NULL, body = NULL, ' +
+      'VALUES (?, ?, ?, NULL, ?, ?, 1, ?, ?) ' +
+      'ON CONFLICT(app, store, id) DO UPDATE SET day = NULL, body = excluded.body, ' +
       'updated_at = excluded.updated_at, deleted = 1, device_id = excluded.device_id, ' +
       'synced_at = excluded.synced_at WHERE excluded.updated_at >= records.updated_at',
-    args: [CLOUD_APP, store, id, now, deviceId, now],
+    args: [CLOUD_APP, store, id, TOMBSTONE_BODY, effectiveAt ?? now, deviceId, now],
   };
 }
 
+/** One record's row, to take the cloud's version of a record it refused to replace. */
+export function rowStatement(store: SyncedStore, id: string): CloudStatement {
+  return {
+    sql:
+      'SELECT store, id, day, body, updated_at, deleted, device_id, synced_at FROM records ' +
+      'WHERE app = ? AND store = ? AND id = ? LIMIT 1',
+    args: [CLOUD_APP, store, id],
+  };
+}
+
+/** The rows one pull request asks for: a whole number from 1 to PULL_PAGE. */
+export function pullLimit(size?: number): number {
+  return Math.max(1, Math.min(PULL_PAGE, Math.floor(size ?? PULL_PAGE)));
+}
+
 /** Rows of this app newer than the cursor, oldest first, one page at a time. */
-export function pullStatement(cursor: string | null, cursorId: string | null): CloudStatement {
+export function pullStatement(
+  cursor: string | null,
+  cursorId: string | null,
+  size?: number,
+): CloudStatement {
   return {
     sql:
       'SELECT store, id, day, body, updated_at, deleted, device_id, synced_at FROM records ' +
       'WHERE app = ? AND (synced_at > ? OR (synced_at = ? AND id > ?)) ' +
-      `ORDER BY synced_at ASC, id ASC LIMIT ${PULL_PAGE}`,
+      `ORDER BY synced_at ASC, id ASC LIMIT ${pullLimit(size)}`,
     args: [CLOUD_APP, cursor ?? '', cursor ?? '', cursorId ?? ''],
   };
 }

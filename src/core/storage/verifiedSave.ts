@@ -59,6 +59,8 @@ export function structurallyEqual(a: unknown, b: unknown): boolean {
 
 export interface VerifiedSaveOptions {
   now?: () => string;
+  /** A restore's backup time, carried to the cloud copy (see WriteOptions in indexedDb). */
+  effectiveAt?: string;
 }
 
 export async function putVerified<T extends Identified>(
@@ -68,7 +70,8 @@ export async function putVerified<T extends Identified>(
   options: VerifiedSaveOptions = {},
 ): Promise<SaveReceipt> {
   const previous = await db.get<T>(store, record.id);
-  await db.put(store, record);
+  if (options.effectiveAt) await db.put(store, record, { effectiveAt: options.effectiveAt });
+  else await db.put(store, record);
   const readBack = await db.get<T>(store, record.id);
 
   if (!structurallyEqual(readBack, record)) {

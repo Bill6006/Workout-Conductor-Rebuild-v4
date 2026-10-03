@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ensureProfile } from './helpers';
+import { ensureProfile, expectNoHorizontalOverflow } from './helpers';
 
 /**
  * Maintenance 12, round B: a plate missing today puts the bar's targets on the
@@ -71,14 +71,13 @@ test.describe('what the place can load', () => {
     await expect(editor.getByTestId('loading-note')).toHaveText(
       'No 2.5 today: the bar moves by 10 lb. Back next workout.',
     );
-    // Without the 2.5s the bar moves by 10, and the plate line never asks for the missing plate.
+    // Without the 2.5s the bar moves by 10, and no plate drawn is the missing one.
     await expect(card.getByRole('button', { name: 'Increase weight by 10 lb' })).toBeVisible();
     const dial = firstNumber(await card.getByTestId('logger-weight').textContent());
     expect((dial - 45) % 10).toBe(0);
-    const plateLine = card.getByText(/^(Bar \d|Empty bar)/).first();
-    await expect(plateLine).toBeVisible();
-    expect(await plateLine.textContent()).not.toContain('2.5');
-    await capture(page, testInfo, 'workout-plates-not-today', editor);
+    await expect(card.getByTestId('plate-math').locator('[data-plate="2.5"]')).toHaveCount(0);
+    await expect(card.getByTestId('logger-helper').locator('[data-plate="2.5"]')).toHaveCount(0);
+    await capture(page, testInfo, 'workout-plates-not-today', card.getByTestId('plate-math'));
 
     // Session-only: the chip comes back off and the finer step returns.
     await editor.getByTestId('missing-2.5').click();
@@ -86,22 +85,31 @@ test.describe('what the place can load', () => {
     await expect(card.getByRole('button', { name: 'Increase weight by 5 lb' })).toBeVisible();
     await expect(editor.getByTestId('loading-note')).toHaveText('The bar moves by 5 lb.');
 
-    // Once per place: Edit rack says which plates the gym never has, and All plates undoes it.
+    // Default, always in view beside Today (item 8): the plates the gym keeps, saved for it,
+    // each tap applied at once, with no Done; All plates puts every plate back.
     await expect(editor).toHaveAttribute('data-mode', 'today');
-    await editor.getByTestId('rack-edit').click();
-    await expect(editor).toHaveAttribute('data-mode', 'rack');
+    await expect(editor.getByTestId('plates-mode-today')).toHaveAttribute('aria-pressed', 'true');
+    await expect(editor.getByRole('button', { name: /^(Done|Edit rack)$/ })).toHaveCount(0);
+    await editor.getByTestId('plates-mode-default').click();
+    await expect(editor).toHaveAttribute('data-mode', 'default');
+    await expect(editor.getByTestId('plates-mode-default')).toHaveAttribute('aria-pressed', 'true');
     await expect(editor).toContainText('Plates at Gym');
     await editor.getByTestId('plate-35').click();
     await settle(page);
     await expect(editor.getByTestId('plate-35')).toHaveAttribute('data-state', 'off');
-    await capture(page, testInfo, 'workout-plates-edit-rack', editor);
-    await editor.getByTestId('rack-edit').click();
+    await expectNoHorizontalOverflow(page);
+    await capture(page, testInfo, 'workout-plates-default', card.getByTestId('plate-math'));
+    // Saved: a reload keeps the gym without its 35s, and Today offers only the plates it keeps.
+    await page.reload();
+    await card.getByTestId('plates-tab').click();
+    await expect(editor).toHaveAttribute('data-mode', 'today');
     await expect(editor.getByTestId('missing-35')).toHaveCount(0);
     await expect(editor.getByTestId('missing-45')).toBeVisible();
-    await editor.getByTestId('rack-edit').click();
+    await editor.getByTestId('plates-mode-default').click();
+    await expect(editor.getByTestId('plate-35')).toHaveAttribute('data-state', 'off');
     await editor.getByTestId('rack-all').click();
     await settle(page);
-    await editor.getByTestId('rack-edit').click();
+    await editor.getByTestId('plates-mode-today').click();
     await expect(editor.getByTestId('missing-35')).toBeVisible();
   });
 

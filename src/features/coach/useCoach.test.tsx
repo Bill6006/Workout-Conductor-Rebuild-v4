@@ -15,6 +15,13 @@ vi.mock('../../engine/coach/coachConductor', async (original) => {
   return { ...actual, conductCoach: vi.fn(actual.conductCoach) };
 });
 
+// The minute clock stays a minute into the store's day (TEST_NOW): the kept swap runs four weeks
+// from it, and the wall clock passing that would read it as over.
+vi.mock('../../core/time/clock', async (original) => ({
+  ...(await original<typeof import('../../core/time/clock')>()),
+  useNow: () => Date.parse('2026-09-02T12:01:00.000Z'),
+}));
+
 describe('the coach and the kept swaps', () => {
   it('passes the swaps still running to the coach', async () => {
     const handle = createTestStore();

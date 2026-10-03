@@ -95,3 +95,11 @@
 .actions > :last-child {
   flex: 1;
 }
+
+/* The step's answers as one group, held while Finish saves; no frame of its own. */
+.fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}

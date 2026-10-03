@@ -195,25 +195,39 @@ describe('recalibration: place and equipment', () => {
     }
   });
 
-  it('a busy station swaps only that row and stays busy for later rebuilds', () => {
+  it('a busy station moves that row behind the next one: nothing is swapped, left out, or kept busy', () => {
+    // Maintenance 25, the owner's item 37: busy equipment is a wait, not a reason to lose the lift.
     const before = build();
     const result = run({ type: 'equipment-busy', entryId: 'e1' }, { workout: before });
     expect(result.scope).toBe('local');
-    expect(entry(result.workout, 'e1').exerciseId).not.toBe('barbell-bench-press');
-    expect(entry(result.workout, 'e1').replacedFrom).toBe('barbell-bench-press');
-    for (const item of allEntries(before.blocks).filter((candidate) => candidate.id !== 'e1')) {
-      expect(entry(result.workout, item.id)).toEqual(item);
-    }
-    expect(result.constraints.busyEquipment.length).toBeGreaterThan(0);
-    expect(result.summary.headline).toMatch(/busy: 1 exercise replaced\.$/);
-    expect(result.summary.counts.replaced).toBe(1);
+    const order = (workout: typeof before) =>
+      workout.blocks.map((block) => block.entries.map((item) => item.id).join('+'));
+    const was = order(before);
+    expect(order(result.workout)).toEqual([was[1], was[0], ...was.slice(2)]);
+    expect(entry(result.workout, 'e1').exerciseId).toBe('barbell-bench-press');
+    expect(entry(result.workout, 'e1').replacedFrom).toBeUndefined();
+    expect(
+      allEntries(result.workout.blocks)
+        .map((item) => item.exerciseId)
+        .sort(),
+    ).toEqual(
+      allEntries(before.blocks)
+        .map((item) => item.exerciseId)
+        .sort(),
+    );
+    expect(result.constraints.busyEquipment).toEqual([]);
+    expect(result.summary.headline).toMatch(
+      /^Barbell Bench Press moved after .+: its equipment is busy\. It comes up again once .+ is done\.$/,
+    );
+    expect(result.summary.counts.replaced).toBe(0);
+    expect(result.summary.counts.removed).toBe(0);
 
+    // A later rebuild still has every piece of equipment at the place to pick from.
     const later = run(
       { type: 'duration', choice: 15 },
       { workout: result.workout, constraints: result.constraints },
     );
-    const busy = new Set(result.constraints.busyEquipment);
-    const available = new Set((gym?.equipment ?? []).filter((id) => !busy.has(id)));
+    const available = new Set(gym?.equipment ?? []);
     for (const item of allEntries(later.workout.blocks)) {
       expect(equipmentAvailable(requireExercise(item.exerciseId), available)).toBe(true);
     }

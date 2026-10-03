@@ -324,35 +324,6 @@
   cursor: pointer;
 }
 
-.plateLine {
-  color: var(--color-text);
-  font-size: 1rem;
-  font-weight: 800;
-}
-
-.plateRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.plate {
-  display: inline-grid;
-  min-width: 44px;
-  height: 44px;
-  padding: 0 8px;
-  place-items: center;
-  border: 2px solid var(--color-accent);
-  border-radius: 50%;
-  color: var(--color-accent);
-  font-weight: 800;
-}
-
-.plate[data-size='45'],
-.plate[data-size='25'] {
-  background: var(--color-accent-soft);
-}
-
 /* Finish */
 .finishButton {
   min-height: 56px;
@@ -443,13 +414,6 @@
 }
 
 /* The plates row: a plate is either there (lit) or not (struck through), nothing in between. */
-.panelHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .textButton {
   min-height: 32px;
   padding: 0 2px;
@@ -462,26 +426,93 @@
   cursor: pointer;
 }
 
+.plateText {
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+/* The plates to tap: plain buttons sharing one row, so every size fits at 360 px (Maintenance 25,
+   item 8). One that is off reads dim and struck through. Each shares the row evenly but is never
+   narrower than its label: in a wide font "1.25" needs more than an even share at 360 px (the
+   tenth review). */
+.plateButtons {
+  display: flex;
+  gap: 4px;
+}
+
 .plateChip {
-  min-width: 44px;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  flex: 1 1 0;
+  min-width: max-content;
+  min-height: 44px;
+  padding: 0 2px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: var(--color-bg-raised);
+  color: var(--color-text);
   font: inherit;
-  font-size: 0.84rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .plateChip[data-state='off'] {
-  border-color: var(--color-border-strong);
+  border-style: dashed;
   background: transparent;
   color: var(--color-text-subtle);
   text-decoration: line-through;
+}
+
+.plateChip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.plateNoteRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plateNoteRow > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Today | Default: two modes always in view, the one in use filled. */
+.modeSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-raised);
+}
+
+.modeButton {
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.modeButton[aria-pressed='true'] {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.modeButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .plateChip:disabled {

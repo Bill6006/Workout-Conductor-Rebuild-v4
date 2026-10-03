@@ -31,8 +31,16 @@ const baseURL = deployedURL ?? localURL;
 
 const pixel7 = { ...devices['Pixel 7'], deviceScaleFactor: 2 };
 const smokeSpecs =
-  /(smoke|onboarding|library|duration|recalibration|activeWorkout|startingLoads|coachRound|sessionPolish|cloud|cloudSetup|cloudRecovery|loggerFixes|loadingRound|sessionContext|alerts|maxAndWeights|styles|timing|sessionReopen|barcode|midWorkout|swaps|bodyweight|roundF|holdAndPain|coachAndHints|coach|progress|media|dataSafety|a11y|zoom|screenshots)\.spec\.ts/;
+  /(smoke|onboarding|library|duration|recalibration|activeWorkout|startingLoads|coachRound|sessionPolish|cloud|cloudSetup|cloudRecovery|loggerFixes|loadingRound|plates|sessionContext|alerts|maxAndWeights|styles|timing|sessionReopen|barcode|storage|midWorkout|swaps|bodyweight|roundF|roundG|holdAndPain|coachAndHints|coach|progress|media|howTo|dataSafety|a11y|zoom|screenshots)\.spec\.ts/;
 const pwaSpecs = /pwa\.spec\.ts/;
+/**
+ * The installed app moving to a new release (Maintenance 25): two real builds served one at a
+ * time on their own origin by scripts/pwa-update-server.mjs, so a release can be "deployed" under
+ * a running app. Only against the local builds: a deployed site cannot be switched.
+ */
+const pwaUpdateSpecs = /pwaUpdate\.spec\.ts/;
+const pwaUpdatePort = 4175;
+const pwaUpdateURL = `http://127.0.0.1:${pwaUpdatePort}${base}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -72,13 +80,28 @@ export default defineConfig({
       dependencies: ['android-412', 'android-360', 'desktop'],
       use: { ...pixel7, serviceWorkers: 'allow' },
     },
+    {
+      name: 'pwa-update',
+      testMatch: pwaUpdateSpecs,
+      dependencies: ['pwa'],
+      use: { ...pixel7, serviceWorkers: 'allow', baseURL: pwaUpdateURL },
+    },
   ],
   webServer: deployedURL
     ? undefined
-    : {
-        command: 'npm run preview',
-        url: localURL,
-        reuseExistingServer: !process.env.CI,
-        timeout: 60_000,
-      },
+    : [
+        {
+          command: 'npm run preview',
+          url: localURL,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+        {
+          // Builds its two releases on first use, inside the update test.
+          command: 'node scripts/pwa-update-server.mjs',
+          port: pwaUpdatePort,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+      ],
 });
