@@ -1403,12 +1403,38 @@ Settings, Plan and Progress on the final build at 412 px, with the same syntheti
 captures before this round: 1,982, 1,765 and 3,488 px tall, where the build before it measured
 9,981, 2,101 and 4,088 (80%, 16% and 15% shorter).
 
-The checks on the live build follow once it is deployed.
+Deployed as build `5c06b14` by Deploy Pages run 37145695579 (its verify job, the browser suite
+included, and the deploy both passed); the live bundle carries the commit, and the marker reads
+"Build 5c06b14 · 2026-10-03 18:52 UTC · Phase 8". Against the live URL: 358 passed, 18 skipped by
+design, none failed, on the first run. The four skipped beyond the local run's 14 are the update
+tests, which need two builds served locally.
+
+The update path on the live site, in one browser that kept the app open under its service worker
+across two real releases, with a synthetic profile and one workout: the page on the build before
+this round (`4addd33`), loaded again after the deploy, offered "New version available", and Reload
+ended on `5c06b14`, the workout and the profile kept. Then a second release of the same commit
+(Deploy Pages run 37146612492, built 2026-10-03 19:06 UTC): brought back from the background, the
+app offered it within 5 seconds; Later took the offer away; brought back again, it offered it again;
+and Reload ended on the newer build time, the workout and the profile kept.
+
+The live suite includes the installed app's offline How to (a clip played once plays offline; one
+never played shows its first frame and says it plays once online) and the gym barcode coming back
+after the browser clears the database.
+
+Item 8 on the live build, at 360 and 412 px, in pounds at 80, 185 and 625 lb and in kilograms at
+67.5 and 335 kg: every plate's weight fits on its plate, the collar stands clear of the last plate,
+and a side too long for 360 px is drawn once per size with its count ("×6"); the plate buttons sit
+on one row at both widths, in Today and in Default. At the reference's 80 lb the drawing loads what
+the reference loads, 2.5, 5 and 10 lb from the outside in, with "45 lb" on the bar and "80 lb = 45
+lb bar + 17.5 lb of plates each side" under it.
+
+Item 5 on the live build: the same heights as on the final tree (1,982, 1,765 and 3,488 px);
+before and after, side by side, are in `docs/screenshots/maintenance-25/`.
 
 ## Review on the phone
 
-Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release to check is this
-round's build, named here once it is live (Settings, About this app).
+Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release to check is build
+`5c06b14` (Settings, About this app).
 
 **Round G**
 
@@ -1470,7 +1496,7 @@ also looks whenever it comes back to the front.
 
 12. Close the installed app from the recent apps, then open it from its icon. If "New version
     available" appears, tap Reload.
-13. Settings, About this app: "Build <this round's commit> · ... · Phase 8", and Display reads "Installed app
+13. Settings, About this app: "Build 5c06b14 · ... · Phase 8", and Display reads "Installed app
     (standalone)". The app shows no browser address bar.
 14. Your profile, places, history (Progress) and settings are all as before.
 15. The update path on return, the one that failed before. Leave the app in the background, not
