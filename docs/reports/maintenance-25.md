@@ -1473,8 +1473,13 @@ the final tree, all 27 browser reverts fail their test.
 (`npm run verify`) passed, lint and type check clean, 1,689 unit tests in 200 files, the build, the
 privacy scan (687 text files, no findings) and the build check, and the browser suite 375 passed, 14
 skipped by design, none failed, on its first run. The complete revert run caught all 890 entries, 52
-of them the fix's, and the browser reverts all 27, 11 of them the fix's. The checks on its live
-build follow once it is deployed.
+of them the fix's, and the browser reverts all 27, 11 of them the fix's. The first push of the fix,
+`270f121`, did not deploy: on the Linux runner one new browser test failed at 360 px. The runner's
+wider font made the card taller, so the tap on Options scrolled the card's clip out of view, where
+it rests by design, and the test expected it to play there. The test now brings the clip back into
+view first, in Verdana on every run as the plate tests are, so a run here sees the runner's card;
+without that step it fails here too, at 360 px, and the five browser reverts that rely on it still
+fail it. The app is unchanged. The checks on its live build follow once it is deployed.
 
 **The round as first deployed** (`5c06b14`):
 

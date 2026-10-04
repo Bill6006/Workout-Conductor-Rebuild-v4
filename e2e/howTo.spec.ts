@@ -31,6 +31,24 @@ async function startedCardClip(page: Page): Promise<Locator> {
   return clip;
 }
 
+/**
+ * The Linux runner draws text in DejaVu Sans, wider than Windows' Segoe UI or Android's Roboto.
+ * Verdana stands in for it on every run, so the card is as tall here as there: at 360 px the tap
+ * on Options then scrolls the card's clip out of view, where it rests by design (the first deploy
+ * of the phone review's fix failed on the runner only).
+ */
+async function wideFont(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const add = () => {
+      const style = document.createElement('style');
+      style.textContent = '* { font-family: Verdana, sans-serif !important; }';
+      document.head.append(style);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add);
+    else add();
+  });
+}
+
 test.describe('How to', () => {
   test('opens over the card with the clip large, its steps and its credit', async ({ page }) => {
     await ensureProfile(page);
@@ -167,6 +185,7 @@ test.describe('How to', () => {
     page,
   }) => {
     test.setTimeout(90_000);
+    await wideFont(page);
     const clip = await startedCardClip(page);
     const card = page.getByTestId('exercise-card').first();
     const thumb = card.getByTestId('exercise-thumb');
@@ -231,6 +250,9 @@ test.describe('How to', () => {
     await expect(options).toBeHidden();
     await expect(thumb).toHaveAttribute('data-animated', 'true');
     await expect(card.getByTestId('thumb-paused')).toHaveCount(0);
+    // The tap on Options scrolled the page down to it; back in view, the clip plays on.
+    await clip.scrollIntoViewIfNeeded();
+    await expect(clip).toBeInViewport();
     await expect
       .poll(() => clip.evaluate((element: HTMLVideoElement) => element.paused), { timeout: 5_000 })
       .toBe(false);
