@@ -11,6 +11,8 @@ interface HowToSheetProps {
   onClose: () => void;
   /** The lifter's own setup, steps and cues for the lift, from its Notes. */
   own?: Pick<CustomInstruction, 'setup' | 'execution' | 'cues'>;
+  /** The workout's key for this exercise (demoHoldKey): Pause here stills its card too. */
+  holdKey?: string | null;
 }
 
 /**
@@ -19,13 +21,13 @@ interface HowToSheetProps {
  * how far to go. Who made the demonstration and on what terms sit under it; the session's own
  * actions stay in Options, so this teaches and nothing else.
  */
-export function HowToSheet({ exercise, onClose, own }: HowToSheetProps) {
+export function HowToSheet({ exercise, onClose, own, holdKey = null }: HowToSheetProps) {
   const customMedia = useCustomMedia(exercise?.id ?? '');
   if (!exercise) return null;
   return (
     <Sheet open title={`How to: ${exercise.name}`} onClose={onClose}>
       <div className={styles.howTo} data-testid="how-to-sheet">
-        <ExerciseDemo exercise={exercise} customMedia={customMedia} />
+        <ExerciseDemo exercise={exercise} customMedia={customMedia} holdKey={holdKey} />
         <ExerciseTeaching exercise={exercise} own={own} />
       </div>
     </Sheet>

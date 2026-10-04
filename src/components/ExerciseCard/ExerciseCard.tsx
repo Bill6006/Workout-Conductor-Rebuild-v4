@@ -13,6 +13,7 @@ import { useCustomMedia } from '../../features/library/useCustomMedia';
 import { effortGuidance, restGuidance } from '../../features/workout/effort';
 import { evidenceLines } from '../../features/workout/evidence';
 import { tempoCue } from '../../features/workout/tempo';
+import { useDemoHeld } from '../ExerciseDetail/demoHold';
 import { ExerciseThumb } from '../ExerciseDetail/ExerciseMedia';
 import { TempoBar } from '../TempoBar/TempoBar';
 import styles from './ExerciseCard.module.css';
@@ -40,6 +41,8 @@ export interface ExerciseCardProps {
   onKnowMax?: () => void;
   /** The profile's rest style; the rest-style research line shows only when it is not Standard. */
   restStyle?: RestStyle;
+  /** The workout's key for this exercise (demoHoldKey): Pause in its How to stills the card. */
+  demoHoldKey?: string | null;
 }
 
 function roleLabel(entry: WorkoutEntry): string {
@@ -81,10 +84,14 @@ export function ExerciseCard({
   onShowDetail,
   onKnowMax,
   restStyle,
+  demoHoldKey = null,
 }: ExerciseCardProps) {
   const [tempoOpen, setTempoOpen] = useState(false);
   const exercise = requireExercise(entry.exerciseId);
   const customMedia = useCustomMedia(exercise.id);
+  // Paused in How to: the card's demonstration holds its still, with a pause mark on it, so it
+  // never reads as stuck (the review of the phone review).
+  const demoHeld = useDemoHeld(demoHoldKey);
   const working = workingSets(entry).filter((set) => set.kind === 'working');
   const doneWorking = logged.filter((set) => set.kind === 'working' && !set.skipped).length;
   const target = position?.set ?? working[0] ?? entry.sets[0];
@@ -198,15 +205,25 @@ export function ExerciseCard({
             className={styles.thumbButton}
             onClick={onShowDetail}
             disabled={!onShowDetail}
-            aria-label={`How to do ${exercise.name}: demonstration and steps`}
+            aria-label={`How to do ${exercise.name}: demonstration${demoHeld ? ' (paused)' : ''} and steps`}
             data-testid="card-thumb"
           >
-            <ExerciseThumb
-              exercise={exercise}
-              size="large"
-              customMedia={customMedia}
-              play={position?.entryId === entry.id}
-            />
+            <span className={styles.thumbFrame}>
+              <ExerciseThumb
+                exercise={exercise}
+                size="large"
+                customMedia={customMedia}
+                play={position?.entryId === entry.id}
+                holdKey={demoHoldKey}
+              />
+              {demoHeld ? (
+                <span
+                  className={styles.thumbPaused}
+                  aria-hidden="true"
+                  data-testid="thumb-paused"
+                />
+              ) : null}
+            </span>
             <span className={styles.thumbLabel}>How to</span>
           </button>
         </div>

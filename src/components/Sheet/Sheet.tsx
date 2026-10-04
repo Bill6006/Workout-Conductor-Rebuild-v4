@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { changeOpenSheets } from './openSheets';
 import styles from './Sheet.module.css';
 
 // The last element focused (Maintenance 25): an opener disabled while it works has lost focus by
@@ -11,9 +12,9 @@ if (typeof document !== 'undefined') {
   });
 }
 
-// Sheets open now, and the page's scroll as it was before the first: one sheet closing while
-// another stays open leaves the page locked, and the last one closing gives it back.
-let openSheets = 0;
+// The page's scroll as it was before the first sheet opened (the count is in openSheets.ts): one
+// sheet closing while another stays open leaves the page locked, and the last one closing gives
+// it back.
 let overflowBefore = '';
 
 interface SheetProps {
@@ -43,8 +44,8 @@ export function Sheet({ open, title, onClose, children, footer }: SheetProps) {
     if (!open) return;
     const active = document.activeElement;
     const opener = active instanceof HTMLElement && active !== document.body ? active : lastFocused;
-    if (openSheets === 0) overflowBefore = document.body.style.overflow;
-    openSheets += 1;
+    const before = document.body.style.overflow;
+    if (changeOpenSheets(1) === 1) overflowBefore = before;
     document.body.style.overflow = 'hidden';
     panelRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
@@ -52,8 +53,7 @@ export function Sheet({ open, title, onClose, children, footer }: SheetProps) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
-      openSheets = Math.max(0, openSheets - 1);
-      if (openSheets === 0) document.body.style.overflow = overflowBefore;
+      if (changeOpenSheets(-1) === 0) document.body.style.overflow = overflowBefore;
       window.removeEventListener('keydown', onKeyDown);
       // Back to what opened it: the sheet sits at the end of the page, so the next Tab would
       // otherwise start from the top (Maintenance 25). An opener gone, hidden or disabled takes no

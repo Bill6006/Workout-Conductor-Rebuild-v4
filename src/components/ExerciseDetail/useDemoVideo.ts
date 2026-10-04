@@ -18,18 +18,17 @@ export interface DemoVideo {
  * or a still in its place). A clip that could not be fetched is asked for again when the phone
  * comes back online, as the still under it says (the tenth review), or when retry() is called.
  */
+interface DemoVideoState {
+  url: string | null;
+  src: string | null;
+  failed: boolean;
+  retrying: boolean;
+}
+
+const EMPTY: DemoVideoState = { url: null, src: null, failed: false, retrying: false };
+
 export function useDemoVideo(url: string | null): DemoVideo {
-  const [state, setState] = useState<{
-    url: string | null;
-    src: string | null;
-    failed: boolean;
-    retrying: boolean;
-  }>({
-    url: null,
-    src: null,
-    failed: false,
-    retrying: false,
-  });
+  const [state, setState] = useState<DemoVideoState>(EMPTY);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!url) return undefined;
@@ -54,6 +53,15 @@ export function useDemoVideo(url: string | null): DemoVideo {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [url, attempt]);
+  // A clip let go is fetched afresh when it is wanted again, never shown from the address freed
+  // with it (the review of the phone review: a card paused and played again did, for a moment).
+  // Only a change of clip lets go; a retry of the same clip keeps its state.
+  useEffect(
+    () => () => {
+      setState((current) => (current.url === url ? EMPTY : current));
+    },
+    [url],
+  );
   const retry = useCallback(() => {
     // Loading again, not failed, until the new answer comes.
     setState((current) => ({ ...current, failed: false, retrying: current.failed }));

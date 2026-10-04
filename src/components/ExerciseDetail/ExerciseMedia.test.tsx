@@ -4,7 +4,9 @@ import { requireExercise } from '../../catalog/exercises/catalog';
 import { DOW_NOTICE } from '../../catalog/media/exerciseMedia';
 import type { CustomMedia } from '../../core/validation/customExercise';
 import { twoFrameGif } from '../../test/images';
-import { ExerciseDemo, ExerciseThumb, THUMB_MOTION_MS } from './ExerciseMedia';
+import { loopingImage } from './animatedImage';
+import { demoHoldKey, releaseAllDemos } from './demoHold';
+import { ExerciseDemo, ExerciseThumb } from './ExerciseMedia';
 
 vi.mock('./animatedImage', async (original) => ({
   ...(await original<typeof import('./animatedImage')>()),
@@ -98,6 +100,8 @@ beforeEach(() => {
 
 afterEach(() => {
   setOnline(true);
+  // A pause held in one test says nothing about the next.
+  releaseAllDemos();
   vi.useRealTimers();
   // @ts-expect-error jsdom has no matchMedia; tests define it as needed
   delete window.matchMedia;
@@ -164,24 +168,24 @@ describe('ExerciseThumb', () => {
     expect(screen.getByTestId('exercise-thumb')).toHaveAttribute('data-still', 'diagram');
   });
 
-  it('moves on the card for five seconds, then rests on its still until another exercise comes up', async () => {
+  it('keeps moving on the card long past five seconds, a clip and a diagram loop alike (the phone review)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockClips('ok');
     const { rerender } = render(<ExerciseThumb exercise={bench} size="large" />);
     await waitFor(() => expect(screen.getByTestId('exercise-thumb').tagName).toBe('VIDEO'));
     await act(async () => {
-      vi.advanceTimersByTime(THUMB_MOTION_MS);
+      vi.advanceTimersByTime(5 * 60_000);
     });
-    expect(screen.getByTestId('exercise-thumb').tagName).toBe('IMG');
-    expect(screen.getByTestId('exercise-thumb')).toHaveAttribute('data-animated', 'false');
-    // A diagram loop rests the same way.
+    const clip = screen.getByTestId('exercise-thumb');
+    expect(clip.tagName).toBe('VIDEO');
+    expect(clip).toHaveAttribute('loop');
+    expect(clip).toHaveAttribute('data-animated', 'true');
     rerender(<ExerciseThumb exercise={pullApart} size="large" />);
-    expect(screen.getByTestId('exercise-thumb')).toHaveAttribute('data-animated', 'true');
     await act(async () => {
-      vi.advanceTimersByTime(THUMB_MOTION_MS);
+      vi.advanceTimersByTime(5 * 60_000);
     });
-    expect(screen.getByTestId('exercise-thumb')).toHaveAttribute('data-animated', 'false');
-    expect(screen.getByTestId('exercise-thumb').getAttribute('src')).not.toContain('-loop');
+    expect(screen.getByTestId('exercise-thumb')).toHaveAttribute('data-animated', 'true');
+    expect(screen.getByTestId('exercise-thumb').getAttribute('src')).toContain('-loop.svg');
   });
 
   it("shows the user's own GIF on the card", () => {
@@ -374,16 +378,29 @@ describe('ExerciseDemo', () => {
 });
 
 describe('the tenth review: whatever moves can be stopped', () => {
-  it('rests an own GIF that moves on its first frame after five seconds, as the clips rest', async () => {
+  it('keeps an own GIF moving on the card, and rests it on its first frame while paused in How to', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    render(<ExerciseThumb exercise={bench} size="large" customMedia={movingGif} />);
-    expect(screen.getByTestId('exercise-thumb')).toHaveAttribute('data-animated', 'true');
-    expect(screen.getByTestId('exercise-thumb').getAttribute('src')).toBe(movingGif.dataUrl);
+    const key = demoHoldKey('session-1', 'entry-1', bench.id);
+    render(
+      <>
+        <ExerciseThumb exercise={bench} size="large" customMedia={movingGif} holdKey={key} />
+        <ExerciseDemo exercise={bench} customMedia={movingGif} holdKey={key} />
+      </>,
+    );
+    const thumb = () => screen.getByTestId('exercise-thumb');
     await act(async () => {
-      vi.advanceTimersByTime(THUMB_MOTION_MS);
+      vi.advanceTimersByTime(60_000);
     });
-    expect(screen.getByTestId('exercise-thumb')).toHaveAttribute('data-animated', 'false');
-    expect(screen.getByTestId('exercise-thumb').getAttribute('src')).toBe('blob:first-frame');
+    // It loops for good whatever its file says (the phone review).
+    const looping = loopingImage(movingGif.dataUrl);
+    expect(thumb()).toHaveAttribute('data-animated', 'true');
+    expect(thumb().getAttribute('src')).toBe(looping);
+    fireEvent.click(screen.getByTestId('demo-pause'));
+    expect(thumb()).toHaveAttribute('data-animated', 'false');
+    expect(thumb().getAttribute('src')).toBe('blob:first-frame');
+    fireEvent.click(screen.getByTestId('demo-pause'));
+    expect(thumb()).toHaveAttribute('data-animated', 'true');
+    expect(thumb().getAttribute('src')).toBe(looping);
   });
 
   it('shows an own GIF that moves on its first frame under reduced motion, a still photo as it is', () => {
@@ -420,7 +437,10 @@ describe('the tenth review: whatever moves can be stopped', () => {
     const { unmount } = render(
       <ExerciseDemo exercise={bench} customMedia={movingGif} onPickFile={vi.fn()} />,
     );
-    expect(screen.getByTestId('custom-demo').getAttribute('src')).toBe(movingGif.dataUrl);
+    // Moving, it loops for good whatever its file says (the phone review).
+    expect(screen.getByTestId('custom-demo').getAttribute('src')).toBe(
+      loopingImage(movingGif.dataUrl),
+    );
     fireEvent.click(screen.getByTestId('demo-pause'));
     expect(screen.getByTestId('custom-demo').getAttribute('src')).toBe('blob:first-frame');
     expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play');

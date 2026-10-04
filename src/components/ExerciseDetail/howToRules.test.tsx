@@ -4,6 +4,7 @@ import { requireExercise } from '../../catalog/exercises/catalog';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { mediaFor } from '../../catalog/media/mediaManifest';
 import type { CustomMedia } from '../../core/validation/customExercise';
+import { releaseAllDemos } from './demoHold';
 import { ExerciseDemo, ExerciseThumb } from './ExerciseMedia';
 import { HowToSheet } from './HowToSheet';
 
@@ -59,6 +60,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // A pause held in one test says nothing about the next.
+  releaseAllDemos();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -121,7 +124,7 @@ describe('the demonstration', () => {
       if (!(found instanceof HTMLVideoElement)) throw new Error('still the still');
       return found;
     });
-    fireEvent.loadedMetadata(video);
+    // The play that starts the clip is refused (the app starts it, the phone review).
     await waitFor(() => expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play'));
     expect(video).toHaveAttribute('data-playing', 'false');
     // Asked to play, refused again: the button still says Play.

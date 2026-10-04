@@ -461,8 +461,8 @@ matches its demonstration and is checked against reliable sources.
   One that cannot load online says so, with Try again. A still that cannot load shows the movement's diagram, without the
   demonstration's credit. Every file is named by its content, so a clip corrected later reaches a
   phone that kept the old one. On the workout only the card of the exercise under way plays its
-  clip, for five seconds, then its still; under reduced motion the card shows the still, and How
-  to has Play.
+  clip, looping for as long as that exercise is in front (the phone review, below); under reduced
+  motion the card shows the still, and How to has Play.
 
 **From the ninth review:**
 
@@ -490,7 +490,8 @@ matches its demonstration and is checked against reliable sources.
 - Play under reduced motion dropped keyboard focus to the page: the button keeps it while the clip
   loads, then hands it to Pause.
 - The card's clip looped for as long as the exercise ran, with no way to stop it (WCAG 2.2.2): it
-  now moves for five seconds, then rests on its still; How to, a tap away, has Pause.
+  now moves for five seconds, then rests on its still; How to, a tap away, has Pause. (The phone
+  review undid the rest: the card loops again, and How to's Pause stops it; below.)
 - A clip corrected later would never have reached a phone that had kept the old one, and the stills
   and the clips could disagree: every file is named by its content now. The phone's cache keeps up
   to 120 clips and drops the oldest past that; there is no age limit, so a replaced clip stays
@@ -525,8 +526,8 @@ matches its demonstration and is checked against reliable sources.
 - In How to the diagram's loop and the lifter's own GIF or video could not be stopped, and on the
   card the lifter's own GIF moved for as long as the card showed, under reduced motion too (WCAG
   2.2.2). Everything that moves in How to now has Pause and starts paused under reduced motion, and
-  the card's own GIF rests on its first frame after five seconds, as the clips do. A photo, which
-  does not move, has no Pause.
+  the card's own GIF rests on its first frame after five seconds, as the clips do (since the phone
+  review, while paused in How to). A photo, which does not move, has no Pause.
 - When Play under reduced motion could not load the clip, its button went and keyboard focus fell
   to the page. The button stays, as Try again, and keeps the focus; any clip that could not load
   offers Try again.
@@ -902,6 +903,10 @@ Each fix has a test that fails when it alone is taken out (PBa to PBz, and PBz1 
 - **A test that read the wall clock.** The coach's kept-swap test failed once the calendar passed
   four weeks after its fixed day: the coach reads the minute clock, and the swap had run out. Its
   clock is pinned to the test's day now, as the coach's rest test already was.
+- **Replace leaves the card on the old demonstration** (found by the third re-check of the phone
+  review, there before this round's work): replacing the lifter's own demonstration in Options shows
+  the new one on the card, and in the sheet where it was replaced, only once each is opened again
+  (the library's details the same). Left for a later round.
 
 ## Review
 
@@ -1065,8 +1070,85 @@ cost (one uncached 6 KB request) and their silence while hidden or offline; a re
 keeping the logged sets, the timers and the history; every PMID in the research notes against
 PubMed; the privacy scan over every file to be committed.
 
+## From the phone review
+
+The owner, on 2026-10-03, from the phone, with a capture of the card: the demonstration on the
+workout card animates once, then stops on a still frame. It should loop for as long as the workout
+screen is open, unless the phone asks for reduced motion, the lifter paused it, or another
+accessibility or performance rule stops it; coming back to the exercise or the card should start
+the loop again, not leave its last frame frozen. How to's larger controls and the offline caching
+stay as they are.
+
+**Found:** on the live build `5c06b14`, the card's clip played for five seconds and was then
+replaced by its still, which stayed through the set, the rest and every return to the card. The
+five-second rest was the ninth review's answer to WCAG 2.2.2 (motion that runs on needs a way to
+stop it), and it was kept for the exercise: one that came back in front stayed still.
+
+**Delivered:**
+
+- The card of the exercise under way loops its demonstration for as long as that exercise is in
+  front: the licensed clip, the diagram's loop, or the lifter's own video or GIF. A GIF, WebP or PNG
+  of their own loops for good whatever its file says (one made to play once stopped on the card).
+- Its clip, or the lifter's own video, rests where it is when the page goes to the background, the
+  card scrolls out of view or a sheet opens over it, and plays on once it is back, a page the
+  browser froze or one shown again from the back-forward cache included; How to's clip does the
+  same. A diagram's loop and a GIF of the lifter's own are pictures, and keep moving under a sheet.
+  A play the browser refuses (a data or battery saver) is left as it is.
+- Pause in the workout's How to stops it, which is the way the loop can be stopped (WCAG 2.2.2):
+  the card then shows the exercise's still with a pause mark on it, and How to opens paused for
+  that exercise, until Play there. The pause belongs to that exercise in that workout: a swap,
+  another workout, or a pause in the library's or Today's details holds nothing. It lasts while the
+  app stays open; a reload starts every demonstration moving again. A screen reader hears with
+  Pause that it holds the card too, and the card's button says "(paused)". A pause the browser
+  makes holds nothing.
+- Under reduced motion the card shows the still, as before, and moves again once the phone allows
+  motion.
+- Unchanged: only the card in front plays, so a session never fetches every clip at once; the clips
+  are kept for offline use as before; How to keeps Slow, Pause and Play.
+
+**From the review of the fix,** an independent review of the first version found seven things, all
+fixed: a pause made anywhere (the library, Today's details) stilled the card for the rest of the
+app's life, with no sign of it; once the app had played a clip, the browser no longer paused it out
+of view, so the card's clip ran on out of sight; a GIF of the lifter's own made to play once still
+stopped; after the browser froze the page, How to's button said Pause over a stopped clip, and a tap
+meant to restart it held the card instead; nothing told a screen reader that Pause stills the card;
+the card and How to played the same clip at once; and a clip let go and played again was shown, for
+a moment, from an address already freed.
+
+**From the re-check of the rework,** four more, all fixed: a card clip that arrived while a sheet
+was open (its first fetch, or after Play in How to) still started under it, by its own autoplay; a
+play in How to cut short by a pause (a clip loading out of view) was taken for a refusal and showed
+Play; the note for a screen reader was read where no Pause stood; and every thumbnail in a list
+rendered again at each sheet's opening and closing. **A third re-check** found the four fixed, and
+one race fixed since: How to could start a clip again as it loaded, after it had been rested out of
+view (only the keep-playing code starts a clip now, and it reports a refusal). **A fourth re-check**
+found nothing more in the app; it added a test for a video of the lifter's own replaced on the same
+element, and caught two test names the revert table had crossed.
+
+Tests: the card loops on for ten minutes and moves again whenever its exercise comes back in front;
+it rests out of view, in the background and under a sheet and plays on once back, again and again,
+after a frozen page and from the back-forward cache, and leaves a refused play alone; How to's Pause
+holds it with the mark and Play lets it go, for a clip, a diagram and the lifter's own video, only
+within the workout, and How to opens paused; a tap on a clip the browser froze plays it; the
+lifter's own GIF, WebP and PNG loop for good; reduced motion keeps it still; a clip that arrives
+under an open sheet stays still until it closes; a play cut short by a pause is no refusal; the note
+for a screen reader stands only beside a Pause; a list's rows, and the cards not under way, never
+render again for a sheet; How to's clip, rested out of view as it loads, stays rested; a refused
+video of the lifter's own offers Play; one replaced on the same element plays on. In a real browser
+at 360 and 412 px and on a desktop: the clip starts over for more than nine seconds; it rests in the
+background, out of view and under How to, and plays on once back; it stays still under How to after
+Play there, until How to closes; it holds with the pause mark while paused in How to and loops after
+Play, while a pause in Options holds nothing; under reduced motion it is still, and plays once
+motion is allowed. In the installed app's setup (the service worker on), the card's clip loops
+offline from the clip it kept. Each part of the fix, taken out alone, fails a test (52 in the unit
+suite, PRa to PRbc; 11 in the browser, Lz1 to Lz11).
+
 ## Known limits
 
+- **An AVIF or HEIF sequence of your own** plays on the card as its file says; a GIF, WebP or PNG
+  loops for good.
+- **A pause made in How to** holds that exercise's demonstration in that workout until Play there
+  or a reload.
 - **A new place lets a busy move go.** The equipment was busy at the place left behind, so a change
   of place plans the order afresh; any other rebuild keeps the lift behind what it gave way to.
 - **The engine's own lines read the log as its rules do,** reps counted to twelve: after sets past
@@ -1249,6 +1331,9 @@ Every training-science choice in this round was settled from the research above.
 
 ## Proposed
 
+- **A setting to keep the card's demonstrations still,** for good (the review of the phone-review
+  fix): How to's Pause holds one exercise in one workout until a reload, and the phone's own
+  reduced motion is the lasting way today.
 - **Move only the busy move of a pair,** splitting the pair for the session.
 - **Keep an order set by hand through a rebuild,** as a lift moved for busy equipment now keeps its
   place.
@@ -1342,10 +1427,11 @@ Found in passing by the reviews, older than this round and left as they are:
 
 Every fix of this round, taken out alone, must fail a test. Each has an entry in the revert table
 that takes that fix alone back out and runs its tests, and the table keeps the two rounds before
-this one: 840 entries, 485 from this round, 185 from Maintenance 24 and 170 from Maintenance 23.
-Nineteen more are retired, 15 of this round's and 4 of Maintenance 23's: a later design replaced
-the code each one took out, so there is nothing left to revert, and each names the entries that
-guard what took its place. The complete run on the final tree caught all 840.
+this one: 890 entries, 535 from this round (52 of them the phone review's fix), 185 from Maintenance
+24 and 170 from Maintenance 23. Twenty-two more are retired, 18 of this round's and 4 of Maintenance
+23's: a later design replaced the code each one took out, so there is nothing left to revert, and
+each names the entries that guard what took its place. The complete run on the final tree, the phone
+review's fix included, caught all 890.
 
 The update path's fixes, taken out one at a time from builds served as a release would be
 (`e2e/pwaUpdate.spec.ts` against two real builds of each version), each fail a browser test:
@@ -1368,15 +1454,29 @@ its first install failed; the plugin's own offer kept owed (the app makes one of
 case the browser tests reach); and a page loaded past a running worker (a hard reload) left to the
 plugin.
 
-Nine more fixes are taken out the same way, from a real build, and each fails a browser test at
-the step it guards: item 8's plate buttons on one row at 360 px, a change plate's weight inside its
+Nine more fixes are taken out the same way, from a real build, and each fails a browser test at the
+step it guards: item 8's plate buttons on one row at 360 px, a change plate's weight inside its
 plate, a long side's count beside its plate, a plate button never narrower than its label in a wide
 font, and the collar clear of the last plate on a heavy side; item 7's stills installing with the
 app, a clip kept the first time it plays, and a tall clip held to part of the screen; and the gym
-barcode coming back after the browser clears the database. On the final tree, all 16 browser
-reverts fail their test.
+barcode coming back after the browser clears the database. The phone review's fix adds eleven, taken
+out the same way: the card's clip looping on past five seconds, playing on when the page comes back,
+and watched in and out of view; a pause made in the workout's How to holding the card still, with a
+pause mark and only within that workout, and How to opening paused for it; the card still under
+reduced motion and resting under a sheet; the clip started by the app's rule alone (one that started
+itself played on under How to); and the installed app looping it offline from the clip it kept. On
+the final tree, all 27 browser reverts fail their test.
 
 ## Verification
+
+**The phone-review fix** (the card's demonstration loops), on the final tree: the local gate
+(`npm run verify`) passed, lint and type check clean, 1,689 unit tests in 200 files, the build, the
+privacy scan (687 text files, no findings) and the build check, and the browser suite 375 passed, 14
+skipped by design, none failed, on its first run. The complete revert run caught all 890 entries, 52
+of them the fix's, and the browser reverts all 27, 11 of them the fix's. The checks on its live
+build follow once it is deployed.
+
+**The round as first deployed** (`5c06b14`):
 
 The local gate (`npm run verify`) on the final tree: lint and type check clean; 1,648 unit tests in
 198 files passed; the build, the privacy scan (683 text files, no findings) and the build check
@@ -1433,8 +1533,8 @@ before and after, side by side, are in `docs/screenshots/maintenance-25/`.
 
 ## Review on the phone
 
-Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release to check is build
-`5c06b14` (Settings, About this app).
+Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release to check is this
+round's build, named here once it is live (Settings, About this app).
 
 **Round G**
 
@@ -1467,8 +1567,10 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release
 8. Start a workout and tap the bench press's picture on its card (or How to under it): How to opens
    with the exercise's own video playing, silent, with Slow and Pause on it; under it Setup, Do it,
    Key cues and Avoid. Tap Slow, then Pause. "About this video" says who made it and on what terms.
-   Close it: the card is as small as before, and its picture moves for five seconds, then rests.
-   Open Options: "Why this target" is there now.
+   Close it: the card's picture holds still, with a small pause mark on it. Open How to again, tap
+   Play and close it: the card is as small as before, and its picture keeps looping, past five
+   seconds and through the set and the rest; switch to another app and back, or scroll down and back
+   up, and it is still moving. Open Options: "Why this target" is there now.
 9. Open How to on two or three other exercises (Settings, Exercise library works too): each shows
    that exercise itself, the same equipment the steps describe, and the loop plays on without a
    jump where it starts again. A few show drawings instead of a video, and eleven show a diagram;
@@ -1496,7 +1598,7 @@ also looks whenever it comes back to the front.
 
 12. Close the installed app from the recent apps, then open it from its icon. If "New version
     available" appears, tap Reload.
-13. Settings, About this app: "Build 5c06b14 · ... · Phase 8", and Display reads "Installed app
+13. Settings, About this app: "Build <this round's commit> · ... · Phase 8", and Display reads "Installed app
     (standalone)". The app shows no browser address bar.
 14. Your profile, places, history (Progress) and settings are all as before.
 15. The update path on return, the one that failed before. Leave the app in the background, not

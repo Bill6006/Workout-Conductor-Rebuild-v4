@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { ensureProfile } from './helpers';
@@ -8,6 +8,28 @@ import { ensureProfile } from './helpers';
  * with the exercise's own clip large, slowed or paused on a tap, then its steps and its credit;
  * nothing runs off the side, the clip leaves room for the steps, and the card does not grow.
  */
+
+/** A workout started, and the first card's clip playing. */
+async function startedCardClip(page: Page): Promise<Locator> {
+  await ensureProfile(page);
+  await page.getByTestId('start-workout').click();
+  await expect(page.getByTestId('workout-stats')).toBeVisible();
+  const clip = page
+    .getByTestId('exercise-card')
+    .first()
+    .locator('video[data-testid="exercise-thumb"]');
+  await expect(clip).toBeVisible({ timeout: 10_000 });
+  await expect
+    .poll(
+      () =>
+        clip.evaluate((element: HTMLVideoElement) =>
+          element.paused ? 0 : element.currentTime && element.duration,
+        ),
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0);
+  return clip;
+}
 
 test.describe('How to', () => {
   test('opens over the card with the clip large, its steps and its credit', async ({ page }) => {
@@ -57,6 +79,185 @@ test.describe('How to', () => {
     // The card never grew by the demonstration.
     const after = await card.boundingBox();
     expect(Math.abs((after?.height ?? 0) - (before?.height ?? 0))).toBeLessThanOrEqual(1);
+  });
+
+  test("keeps the card's demonstration looping well past five seconds", async ({ page }) => {
+    // The phone review: the card's clip rested on a still after five seconds and stayed there.
+    // It watches the clip start over for nine seconds and more: room beyond the usual 30 s.
+    test.setTimeout(90_000);
+    const clip = await startedCardClip(page);
+    const duration = await clip.evaluate((element: HTMLVideoElement) => element.duration);
+    const starts = Math.max(2, Math.ceil(9 / duration));
+    await clip.evaluate((element: HTMLVideoElement) => {
+      const seen = { starts: 0, last: element.currentTime };
+      Object.assign(window, { cardLoop: seen });
+      element.addEventListener('timeupdate', () => {
+        if (element.currentTime + 0.05 < seen.last) seen.starts += 1;
+        seen.last = element.currentTime;
+      });
+    });
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () => (window as unknown as { cardLoop: { starts: number } }).cardLoop.starts,
+          ),
+        { timeout: (starts * duration + 15) * 1000 },
+      )
+      .toBeGreaterThanOrEqual(starts);
+    await expect(
+      page.getByTestId('exercise-card').first().getByTestId('exercise-thumb'),
+    ).toHaveAttribute('data-animated', 'true');
+  });
+
+  test("rests the card's clip in the background, out of view or under a sheet, and plays it on once it is back", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const clip = await startedCardClip(page);
+    const paused = () => clip.evaluate((element: HTMLVideoElement) => element.paused);
+    /** Playing again, and its time moving on from where it rested. */
+    const playsOn = async () => {
+      await expect.poll(paused, { timeout: 5_000 }).toBe(false);
+      const from = await clip.evaluate((element: HTMLVideoElement) => element.currentTime);
+      await expect
+        .poll(() => clip.evaluate((element: HTMLVideoElement) => element.currentTime), {
+          timeout: 5_000,
+        })
+        .not.toBe(from);
+    };
+    const pageBecomes = (state: 'hidden' | 'visible') =>
+      page.evaluate((next) => {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => next });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }, state);
+
+    // Sent to the background and brought back, twice: it rests, then plays on.
+    for (let round = 0; round < 2; round += 1) {
+      await pageBecomes('hidden');
+      await expect.poll(paused, { timeout: 5_000 }).toBe(true);
+      await pageBecomes('visible');
+      await playsOn();
+    }
+
+    // Scrolled out of view: it rests; scrolled back: it plays on. The whole workout's list,
+    // opened, makes the page long enough to scroll the card away.
+    await page.getByText('Whole workout', { exact: true }).click();
+    await page.evaluate(() => window.scrollTo(0, document.scrollingElement?.scrollHeight ?? 0));
+    await expect(clip).not.toBeInViewport();
+    await expect.poll(paused, { timeout: 5_000 }).toBe(true);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(clip).toBeInViewport();
+    await playsOn();
+
+    // Under How to the card's clip rests where it is, and plays on once How to closes.
+    const card = page.getByTestId('exercise-card').first();
+    const before = await clip.elementHandle();
+    await card.getByTestId('card-thumb').click();
+    const sheet = page.getByRole('dialog', { name: /^How to: / });
+    await expect(sheet.locator('video[data-testid="exercise-demo"]')).toBeVisible();
+    await expect.poll(paused, { timeout: 5_000 }).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await playsOn();
+    expect(await clip.evaluate((element, earlier) => element === earlier, before)).toBe(true);
+  });
+
+  test('holds the card still with a pause mark while paused in How to, until Play there; a pause in Options holds nothing', async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const clip = await startedCardClip(page);
+    const card = page.getByTestId('exercise-card').first();
+    const thumb = card.getByTestId('exercise-thumb');
+    const sheet = page.getByRole('dialog', { name: /^How to: / });
+
+    await card.getByTestId('card-thumb').click();
+    await expect(sheet.locator('video[data-testid="exercise-demo"]')).toBeVisible();
+    // Started by the app first, so the tap is a Pause.
+    await expect
+      .poll(() =>
+        sheet
+          .locator('video[data-testid="exercise-demo"]')
+          .evaluate((v: HTMLVideoElement) => v.paused),
+      )
+      .toBe(false);
+    await sheet.getByTestId('demo-pause').click();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await expect(thumb).toHaveAttribute('data-animated', 'false');
+    await expect(card.getByTestId('thumb-paused')).toBeVisible();
+    // Brought back, the page leaves a held card still.
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await page.waitForTimeout(1_000);
+    expect(await thumb.evaluate((element) => element.tagName)).toBe('IMG');
+
+    await card.getByTestId('card-thumb').click();
+    await expect(sheet.getByTestId('demo-pause')).toHaveText('Play');
+    await sheet.getByTestId('demo-pause').click();
+    // The card's clip comes back under How to, and stays where it is until How to closes: the
+    // card and How to never play the same clip at once (the re-check).
+    await expect(clip).toBeAttached({ timeout: 10_000 });
+    await page.waitForTimeout(1_500);
+    expect(await clip.evaluate((element: HTMLVideoElement) => element.paused)).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await expect(clip).toBeVisible({ timeout: 10_000 });
+    await expect
+      .poll(
+        () =>
+          clip.evaluate((element: HTMLVideoElement) => (element.paused ? 0 : element.currentTime)),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(0.2);
+    await expect(card.getByTestId('thumb-paused')).toHaveCount(0);
+
+    // Options' details have the demonstration too: a pause there is theirs alone.
+    await card.getByTestId('options-tab').click();
+    const options = page.getByRole('dialog');
+    await expect(options.locator('video[data-testid="exercise-demo"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect
+      .poll(() =>
+        options
+          .locator('video[data-testid="exercise-demo"]')
+          .evaluate((v: HTMLVideoElement) => v.paused),
+      )
+      .toBe(false);
+    await options.getByTestId('demo-pause').click();
+    await expect(options.getByTestId('demo-pause')).toHaveText('Play');
+    await page.keyboard.press('Escape');
+    await expect(options).toBeHidden();
+    await expect(thumb).toHaveAttribute('data-animated', 'true');
+    await expect(card.getByTestId('thumb-paused')).toHaveCount(0);
+    await expect
+      .poll(() => clip.evaluate((element: HTMLVideoElement) => element.paused), { timeout: 5_000 })
+      .toBe(false);
+  });
+
+  test("shows the card's still under reduced motion, and plays the clip once motion is allowed", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await ensureProfile(page);
+    await page.getByTestId('start-workout').click();
+    await expect(page.getByTestId('workout-stats')).toBeVisible();
+    const card = page.getByTestId('exercise-card').first();
+    const thumb = card.getByTestId('exercise-thumb');
+    await expect(thumb).toHaveAttribute('data-animated', 'false');
+    await page.waitForTimeout(1_000);
+    expect(await thumb.evaluate((element) => element.tagName)).toBe('IMG');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const clip = card.locator('video[data-testid="exercise-thumb"]');
+    await expect(clip).toBeVisible({ timeout: 10_000 });
+    await expect
+      .poll(
+        () =>
+          clip.evaluate((element: HTMLVideoElement) => (element.paused ? 0 : element.currentTime)),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(0.2);
   });
 
   test('holds a tall clip to part of the screen, so the steps stay in reach', async ({ page }) => {

@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ONE_FRAME_GIF, twoFrameGif, twoFrameGifWithoutControl } from '../../test/images';
-import { isAnimatedImage, useFirstFrame } from './animatedImage';
+import { isAnimatedImage, loopingImage, useFirstFrame } from './animatedImage';
 import { makeFirstFrame } from './firstFrame';
 
 vi.mock('./firstFrame', () => ({ makeFirstFrame: vi.fn() }));
@@ -79,6 +79,65 @@ describe('isAnimatedImage', () => {
     expect(isAnimatedImage(as('image/png', webp))).toBe(true);
     // A photo labelled a GIF stays a photo.
     expect(isAnimatedImage(as('image/gif', '\xff\xd8\xff\xe0....'))).toBe(false);
+  });
+});
+
+describe('loopingImage (the phone review)', () => {
+  const bytes = (dataUrl: string) => atob(dataUrl.split(',')[1]!);
+
+  it('tells a GIF with no loop block to loop for good, its frames untouched', () => {
+    const original = bytes(twoFrameGif());
+    const looped = bytes(loopingImage(twoFrameGif()));
+    const loopBlock = '\x21\xff\x0bNETSCAPE2.0\x03\x01\x00\x00\x00';
+    // After the header, the screen and its two-colour table (13 + 6 bytes), before any image.
+    expect(looped).toBe('GIF89a' + original.slice(6, 19) + loopBlock + original.slice(19));
+    expect(isAnimatedImage(loopingImage(twoFrameGif()))).toBe(true);
+  });
+
+  it('sets a loop count the GIF gives to 0, wherever its block is', () => {
+    const original = bytes(twoFrameGif());
+    for (const id of ['NETSCAPE2.0', 'ANIMEXTS1.0']) {
+      const once = `\x21\xff\x0b${id}\x03\x01\x01\x00\x00`;
+      const gif = original.slice(0, 19) + once + original.slice(19);
+      const looped = bytes(loopingImage(as('image/gif', gif)));
+      expect(looped).toBe(
+        original.slice(0, 19) + `\x21\xff\x0b${id}\x03\x01\x00\x00\x00` + original.slice(19),
+      );
+    }
+  });
+
+  it("sets an animated WebP's loop count to 0", () => {
+    const head =
+      'RIFF\x00\x00\x00\x00WEBPVP8X\x0a\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00';
+    const anim = (loops: string) => `ANIM\x06\x00\x00\x00\xff\xff\xff\xff${loops}`;
+    const webp = as('image/webp', `${head}${anim('\x03\x00')}ANMF\x00\x00\x00\x00`);
+    expect(bytes(loopingImage(webp))).toBe(`${head}${anim('\x00\x00')}ANMF\x00\x00\x00\x00`);
+  });
+
+  it("sets an animated PNG's play count to 0, with the chunk's check value made anew", () => {
+    const head = '\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR' + '\x00'.repeat(13) + '\x00\x00\x00\x00';
+    const acTL = (plays: string, crc: string) =>
+      `\x00\x00\x00\x08acTL\x00\x00\x00\x02${plays}${crc}`;
+    const png = as('image/png', `${head}${acTL('\x00\x00\x00\x03', '\x6a\x84\xc2\xca')}IDAT`);
+    // CRC-32 of "acTL" and its data with a play count of 0: f38d9370 (zlib).
+    expect(bytes(loopingImage(png))).toBe(
+      `${head}${acTL('\x00\x00\x00\x00', '\xf3\x8d\x93\x70')}IDAT`,
+    );
+  });
+
+  it('returns any other picture, and one whose bytes cannot be read, as it is', () => {
+    for (const picture of [
+      as('image/jpeg', '\xff\xd8\xff\xe0....'),
+      as('image/avif', '\x00\x00\x00\x18ftypavis\x00\x00\x00\x00avismiaf'),
+      'data:image/gif,not-base64',
+    ]) {
+      expect(loopingImage(picture)).toBe(picture);
+    }
+    // A GIF that loops for good already, and a still WebP or PNG, are returned unchanged.
+    const forever = loopingImage(twoFrameGif());
+    expect(loopingImage(forever)).toBe(forever);
+    const still = as('image/webp', 'RIFF\x00\x00\x00\x00WEBPVP8 \x04\x00\x00\x00....');
+    expect(loopingImage(still)).toBe(still);
   });
 });
 

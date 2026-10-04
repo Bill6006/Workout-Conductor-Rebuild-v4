@@ -15,6 +15,7 @@ import {
   type EditActions,
   type TargetNotes,
 } from '../../components/ExerciseDetail/ExerciseDetailSheet';
+import { demoHoldKey } from '../../components/ExerciseDetail/demoHold';
 import { HowToSheet } from '../../components/ExerciseDetail/HowToSheet';
 import { PlateLine } from '../../components/PlateStack/PlateStack';
 import { isCoreStability } from '../../catalog/movementPatterns/movementPatterns';
@@ -674,6 +675,7 @@ export function ActiveWorkoutScreen() {
           onShowDetail={() => setHowTo({ entry, block })}
           onKnowMax={knowMaxFor(entry, block)}
           restStyle={profile.restStyle}
+          demoHoldKey={demoHoldKey(session.id, entry.id, entry.exerciseId)}
         >
           {loggerFor(entry, block)}
         </ExerciseCard>
@@ -706,6 +708,7 @@ export function ActiveWorkoutScreen() {
             onShowDetail={() => setHowTo({ entry, block })}
             onKnowMax={knowMaxFor(entry, block)}
             restStyle={profile.restStyle}
+            demoHoldKey={demoHoldKey(session.id, entry.id, entry.exerciseId)}
           >
             {loggerFor(entry, block)}
           </ExerciseCard>
@@ -1063,6 +1066,7 @@ export function ActiveWorkoutScreen() {
         exercise={howTo ? requireExercise(howTo.entry.exerciseId) : null}
         onClose={() => setHowTo(null)}
         own={howToInstruction}
+        holdKey={howTo ? demoHoldKey(session.id, howTo.entry.id, howTo.entry.exerciseId) : null}
       />
 
       <ExerciseDetailSheet

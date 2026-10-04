@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import {
   creditLine,
@@ -9,7 +18,9 @@ import {
   type MediaAsset,
 } from '../../catalog/media/mediaManifest';
 import type { CustomMedia } from '../../core/validation/customExercise';
-import { isAnimatedImage, useFirstFrame } from './animatedImage';
+import { useAnySheetOpen } from '../Sheet/openSheets';
+import { isAnimatedImage, loopingImage, useFirstFrame } from './animatedImage';
+import { holdDemo, isDemoHeld, useDemoHeld } from './demoHold';
 import styles from './ExerciseDetail.module.css';
 import { useDemoVideo } from './useDemoVideo';
 import { useReducedMotion } from './useReducedMotion';
@@ -79,44 +90,126 @@ interface ThumbProps {
    * screen; the rest show their still, so a session never downloads every clip at once.
    */
   play?: boolean;
+  /** The workout's key for this exercise (demoHoldKey): a Pause in its How to stills the card. */
+  holdKey?: string | null;
 }
 
-/** How long the card's demonstration moves before it rests on its still: WCAG 2.2.2 (Level A). */
-export const THUMB_MOTION_MS = 5000;
+/**
+ * Whether a play() that failed was refused (a data or battery saver, a source it cannot play), and
+ * not merely cut short by a pause made meanwhile (an AbortError): How to offers Play only for a
+ * refusal (the re-check of the phone review).
+ */
+function refused(error: unknown): boolean {
+  return !(error instanceof DOMException && error.name === 'AbortError');
+}
 
 /**
- * Compact demonstration for rows and cards. The large size plays the same loop as the How-to
- * view (or the user's own GIF or video) for five seconds, then rests on its still: motion that
- * goes on longer needs a way to stop it, and How to, a tap away, has one (the ninth review). An
- * own GIF rests on its first frame (the tenth review). Small rows and reduced-motion users get the
- * still so lists stay calm and fast. A clip that cannot load leaves its still in place.
+ * Plays a looping clip while it is wanted, on a page in front, and in view (Maintenance 25, the
+ * phone review). Once a script has played a clip, the browser no longer pauses it out of view by
+ * itself, so this does both: it pauses the clip in the background, out of view, or when it is not
+ * wanted (a sheet over the card, Pause), and plays it on once it is back, instead of leaving it on
+ * the frame it stopped at; a page the browser froze included. It is the only thing that starts the
+ * clip (no autoplay, no play as it loads): a clip that arrives under an open sheet, out of view or
+ * on a page in the background stays still (the re-checks of the phone review). A play the browser
+ * refuses (a data or battery saver) is told to onRefused (How to then offers Play), never one cut
+ * short by a pause.
+ */
+function useKeepPlaying(
+  ref: RefObject<HTMLVideoElement | null>,
+  mounted: boolean,
+  wanted: boolean,
+  source: string | null,
+  onRefused?: () => void,
+): void {
+  useEffect(() => {
+    const element = ref.current;
+    if (!mounted || !element) return undefined;
+    // In view until the observer says otherwise.
+    let inView = true;
+    const settle = () => {
+      if (wanted && inView && document.visibilityState !== 'hidden') {
+        // Older browsers answer play() with nothing at all, not a promise.
+        if (element.paused) {
+          (element.play() as Promise<void> | undefined)?.catch((error: unknown) => {
+            if (refused(error)) onRefused?.();
+          });
+        }
+      } else if (!element.paused) {
+        element.pause();
+      }
+    };
+    const observer =
+      typeof IntersectionObserver === 'function'
+        ? new IntersectionObserver((entries) => {
+            const latest = entries[entries.length - 1];
+            if (!latest) return;
+            inView = latest.isIntersecting;
+            settle();
+          })
+        : null;
+    observer?.observe(element);
+    document.addEventListener('visibilitychange', settle);
+    document.addEventListener('resume', settle);
+    window.addEventListener('pageshow', settle);
+    settle();
+    return () => {
+      observer?.disconnect();
+      document.removeEventListener('visibilitychange', settle);
+      document.removeEventListener('resume', settle);
+      window.removeEventListener('pageshow', settle);
+    };
+  }, [ref, mounted, wanted, source, onRefused]);
+}
+
+/**
+ * Compact demonstration for rows and cards. The large size, on the card of the exercise under
+ * way, loops the same clip as How to (or the user's own GIF or video) for as long as that card is
+ * in front, and plays on when the page or the card comes back into view (the phone review: it
+ * rested after five seconds and stayed still). Its clip, or the lifter's own video, rests where it
+ * is under a sheet (a diagram's loop or an own GIF, which are pictures, keep moving), and it shows
+ * its still under reduced motion and while the lifter has it paused in the workout's How to,
+ * which is how it is stopped (WCAG 2.2.2). Small rows get the still so lists stay calm and fast. A
+ * clip that cannot load leaves its still in place.
  */
 export function ExerciseThumb({
   exercise,
   size = 'small',
   customMedia = null,
   play = true,
+  holdKey = null,
 }: ThumbProps) {
   const asset = mediaFor(exercise);
   const reducedMotion = useReducedMotion();
+  const held = useDemoHeld(holdKey);
   const large = size === 'large';
+  // Only a card that may move follows the sheets: a list's rows never render again for one.
+  const sheetOpen = useAnySheetOpen(large && play);
   const className = large ? `${styles.thumb} ${styles.thumbLarge}` : styles.thumb;
   const width = large ? 96 : 72;
   const height = large ? 72 : 54;
-  // The exercise whose motion has run its five seconds; another exercise starts again.
-  const [restedFor, setRestedFor] = useState<string | null>(null);
-  const moving = large && !reducedMotion && play;
-  useEffect(() => {
-    if (!moving) return undefined;
-    const timer = window.setTimeout(() => setRestedFor(exercise.id), THUMB_MOTION_MS);
-    return () => window.clearTimeout(timer);
-  }, [moving, exercise.id]);
-  const animated = moving && restedFor !== exercise.id;
+  const animated = large && !reducedMotion && play && !held;
   const clip = !customMedia && animated && isVideoAsset(asset);
   const video = useDemoVideo(clip ? mediaUrl(asset.demo) : null);
-  // The lifter's own image: a GIF that moves rests on its first frame, as the clips rest.
+  const clipRef = useRef<HTMLVideoElement>(null);
+  const ownVideoRef = useRef<HTMLVideoElement>(null);
+  // Under a sheet the card's clip rests where it is: the card and the sheet never play at once.
+  useKeepPlaying(clipRef, clip && video.src !== null, !sheetOpen, video.src);
+  useKeepPlaying(
+    ownVideoRef,
+    large && customMedia?.kind === 'video',
+    animated && !sheetOpen,
+    customMedia?.kind === 'video'
+      ? `${customMedia.id}|${customMedia.createdAt}|${customMedia.sizeBytes}`
+      : null,
+  );
+  // The lifter's own image: a GIF that moves loops for good, whatever its file says (the phone
+  // review), and rests on its first frame when the card is still.
   const ownImage = large && customMedia?.kind === 'image' ? customMedia.dataUrl : null;
   const ownMoves = useMemo(() => (ownImage ? isAnimatedImage(ownImage) : false), [ownImage]);
+  const ownLooping = useMemo(
+    () => (ownImage && ownMoves ? loopingImage(ownImage) : ownImage),
+    [ownImage, ownMoves],
+  );
   const ownStill = useFirstFrame(ownMoves ? ownImage : null, !animated);
 
   if (customMedia && large) {
@@ -125,11 +218,11 @@ export function ExerciseThumb({
         <video
           // A new element when the motion rests, so the pause is the element's own state.
           key={animated ? 'moving' : 'resting'}
+          ref={ownVideoRef}
           className={className}
           src={customMedia.dataUrl}
           width={width}
           height={height}
-          autoPlay={animated}
           loop={animated}
           muted
           playsInline
@@ -140,7 +233,7 @@ export function ExerciseThumb({
       );
     }
     const moving = ownMoves && animated;
-    const src = ownMoves && !moving ? ownStill : customMedia.dataUrl;
+    const src = ownMoves && !moving ? ownStill : (ownLooping ?? customMedia.dataUrl);
     if (!src) {
       // Its first frame is still being made: an empty frame meanwhile, never the motion.
       return (
@@ -170,12 +263,12 @@ export function ExerciseThumb({
   if (clip && video.src) {
     return (
       <video
+        ref={clipRef}
         className={className}
         src={video.src}
         poster={mediaUrl(asset.poster)}
         width={width}
         height={height}
-        autoPlay
         loop
         muted
         playsInline
@@ -252,6 +345,11 @@ interface DemoProps {
   /** When given with custom media, offers to remove the user's demonstration. */
   onRemove?: () => void;
   busy?: boolean;
+  /**
+   * The workout's key for this exercise (demoHoldKey), given only by the workout's How to: its
+   * Pause then holds the demonstration on the workout card still too.
+   */
+  holdKey?: string | null;
 }
 
 /**
@@ -262,7 +360,9 @@ interface DemoProps {
  * source asks for it, its credit and notice sit under it. The user's own GIF, photo or video
  * replaces it when they picked one; an exercise with no licensed demonstration keeps its movement
  * pattern's diagram. Whatever moves here can be paused, and starts paused under reduced motion
- * (the tenth review: the diagram and the lifter's own GIF or video could not be stopped).
+ * (the tenth review: the diagram and the lifter's own GIF or video could not be stopped). In the
+ * workout's How to, the lifter's Pause holds the exercise's demonstration on its card still too,
+ * and How to opens paused for it, until Play (the phone review).
  */
 export function ExerciseDemo({
   exercise,
@@ -270,13 +370,20 @@ export function ExerciseDemo({
   onPickFile,
   onRemove,
   busy = false,
+  holdKey = null,
 }: DemoProps) {
   const asset = mediaFor(exercise);
   const reducedMotion = useReducedMotion();
+  // Paused before in this workout's How to: it opens paused, as the card shows it.
+  const lifterHeld = useDemoHeld(holdKey);
+  const hold = (value: boolean) => {
+    if (holdKey) holdDemo(holdKey, value);
+  };
+  const holdNoteId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
-  const [paused, setPaused] = useState(false);
+  const [paused, setPaused] = useState(() => isDemoHeld(holdKey));
   const [slow, setSlow] = useState(false);
   // The diagram stands in for a still that could not load: the credit is not for it.
   const [diagram, setDiagram] = useState(false);
@@ -285,21 +392,23 @@ export function ExerciseDemo({
   const focusPause = useRef(false);
   const playFocused = useRef(false);
   // The diagram's loop and the lifter's own GIF or video: paused or played by hand, else moving
-  // unless reduced motion asks for stillness.
+  // unless reduced motion asks for stillness or the lifter paused it before.
   const [held, setHeld] = useState<boolean | null>(null);
-  const moving = held === null ? !reducedMotion : !held;
+  const moving = held === null ? !reducedMotion && !lifterHeld : !held;
   const ownVideoRef = useRef<HTMLVideoElement>(null);
   const ownImage = customMedia?.kind === 'image' ? customMedia.dataUrl : null;
   const ownMoves = useMemo(() => (ownImage ? isAnimatedImage(ownImage) : false), [ownImage]);
+  // A GIF of their own loops for good here too, whatever its file says (the phone review).
+  const ownLooping = useMemo(
+    () => (ownImage && ownMoves ? loopingImage(ownImage) : ownImage),
+    [ownImage, ownMoves],
+  );
   const ownStill = useFirstFrame(ownMoves ? ownImage : null, !moving);
-  // The lifter's own video follows the button.
+  // The lifter's own video follows the button (useKeepPlaying, below): a play the browser refuses
+  // shows Play.
   const ownVideo = customMedia?.kind === 'video';
-  useEffect(() => {
-    const element = ownVideoRef.current;
-    if (!ownVideo || !element) return;
-    if (moving) void element.play().catch(() => setHeld(true));
-    else element.pause();
-  }, [moving, ownVideo]);
+  const ownRefused = useCallback(() => setHeld(true), []);
+  const clipRefused = useCallback(() => setPaused(true), []);
   const canPick = typeof onPickFile === 'function';
   const pickLabel = customMedia
     ? 'Replace your demonstration'
@@ -307,6 +416,11 @@ export function ExerciseDemo({
   const clip = isVideoAsset(asset) && !customMedia;
   const wantsClip = clip && (!reducedMotion || started);
   const video = useDemoVideo(wantsClip ? mediaUrl(asset.demo) : null);
+  // Started, played on where the browser paused them (a page frozen in the background), and rested
+  // out of view, as the card's clip is; a pause of the lifter's stays (the reviews of the phone
+  // review).
+  useKeepPlaying(videoRef, clip && video.src !== null, !paused, video.src, clipRefused);
+  useKeepPlaying(ownVideoRef, ownVideo, moving, ownVideo ? customMedia.dataUrl : null, ownRefused);
 
   const openPicker = () => inputRef.current?.click();
   const picker = canPick ? (
@@ -340,22 +454,35 @@ export function ExerciseDemo({
       image
     );
 
+  // Said with Pause to a screen reader, in the workout's How to: it stills the card too. Beside a
+  // Pause only, and hidden, so it is never read as text of its own (the re-check).
+  const holdNote = holdKey ? (
+    <span id={holdNoteId} hidden>
+      Pause holds this demonstration on the workout card too.
+    </span>
+  ) : null;
+
   const motionButton = (
     <span className={styles.demoOverlay}>
       <button
         type="button"
         className={styles.overlayButton}
-        onClick={() => setHeld(moving)}
+        onClick={() => {
+          setHeld(moving);
+          hold(moving);
+        }}
+        aria-describedby={holdKey ? holdNoteId : undefined}
         data-testid="demo-pause"
       >
         {moving ? 'Pause' : 'Play'}
       </button>
+      {holdNote}
     </span>
   );
 
   if (customMedia) {
     const ownAlt = `${exercise.name}, your demonstration`;
-    const ownImageSrc = ownMoves && !moving ? ownStill : customMedia.dataUrl;
+    const ownImageSrc = ownMoves && !moving ? ownStill : (ownLooping ?? customMedia.dataUrl);
     return (
       <figure className={styles.demo} data-testid="custom-media">
         <div className={styles.demoFrame}>
@@ -365,7 +492,6 @@ export function ExerciseDemo({
                   ref={ownVideoRef}
                   className={styles.demoImage}
                   src={customMedia.dataUrl}
-                  autoPlay={moving}
                   loop
                   muted
                   playsInline
@@ -431,16 +557,23 @@ export function ExerciseDemo({
   const alt = `${exercise.name} demonstration`;
   const shape =
     asset.width && asset.height ? { aspectRatio: `${asset.width} / ${asset.height}` } : undefined;
-  // The button follows what it last asked for; a play the browser refuses shows Play again.
+  // The button follows what it last asked for; a play the browser refuses shows Play again. A tap
+  // reads the clip itself: one the browser paused (a page frozen in the background) is played, not
+  // held. The lifter's Pause holds the card's loop still too, and Play lets it move (the phone
+  // review).
   const togglePause = () => {
     const element = videoRef.current;
     if (!element) return;
-    if (paused) {
+    if (element.paused) {
       setPaused(false);
-      void element.play().catch(() => setPaused(true));
+      hold(false);
+      void element.play().catch((error: unknown) => {
+        if (refused(error)) setPaused(true);
+      });
     } else {
       element.pause();
       setPaused(true);
+      hold(true);
     }
   };
   const toggleSlow = () => {
@@ -459,16 +592,14 @@ export function ExerciseDemo({
           className={styles.demoVideo}
           src={video.src}
           poster={mediaUrl(asset.poster)}
-          autoPlay
+          // Started by useKeepPlaying only, so one rested out of view as it loaded stays rested,
+          // and one paused by the lifter before waits on its first frame for Play (the re-checks).
           loop
           muted
           playsInline
           aria-label={alt}
           onLoadedMetadata={(event) => {
-            const element = event.currentTarget;
-            element.playbackRate = slow ? 0.5 : 1;
-            // Autoplay can be refused (a data saver): the button then offers Play.
-            if (!paused) void element.play().catch(() => setPaused(true));
+            event.currentTarget.playbackRate = slow ? 0.5 : 1;
           }}
           onClick={togglePause}
           data-testid="exercise-demo"
@@ -496,10 +627,12 @@ export function ExerciseDemo({
             type="button"
             className={styles.overlayButton}
             onClick={togglePause}
+            aria-describedby={holdKey ? holdNoteId : undefined}
             data-testid="demo-pause"
           >
             {paused ? 'Play' : 'Pause'}
           </button>
+          {holdNote}
         </span>
       </div>
     );
@@ -547,6 +680,9 @@ export function ExerciseDemo({
                 if (started || video.retrying) return;
                 focusPause.current = held;
                 setStarted(true);
+                // Play asks for motion: a pause held from before lets go.
+                setPaused(false);
+                hold(false);
               }}
               data-testid="demo-play"
             >

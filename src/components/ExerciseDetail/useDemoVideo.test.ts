@@ -80,14 +80,24 @@ describe('useDemoVideo', () => {
   });
 
   it('shows nothing of a clip that already arrived once the exercise changes, until its own comes', async () => {
-    const { result, rerender } = renderHook(({ url }) => useDemoVideo(url), {
-      initialProps: { url: '/media/exercises/a.mp4' },
-    });
+    // Every render's answer, so even one render showing the first clip for the second is seen.
+    const seen: { url: string; src: string | null }[] = [];
+    const { result, rerender } = renderHook(
+      ({ url }) => {
+        const video = useDemoVideo(url);
+        seen.push({ url, src: video.src });
+        return video;
+      },
+      { initialProps: { url: '/media/exercises/a.mp4' } },
+    );
     answers.get('/media/exercises/a.mp4')?.(ok(1));
     await waitFor(() => expect(result.current).toMatchObject({ src: 'blob:1', failed: false }));
     rerender({ url: '/media/exercises/b.mp4' });
-    // The first clip's state belongs to the first clip (the ninth review).
+    // The first clip's state belongs to the first clip (the ninth review), from the first render.
     expect(result.current).toMatchObject({ src: null, failed: false });
+    expect(
+      seen.filter((render) => render.url.endsWith('b.mp4') && render.src === 'blob:1'),
+    ).toEqual([]);
     answers.get('/media/exercises/b.mp4')?.(ok(2));
     await waitFor(() => expect(result.current).toMatchObject({ src: 'blob:2', failed: false }));
   });

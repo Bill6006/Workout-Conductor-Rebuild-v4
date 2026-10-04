@@ -131,6 +131,120 @@ export function isAnimatedImage(dataUrl: string): boolean {
   }
 }
 
+/** A CRC-32 over a binary string, as a PNG chunk carries it. */
+function crc32(bytes: string): number {
+  let crc = 0xffffffff;
+  for (let at = 0; at < bytes.length; at += 1) {
+    crc ^= bytes.charCodeAt(at);
+    for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function bigEndian32(value: number): string {
+  return String.fromCharCode(
+    (value >>> 24) & 255,
+    (value >>> 16) & 255,
+    (value >>> 8) & 255,
+    value & 255,
+  );
+}
+
+/** The block that tells a GIF to loop: application extension NETSCAPE2.0, a count of 0 (for good). */
+const GIF_LOOP_FOREVER = '\x21\xff\x0bNETSCAPE2.0\x03\x01\x00\x00\x00';
+
+/** A GIF told to loop for good: every loop count it gives set to 0, or the block put in. */
+function loopingGif(bytes: string): string {
+  let out = bytes;
+  let found = false;
+  for (const id of ['NETSCAPE2.0', 'ANIMEXTS1.0']) {
+    const marker = `\x21\xff\x0b${id}\x03\x01`;
+    for (let at = out.indexOf(marker); at >= 0; at = out.indexOf(marker, at + 1)) {
+      found = true;
+      const count = at + marker.length;
+      out = out.slice(0, count) + '\x00\x00' + out.slice(count + 2);
+    }
+  }
+  if (found) return out;
+  // None: the block goes after the colour table, before any image; extensions need GIF89a.
+  let start = 13;
+  if (bytes.charCodeAt(10) & 0x80) start += 3 * 2 ** ((bytes.charCodeAt(10) & 7) + 1);
+  return 'GIF89a' + bytes.slice(6, start) + GIF_LOOP_FOREVER + bytes.slice(start);
+}
+
+/** An animated WebP told to loop for good: its ANIM chunk's loop count set to 0. */
+function loopingWebp(bytes: string): string {
+  let at = 12;
+  while (at + 8 <= bytes.length) {
+    const size =
+      (bytes.charCodeAt(at + 4) |
+        (bytes.charCodeAt(at + 5) << 8) |
+        (bytes.charCodeAt(at + 6) << 16) |
+        (bytes.charCodeAt(at + 7) << 24)) >>>
+      0;
+    if (bytes.slice(at, at + 4) === 'ANIM') {
+      // Its background colour (four bytes), then the loop count (two).
+      const count = at + 8 + 4;
+      return bytes.slice(0, count) + '\x00\x00' + bytes.slice(count + 2);
+    }
+    at += 8 + size + (size & 1);
+  }
+  return bytes;
+}
+
+/** An animated PNG told to loop for good: its acTL chunk's play count set to 0, its CRC anew. */
+function loopingPng(bytes: string): string {
+  let at = 8;
+  while (at + 12 <= bytes.length) {
+    const size =
+      ((bytes.charCodeAt(at) << 24) |
+        (bytes.charCodeAt(at + 1) << 16) |
+        (bytes.charCodeAt(at + 2) << 8) |
+        bytes.charCodeAt(at + 3)) >>>
+      0;
+    const type = bytes.slice(at + 4, at + 8);
+    if (type === 'acTL' && size === 8) {
+      // The frame count stays; the play count (the next four bytes) becomes 0.
+      const data = bytes.slice(at + 8, at + 12) + '\x00\x00\x00\x00';
+      return (
+        bytes.slice(0, at + 8) +
+        data +
+        bigEndian32(crc32(type + data)) +
+        bytes.slice(at + 8 + size + 4)
+      );
+    }
+    if (type === 'IDAT' || type === 'IEND') break;
+    at += 12 + size;
+  }
+  return bytes;
+}
+
+/**
+ * The lifter's own moving picture, made to loop for good (the phone review): a GIF, WebP or PNG
+ * whose file plays once, or a set number of times, stopped on its last frame on the card. Any
+ * other picture, or one whose bytes cannot be read, is returned as it is.
+ */
+export function loopingImage(dataUrl: string): string {
+  const bytes = bytesOf(dataUrl);
+  if (bytes === null) return dataUrl;
+  let looped: string;
+  switch (formatOf(bytes)) {
+    case 'gif':
+      looped = loopingGif(bytes);
+      break;
+    case 'webp':
+      looped = loopingWebp(bytes);
+      break;
+    case 'png':
+      looped = loopingPng(bytes);
+      break;
+    default:
+      return dataUrl;
+  }
+  if (looped === bytes) return dataUrl;
+  return `${dataUrl.slice(0, dataUrl.indexOf(','))},${btoa(looped)}`;
+}
+
 /**
  * The first frame of an image as a still, made the first time it is wanted and kept, so Pause
  * after Play shows it at once; freed once a still of another image takes its place, or when the

@@ -127,6 +127,66 @@ test.describe('PWA shell', () => {
     await context.setOffline(false);
   });
 
+  // The phone review: the card's demonstration loops in the installed app too, from the clip the
+  // service worker kept, offline as well.
+  test("loops the card's clip from the clip the app kept, offline too", async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(90_000);
+    await ensureProfile(page);
+    await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+    await page.reload();
+    expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    await page.getByTestId('start-workout').click();
+    await expect(page.getByTestId('workout-stats')).toBeVisible();
+    const clip = page
+      .getByTestId('exercise-card')
+      .first()
+      .locator('video[data-testid="exercise-thumb"]');
+    await expect(clip).toBeVisible({ timeout: 10_000 });
+    // Kept by the service worker the first time it played.
+    await expect
+      .poll(() =>
+        page.evaluate(async () => (await (await caches.open('exercise-clips')).keys()).length),
+      )
+      .toBeGreaterThan(0);
+
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page.getByTestId('workout-stats')).toBeVisible();
+    // As above: offline again after the reload, so the page reads offline as a phone does.
+    await context.setOffline(false);
+    await context.setOffline(true);
+    expect(await page.evaluate(() => navigator.onLine)).toBe(false);
+    await expect(clip).toBeVisible({ timeout: 10_000 });
+    await expect
+      .poll(() => clip.evaluate((element: HTMLVideoElement) => element.duration || 0), {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(0);
+    const duration = await clip.evaluate((element: HTMLVideoElement) => element.duration);
+    const starts = Math.max(2, Math.ceil(9 / duration));
+    await clip.evaluate((element: HTMLVideoElement) => {
+      const seen = { starts: 0, last: element.currentTime };
+      Object.assign(window, { cardLoop: seen });
+      element.addEventListener('timeupdate', () => {
+        if (element.currentTime + 0.05 < seen.last) seen.starts += 1;
+        seen.last = element.currentTime;
+      });
+    });
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () => (window as unknown as { cardLoop: { starts: number } }).cardLoop.starts,
+          ),
+        { timeout: (starts * duration + 15) * 1000 },
+      )
+      .toBeGreaterThanOrEqual(starts);
+    await context.setOffline(false);
+  });
+
   test('the manifest advertises an installable standalone app', async ({ page }) => {
     await page.goto('./');
     const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
