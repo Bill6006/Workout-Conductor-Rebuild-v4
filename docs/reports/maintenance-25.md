@@ -1479,7 +1479,15 @@ wider font made the card taller, so the tap on Options scrolled the card's clip 
 it rests by design, and the test expected it to play there. The test now brings the clip back into
 view first, in Verdana on every run as the plate tests are, so a run here sees the runner's card;
 without that step it fails here too, at 360 px, and the five browser reverts that rely on it still
-fail it. The app is unchanged. The checks on its live build follow once it is deployed.
+fail it. The app is unchanged. Deployed as build `567d606` by Deploy Pages run 37174297703; against
+the live URL the browser suite passed 371, 18 skipped by design, none failed, on the first run. The
+live bundle carries the commit, and the marker reads
+"Build 567d606 · 2026-10-04 03:34 UTC · Phase 8". The four skipped beyond the local run's 14 are the
+update tests, which need two builds served locally. As the installed app runs it (the service worker
+on, a phone's screen, a synthetic profile), all 12 checks of the card's loop passed: the clip
+started over and over past ten seconds, rested in the background and under How to and played on
+after, held its still with the pause mark after Pause in How to, How to opened paused, it looped
+again after Play, and offline it looped from the clip the app kept.
 
 **The round as first deployed** (`5c06b14`):
 
@@ -1538,8 +1546,8 @@ before and after, side by side, are in `docs/screenshots/maintenance-25/`.
 
 ## Review on the phone
 
-Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release to check is this
-round's build, named here once it is live (Settings, About this app).
+Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release to check is build
+`567d606` (Settings, About this app).
 
 **Round G**
 
@@ -1603,7 +1611,7 @@ also looks whenever it comes back to the front.
 
 12. Close the installed app from the recent apps, then open it from its icon. If "New version
     available" appears, tap Reload.
-13. Settings, About this app: "Build <this round's commit> · ... · Phase 8", and Display reads "Installed app
+13. Settings, About this app: "Build 567d606 · ... · Phase 8", and Display reads "Installed app
     (standalone)". The app shows no browser address bar.
 14. Your profile, places, history (Progress) and settings are all as before.
 15. The update path on return, the one that failed before. Leave the app in the background, not
