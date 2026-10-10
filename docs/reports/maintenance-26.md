@@ -701,10 +701,20 @@ shared setup step now waits for the route. The app is unchanged.
 The revert runs on the final tree: all 1,199 unit entries caught, and all 32 browser reverts (The
 complete revert run, above).
 
+Deployed as build `43d50e6` by Deploy Pages run 38037382932: its verify job passed, the browser
+suite on the Linux runner included (384 passed, 14 skipped by design, none failed, no retries), and
+so did the deploy. The live bundle carries the commit, and the marker reads "Build 43d50e6 ·
+2026-10-10 08:21 UTC · Phase 8". Against the live URL: 380 passed, 18 skipped by design, none
+failed, on the second run. On the first, four tests could not load the live page in time
+(net::ERR_TIMED_OUT reaching github.io; one page was still opening at the 30-second limit), so the
+eight installed-app and update tests, which run after the others, did not run. Run again on their
+own, the four passed. The four skipped beyond the local run's 14 are the update tests, which need two
+builds served locally.
+
 ## Review on the phone
 
 Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release to check is build
-`(sha)` (Settings, About this app). Step 6 replaces Maintenance 25's step 8 (there is no Pause now).
+`43d50e6` (Settings, About this app). Step 6 replaces Maintenance 25's step 8 (there is no Pause now).
 Item 41 is not in this release, so it has no step.
 
 **Item 40, numbers that look like slips**
