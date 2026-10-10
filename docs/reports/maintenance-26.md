@@ -1,5 +1,8 @@
 # Maintenance 26: round H, intelligence the owner approved
 
+**GREEN** from the owner on 2026-10-10: "GREEN. Maintenance 26 phone review passed." Item 41 is
+built after item 43, in Maintenance 27.
+
 Built on 2026-10-09 on the owner's word: "All is approved except for number 48. Please proceed with
 the plan". Round H is the first three of the approved items: 40, numbers that look like slips are
 asked about before they steer a target; 41, each lift's own reps-to-weight curve; and 42, a bad
