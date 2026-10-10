@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../app/App';
 import { requireExercise } from '../../catalog/exercises/catalog';
-import { releaseAllDemos } from '../../components/ExerciseDetail/demoHold';
 import type { AppStore } from '../../core/state/appStore';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
@@ -18,10 +17,9 @@ vi.mock('../../core/time/clock', async (original) => ({
 }));
 
 /**
- * Maintenance 25, the phone review, on the Workout tab: Pause in the workout's How to holds the
- * card's demonstration on its still with a pause mark on it, so a held card never reads as stuck,
- * until Play there; a pause made in Options' details holds nothing on the card (the review of the
- * fix).
+ * Maintenance 26, item 50, on the Workout tab: How to and Options' details have no Pause, How to
+ * offers the lifter their own GIF, and the card's demonstration loops on after either closes (the
+ * Maintenance 25 hold on the card went with the Pause).
  */
 
 async function started(): Promise<AppStore> {
@@ -97,13 +95,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  releaseAllDemos();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
-describe("the card's demonstration on the Workout tab", () => {
-  it('shows a pause mark while paused in How to, and moves again after Play there', async () => {
+describe("the card's demonstration on the Workout tab (Maintenance 26, item 50)", () => {
+  it('How to has no Pause and offers the lifter their own GIF; the card loops on after it closes', async () => {
     const store = await started();
     const card = await renderWorkout(store);
     const first = allEntries(store.getSnapshot().session!.workout.blocks)[0]!;
@@ -111,37 +108,24 @@ describe("the card's demonstration on the Workout tab", () => {
     const user = userEvent.setup();
     const thumb = () => within(card).getByTestId('exercise-thumb');
     await waitFor(() => expect(thumb()).toHaveAttribute('data-animated', 'true'));
-    expect(within(card).queryByTestId('thumb-paused')).toBeNull();
-
-    await user.click(within(card).getByTestId('card-thumb'));
-    let sheet = await screen.findByRole('dialog', { name: `How to: ${exercise.name}` });
-    const playing = await sheetClip(sheet);
-    // Started by the app first, so the tap is a Pause.
-    await waitFor(() => expect(playing.paused).toBe(false));
-    await user.click(within(sheet).getByTestId('demo-pause'));
-    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(thumb()).toHaveAttribute('data-animated', 'false');
-    expect(within(card).getByTestId('thumb-paused')).toBeInTheDocument();
-    expect(within(card).getByTestId('card-thumb')).toHaveAccessibleName(
-      `How to do ${exercise.name}: demonstration (paused) and steps`,
-    );
-
-    await user.click(within(card).getByTestId('card-thumb'));
-    sheet = await screen.findByRole('dialog', { name: `How to: ${exercise.name}` });
-    await sheetClip(sheet);
-    expect(within(sheet).getByTestId('demo-pause')).toHaveTextContent('Play');
-    await user.click(within(sheet).getByTestId('demo-pause'));
-    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    await waitFor(() => expect(thumb()).toHaveAttribute('data-animated', 'true'));
-    expect(within(card).queryByTestId('thumb-paused')).toBeNull();
     expect(within(card).getByTestId('card-thumb')).toHaveAccessibleName(
       `How to do ${exercise.name}: demonstration and steps`,
     );
+
+    await user.click(within(card).getByTestId('card-thumb'));
+    const sheet = await screen.findByRole('dialog', { name: `How to: ${exercise.name}` });
+    const playing = await sheetClip(sheet);
+    await waitFor(() => expect(playing.paused).toBe(false));
+    expect(within(sheet).queryByRole('button', { name: /pause/i })).toBeNull();
+    // The way to set their own: a tap on the demonstration, or its button.
+    expect(within(sheet).getByTestId('demo-pick')).toBeInTheDocument();
+    expect(within(sheet).getByTestId('demo-your-gif')).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(thumb()).toHaveAttribute('data-animated', 'true'));
   });
 
-  it("holds nothing on the card when paused in Options' details", async () => {
+  it("Options' details have no Pause either, and the card loops on", async () => {
     const store = await started();
     const card = await renderWorkout(store);
     const user = userEvent.setup();
@@ -150,13 +134,10 @@ describe("the card's demonstration on the Workout tab", () => {
     await user.click(within(card).getByTestId('options-tab'));
     const sheet = await screen.findByRole('dialog');
     const playing = await sheetClip(sheet);
-    // Started by the app first, so the tap is a Pause.
     await waitFor(() => expect(playing.paused).toBe(false));
-    await user.click(within(sheet).getByTestId('demo-pause'));
-    expect(within(sheet).getByTestId('demo-pause')).toHaveTextContent('Play');
+    expect(within(sheet).queryByRole('button', { name: /pause/i })).toBeNull();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(thumb()).toHaveAttribute('data-animated', 'true');
-    expect(within(card).queryByTestId('thumb-paused')).toBeNull();
   });
 });

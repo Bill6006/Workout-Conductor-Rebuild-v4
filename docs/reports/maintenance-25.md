@@ -488,10 +488,11 @@ matches its demonstration and is checked against reliable sources.
 - A clip that failed while online said it would play once online: it now says it could not load.
   Under a diagram standing in for a still that failed, the demonstration's credit is not shown.
 - Play under reduced motion dropped keyboard focus to the page: the button keeps it while the clip
-  loads, then hands it to Pause.
+  loads, then hands it to Pause. _(To Slow since Maintenance 26, item 50: there is no Pause.)_
 - The card's clip looped for as long as the exercise ran, with no way to stop it (WCAG 2.2.2): it
   now moves for five seconds, then rests on its still; How to, a tap away, has Pause. (The phone
-  review undid the rest: the card loops again, and How to's Pause stops it; below.)
+  review undid the rest: the card loops again, and How to's Pause stops it; below.) _(Since
+  Maintenance 26, item 50, no demonstration has a Pause.)_
 - A clip corrected later would never have reached a phone that had kept the old one, and the stills
   and the clips could disagree: every file is named by its content now. The phone's cache keeps up
   to 120 clips and drops the oldest past that; there is no age limit, so a replaced clip stays
@@ -527,7 +528,8 @@ matches its demonstration and is checked against reliable sources.
   card the lifter's own GIF moved for as long as the card showed, under reduced motion too (WCAG
   2.2.2). Everything that moves in How to now has Pause and starts paused under reduced motion, and
   the card's own GIF rests on its first frame after five seconds, as the clips do (since the phone
-  review, while paused in How to). A photo, which does not move, has no Pause.
+  review, while paused in How to). A photo, which does not move, has no Pause. _(Since Maintenance
+  26, item 50, nothing has a Pause: under reduced motion it starts still, with Play.)_
 - When Play under reduced motion could not load the clip, its button went and keyboard focus fell
   to the page. The button stays, as Try again, and keeps the focus; any clip that could not load
   offers Try again.
@@ -553,7 +555,7 @@ matches its demonstration and is checked against reliable sources.
   photo format (JPEG, BMP) or its file says it holds one picture.
 - Back online, the automatic retry took the Try again button away, and with it the keyboard focus;
   the button now stays through the retry, and the focus passes to Pause when the clip comes, if
-  the button still holds it.
+  the button still holds it. _(To Slow since Maintenance 26.)_
 - A second re-check: a GIF was judged by its control extensions, which a frame need not have, and
   by the type it was given, so a moving GIF named .jpg (or a moving WebP named .png) was taken for
   a photo. A picture is now judged by its own bytes, a GIF by its frames.
@@ -1106,6 +1108,10 @@ stop it), and it was kept for the exercise: one that came back in front stayed s
 - Unchanged: only the card in front plays, so a session never fetches every clip at once; the clips
   are kept for offline use as before; How to keeps Slow, Pause and Play.
 
+> **Since Maintenance 26, item 50:** the owner asked for no Pause on any demonstration, so How to's
+> Pause, and the card's hold and pause mark it brought, are gone; How to sets the lifter's own GIF
+> instead (`docs/reports/maintenance-26.md`). The card's loop above is unchanged.
+
 **From the review of the fix,** an independent review of the first version found seven things, all
 fixed: a pause made anywhere (the library, Today's details) stilled the card for the rest of the
 app's life, with no sign of it; once the app had played a clip, the browser no longer paused it out
@@ -1148,7 +1154,7 @@ suite, PRa to PRbc; 11 in the browser, Lz1 to Lz11).
 - **An AVIF or HEIF sequence of your own** plays on the card as its file says; a GIF, WebP or PNG
   loops for good.
 - **A pause made in How to** holds that exercise's demonstration in that workout until Play there
-  or a reload.
+  or a reload. _(Since Maintenance 26, item 50, there is no Pause, and nothing holds the card.)_
 - **A new place lets a busy move go.** The equipment was busy at the place left behind, so a change
   of place plans the order afresh; any other rebuild keeps the lift behind what it gave way to.
 - **The engine's own lines read the log as its rules do,** reps counted to twelve: after sets past
@@ -1333,7 +1339,8 @@ Every training-science choice in this round was settled from the research above.
 
 - **A setting to keep the card's demonstrations still,** for good (the review of the phone-review
   fix): How to's Pause holds one exercise in one workout until a reload, and the phone's own
-  reduced motion is the lasting way today.
+  reduced motion is the lasting way today. _Since Maintenance 26, item 50 there is no Pause; this
+  stays proposed in Maintenance 26._
 - **Move only the busy move of a pair,** splitting the pair for the session.
 - **Keep an order set by hand through a rebuild,** as a lift moved for busy equipment now keeps its
   place.
@@ -1577,8 +1584,9 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release
 
 **Demonstrations and plates**
 
-8. Start a workout and tap the bench press's picture on its card (or How to under it): How to opens
-   with the exercise's own video playing, silent, with Slow and Pause on it; under it Setup, Do it,
+8. _(Replaced by Maintenance 26's checklist, item 50: there is no Pause now.)_ Start a workout and
+   tap the bench press's picture on its card (or How to under it): How to opens with the
+   exercise's own video playing, silent, with Slow and Pause on it; under it Setup, Do it,
    Key cues and Avoid. Tap Slow, then Pause. "About this video" says who made it and on what terms.
    Close it: the card's picture holds still, with a small pause mark on it. Open How to again, tap
    Play and close it: the card is as small as before, and its picture keeps looping, past five
@@ -1589,7 +1597,8 @@ Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release
    jump where it starts again. A few show drawings instead of a video, and eleven show a diagram;
    where a video differs from the steps in a detail (the leg press goes deeper, for one), a line
    under it says so. On one with a diagram (Band pull-apart, say), Pause stops it and Play starts it
-   again. Settings, About, Demonstration credits lists every one.
+   again _(no Pause since Maintenance 26, item 50)_. Settings, About, Demonstration credits lists
+   every one.
 10. Turn on airplane mode: How to on an exercise you have already watched still plays; one you have
     not shows its first frame and says the video plays once you are online. Turn airplane mode off
     with that How to still open: within a few seconds the video starts by itself.

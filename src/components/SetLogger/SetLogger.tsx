@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { nudge, snapDown } from '../../engine/loading/loading';
+import type { SlipQuestion } from '../../engine/progression/slips';
 import type { SetKind } from '../../engine/workout/types';
 import styles from './SetLogger.module.css';
 
@@ -59,6 +60,11 @@ interface SetLoggerProps {
   filled?: { reps: number; nonce: string } | null;
   /** The hold's countdown, shown above the button. */
   timer?: ReactNode;
+  /**
+   * Whether the values about to be logged look like a slip (Maintenance 26, item 40): asked once,
+   * kept with one tap or changed. Null: they are plausible.
+   */
+  question?: (values: SetLoggerValues) => SlipQuestion | null;
 }
 
 type Field = 'weight' | 'reps' | 'rir';
@@ -97,6 +103,7 @@ export function SetLogger({
   noLoad = false,
   filled = null,
   timer = null,
+  question,
 }: SetLoggerProps) {
   const [values, setValues] = useState<SetLoggerValues>(() =>
     filled ? { ...initial, reps: filled.reps } : initial,
@@ -106,13 +113,34 @@ export function SetLogger({
   const [cooling, setCooling] = useState(false);
   /** Once the weight has been turned or typed, the target's nudge stops asking. */
   const [touchedWeight, setTouchedWeight] = useState(false);
+  /** Values that look like a slip, waiting for the lifter to keep or change them (item 40). */
+  const [asking, setAsking] = useState<{ question: SlipQuestion; values: SetLoggerValues } | null>(
+    null,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
+  const changeRef = useRef<HTMLButtonElement>(null);
+  const questionId = useId();
+  /** Keep is ready a moment after a question opens; Change it, and Log after it, never wait. */
+  const [keepReady, setKeepReady] = useState(true);
+  // One wait at a time: a question asked again starts its own (the third pass of item 40: one
+  // asked again within the wait was ready early).
+  const keepTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(keepTimer.current), []);
 
+  // The field opened for typing takes the focus, so the numeric keyboard comes up on it.
   useEffect(() => {
-    if (typing) inputRef.current?.select();
+    if (!typing) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }, [typing]);
 
+  // The question takes the focus where the button that asked it stood: "Change it" is the safe one.
+  useEffect(() => {
+    if (asking) changeRef.current?.focus();
+  }, [asking]);
+
   const update = (next: SetLoggerValues) => {
+    setAsking(null);
     setValues(next);
     onChange?.(next);
   };
@@ -135,6 +163,8 @@ export function SetLogger({
     if (fillNonce === null || fillReps === null || lastFill.current === fillNonce) return;
     lastFill.current = fillNonce;
     setTyping(null);
+    // The question was about the seconds before: Keep would log those, not the dial's (the review).
+    setAsking(null);
     setValues((current) => ({ ...current, reps: clampReps(fillReps) }));
   }, [fillNonce, fillReps]);
 
@@ -149,6 +179,7 @@ export function SetLogger({
     update({ ...values, rir: clampRir((values.rir ?? target.rir) + direction) });
 
   const beginTyping = (field: Field) => {
+    setAsking(null);
     if (field === 'weight') setTouchedWeight(true);
     const current =
       field === 'weight' ? values.weight : field === 'reps' ? values.reps : values.rir;
@@ -171,13 +202,7 @@ export function SetLogger({
     setTyping(null);
   };
 
-  const commit = () => {
-    if (disabled || cooling) return;
-    const final = typedValues();
-    if (typing) {
-      update(final);
-      setTyping(null);
-    }
+  const send = (final: SetLoggerValues) => {
     setCooling(true);
     window.setTimeout(() => setCooling(false), COOLDOWN_MS);
     onCommit({
@@ -185,6 +210,41 @@ export function SetLogger({
       reps: clampReps(final.reps),
       rir: hold || final.rir === null ? null : clampRir(final.rir),
     });
+  };
+
+  const commit = () => {
+    if (disabled || cooling) return;
+    const final = typedValues();
+    if (typing) {
+      update(final);
+      setTyping(null);
+    }
+    // A number that looks like a slip is asked about once, before it steers anything (item 40).
+    // Keep waits a moment, so a second tap meant for the log button keeps nothing unread (the
+    // re-check: the question's words push the buttons down, and Keep can sit under it).
+    const slip = question?.(final) ?? null;
+    if (slip) {
+      setAsking({ question: slip, values: final });
+      setKeepReady(false);
+      window.clearTimeout(keepTimer.current);
+      keepTimer.current = window.setTimeout(() => setKeepReady(true), COOLDOWN_MS);
+      return;
+    }
+    send(final);
+  };
+
+  /** The lifter keeps the values asked about: they are logged as they are. */
+  const keep = () => {
+    if (!asking || disabled || cooling || !keepReady) return;
+    const final = asking.values;
+    setAsking(null);
+    send(final);
+  };
+
+  /** Back to the number asked about, ready to type. */
+  const change = () => {
+    if (!asking) return;
+    beginTyping(asking.question.field === 'reps' ? 'reps' : 'weight');
   };
 
   const [low, high] = target.reps;
@@ -392,30 +452,80 @@ export function SetLogger({
         </p>
       ) : null}
       {timer}
-      <div className={styles.actions}>
-        {mode === 'edit' ? (
-          <>
-            <button type="button" className={styles.secondary} onClick={onCancel}>
-              Cancel
-            </button>
-            {onDelete ? (
-              <button type="button" className={styles.secondary} onClick={onDelete}>
-                Remove
+      {asking ? (
+        <div className={styles.question} data-testid="slip-question">
+          <p id={questionId} className={styles.questionText} role="alert">
+            {asking.question.text}
+          </p>
+          {/* Change it takes the focus and Keep waits a moment: a second tap or Enter changes the
+              number, never logs it. An edit can still be cancelled. */}
+          <div className={styles.actions}>
+            {mode === 'edit' ? (
+              <button type="button" className={styles.secondary} onClick={onCancel}>
+                Cancel
               </button>
             ) : null}
-          </>
-        ) : null}
-        <button
-          type="button"
-          className={styles.primary}
-          onClick={commit}
-          disabled={disabled || cooling}
-          data-testid="log-set"
-          data-intent={skipping ? 'skip' : 'log'}
-        >
-          {buttonLabel}
-        </button>
-      </div>
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={keep}
+              disabled={disabled || cooling || !keepReady}
+              aria-describedby={questionId}
+              data-testid="slip-keep"
+            >
+              {keepLabel(mode, asking.values, units, hold)}
+            </button>
+            <button
+              ref={changeRef}
+              type="button"
+              className={styles.primary}
+              onClick={change}
+              aria-describedby={questionId}
+              data-testid="slip-change"
+            >
+              Change it
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.actions}>
+          {mode === 'edit' ? (
+            <>
+              <button type="button" className={styles.secondary} onClick={onCancel}>
+                Cancel
+              </button>
+              {onDelete ? (
+                <button type="button" className={styles.secondary} onClick={onDelete}>
+                  Remove
+                </button>
+              ) : null}
+            </>
+          ) : null}
+          <button
+            type="button"
+            className={styles.primary}
+            onClick={commit}
+            disabled={disabled || cooling}
+            data-testid="log-set"
+            data-intent={skipping ? 'skip' : 'log'}
+          >
+            {buttonLabel}
+          </button>
+        </div>
+      )}
     </section>
   );
+}
+
+/** The button that keeps values asked about names them: "Log 1850 lb × 5". */
+function keepLabel(
+  mode: 'log' | 'edit',
+  values: SetLoggerValues,
+  units: 'lb' | 'kg',
+  hold: boolean,
+): string {
+  const verb = mode === 'edit' ? 'Save' : 'Log';
+  const count = hold ? `${values.reps} s` : `${values.reps}`;
+  if (values.weight === null) return `${verb} ${count}${hold ? '' : ' reps'}`;
+  return `${verb} ${values.weight} ${units} ${hold ? 'for' : '×'} ${count}`;
 }

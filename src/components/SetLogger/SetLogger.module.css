@@ -160,6 +160,25 @@
   gap: 8px;
 }
 
+/* A number that looks like a slip, asked about once before it is logged (Maintenance 26, item 40). */
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-yellow);
+  border-radius: var(--radius-control);
+  background: var(--color-yellow-soft);
+}
+
+.questionText {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .primary {
   flex: 1;
   min-height: 56px;

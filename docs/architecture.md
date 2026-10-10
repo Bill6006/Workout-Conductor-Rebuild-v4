@@ -68,7 +68,7 @@ src/
     AppShell/ BottomNav/ NavIcons/ Card/ Button/ FactList/ Screen/
     Form/                       Field, ChoiceGroup, ChipSelect, Toggle, NumberField, TagInput, TextArea
     Sheet/ Toast/ ProgressBar/
-    ExerciseDetail/             ExerciseThumb, ExerciseDemo (play/pause/replay, reduced motion), ExerciseDetailSheet
+    ExerciseDetail/             ExerciseThumb, ExerciseDemo (looping, Slow, Play under reduced motion, your own GIF), ExerciseDetailSheet
     DurationSelector/           the one workout-length dropdown (15 / 30 / 45 / Default)
   styles/                       tokens.css (dark charcoal, lime accent, radii, safe areas), global.css
 ```

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { createDefaultProfile } from '../../core/validation/profile';
 import { RECORD_NOW, record } from '../../test/records';
-import { emptyMaxes, recordMax, type StrengthMaxes } from './maxes';
+import { emptyMaxes, enteredBy, recordMax, type StrengthMaxes } from './maxes';
 import { ENTERED_MAX_STEPS, recommendNextTarget } from './progression';
 import { prescribe } from './roles';
 
@@ -79,5 +79,54 @@ describe('a max entered on a lift that already has logged sets', () => {
       daysAgo(1),
     );
     expect(target(maxes).weight ?? 0).toBeGreaterThan(plain.weight);
+  });
+});
+
+describe('a max dated ahead (Maintenance 26, the tenth pass of item 40)', () => {
+  it('moves no target, on a lift trained lately or one come back to after a break', () => {
+    const plain = target(null);
+    const ahead = recordMax(
+      emptyMaxes(),
+      bench.id,
+      { kind: 'max', e1rm: 275 },
+      'lb',
+      '2027-09-01T12:00:00.000Z',
+    );
+    expect(target(ahead).weight).toBe(plain.weight);
+    // An hour ahead is a clock running ahead: it counts.
+    const hour = recordMax(
+      emptyMaxes(),
+      bench.id,
+      { kind: 'max', e1rm: 275 },
+      'lb',
+      '2026-09-10T13:00:00.000Z',
+    );
+    expect(target(hour).weight).toBeGreaterThan(plain.weight as number);
+    // After a break, a lower max dated ahead does not take the start down.
+    const away = [record(30, 'barbell-bench-press', [[5, 185, 2]])];
+    const back = (maxes: StrengthMaxes | null) =>
+      recommendNextTarget({
+        exercise: bench,
+        role: 'primary-strength',
+        prescription: prescribe(bench, 'primary-strength', profile),
+        history: away,
+        profile,
+        now: RECORD_NOW,
+        maxes,
+      }).weight;
+    const lower = (enteredAt: string) =>
+      recordMax(emptyMaxes(), bench.id, { kind: 'max', e1rm: 135 }, 'lb', enteredAt);
+    expect(back(lower('2027-09-01T12:00:00.000Z'))).toBe(back(null));
+    expect(back(lower(daysAgo(1)))).toBeLessThan(back(null) as number);
+  });
+});
+
+describe('a max dated ahead with no clock given (Maintenance 26, the eleventh pass of item 40)', () => {
+  it('is read against the real clock: a date years ahead is no date, one just made is', () => {
+    expect(enteredBy('2099-01-01T00:00:00.000Z', undefined)).toBe(false);
+    expect(enteredBy(new Date().toISOString(), undefined)).toBe(true);
+    expect(enteredBy('', undefined)).toBe(false);
+    // A clock that cannot be read is none: the real one stands in (the twelfth pass).
+    expect(enteredBy('2099-01-01T00:00:00.000Z', 'not a time')).toBe(false);
   });
 });

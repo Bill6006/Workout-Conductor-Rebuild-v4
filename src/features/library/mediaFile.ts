@@ -5,7 +5,8 @@ export function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read the file.'));
+    // In plain words: the browser's own are no help (the ninth pass of item 50).
+    reader.onerror = () => reject(new Error('Could not read that file. Try again.'));
     reader.readAsDataURL(file);
   });
 }

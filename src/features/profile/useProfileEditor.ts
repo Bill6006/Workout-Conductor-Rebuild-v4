@@ -12,7 +12,7 @@ interface LocalDraft {
   draft: ProfileDraft;
 }
 
-const DEBOUNCE_MS = 450;
+export const DEBOUNCE_MS = 450;
 
 /** The store's update stamps: a local draft holds while they are the ones it was made over. */
 function stampsOf(state: Pick<AppState, 'profile' | 'locations'>): string {

@@ -1,10 +1,10 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -20,7 +20,6 @@ import {
 import type { CustomMedia } from '../../core/validation/customExercise';
 import { useAnySheetOpen } from '../Sheet/openSheets';
 import { isAnimatedImage, loopingImage, useFirstFrame } from './animatedImage';
-import { holdDemo, isDemoHeld, useDemoHeld } from './demoHold';
 import styles from './ExerciseDetail.module.css';
 import { useDemoVideo } from './useDemoVideo';
 import { useReducedMotion } from './useReducedMotion';
@@ -90,29 +89,41 @@ interface ThumbProps {
    * screen; the rest show their still, so a session never downloads every clip at once.
    */
   play?: boolean;
-  /** The workout's key for this exercise (demoHoldKey): a Pause in its How to stills the card. */
-  holdKey?: string | null;
 }
 
 /**
  * Whether a play() that failed was refused (a data or battery saver, a source it cannot play), and
- * not merely cut short by a pause made meanwhile (an AbortError): How to offers Play only for a
- * refusal (the re-check of the phone review).
+ * not merely cut short by a pause made meanwhile (an AbortError, the clip rested out of view): How
+ * to offers Play only for a refusal (the re-check of the phone review).
  */
 function refused(error: unknown): boolean {
   return !(error instanceof DOMException && error.name === 'AbortError');
+}
+
+/** The next frame, or a moment later where a document draws none. */
+function nextFrame(callback: () => void): number {
+  return typeof window.requestAnimationFrame === 'function'
+    ? window.requestAnimationFrame(callback)
+    : window.setTimeout(callback, 16);
+}
+
+function cancelFrame(handle: number): void {
+  if (typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(handle);
+  else window.clearTimeout(handle);
 }
 
 /**
  * Plays a looping clip while it is wanted, on a page in front, and in view (Maintenance 25, the
  * phone review). Once a script has played a clip, the browser no longer pauses it out of view by
  * itself, so this does both: it pauses the clip in the background, out of view, or when it is not
- * wanted (a sheet over the card, Pause), and plays it on once it is back, instead of leaving it on
- * the frame it stopped at; a page the browser froze included. It is the only thing that starts the
- * clip (no autoplay, no play as it loads): a clip that arrives under an open sheet, out of view or
- * on a page in the background stays still (the re-checks of the phone review). A play the browser
- * refuses (a data or battery saver) is told to onRefused (How to then offers Play), never one cut
- * short by a pause.
+ * wanted (a sheet over the card, a play refused), and plays it on once it is back, instead of
+ * leaving it on the frame it stopped at; a page the browser froze included. It is the only thing
+ * that starts the clip (no autoplay, no play as it loads): a clip that arrives under an open sheet,
+ * out of view or on a page in the background stays still (the re-checks of the phone review). A
+ * play the browser refuses (a data or battery saver) is told to onRefused (How to then offers
+ * Play), never one cut short by a pause; so is a pause none of this asked for, made while the clip
+ * is wanted, in view and in front (a saver stopping it as it played): with no Pause, a clip stopped
+ * that way would otherwise stay still with nothing to start it (the review of item 50).
  */
 function useKeepPlaying(
   ref: RefObject<HTMLVideoElement | null>,
@@ -147,13 +158,35 @@ function useKeepPlaying(
             settle();
           })
         : null;
+    // The event comes after the pause: one made here is told apart by the state then (no longer
+    // wanted, out of view, in the background), one undone since by a play by `paused`, and one
+    // made as the clip left the page by `isConnected`. One the browser makes as the page hides can
+    // come before the page reads hidden: it is judged again a frame later, and no frame comes
+    // while the page is hidden; by then the browser has played it on (the re-check of item 50).
+    const stopping = () =>
+      wanted &&
+      inView &&
+      element.paused &&
+      element.isConnected &&
+      document.visibilityState !== 'hidden';
+    let frame: number | null = null;
+    const stopped = () => {
+      if (!stopping() || frame !== null) return;
+      frame = nextFrame(() => {
+        frame = null;
+        if (stopping()) onRefused?.();
+      });
+    };
     observer?.observe(element);
+    element.addEventListener('pause', stopped);
     document.addEventListener('visibilitychange', settle);
     document.addEventListener('resume', settle);
     window.addEventListener('pageshow', settle);
     settle();
     return () => {
+      if (frame !== null) cancelFrame(frame);
       observer?.disconnect();
+      element.removeEventListener('pause', stopped);
       document.removeEventListener('visibilitychange', settle);
       document.removeEventListener('resume', settle);
       window.removeEventListener('pageshow', settle);
@@ -167,27 +200,25 @@ function useKeepPlaying(
  * in front, and plays on when the page or the card comes back into view (the phone review: it
  * rested after five seconds and stayed still). Its clip, or the lifter's own video, rests where it
  * is under a sheet (a diagram's loop or an own GIF, which are pictures, keep moving), and it shows
- * its still under reduced motion and while the lifter has it paused in the workout's How to,
- * which is how it is stopped (WCAG 2.2.2). Small rows get the still so lists stay calm and fast. A
- * clip that cannot load leaves its still in place.
+ * its still under reduced motion: the owner asked for no Pause on any demonstration (Maintenance
+ * 26, item 50), so the phone's own setting is the way to keep them still. Small rows get the still
+ * so lists stay calm and fast. A clip that cannot load leaves its still in place.
  */
 export function ExerciseThumb({
   exercise,
   size = 'small',
   customMedia = null,
   play = true,
-  holdKey = null,
 }: ThumbProps) {
   const asset = mediaFor(exercise);
   const reducedMotion = useReducedMotion();
-  const held = useDemoHeld(holdKey);
   const large = size === 'large';
   // Only a card that may move follows the sheets: a list's rows never render again for one.
   const sheetOpen = useAnySheetOpen(large && play);
   const className = large ? `${styles.thumb} ${styles.thumbLarge}` : styles.thumb;
   const width = large ? 96 : 72;
   const height = large ? 72 : 54;
-  const animated = large && !reducedMotion && play && !held;
+  const animated = large && !reducedMotion && play;
   const clip = !customMedia && animated && isVideoAsset(asset);
   const video = useDemoVideo(clip ? mediaUrl(asset.demo) : null);
   const clipRef = useRef<HTMLVideoElement>(null);
@@ -342,27 +373,25 @@ interface DemoProps {
   customMedia?: CustomMedia | null;
   /** When given, tapping the demonstration (or its button) picks a GIF, photo, or video. */
   onPickFile?: (file: File) => void;
-  /** When given with custom media, offers to remove the user's demonstration. */
-  onRemove?: () => void;
-  busy?: boolean;
   /**
-   * The workout's key for this exercise (demoHoldKey), given only by the workout's How to: its
-   * Pause then holds the demonstration on the workout card still too.
+   * When given with custom media, offers to remove the user's demonstration; a promise of whether
+   * it was removed lets a failed removal give the focus back to Remove.
    */
-  holdKey?: string | null;
+  onRemove?: () => void | Promise<boolean>;
+  busy?: boolean;
 }
 
 /**
  * The demonstration, large enough to learn from (Maintenance 25, item 7): the exercise's own clip,
- * looping without sound, which can be paused or slowed to half speed to watch the path.
- * Reduced-motion users get the still and a Play button. While the clip loads, and when it cannot
- * (offline before it was ever kept), the still stands in and says so, with Try again. Where the
- * source asks for it, its credit and notice sit under it. The user's own GIF, photo or video
- * replaces it when they picked one; an exercise with no licensed demonstration keeps its movement
- * pattern's diagram. Whatever moves here can be paused, and starts paused under reduced motion
- * (the tenth review: the diagram and the lifter's own GIF or video could not be stopped). In the
- * workout's How to, the lifter's Pause holds the exercise's demonstration on its card still too,
- * and How to opens paused for it, until Play (the phone review).
+ * looping without sound, which can be slowed to half speed to watch the path. It has no Pause: the
+ * owner asked for none on any demonstration (Maintenance 26, item 50). Under reduced motion it
+ * starts still, with a Play that shows the motion when asked; a play the browser refuses or stops
+ * (a data or battery saver) offers Play too. While the clip loads, and when it cannot (offline
+ * before it was ever kept), the still stands in and says so, with Try again. Where the source asks
+ * for it, its credit and notice sit under it. The user's own GIF, photo or video replaces it when
+ * they picked one; given a picker (How to, and the details), a tap on the demonstration or on its
+ * button picks one (item 50). An exercise with no licensed demonstration keeps its movement
+ * pattern's diagram.
  */
 export function ExerciseDemo({
   exercise,
@@ -370,31 +399,38 @@ export function ExerciseDemo({
   onPickFile,
   onRemove,
   busy = false,
-  holdKey = null,
 }: DemoProps) {
   const asset = mediaFor(exercise);
   const reducedMotion = useReducedMotion();
-  // Paused before in this workout's How to: it opens paused, as the card shows it.
-  const lifterHeld = useDemoHeld(holdKey);
-  const hold = (value: boolean) => {
-    if (holdKey) holdDemo(holdKey, value);
-  };
-  const holdNoteId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
-  const [paused, setPaused] = useState(() => isDemoHeld(holdKey));
+  // A play of the clip the browser refused or stopped: Play stands in for it until it plays.
+  const [clipStill, setClipStill] = useState(false);
   const [slow, setSlow] = useState(false);
-  // The diagram stands in for a still that could not load: the credit is not for it.
+  // The diagram stands in for a still that could not load: the credit is not for it. A picture of
+  // the lifter's own ends it: once that is removed, the still is tried again (the third pass of
+  // item 50: the still loaded under the diagram's label, its credit missing).
   const [diagram, setDiagram] = useState(false);
-  // Play was pressed, or its button holds the focus: the focus moves to Pause once the clip is up
+  if (customMedia && diagram) setDiagram(false);
+  // Play was pressed, or its button holds the focus: the focus moves on to Slow once the clip is up
   // (the ninth review; a retry made on its own, back online, too: the tenth review's re-check).
-  const focusPause = useRef(false);
+  const focusSlow = useRef(false);
   const playFocused = useRef(false);
-  // The diagram's loop and the lifter's own GIF or video: paused or played by hand, else moving
-  // unless reduced motion asks for stillness or the lifter paused it before.
-  const [held, setHeld] = useState<boolean | null>(null);
-  const moving = held === null ? !reducedMotion && !lifterHeld : !held;
+  // Play over a picture leaves with the press: the focus moves to the picture's frame, never to
+  // the page, nor to the picker a second Enter would open (the review of item 50 and its
+  // re-check).
+  const focusPicture = useRef(false);
+  // The lifter's own media, by what it is: a refusal and a Play belong to the one they were for.
+  const ownKey = customMedia
+    ? `${customMedia.id}|${customMedia.createdAt}|${customMedia.sizeBytes}`
+    : null;
+  // The diagram's loop and the lifter's own GIF or video move unless reduced motion asks for
+  // stillness and Play has not been pressed for that one (the re-check of item 50: a Play pressed
+  // on one GIF moved the next one picked).
+  const [askedFor, setAskedFor] = useState<string | null>(null);
+  const motionKey = ownKey ?? 'catalog';
+  const moving = !reducedMotion || askedFor === motionKey;
   const ownVideoRef = useRef<HTMLVideoElement>(null);
   const ownImage = customMedia?.kind === 'image' ? customMedia.dataUrl : null;
   const ownMoves = useMemo(() => (ownImage ? isAnimatedImage(ownImage) : false), [ownImage]);
@@ -404,11 +440,13 @@ export function ExerciseDemo({
     [ownImage, ownMoves],
   );
   const ownStill = useFirstFrame(ownMoves ? ownImage : null, !moving);
-  // The lifter's own video follows the button (useKeepPlaying, below): a play the browser refuses
-  // shows Play.
   const ownVideo = customMedia?.kind === 'video';
-  const ownRefused = useCallback(() => setHeld(true), []);
-  const clipRefused = useCallback(() => setPaused(true), []);
+  // A play of the lifter's own video the browser refused or stopped, for that video only: another
+  // picked in its place, or a picture, is not held by it (the review of item 50).
+  const [ownRefusedFor, setOwnRefusedFor] = useState<string | null>(null);
+  const ownVideoMoving = moving && !(ownVideo && ownRefusedFor === ownKey);
+  const ownRefused = useCallback(() => setOwnRefusedFor(ownKey), [ownKey]);
+  const clipRefused = useCallback(() => setClipStill(true), []);
   const canPick = typeof onPickFile === 'function';
   const pickLabel = customMedia
     ? 'Replace your demonstration'
@@ -417,19 +455,67 @@ export function ExerciseDemo({
   const wantsClip = clip && (!reducedMotion || started);
   const video = useDemoVideo(wantsClip ? mediaUrl(asset.demo) : null);
   // Started, played on where the browser paused them (a page frozen in the background), and rested
-  // out of view, as the card's clip is; a pause of the lifter's stays (the reviews of the phone
-  // review).
-  useKeepPlaying(videoRef, clip && video.src !== null, !paused, video.src, clipRefused);
-  useKeepPlaying(ownVideoRef, ownVideo, moving, ownVideo ? customMedia.dataUrl : null, ownRefused);
+  // out of view, as the card's clip is (the reviews of the phone review).
+  useKeepPlaying(videoRef, clip && video.src !== null, !clipStill, video.src, clipRefused);
+  useKeepPlaying(
+    ownVideoRef,
+    ownVideo,
+    ownVideoMoving,
+    ownVideo ? customMedia.dataUrl : null,
+    ownRefused,
+  );
 
-  const openPicker = () => inputRef.current?.click();
+  const takeFocus = (node: HTMLElement | null) => {
+    if (node && focusPicture.current) {
+      focusPicture.current = false;
+      node.focus({ preventScroll: true });
+    }
+  };
+  // A pick or a removal made from a focused control gives the focus back once it is saved: the
+  // controls are disabled while it saves, and the focus fell to the page (the re-check of item
+  // 50). Only a focus the page holds is taken back, never one the lifter moved meanwhile.
+  const pickRef = useRef<HTMLButtonElement>(null);
+  const barRef = useRef<HTMLButtonElement>(null);
+  const removeRef = useRef<HTMLButtonElement>(null);
+  const giveBack = useRef<'pick' | 'bar' | 'remove' | null>(null);
+  const saving = useRef(false);
+  useEffect(() => {
+    if (busy) {
+      saving.current = true;
+      return;
+    }
+    if (!saving.current) return;
+    saving.current = false;
+    const target = giveBack.current;
+    giveBack.current = null;
+    const at = document.activeElement;
+    const lost = at === null || at === document.body;
+    // A removal that failed: back to Remove, enabled again now, from Replace where it waited; to
+    // the bar when the picture went all the same (the sixth pass: the focus fell to the page).
+    if (target === 'remove') {
+      if (lost || at === barRef.current) {
+        (removeRef.current ?? barRef.current)?.focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (target && lost)
+      (target === 'pick' ? pickRef : barRef).current?.focus({ preventScroll: true });
+  }, [busy]);
+  // Called from the click itself: a ref is read in the event, never in render (the seventh pass).
+  const openPicker = (from: 'pick' | 'bar', event: MouseEvent<HTMLButtonElement>) => {
+    giveBack.current = document.activeElement === event.currentTarget ? from : null;
+    inputRef.current?.click();
+  };
+  // Opened only by the picture or the buttons: never a stop of its own for Tab or a screen reader.
   const picker = canPick ? (
     <input
+      key="picker"
       ref={inputRef}
       className={styles.demoInput}
       type="file"
       accept="image/gif,image/*,video/*"
-      aria-label={pickLabel}
+      tabIndex={-1}
+      aria-hidden="true"
       data-testid="demo-file-input"
       onChange={(event) => {
         const file = event.target.files?.[0];
@@ -438,54 +524,51 @@ export function ExerciseDemo({
       }}
     />
   ) : null;
-  const wrap = (image: ReactNode) =>
+  // With a picker, the demonstration itself is the button that picks one (item 50); its name says
+  // what it shows as well as what it does, since a button's content is not read on its own.
+  const wrap = (media: ReactNode, name: string) =>
     canPick ? (
       <button
+        ref={pickRef}
         type="button"
         className={styles.demoPick}
-        onClick={openPicker}
+        onClick={(event) => openPicker('pick', event)}
         disabled={busy}
-        aria-label={pickLabel}
+        aria-label={`${name}. ${pickLabel}`}
         data-testid="demo-pick"
       >
-        {image}
+        {media}
       </button>
     ) : (
-      image
+      media
     );
 
-  // Said with Pause to a screen reader, in the workout's How to: it stills the card too. Beside a
-  // Pause only, and hidden, so it is never read as text of its own (the re-check).
-  const holdNote = holdKey ? (
-    <span id={holdNoteId} hidden>
-      Pause holds this demonstration on the workout card too.
-    </span>
-  ) : null;
-
-  const motionButton = (
-    <span className={styles.demoOverlay}>
+  // A picture that can move but is still (reduced motion, or a video the browser would not play):
+  // Play shows the motion. Above the picture, clear of a diagram's own label along its foot.
+  const playButton = (
+    <span className={`${styles.demoOverlay} ${styles.demoOverlayTop}`}>
       <button
         type="button"
         className={styles.overlayButton}
-        onClick={() => {
-          setHeld(moving);
-          hold(moving);
+        onClick={(event) => {
+          focusPicture.current = document.activeElement === event.currentTarget;
+          setOwnRefusedFor(null);
+          setAskedFor(motionKey);
         }}
-        aria-describedby={holdKey ? holdNoteId : undefined}
-        data-testid="demo-pause"
+        data-testid="demo-play"
       >
-        {moving ? 'Pause' : 'Play'}
+        Play
       </button>
-      {holdNote}
     </span>
   );
 
   if (customMedia) {
     const ownAlt = `${exercise.name}, your demonstration`;
     const ownImageSrc = ownMoves && !moving ? ownStill : (ownLooping ?? customMedia.dataUrl);
+    const still = ownVideo ? !ownVideoMoving : ownMoves && !moving;
     return (
       <figure className={styles.demo} data-testid="custom-media">
-        <div className={styles.demoFrame}>
+        <div key="stage" className={styles.demoFrame} ref={takeFocus} tabIndex={-1}>
           {customMedia.kind === 'video'
             ? wrap(
                 <video
@@ -497,8 +580,9 @@ export function ExerciseDemo({
                   playsInline
                   aria-label={ownAlt}
                   data-testid="custom-demo"
-                  data-playing={moving ? 'true' : 'false'}
+                  data-playing={ownVideoMoving ? 'true' : 'false'}
                 />,
+                ownAlt,
               )
             : wrap(
                 ownImageSrc ? (
@@ -521,27 +605,62 @@ export function ExerciseDemo({
                     data-playing="false"
                   />
                 ),
+                ownAlt,
               )}
-          {ownVideo || ownMoves ? motionButton : null}
+          {still ? playButton : null}
         </div>
-        <figcaption className={styles.demoBar}>
+        <figcaption key="bar" className={styles.demoBar}>
           <span className={styles.demoLabel}>Your demonstration · stays on this device</span>
           {canPick ? (
             <span className={styles.demoControls}>
               <button
+                ref={barRef}
                 type="button"
                 className={styles.demoButton}
-                onClick={openPicker}
+                onClick={(event) => openPicker('bar', event)}
                 disabled={busy}
+                data-testid="demo-replace"
               >
                 Replace
               </button>
               {onRemove ? (
                 <button
+                  ref={removeRef}
                   type="button"
                   className={styles.demoButton}
-                  onClick={onRemove}
+                  onClick={(event) => {
+                    const focused = document.activeElement === event.currentTarget;
+                    giveBack.current = focused ? 'bar' : null;
+                    // The focus moves to Replace first: its button stays, as "Your GIF", once the
+                    // picture is gone, where Remove goes (the third pass of item 50: with another
+                    // exercise's picture kept, the save ended first and the focus fell after).
+                    if (focused) barRef.current?.focus({ preventScroll: true });
+                    const done = onRemove();
+                    // Not removed: the focus goes back to Remove once it can take it again, so
+                    // the next Enter tries again rather than opening the picker (the fourth pass).
+                    if (focused && done instanceof Promise) {
+                      void done.then((removed) => {
+                        if (removed) return;
+                        // The save's own end takes it there once Remove is enabled again; this
+                        // runs before that end, whenever the browser draws (the fifth pass). A
+                        // frame later, for a caller whose save marks nothing busy.
+                        giveBack.current = 'remove';
+                        nextFrame(() => {
+                          const at = document.activeElement;
+                          const back = removeRef.current ?? barRef.current;
+                          if (
+                            back &&
+                            !back.disabled &&
+                            (at === barRef.current || at === null || at === document.body)
+                          ) {
+                            back.focus({ preventScroll: true });
+                          }
+                        });
+                      });
+                    }
+                  }}
                   disabled={busy}
+                  data-testid="demo-remove"
                 >
                   Remove
                 </button>
@@ -557,25 +676,6 @@ export function ExerciseDemo({
   const alt = `${exercise.name} demonstration`;
   const shape =
     asset.width && asset.height ? { aspectRatio: `${asset.width} / ${asset.height}` } : undefined;
-  // The button follows what it last asked for; a play the browser refuses shows Play again. A tap
-  // reads the clip itself: one the browser paused (a page frozen in the background) is played, not
-  // held. The lifter's Pause holds the card's loop still too, and Play lets it move (the phone
-  // review).
-  const togglePause = () => {
-    const element = videoRef.current;
-    if (!element) return;
-    if (element.paused) {
-      setPaused(false);
-      hold(false);
-      void element.play().catch((error: unknown) => {
-        if (refused(error)) setPaused(true);
-      });
-    } else {
-      element.pause();
-      setPaused(true);
-      hold(true);
-    }
-  };
   const toggleSlow = () => {
     const next = !slow;
     setSlow(next);
@@ -586,27 +686,51 @@ export function ExerciseDemo({
   let status: string | null = null;
   if (clip && video.src) {
     stage = (
-      <div className={styles.demoStage} style={shape}>
-        <video
-          ref={videoRef}
-          className={styles.demoVideo}
-          src={video.src}
-          poster={mediaUrl(asset.poster)}
-          // Started by useKeepPlaying only, so one rested out of view as it loaded stays rested,
-          // and one paused by the lifter before waits on its first frame for Play (the re-checks).
-          loop
-          muted
-          playsInline
-          aria-label={alt}
-          onLoadedMetadata={(event) => {
-            event.currentTarget.playbackRate = slow ? 0.5 : 1;
-          }}
-          onClick={togglePause}
-          data-testid="exercise-demo"
-          data-playing={paused ? 'false' : 'true'}
-        />
+      <div key="stage" className={styles.demoStage} style={shape}>
+        {wrap(
+          <video
+            ref={videoRef}
+            className={styles.demoVideo}
+            src={video.src}
+            poster={mediaUrl(asset.poster)}
+            // Started by useKeepPlaying only, so one rested out of view as it loaded stays rested
+            // (the re-checks of the phone review).
+            loop
+            muted
+            playsInline
+            aria-label={alt}
+            onLoadedMetadata={(event) => {
+              event.currentTarget.playbackRate = slow ? 0.5 : 1;
+            }}
+            data-testid="exercise-demo"
+            data-playing={clipStill ? 'false' : 'true'}
+          />,
+          alt,
+        )}
         <span className={styles.demoOverlay}>
+          {clipStill ? (
+            <button
+              type="button"
+              className={styles.overlayButton}
+              onClick={(event) => {
+                // It leaves with the press: Slow takes the focus once the clip plays.
+                focusSlow.current = document.activeElement === event.currentTarget;
+                setClipStill(false);
+              }}
+              data-testid="demo-play"
+            >
+              Play
+            </button>
+          ) : null}
           <button
+            ref={(node) => {
+              if (node && (focusSlow.current || playFocused.current) && !clipStill) {
+                focusSlow.current = false;
+                playFocused.current = false;
+                // Without scrolling: the lifter may be reading further down the sheet.
+                node.focus({ preventScroll: true });
+              }
+            }}
             type="button"
             className={styles.overlayButton}
             aria-pressed={slow}
@@ -615,24 +739,6 @@ export function ExerciseDemo({
           >
             Slow
           </button>
-          <button
-            ref={(node) => {
-              if (node && (focusPause.current || playFocused.current)) {
-                focusPause.current = false;
-                playFocused.current = false;
-                // Without scrolling: the lifter may be reading further down the sheet.
-                node.focus({ preventScroll: true });
-              }
-            }}
-            type="button"
-            className={styles.overlayButton}
-            onClick={togglePause}
-            aria-describedby={holdKey ? holdNoteId : undefined}
-            data-testid="demo-pause"
-          >
-            {paused ? 'Play' : 'Pause'}
-          </button>
-          {holdNote}
         </span>
       </div>
     );
@@ -640,21 +746,25 @@ export function ExerciseDemo({
     // The still stands in: before the clip arrives, when it cannot, or until a reduced-motion
     // user asks for it.
     stage = (
-      <div className={styles.demoStage} style={shape}>
-        <Still
-          asset={asset}
-          exercise={exercise}
-          className={styles.demoVideo}
-          alt={alt}
-          width={asset.width ?? 480}
-          height={asset.height ?? 360}
-          testId="exercise-demo"
-          onDiagram={() => setDiagram(true)}
-        />
+      <div key="stage" className={styles.demoStage} style={shape}>
+        {wrap(
+          <Still
+            asset={asset}
+            exercise={exercise}
+            className={styles.demoVideo}
+            alt={alt}
+            width={asset.width ?? 480}
+            height={asset.height ?? 360}
+            testId="exercise-demo"
+            onDiagram={() => setDiagram(true)}
+          />,
+          alt,
+        )}
         {reducedMotion || video.failed || video.retrying ? (
-          <span className={styles.demoOverlay}>
+          // Over the diagram that stood in, the top corner, clear of its label (the review of 50).
+          <span className={`${styles.demoOverlay} ${diagram ? styles.demoOverlayTop : ''}`}>
             {/* One button throughout: Play, Loading…, and Try again when the clip cannot load,
-                so focus stays on it until Pause takes it (the tenth review). */}
+                so focus stays on it until Slow takes it (the tenth review). */}
             <button
               type="button"
               className={styles.overlayButton}
@@ -665,7 +775,7 @@ export function ExerciseDemo({
               onBlur={() => {
                 // Moved on: the clip no longer takes the focus when it comes (the second re-check).
                 playFocused.current = false;
-                focusPause.current = false;
+                focusSlow.current = false;
               }}
               onClick={(event) => {
                 // Only a press from the focused button hands the focus on: Safari, and Firefox
@@ -673,16 +783,14 @@ export function ExerciseDemo({
                 // the hand-over (the tenth review's third re-check).
                 const held = document.activeElement === event.currentTarget;
                 if (video.failed) {
-                  focusPause.current = held;
+                  focusSlow.current = held;
                   video.retry();
                   return;
                 }
                 if (started || video.retrying) return;
-                focusPause.current = held;
+                focusSlow.current = held;
                 setStarted(true);
-                // Play asks for motion: a pause held from before lets go.
-                setPaused(false);
-                hold(false);
+                setClipStill(false);
               }}
               data-testid="demo-play"
             >
@@ -700,11 +808,11 @@ export function ExerciseDemo({
     if (video.failed) status = diagram ? `Shown as a diagram: ${why}` : `Shown as a still: ${why}`;
     else if (wantsClip) status = 'Loading the video…';
   } else {
-    // The diagram's loop, which can be paused on its still.
+    // The diagram's loop, still under reduced motion until Play.
     const loops = asset.demo !== asset.poster;
     const playing = loops && moving;
     stage = (
-      <div className={styles.demoFrame}>
+      <div key="stage" className={styles.demoFrame} ref={takeFocus} tabIndex={-1}>
         {wrap(
           <img
             className={styles.demoImage}
@@ -716,14 +824,17 @@ export function ExerciseDemo({
             data-testid="exercise-demo"
             data-playing={playing ? 'true' : 'false'}
           />,
+          alt,
         )}
-        {loops ? motionButton : null}
+        {loops && !moving ? playButton : null}
       </div>
     );
   }
 
-  // Under the diagram that stood in, the demonstration's credit, note and notice are not shown.
-  const own = !diagram;
+  // Under the diagram that stood in, the demonstration's credit, note and notice are not shown;
+  // once the clip plays they are its own again (the re-check of item 50: a clip that came after
+  // a diagram had stood in played with no credit).
+  const own = !diagram || (clip && video.src !== null);
   const credit = own ? creditLine(asset) : null;
   return (
     <figure className={styles.demo}>
@@ -733,17 +844,19 @@ export function ExerciseDemo({
           {status}
         </p>
       ) : null}
-      <figcaption className={styles.demoBar}>
+      <figcaption key="bar" className={styles.demoBar}>
         <span className={styles.demoLabel} data-testid="demo-credit">
           {credit ?? (canPick ? 'Diagram · tap it to use your own GIF' : 'Diagram of the movement')}
         </span>
         {canPick ? (
           <span className={styles.demoControls}>
             <button
+              ref={barRef}
               type="button"
               className={`${styles.demoButton} ${styles.demoButtonAccent}`}
-              onClick={openPicker}
+              onClick={(event) => openPicker('bar', event)}
               disabled={busy}
+              data-testid="demo-your-gif"
             >
               Your GIF
             </button>

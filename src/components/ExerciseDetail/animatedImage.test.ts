@@ -157,7 +157,7 @@ describe('useFirstFrame', () => {
     // Played: no still wanted, none freed.
     rerender({ wanted: false });
     expect(result.current).toBeNull();
-    // Paused again: the same still at once, never one already freed, and none made anew.
+    // Still again: the same still at once, never one already freed, and none made anew.
     rerender({ wanted: true });
     expect(result.current).toBe('blob:still-1');
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();

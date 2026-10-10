@@ -108,6 +108,21 @@ export function enteredE1rm(entry: Pick<EnteredMax, 'e1rm' | 'from'>): number {
   return entry.from ? maxFromSet(entry.from.weight, entry.from.reps) : entry.e1rm;
 }
 
+/**
+ * Whether a max entered at `enteredAt` reads as entered by `now`: a date further ahead than a day,
+ * leeway for a clock running ahead, or none readable, is no date (Maintenance 26, the tenth pass of
+ * item 40: a max dated a year ahead counted as newer than every set logged since).
+ */
+export function enteredBy(enteredAt: string, now: string | undefined): boolean {
+  const at = Date.parse(enteredAt);
+  if (!Number.isFinite(at)) return false;
+  // With no clock given, or none readable, the real one: a date ahead is no date either way (the
+  // eleventh and twelfth passes).
+  const given = now === undefined ? NaN : Date.parse(now);
+  const by = Number.isFinite(given) ? given : Date.now();
+  return !(at > by + DAY_MS);
+}
+
 /** The entered max for a lift in the requested units, or null. */
 export function enteredMaxFor(
   maxes: StrengthMaxes,

@@ -58,3 +58,35 @@ describe('the keep-for-weeks switch', () => {
     expect(use).toHaveBeenCalledWith(expect.any(String), false);
   });
 });
+
+describe('the details after the third pass of item 50', () => {
+  it('gives each exercise a demonstration of its own: a Play pressed on one moves no other', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    });
+    try {
+      const handle = createTestStore();
+      const sheet = (id: string) => (
+        <Providers store={handle.store}>
+          <ExerciseDetailSheet exercise={requireExercise(id)} onClose={() => undefined} />
+        </Providers>
+      );
+      const { rerender } = render(sheet('band-pull-apart'));
+      fireEvent.click(screen.getByTestId('demo-play'));
+      expect(screen.getByTestId('exercise-demo').getAttribute('src')).toContain('-loop.svg');
+      rerender(sheet('ab-wheel-rollout'));
+      expect(screen.getByTestId('exercise-demo').getAttribute('src')).not.toContain('-loop');
+      expect(screen.getByTestId('demo-play')).toHaveTextContent('Play');
+    } finally {
+      // @ts-expect-error jsdom has no matchMedia; this test defined it
+      delete window.matchMedia;
+    }
+  });
+});

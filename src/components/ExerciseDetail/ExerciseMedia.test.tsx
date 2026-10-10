@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireExercise } from '../../catalog/exercises/catalog';
@@ -5,7 +7,6 @@ import { DOW_NOTICE } from '../../catalog/media/exerciseMedia';
 import type { CustomMedia } from '../../core/validation/customExercise';
 import { twoFrameGif } from '../../test/images';
 import { loopingImage } from './animatedImage';
-import { demoHoldKey, releaseAllDemos } from './demoHold';
 import { ExerciseDemo, ExerciseThumb } from './ExerciseMedia';
 
 vi.mock('./animatedImage', async (original) => ({
@@ -100,8 +101,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setOnline(true);
-  // A pause held in one test says nothing about the next.
-  releaseAllDemos();
+  // One test's clock, stubs and spies say nothing about the next.
   vi.useRealTimers();
   // @ts-expect-error jsdom has no matchMedia; tests define it as needed
   delete window.matchMedia;
@@ -197,7 +197,7 @@ describe('ExerciseThumb', () => {
 });
 
 describe('ExerciseDemo', () => {
-  it('plays the clip large, slows it to half speed and pauses it', async () => {
+  it('plays the clip large and slows it to half speed, with no Pause (Maintenance 26, item 50)', async () => {
     mockClips('ok');
     render(<ExerciseDemo exercise={bench} />);
     const video = await waitFor(() => {
@@ -209,13 +209,9 @@ describe('ExerciseDemo', () => {
     fireEvent.click(screen.getByTestId('demo-slow'));
     expect(video.playbackRate).toBe(0.5);
     expect(screen.getByTestId('demo-slow')).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    expect(video).toHaveAttribute('data-playing', 'false');
-    expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play');
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    expect(video).toHaveAttribute('data-playing', 'true');
+    expect(screen.queryByRole('button', { name: /pause/i })).toBeNull();
+    expect(screen.queryByTestId('demo-play')).toBeNull();
   });
-
   it('keeps the still and says why while offline before the clip was ever kept', async () => {
     setOnline(false);
     mockClips('offline');
@@ -300,10 +296,11 @@ describe('ExerciseDemo', () => {
     expect(onPickFile).toHaveBeenCalledWith(file);
   });
 
-  it('offers Your GIF beside a licensed clip too', () => {
+  it('offers Your GIF beside a licensed clip too, and the clip itself picks one (Maintenance 26, item 50)', () => {
     const onPickFile = vi.fn();
     render(<ExerciseDemo exercise={bench} onPickFile={onPickFile} />);
-    expect(screen.queryByTestId('demo-pick')).toBeNull();
+    // Before the clip arrives its still stands in, and the still is the picker as the clip will be.
+    expect(screen.getByTestId('demo-pick')).toContainElement(screen.getByTestId('exercise-demo'));
     expect(screen.getByRole('button', { name: 'Your GIF' })).toBeInTheDocument();
   });
 
@@ -355,7 +352,7 @@ describe('ExerciseDemo', () => {
     expect(screen.queryByTestId('media-credit')).toBeNull();
   });
 
-  it('keeps focus on Play while the clip loads under reduced motion, then hands it to Pause', async () => {
+  it('keeps focus on Play while the clip loads under reduced motion, then hands it to Slow', async () => {
     mockReducedMotion(true);
     let arrive!: () => void;
     const hold = new Promise<void>((resolve) => {
@@ -373,18 +370,17 @@ describe('ExerciseDemo', () => {
       arrive();
     });
     await waitFor(() => expect(screen.getByTestId('exercise-demo').tagName).toBe('VIDEO'));
-    expect(document.activeElement).toBe(screen.getByTestId('demo-pause'));
+    expect(document.activeElement).toBe(screen.getByTestId('demo-slow'));
   });
 });
 
-describe('the tenth review: whatever moves can be stopped', () => {
-  it('keeps an own GIF moving on the card, and rests it on its first frame while paused in How to', async () => {
+describe('what moves, and Play under reduced motion (the tenth review; Maintenance 26, item 50: no Pause)', () => {
+  it('keeps an own GIF looping on the card, with How to beside it and nothing to pause it', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const key = demoHoldKey('session-1', 'entry-1', bench.id);
     render(
       <>
-        <ExerciseThumb exercise={bench} size="large" customMedia={movingGif} holdKey={key} />
-        <ExerciseDemo exercise={bench} customMedia={movingGif} holdKey={key} />
+        <ExerciseThumb exercise={bench} size="large" customMedia={movingGif} />
+        <ExerciseDemo exercise={bench} customMedia={movingGif} />
       </>,
     );
     const thumb = () => screen.getByTestId('exercise-thumb');
@@ -395,14 +391,8 @@ describe('the tenth review: whatever moves can be stopped', () => {
     const looping = loopingImage(movingGif.dataUrl);
     expect(thumb()).toHaveAttribute('data-animated', 'true');
     expect(thumb().getAttribute('src')).toBe(looping);
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    expect(thumb()).toHaveAttribute('data-animated', 'false');
-    expect(thumb().getAttribute('src')).toBe('blob:first-frame');
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    expect(thumb()).toHaveAttribute('data-animated', 'true');
-    expect(thumb().getAttribute('src')).toBe(looping);
+    expect(screen.queryByRole('button', { name: /pause/i })).toBeNull();
   });
-
   it('shows an own GIF that moves on its first frame under reduced motion, a still photo as it is', () => {
     mockReducedMotion(true);
     const { rerender } = render(
@@ -413,27 +403,24 @@ describe('the tenth review: whatever moves can be stopped', () => {
     expect(screen.getByTestId('exercise-thumb').getAttribute('src')).toBe(gif.dataUrl);
   });
 
-  it('pauses the diagram’s loop on its still in How to, and plays it again', () => {
+  it('loops the diagram in How to with no Pause', () => {
     render(<ExerciseDemo exercise={pullApart} onPickFile={vi.fn()} />);
-    const demo = () => screen.getByTestId('exercise-demo');
-    expect(demo().getAttribute('src')).toContain('-loop.svg');
-    expect(demo()).toHaveAttribute('data-playing', 'true');
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    expect(demo().getAttribute('src')).not.toContain('-loop');
-    expect(demo()).toHaveAttribute('data-playing', 'false');
-    expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play');
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    expect(demo().getAttribute('src')).toContain('-loop.svg');
+    const demo = screen.getByTestId('exercise-demo');
+    expect(demo.getAttribute('src')).toContain('-loop.svg');
+    expect(demo).toHaveAttribute('data-playing', 'true');
+    expect(screen.queryByRole('button', { name: /pause/i })).toBeNull();
+    expect(screen.queryByTestId('demo-play')).toBeNull();
   });
-
-  it('starts the diagram still under reduced motion, with Play', () => {
+  it('starts the diagram still under reduced motion, with Play, which lets it loop', () => {
     mockReducedMotion(true);
     render(<ExerciseDemo exercise={pullApart} />);
     expect(screen.getByTestId('exercise-demo').getAttribute('src')).not.toContain('-loop');
-    expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play');
+    expect(screen.getByTestId('demo-play')).toHaveTextContent('Play');
+    fireEvent.click(screen.getByTestId('demo-play'));
+    expect(screen.getByTestId('exercise-demo').getAttribute('src')).toContain('-loop.svg');
+    expect(screen.queryByTestId('demo-play')).toBeNull();
   });
-
-  it('pauses the lifter’s own GIF on its first frame in How to, and starts there under reduced motion', () => {
+  it('loops the lifter’s own GIF in How to with no Pause, and starts it on its first frame under reduced motion, with Play', () => {
     const { unmount } = render(
       <ExerciseDemo exercise={bench} customMedia={movingGif} onPickFile={vi.fn()} />,
     );
@@ -441,35 +428,30 @@ describe('the tenth review: whatever moves can be stopped', () => {
     expect(screen.getByTestId('custom-demo').getAttribute('src')).toBe(
       loopingImage(movingGif.dataUrl),
     );
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    expect(screen.getByTestId('custom-demo').getAttribute('src')).toBe('blob:first-frame');
-    expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play');
+    expect(screen.queryByRole('button', { name: /pause/i })).toBeNull();
     unmount();
     mockReducedMotion(true);
     render(<ExerciseDemo exercise={bench} customMedia={movingGif} />);
     expect(screen.getByTestId('custom-demo').getAttribute('src')).toBe('blob:first-frame');
-    expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play');
+    fireEvent.click(screen.getByTestId('demo-play'));
+    expect(screen.getByTestId('custom-demo').getAttribute('src')).toBe(
+      loopingImage(movingGif.dataUrl),
+    );
   });
-
   it('offers no Pause for a photo of the lifter’s own, which does not move', () => {
     render(<ExerciseDemo exercise={bench} customMedia={gif} onPickFile={vi.fn()} />);
     expect(screen.getByTestId('custom-demo').getAttribute('src')).toBe(gif.dataUrl);
-    expect(screen.queryByTestId('demo-pause')).toBeNull();
+    expect(screen.queryByRole('button', { name: /pause/i })).toBeNull();
   });
 
-  it('pauses the lifter’s own video in How to, even where it can be replaced', () => {
-    const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+  it('loops the lifter’s own video in How to with no Pause, where it can be replaced', () => {
     render(<ExerciseDemo exercise={bench} customMedia={ownVideo} onPickFile={vi.fn()} />);
     const video = screen.getByTestId('custom-demo');
     expect(video.tagName).toBe('VIDEO');
     expect(video).toHaveAttribute('data-playing', 'true');
-    pause.mockClear();
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    expect(pause).toHaveBeenCalled();
-    expect(screen.getByTestId('custom-demo')).toHaveAttribute('data-playing', 'false');
-    expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play');
+    expect(screen.queryByRole('button', { name: /pause/i })).toBeNull();
+    expect(screen.getByTestId('demo-replace')).toBeInTheDocument();
   });
-
   it('keeps focus on its button when Play cannot load the clip, offers Try again, and plays it', async () => {
     mockReducedMotion(true);
     let answer: 'offline' | 'ok' = 'offline';
@@ -497,10 +479,10 @@ describe('the tenth review: whatever moves can be stopped', () => {
     });
     await waitFor(() => expect(screen.getByTestId('exercise-demo').tagName).toBe('VIDEO'));
     expect(fetched).toHaveLength(2);
-    expect(document.activeElement).toBe(screen.getByTestId('demo-pause'));
+    expect(document.activeElement).toBe(screen.getByTestId('demo-slow'));
   });
 
-  it('keeps focus on Try again through a retry made on its own back online, then hands it to Pause (the re-check)', async () => {
+  it('keeps focus on Try again through a retry made on its own back online, then hands it to Slow (the re-check)', async () => {
     let answer: 'offline' | 'held' = 'offline';
     let arrive!: () => void;
     const held = new Promise<void>((resolve) => {
@@ -531,7 +513,7 @@ describe('the tenth review: whatever moves can be stopped', () => {
       arrive();
     });
     await waitFor(() => expect(screen.getByTestId('exercise-demo').tagName).toBe('VIDEO'));
-    expect(document.activeElement).toBe(screen.getByTestId('demo-pause'));
+    expect(document.activeElement).toBe(screen.getByTestId('demo-slow'));
   });
 
   it('never takes the focus for a clip that comes after the lifter has moved on (second re-check)', async () => {
@@ -605,5 +587,74 @@ describe('the tenth review: whatever moves can be stopped', () => {
     mockClips('missing');
     render(<ExerciseDemo exercise={bench} />);
     await waitFor(() => expect(screen.getByTestId('demo-play')).toHaveTextContent('Try again'));
+  });
+
+  it('puts Try again at the top over a diagram that stood in, clear of its label (the review of item 50)', async () => {
+    mockClips('missing');
+    render(<ExerciseDemo exercise={requireExercise('push-up')} />);
+    await waitFor(() => expect(screen.getByTestId('demo-play')).toHaveTextContent('Try again'));
+    // Over the still: at its foot, as before.
+    expect(screen.getByTestId('demo-play').parentElement).not.toHaveClass(/demoOverlayTop/);
+    fireEvent.error(screen.getByTestId('exercise-demo'));
+    expect(screen.getByTestId('exercise-demo')).toHaveAttribute('data-still', 'diagram');
+    expect(screen.getByTestId('demo-play').parentElement).toHaveClass(/demoOverlayTop/);
+  });
+
+  it('puts Play over a picture at the top, clear of a diagram label along its foot', () => {
+    mockReducedMotion(true);
+    render(<ExerciseDemo exercise={pullApart} />);
+    expect(screen.getByTestId('demo-play').parentElement).toHaveClass(/demoOverlayTop/);
+  });
+});
+
+describe('ExerciseDemo after the re-check of item 50', () => {
+  it('gives a clip its credit once it plays, though the diagram stood in for its still before', async () => {
+    let answer: 'missing' | 'ok' = 'missing';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        answer === 'missing'
+          ? { ok: false, status: 404, blob: async () => new Blob([]) }
+          : { ok: true, status: 200, blob: async () => new Blob(['mp4']) },
+      ),
+    );
+    render(<ExerciseDemo exercise={requireExercise('push-up')} />);
+    fireEvent.error(screen.getByTestId('exercise-demo'));
+    await waitFor(() => expect(screen.getByTestId('demo-play')).toHaveTextContent('Try again'));
+    expect(screen.getByTestId('demo-credit')).toHaveTextContent('Diagram of the movement');
+    answer = 'ok';
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('demo-play'));
+    });
+    await waitFor(() => expect(screen.getByTestId('exercise-demo').tagName).toBe('VIDEO'));
+    expect(screen.getByTestId('demo-credit')).toHaveTextContent('U.S. Marine Corps');
+  });
+});
+
+describe('ExerciseDemo after the third pass of item 50', () => {
+  it("tries the still again once a picture of the lifter's own is removed, its credit back", () => {
+    mockReducedMotion(true);
+    const pushUp = requireExercise('push-up');
+    const mine: CustomMedia = { ...gif, id: pushUp.id, exerciseId: pushUp.id };
+    const pick = vi.fn();
+    const { rerender } = render(<ExerciseDemo exercise={pushUp} onPickFile={pick} />);
+    fireEvent.error(screen.getByTestId('exercise-demo'));
+    expect(screen.getByTestId('demo-credit')).toHaveTextContent(
+      'Diagram · tap it to use your own GIF',
+    );
+    rerender(<ExerciseDemo exercise={pushUp} customMedia={mine} onPickFile={pick} />);
+    rerender(<ExerciseDemo exercise={pushUp} onPickFile={pick} />);
+    expect(screen.getByTestId('exercise-demo')).toHaveAttribute('data-still', 'poster');
+    expect(screen.getByTestId('demo-credit')).toHaveTextContent('U.S. Marine Corps');
+  });
+
+  it("draws the focus ring of a picture's frame inside it, where the figure does not clip it", () => {
+    const css = readFileSync(
+      path.join(process.cwd(), 'src', 'components', 'ExerciseDetail', 'ExerciseDetail.module.css'),
+      'utf8',
+    );
+    expect(css).toMatch(
+      /\.demoFrame:focus-visible \{\s*outline: 2px solid var\(--color-accent\);\s*outline-offset: -2px;/,
+    );
   });
 });

@@ -10,11 +10,8 @@ import { movementPatternName } from '../../catalog/movementPatterns/movementPatt
 import { muscleName } from '../../catalog/muscles/muscles';
 import { SWAP_WEEKS } from '../../engine/planning/lastingSwaps';
 import type { AlternativeResult } from '../../engine/alternatives/rankAlternatives';
-import { customMediaFromFile } from '../../features/library/mediaFile';
-import { useCustomMedia } from '../../features/library/useCustomMedia';
-import { useAppStore } from '../../core/state/useAppStore';
+import { useOwnDemonstration } from '../../features/library/useOwnDemonstration';
 import { Toggle } from '../Form/Toggle';
-import { useToast } from '../Toast/useToast';
 import { Sheet } from '../Sheet/Sheet';
 import styles from './ExerciseDetail.module.css';
 import { ExerciseDemo, ExerciseThumb } from './ExerciseMedia';
@@ -145,37 +142,14 @@ export function ExerciseDetailSheet({
   const [keepFor, setKeepFor] = useState<string | null>(null);
   const [repLow, setRepLow] = useState('');
   const [repHigh, setRepHigh] = useState('');
-  const customMedia = useCustomMedia(exercise?.id ?? '');
-  const store = useAppStore();
-  const toast = useToast();
-  const [mediaBusy, setMediaBusy] = useState(false);
+  // Shut, it keeps reading the exercise it last showed, so it opens on the picture the lifter has
+  // now (the eleventh pass of item 50).
+  const [last, setLast] = useState(exercise?.id ?? '');
+  if (exercise && exercise.id !== last) setLast(exercise.id);
+  const own = useOwnDemonstration(exercise?.id ?? last);
   // Closed, the switch goes back off: it is never carried to the next time the sheet opens.
   if (!exercise && keepFor !== null) setKeepFor(null);
   if (!exercise) return null;
-
-  const exerciseId = exercise.id;
-  const pickMedia = async (file: File) => {
-    setMediaBusy(true);
-    try {
-      await store.addCustomMedia(exerciseId, await customMediaFromFile(file));
-      toast.show('Saved your demonstration · stays on this device', 'success');
-    } catch (error) {
-      toast.show(error instanceof Error ? error.message : 'Could not save that file', 'error');
-    } finally {
-      setMediaBusy(false);
-    }
-  };
-  const removeMedia = async () => {
-    setMediaBusy(true);
-    try {
-      await store.deleteCustomMedia(exerciseId);
-      toast.show('Removed your demonstration', 'success');
-    } catch (error) {
-      toast.show(error instanceof Error ? error.message : 'Could not remove it', 'error');
-    } finally {
-      setMediaBusy(false);
-    }
-  };
 
   const traits = [
     exercise.compound ? 'Compound' : 'Isolation',
@@ -190,11 +164,12 @@ export function ExerciseDetailSheet({
   return (
     <Sheet open title={exercise.name} onClose={onClose}>
       <ExerciseDemo
+        key={exercise.id}
         exercise={exercise}
-        customMedia={customMedia}
-        onPickFile={(file) => void pickMedia(file)}
-        onRemove={() => void removeMedia()}
-        busy={mediaBusy}
+        customMedia={own.media}
+        onPickFile={own.pick}
+        onRemove={own.remove}
+        busy={own.busy}
       />
 
       <div className={styles.chips} aria-label="Muscles">

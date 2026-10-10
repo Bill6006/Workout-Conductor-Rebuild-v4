@@ -107,7 +107,7 @@ const EXERCISE_RATIO: Readonly<Record<string, number | null>> = {
   'farmer-carry': 0.5,
 };
 
-const LOWER_BODY: ReadonlySet<MovementPatternId> = new Set([
+export const LOWER_BODY: ReadonlySet<MovementPatternId> = new Set([
   'squat',
   'hinge',
   'lunge',

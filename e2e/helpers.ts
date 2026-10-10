@@ -9,6 +9,9 @@ export async function ensureProfile(page: Page): Promise<void> {
   if (await skip.isVisible()) {
     await skip.click();
     await expect(today).toBeVisible();
+    // Setup moves to Today's route just after Today shows: a reload made before it lands is
+    // cancelled by it (net::ERR_ABORTED), so a test that reloads next waits for it.
+    await expect(page).toHaveURL(/#\/today$/);
   }
 }
 

@@ -28,6 +28,47 @@ export const SetPrescriptionSchema = z.looseObject({
     .catch(undefined),
 });
 
+// Why a target is what it is: advisory. A note this copy of the app cannot read (one written
+// by a newer copy, say) is dropped rather than costing the whole workout.
+const EntryProgressionSchema = z.looseObject({
+  mode: z.enum(PROGRESSION_MODES),
+  evidence: z.array(z.string()),
+  sessions: z.number().int().min(0),
+  viaFamily: z.boolean(),
+  confidence: z.enum(['low', 'medium', 'high']),
+  setsAdvice: z.union([z.literal(0), z.literal(1)]),
+  capped: z.looseObject({ at: z.number() }).optional(),
+  rack: z
+    .looseObject({
+      asked: z.number(),
+      loaded: z.number(),
+      extra: z.number().int().min(0),
+      line: z.string(),
+    })
+    .optional()
+    .catch(undefined),
+  // The weight the target moved from (Maintenance 23), for the step rule in a refit.
+  from: z.number().optional().catch(undefined),
+  // Steps the session or the lifter's habit moved the target (Maintenance 24), for the coach.
+  nudged: z.number().int().optional().catch(undefined),
+  // A lift done at bodyweight that fell short of its floor (Maintenance 21).
+  short: z
+    .looseObject({
+      sessions: z.number().int().min(0),
+      floor: z.number().int().min(0),
+    })
+    .optional()
+    .catch(undefined),
+  // Maintenance 26, the re-check of item 42: the session read missed its floor on its first
+  // set, and a target an entered max raised. A hard start reads neither.
+  missed: z.boolean().optional().catch(undefined),
+  fromMax: z.boolean().optional().catch(undefined),
+  // The third pass: a saved workout's targets, from the day it was saved.
+  saved: z.boolean().optional().catch(undefined),
+  // The fourth pass: a target read from another rep range.
+  otherRange: z.boolean().optional().catch(undefined),
+});
+
 export const WorkoutEntrySchema = z.looseObject({
   id: z.string().min(1),
   exerciseId: z.string().min(1),
@@ -42,41 +83,7 @@ export const WorkoutEntrySchema = z.looseObject({
   slot: z.number().int().min(0).optional(),
   replacedFrom: z.string().optional(),
   standsFor: z.string().optional().catch(undefined),
-  // Why a target is what it is: advisory. A note this copy of the app cannot read (one written
-  // by a newer copy, say) is dropped rather than costing the whole workout.
-  progression: z
-    .looseObject({
-      mode: z.enum(PROGRESSION_MODES),
-      evidence: z.array(z.string()),
-      sessions: z.number().int().min(0),
-      viaFamily: z.boolean(),
-      confidence: z.enum(['low', 'medium', 'high']),
-      setsAdvice: z.union([z.literal(0), z.literal(1)]),
-      capped: z.looseObject({ at: z.number() }).optional(),
-      rack: z
-        .looseObject({
-          asked: z.number(),
-          loaded: z.number(),
-          extra: z.number().int().min(0),
-          line: z.string(),
-        })
-        .optional()
-        .catch(undefined),
-      // The weight the target moved from (Maintenance 23), for the step rule in a refit.
-      from: z.number().optional().catch(undefined),
-      // Steps the session or the lifter's habit moved the target (Maintenance 24), for the coach.
-      nudged: z.number().int().optional().catch(undefined),
-      // A lift done at bodyweight that fell short of its floor (Maintenance 21).
-      short: z
-        .looseObject({
-          sessions: z.number().int().min(0),
-          floor: z.number().int().min(0),
-        })
-        .optional()
-        .catch(undefined),
-    })
-    .optional()
-    .catch(undefined),
+  progression: EntryProgressionSchema.optional().catch(undefined),
   manual: z
     .looseObject({
       weight: z.boolean().optional(),
@@ -91,6 +98,38 @@ export const WorkoutEntrySchema = z.looseObject({
     .looseObject({
       owed: z.number().int().min(0),
       why: z.enum(['place', 'swap', 'skip']).optional().catch(undefined),
+    })
+    .optional()
+    .catch(undefined),
+  // The lift as the plan had it under a hard start's ease (Maintenance 26, the sixth pass of
+  // item 42): dropped when unreadable, the lift then kept as it shows.
+  eased: z
+    .looseObject({
+      // The exercise it was for: a mark left on another one is no record of it (the seventh pass).
+      exerciseId: z.string().optional().catch(undefined),
+      sets: z.array(SetPrescriptionSchema).optional().catch(undefined),
+      progression: EntryProgressionSchema.optional().catch(undefined),
+      // The lift's own settings with those sets (the ninth pass): dropped when unreadable, the
+      // sets then given back alone.
+      settings: z
+        .looseObject({
+          restSeconds: z.number().min(0),
+          warmupSets: z.number().int().min(0),
+          dropSet: z.boolean(),
+          manual: z
+            .looseObject({
+              weight: z.boolean().optional(),
+              reps: z.boolean().optional(),
+              sets: z.boolean().optional(),
+              rest: z.boolean().optional(),
+            })
+            .optional(),
+          blockRest: z.number().min(0).optional(),
+        })
+        .optional()
+        .catch(undefined),
+      // Under way: kept for good (the eighth pass).
+      kept: z.boolean().optional().catch(undefined),
     })
     .optional()
     .catch(undefined),

@@ -119,6 +119,9 @@ async function enterThroughOffer(store: AppStore, lift: WorkoutEntry, max: strin
   // A change before the max left a summary of its own: wait for the max's, not that one.
   const earlier = store.getSnapshot().session?.lastSummary ?? null;
   await user.click(screen.getByTestId('max-save'));
+  // A max far past what the body suggests is asked about once (Maintenance 26, item 40): kept.
+  const keep = screen.queryByTestId('slip-keep');
+  if (keep) await user.click(keep);
   await waitFor(() => {
     const summary = store.getSnapshot().session?.lastSummary ?? null;
     expect(summary).not.toBeNull();

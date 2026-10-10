@@ -77,6 +77,7 @@ import {
 import {
   allEntries,
   isStopped,
+  roundsOf,
   roundsRun,
   workingSets,
   type DurationChoice,
@@ -131,13 +132,29 @@ export function closeAtLogged(
   why: 'place' | 'swap' = 'place',
 ): void {
   const planned = entry.sets.some((set) => set.kind === 'working');
+  // A lift owes what it shows still to come: under a hard start's ease, the sets the ease left, as
+  // a lift under way keeps the ease for good, and what stands in for it takes no set more
+  // (Maintenance 26, the ninth pass of item 42: owed the plan's sets, a stand-in gave back the set
+  // the ease took, and a lift done under the ease owed one). The ease's record goes with the sets it
+  // was for: kept on a lift picked up again, it gave a copy the plan's sets on top of a stand-in's,
+  // at the weights of a place left (the eleventh pass took back the tenth's keeping).
   const owed = entry.sets.filter(
     (set) => set.kind === 'working' && !isDone(entry.id, set.index),
   ).length;
+  delete entry.eased;
   entry.sets = entry.sets.filter((set) => isDone(entry.id, set.index));
   entry.warmupSets = entry.sets.filter((set) => set.kind === 'warmup').length;
   entry.dropSet = entry.sets.some((set) => set.kind === 'drop');
   if (entry.stopped === undefined && planned) entry.stopped = { owed, why };
+}
+
+/** What the warm-up says, for its general minutes and the session's length. */
+export function warmupNote(generalWarmup: number, targetMinutes: number): string {
+  return generalWarmup === 0
+    ? 'Already warmed up: continue with the remaining sets.'
+    : targetMinutes <= 15
+      ? 'Short general warm-up, then one ramp set on the main lift.'
+      : `${generalWarmup} min general warm-up, then ramp sets on the main lifts; ramp sets never count as working sets.`;
 }
 
 /** The working sets a stopped entry still owes its slot; one with no count owes a whole prescription. */
@@ -706,7 +723,7 @@ function straightBlock(
     kind: 'straight',
     label: exerciseOf(entry.exerciseId).name,
     entries: [entry],
-    rounds: workingSets(entry).length,
+    rounds: roundsOf(entry),
     restBetweenRoundsSeconds: entry.restSeconds,
   };
 }
@@ -817,6 +834,15 @@ function withDeload(
     : day;
 }
 
+/**
+ * The fewest working sets the day's settings leave a lift (Maintenance 24): three on a main
+ * strength lift, two on any other. A hard start's ease keeps to it too (Maintenance 26, the sixth
+ * pass of item 42).
+ */
+export function setFloor(role: TrainingRole): number {
+  return role === 'primary-strength' ? 3 : 2;
+}
+
 function adjustPrescription(
   prescription: Prescription,
   role: TrainingRole,
@@ -825,7 +851,7 @@ function adjustPrescription(
   minRir = 0,
 ): Prescription {
   if (!adjust) return prescription;
-  const floor = role === 'primary-strength' ? 3 : 2;
+  const floor = setFloor(role);
   return {
     ...prescription,
     sets: clamp(prescription.sets + adjust.sets, floor, 5),
@@ -1157,7 +1183,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     blocks.splice(firstIndex, 0, {
       ...original,
       entries: members,
-      rounds: Math.min(...members.map((member) => workingSets(member).length)),
+      rounds: Math.max(...members.map(roundsOf)),
     });
   }
 
@@ -1220,7 +1246,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     block.kind = 'superset';
     block.id = `s-${block.entries.map((entry) => entry.id).join('-')}`;
     block.label = `A1 ${names[0]} + A2 ${names[1]}`;
-    block.rounds = Math.min(...block.entries.map((entry) => workingSets(entry).length));
+    block.rounds = roundsRun(block);
     leftOut.push(straightBlock(gone, exerciseOf));
     fitLog.add(`Left out ${exerciseOf(gone.exerciseId).name} from the circuit ${why}.`);
     return true;
@@ -1249,7 +1275,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
         ),
       );
     if (compatible) {
-      const rounds = Math.min(3, ...members.map((entry) => workingSets(entry).length));
+      const rounds = Math.min(3, ...members.map(roundsOf));
       const circuit: WorkoutBlock = {
         id: `c-${members.map((entry) => entry.id).join('-')}`,
         kind: 'circuit',
@@ -1289,7 +1315,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
           exerciseB.primaryMuscles.includes(muscle),
         );
         if (isBlocked(conflicts) || shareMuscle) continue;
-        const rounds = Math.min(workingSets(a).length, workingSets(b).length);
+        const rounds = Math.max(roundsOf(a), roundsOf(b));
         const superset: WorkoutBlock = {
           id: `s-${a.id}-${b.id}`,
           kind: 'superset',
@@ -1364,15 +1390,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const syncRoundsOf = (target: WorkoutEntry) => {
     for (const block of blocks) {
       if (block.kind !== 'straight' && block.entries.includes(target)) {
-        block.rounds = Math.min(...block.entries.map((entry) => workingSets(entry).length));
-        // A circuit runs its longest member's rounds, and its label names them (Maintenance 24).
+        // A pair or circuit runs its longest member's rounds (Maintenance 24; a pair since the
+        // eighth pass of Maintenance 26, item 42), and a circuit's label names them.
+        block.rounds = roundsRun(block);
         if (block.kind === 'circuit') {
-          block.rounds = roundsRun(block);
           block.label = block.label.replace(/^Circuit ×\d+/, `Circuit ×${block.rounds}`);
         }
       }
-      if (block.kind === 'straight' && block.entries[0] === target)
-        block.rounds = workingSets(target).length;
+      if (block.kind === 'straight' && block.entries[0] === target) block.rounds = roundsOf(target);
     }
   };
   // The sets trimmed, latest last, each with where it sat: a lift left on its own takes them back
@@ -1688,12 +1713,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       rampEntryIds: allEntries(blocks)
         .filter((entry) => entry.warmupSets > 0)
         .map((entry) => entry.id),
-      note:
-        generalWarmup === 0
-          ? 'Already warmed up: continue with the remaining sets.'
-          : targetMinutes <= 15
-            ? 'Short general warm-up, then one ramp set on the main lift.'
-            : `${generalWarmup} min general warm-up, then ramp sets on the main lifts; ramp sets never count as working sets.`,
+      note: warmupNote(generalWarmup, targetMinutes),
     },
     explanation: { summary, reasons, fittingSteps: fitLog.lines(), time },
     confidence:

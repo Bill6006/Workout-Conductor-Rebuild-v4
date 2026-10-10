@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CUSTOM_MEDIA_MAX_BYTES } from '../../core/validation/customExercise';
 import { customMediaFromFile } from './mediaFile';
 
@@ -36,5 +36,29 @@ describe('customMediaFromFile', () => {
     await expect(
       customMediaFromFile(new File([GIF], 'notes.txt', { type: 'text/plain' })),
     ).rejects.toThrow('Choose a GIF');
+  });
+});
+
+describe('customMediaFromFile after the ninth pass of item 50', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('says a file the browser could not read in plain words', async () => {
+    class FailingReader {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      result: string | null = null;
+      error = new Error(
+        'The requested file could not be read, typically due to permission problems.',
+      );
+      readAsDataURL() {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal('FileReader', FailingReader);
+    await expect(
+      customMediaFromFile(new File([GIF], 'bench.gif', { type: 'image/gif' })),
+    ).rejects.toThrow('Could not read that file. Try again.');
   });
 });

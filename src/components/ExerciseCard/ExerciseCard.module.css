@@ -106,43 +106,6 @@
   cursor: default;
 }
 
-/* The thumbnail, and on it a pause mark while the lifter has its demonstration paused. */
-.thumbFrame {
-  position: relative;
-  display: grid;
-}
-
-/* Two bars in a dark disc, as How to's overlay buttons are drawn. */
-.thumbPaused {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 22px;
-  height: 22px;
-  border: 1px solid rgb(255 255 255 / 45%);
-  border-radius: 50%;
-  background: rgb(0 0 0 / 62%);
-}
-
-.thumbPaused::before,
-.thumbPaused::after {
-  content: '';
-  position: absolute;
-  top: 5px;
-  width: 3px;
-  height: 10px;
-  border-radius: 1px;
-  background: #fff;
-}
-
-.thumbPaused::before {
-  left: 6px;
-}
-
-.thumbPaused::after {
-  right: 6px;
-}
-
 .thumbLabel {
   color: var(--color-accent);
   font-size: 0.62rem;

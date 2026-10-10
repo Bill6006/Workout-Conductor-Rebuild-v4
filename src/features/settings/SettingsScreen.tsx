@@ -130,7 +130,7 @@ export function SettingsScreen() {
                 summary={unitsSummary(draft.profile)}
                 linked={section === 'units'}
               >
-                <UnitsEditor draft={draft} onChange={editor.update} />
+                <UnitsEditor draft={draft} onChange={editor.update} autosaves />
               </DisclosureRow>
             </Group>
 

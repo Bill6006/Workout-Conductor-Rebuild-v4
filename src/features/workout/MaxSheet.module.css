@@ -80,6 +80,19 @@
   line-height: 1.4;
 }
 
+/* A number that looks like a slip, asked about once before it is saved (Maintenance 26, item 40). */
+.slip {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-yellow);
+  border-radius: 12px;
+  background: var(--color-yellow-soft);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .error {
   margin: 0 0 12px;
   color: var(--color-danger, #ff8a80);

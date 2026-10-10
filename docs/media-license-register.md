@@ -176,18 +176,18 @@ while it resolves to a diagram.
 
 ## Your own demonstration (user media)
 
-- Open an exercise's Options (or its page in the Library), then tap the demonstration (or the
-  "Your GIF" button) to pick a GIF, photo, or short video from the phone, up to 3 MB. It replaces
-  the catalog's demonstration on the card, in How to and in the details, with Replace and Remove
-  under it.
+- Open an exercise's How to on the workout (Maintenance 26, item 50), its Options, or its page in
+  the Library, then tap the demonstration (or the "Your GIF" button) to pick a GIF, photo, or short
+  video from the phone, up to 3 MB. It replaces the catalog's demonstration on the card, in How to
+  and in the details, with Replace and Remove under it; a replacement shows at once.
 - User media is stored inline in the on-device database (`customMedia`, one per exercise),
   travels with a full backup, and is never uploaded anywhere or committed to this repository.
 - On the workout, the card of the exercise under way loops its demonstration for as long as that
   exercise is in front; its clip (or the user's own video) rests where it is out of view, in the
-  background or under a sheet, and plays on once back; the other cards show the still. The workout's How to's Pause holds it on
-  its still, with a pause mark (WCAG 2.2.2), until Play there. Phones set to reduce motion get the
-  still, with Play in How to.
-- A licensed clip can be paused and slowed to half speed in How to; the user's own video or
-  moving GIF, and a diagram's loop, have Pause and Play there too, and start paused under reduced
-  motion; on the card the user's own GIF rests on its first frame while paused in How to, and a
-  GIF, WebP or PNG of their own loops for good whatever its file says.
+  background or under a sheet, and plays on once back; the other cards show the still. No
+  demonstration has a Pause (Maintenance 26, item 50: the owner asked for none): phones set to
+  reduce motion get the still, with Play in How to, which is the way to keep them still.
+- A licensed clip can be slowed to half speed in How to. The user's own video or moving GIF, and a
+  diagram's loop, start still under reduced motion, with Play; a play the browser refuses or stops
+  (a data or battery saver) offers Play too. A GIF, WebP or PNG of their own loops for good
+  whatever its file says.

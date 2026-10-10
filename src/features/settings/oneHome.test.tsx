@@ -522,3 +522,40 @@ describe('Progress, every lift once', () => {
     expect(screen.getAllByTestId('exercise-progress-row')).toHaveLength(14);
   });
 });
+
+describe('Settings: the bodyweight a pause saves (Maintenance 26, the fifth pass of item 40)', () => {
+  it('confirms the bodyweight saved at a pause: the next change is judged against it', async () => {
+    const store = await onboarded();
+    await renderAt(store, '#/settings/units');
+    await screen.findByRole('heading', { level: 1, name: 'Settings' });
+    const user = userEvent.setup();
+    const field = screen.getByLabelText(/Bodyweight/);
+    await user.clear(field);
+    await user.type(field, '230');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    });
+    expect(store.getSnapshot().profile?.bodyweight).toBe(230);
+    // 240 is a quarter from the 185 saved before, and close to the 230 Settings saved: no question.
+    await user.clear(field);
+    await user.type(field, '240');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    });
+    expect(screen.queryByTestId('slip-question')).toBeNull();
+    expect(store.getSnapshot().profile?.bodyweight).toBe(240);
+  });
+
+  it('names the bodyweight Settings saved in its question, not one entered', async () => {
+    const store = await onboarded();
+    await renderAt(store, '#/settings/units');
+    await screen.findByRole('heading', { level: 1, name: 'Settings' });
+    const user = userEvent.setup();
+    const field = screen.getByLabelText(/Bodyweight/);
+    await user.clear(field);
+    await user.type(field, '300');
+    expect(await screen.findByTestId('slip-question')).toHaveTextContent(
+      /far from your saved bodyweight/,
+    );
+  });
+});

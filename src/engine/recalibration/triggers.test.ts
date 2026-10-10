@@ -13,7 +13,8 @@ const profile = createDefaultProfile(NOW);
 describe('trigger registry', () => {
   it('covers every trigger with a label, a scope, and what the engine evaluates', () => {
     const types = Object.keys(TRIGGER_REGISTRY) as TriggerType[];
-    expect(types).toHaveLength(28);
+    // 'bad-start' joined in Maintenance 26 (item 42).
+    expect(types).toHaveLength(29);
     for (const type of types) {
       const definition = TRIGGER_REGISTRY[type];
       expect(definition.label.length).toBeGreaterThan(0);
@@ -43,6 +44,18 @@ describe('trigger registry', () => {
       scope: 'full',
     });
     expect(described.evaluating).toContain('Ranking superset opportunities');
+    expect(triggerTitle({ type: 'bad-start', low: true, lifts: ['barbell-row'] })).toBe(
+      'Easing the rest after a hard start',
+    );
+    expect(triggerTitle({ type: 'bad-start', low: false, lifts: [] })).toBe(
+      'Your start no longer falls short',
+    );
+    expect(describeTrigger({ type: 'bad-start', low: true, lifts: [] }).scope).toBe('partial');
+    // Taken back, the start is no hard start: the overlay and the log say so (the third pass).
+    expect(describeTrigger({ type: 'bad-start', low: true, lifts: [] }).label).toBe('A hard start');
+    expect(describeTrigger({ type: 'bad-start', low: false, lifts: [] }).label).toBe(
+      'No longer a hard start',
+    );
   });
 });
 

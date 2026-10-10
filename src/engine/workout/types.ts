@@ -52,6 +52,24 @@ export interface EntryProgression {
   /** A lift done at bodyweight fell short of its floor this many sessions running (Maintenance 21). */
   short?: ShortRun;
   /**
+   * The session the target was read from fell short on its first working set: under its floor, or
+   * as far short of what it asked as a hard start reads (Maintenance 26, item 42): a hard start
+   * does not read the lift today.
+   */
+  missed?: boolean;
+  /** An entered max raised the target over the log's (Maintenance 26): a hard start does not read it. */
+  fromMax?: boolean;
+  /**
+   * Read from a session at another rep range (Maintenance 26, the fourth pass of item 42): a hard
+   * start does not read it.
+   */
+  otherRange?: boolean;
+  /**
+   * Read on the day a saved workout was saved, and loaded today (Maintenance 26, the third pass of
+   * item 42): not today's target, so a hard start does not read it.
+   */
+  saved?: boolean;
+  /**
    * The weight the target moved from, the last one lifted (Maintenance 23): a refit applies the
    * step rule from it, as the plan did.
    */
@@ -132,6 +150,35 @@ export interface WorkoutEntry {
    * rebuild.
    */
   stopped?: StoppedWork;
+  /**
+   * A hard start's ease on this lift (Maintenance 26, item 42): the lift as the plan had it, its
+   * sets and reasons before the ease, given back exactly when the ease comes off (the sixth pass).
+   * `kept` once a change is made while the lift is under way (the eighth pass), or on what comes
+   * in for such a lift swapped in place (the fourteenth): it keeps the ease for good, never given
+   * back in the workout, its sets kept for a saved copy, which gives the plan back; on a lift begun
+   * before the ease, with no sets, it is never eased.
+   */
+  eased?: {
+    exerciseId?: string;
+    sets?: SetPrescription[];
+    progression?: EntryProgression;
+    /**
+     * The lift's own settings with those sets (the ninth pass): given back with them, so a copy
+     * saved after changes on a lift under way is the lift as it was, not its sets under settings
+     * made since.
+     */
+    settings?: EasedSettings;
+    kept?: boolean;
+  };
+}
+
+export interface EasedSettings {
+  restSeconds: number;
+  warmupSets: number;
+  dropSet: boolean;
+  manual?: ManualEdits;
+  /** The rest between rounds of a block of its own. */
+  blockRest?: number;
 }
 
 export interface StoppedWork {
@@ -223,6 +270,15 @@ export function workingSets(entry: WorkoutEntry): SetPrescription[] {
   return entry.sets.filter((set) => set.kind !== 'warmup');
 }
 
+/**
+ * The rounds an entry makes in its block: its working sets, a drop set no round of its own
+ * (Maintenance 26, the seventh pass of item 42: some paths counted it, and a lift with a drop set
+ * showed a set more).
+ */
+export function roundsOf(entry: WorkoutEntry): number {
+  return entry.sets.filter((set) => set.kind === 'working').length;
+}
+
 /** The rounds a paired block runs: its longest member's working sets (Maintenance 24). */
 export function roundsRun(block: WorkoutBlock): number {
   return Math.max(
@@ -290,6 +346,56 @@ export function withoutStops(workout: GeneratedWorkout): GeneratedWorkout {
     return [{ ...block, entries: [{ ...entry, sets }], rounds: working(entry).length + carried }];
   });
   return { ...workout, blocks };
+}
+
+/**
+ * A lift that took a hard start's ease and had a change made while it was under way, or came in for
+ * one swapped in place: it keeps the ease for good, and what it has, through new weights, a
+ * check-in or a max, its sets undone or not (Maintenance 26, the ninth to fifteenth passes of item
+ * 42). A mark with no sets, on a lift under way before the ease
+ * or beside one, is no ease kept: such a lift takes those as any lift does.
+ */
+export function keepsTheEase(entry: WorkoutEntry): boolean {
+  return entry.eased?.kept === true && entry.eased.sets !== undefined;
+}
+
+/**
+ * A workout as it shows, with no hard start's marks on it (Maintenance 26, the sixth pass of item
+ * 42): a saved copy is a plain snapshot, and the ease of the day it was saved is no part of it.
+ */
+export function withoutEase(workout: GeneratedWorkout): GeneratedWorkout {
+  if (!allEntries(workout.blocks).some((entry) => entry.eased)) return workout;
+  return {
+    ...workout,
+    blocks: workout.blocks.map((block) => ({
+      ...block,
+      entries: block.entries.map((entry) => {
+        if (!entry.eased) return entry;
+        const plain = { ...entry };
+        delete plain.eased;
+        return plain;
+      }),
+    })),
+  };
+}
+
+/**
+ * A saved workout's targets, marked as read on the day it was saved (Maintenance 26, the third
+ * pass of item 42): a hard start does not read them as today's.
+ */
+export function asSaved(workout: GeneratedWorkout): GeneratedWorkout {
+  const plain = withoutEase(workout);
+  return {
+    ...plain,
+    blocks: plain.blocks.map((block) => ({
+      ...block,
+      entries: block.entries.map((entry) =>
+        entry.progression
+          ? { ...entry, progression: { ...entry.progression, saved: true } }
+          : entry,
+      ),
+    })),
+  };
 }
 
 /**

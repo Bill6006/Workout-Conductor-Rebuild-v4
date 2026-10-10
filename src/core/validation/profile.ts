@@ -92,6 +92,9 @@ export const PROFILE_SCHEMA_VERSION = 1;
 const isoDate = z.iso.datetime();
 const exerciseName = z.string().trim().min(1).max(60);
 
+/** The heaviest bodyweight a profile keeps, in its own units. */
+export const BODYWEIGHT_MAX = 1000;
+
 export const UserProfileSchema = z.looseObject({
   id: z.literal(PROFILE_ID),
   schemaVersion: z.literal(PROFILE_SCHEMA_VERSION),
@@ -128,7 +131,7 @@ export const UserProfileSchema = z.looseObject({
   }),
   restStyle: z.enum(REST_STYLES),
   units: z.enum(UNIT_SYSTEMS),
-  bodyweight: z.number().positive().max(1000).optional(),
+  bodyweight: z.number().positive().max(BODYWEIGHT_MAX).optional(),
   /** Optional and local only: with bodyweight they sharpen the starting weight of a lift with no history. */
   age: z.number().int().min(13).max(100).optional(),
   sex: z.enum(SEXES).optional(),

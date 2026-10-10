@@ -379,9 +379,17 @@ earns no ramp, and `rampWeights` keeps every ramp at least a step under the work
 never under the bar, and rising. A target weight set by hand recomputes its pending ramps.
 
 For a lift never done, `estimateFromOtherLifts` (`crossEstimate.ts`) scales each known lift's
-estimated max (history within 180 days, or an entered max) through the reference ratios of
-`startingLoad.ts`, weighting lifts on the same muscles most and recent ones more; it comes before
-the bodyweight estimate and needs no bodyweight.
+estimated max through the reference ratios of `startingLoad.ts`, weighting lifts on the same
+muscles most and recent ones more; it comes before the bodyweight estimate and needs no
+bodyweight. A known lift is its newest session within 180 days (two within half a day read as one),
+the strongest set there, every rep up to thirty (a single as lifted) and a load of nothing aside; or a max entered within
+those 180 days and not dated more than a day ahead (`enteredBy`), weighed by its own age. A max
+stands for a lift with logs only when entered after the lift began in its newest workout (its first
+set logged there of any kind, else that workout's end), as `withEnteredMax` reads one (Maintenance
+26, the eighth to tenth passes of item 40). As a ceiling for the slip check (`ceiling`), each lift
+is read at its best set in the 180 days (`maxFromSet`), weighed by its newest session's age, and a
+max entered where it is higher, never weighed as older than the logs it stands over; the check takes
+the higher of the ceiling with and without the maxes, so a max entered never lowers it.
 
 ## Offers taken, and where an extra set goes (Maintenance 13 follow-up)
 
@@ -399,7 +407,9 @@ next session. The `sets` trigger refuses to go past `MAX_WORKING_SETS` (8) and s
 
 An entered max sets the first target of a lift without its own history, as before. On a lift
 with logged sets the log is the better evidence, so `withEnteredMax` lets a max count only while
-`enteredAt` is later than the last logged session and the max is at least `ENTERED_MAX_MARGIN`
+`enteredAt` is later than the lift began in its last logged session, its first set there (and not
+more than a day ahead of now, which reads as no date: Maintenance 26, the tenth pass of item 40),
+and the max is at least `ENTERED_MAX_MARGIN`
 (2.5 percent) above the log's estimate. Then the target moves toward what the max implies at
 `ENTERED_WITH_HISTORY_FRACTION` (0.95, a little less careful than a first target because the
 movement is known), by `ENTERED_MAX_STEPS` (two) at most, with the reason in the evidence. The
@@ -692,3 +702,38 @@ sets for another rep range (mode `estimate`) counts a max the same way (`MAX_MOD
   bench press gives a push-up no weight ("New variation: log what you do …"), and a pulldown
   after chin-ups starts from its own first-target rules rather than from the chin-ups' added
   weight. Two lifts done at bodyweight still share their added weight.
+
+## Numbers that look like slips (`src/engine/progression/slips.ts`, Maintenance 26)
+
+The owner's item 40 (`docs/research/slip-checks.md`). A typed number far past anything real is
+asked about once, never refused: the set logger (`SetLogger`'s `question`, from `slipFor` on the
+workout screen), the max sheet, and bodyweight (held back from Settings' autosave until kept).
+
+- `weightSlip`, in order: a weight past what almost anyone loads (1000 lb or 450 kg on a bar or
+  stack, 2000 lb or 900 kg on a sled, 250 lb or 115 kg per dumbbell or added to the body); a bar
+  lift lighter than its empty bar
+  (`barWeightFor`), unless the lift's own logged sets, before or today, include that weight or
+  lighter (`loggedAsLight`: a lighter bar of the lifter's own is asked about once); then, unless a
+  set today as heavy and of as many reps covers it (`covered`), a logged weight the place cannot
+  make, unless the lift was logged that heavy there; added weight as much as the lifter weighs (an
+  upper-body lift only, with a bodyweight inside 30-300 kg). The ceiling and the bodyweight check skip a weight the lift has lifted
+  before (`loggedAsHeavy`). Then the lift's own best: a max more than one and a half times what its
+  sets (`bestLoggedMax`, today's working sets included; sets and the number typed read alike, every
+  rep up to thirty) or the max saved for it say; with none, more than two and a half times its
+  family's estimate (from family lifts that carry a load), three and a half times what the other
+  lifts suggest (`estimateFromOtherLifts` as a ceiling) or three and a half times the starting
+  estimate from the body (with a bodyweight inside 30-300 kg), whichever allows most, and never
+  under three and a half times the set's own target (`target`) read alike, which alone makes no
+  limit; no estimate questions the empty bar. A hold is read by its load; weight added to the body
+  with the body, when its bodyweight is in the range. A lower weight or max is never questioned but
+  for the empty bar.
+- `repsSlip`: a working set's reps past three times the top of the range and fifteen over it (not a
+  hold), unless the lift has logged as many before, today or in its history.
+- `bodyweightSlip`: outside 30-300 kg, or a quarter away from the bodyweight confirmed, either way;
+  the confirmed one converted to the units shown (`UnitsEditor`), and not when it is itself out of
+  the range.
+- On the workout screen (`slipFor`) every set of the lift logged today counts; the one being
+  corrected is passed apart (`editing`): it spares a correction within one and a half times its own
+  reading, and the absolute checks at its own weight, and never makes a question. The question's "Change it" stands where the button pressed stood and takes the
+  focus; in the set logger "Keep" answers only once its question has shown for 450 ms
+  (`COOLDOWN_MS`). The max sheet refuses a recent set of more than thirty reps.

@@ -75,6 +75,12 @@ export type RecalibrationTrigger =
   | { type: 'resume'; awaySeconds: number }
   | { type: 'finish-early' }
   | { type: 'intensity'; direction: 'harder' | 'easier' }
+  /**
+   * The first two lifts that can be judged both fell well short, or no longer do after an undo or
+   * a correction (Maintenance 26, item 42): the rest of the workout takes the low check-in's
+   * treatment, or loses it. `lifts` names the two that fell short.
+   */
+  | { type: 'bad-start'; low: boolean; lifts: string[] }
   | { type: 'end-by'; time: string | null };
 
 export type TriggerType = RecalibrationTrigger['type'];
@@ -91,6 +97,16 @@ export interface CompletedSet {
   completedAt: string;
   /** A skipped set is done for planning but carries no work. */
   skipped?: boolean;
+  /**
+   * Its target was set by hand when it was logged (Maintenance 26, the review of item 42): the
+   * lifter's own choice, so a hard start does not read it. Absent otherwise.
+   */
+  byHand?: boolean;
+  /**
+   * The reserve the plan asked for the lift's role when the set was logged (Maintenance 26, the
+   * third pass of item 42): a hard start reads the set against it. Absent on a set logged before.
+   */
+  planRir?: number;
 }
 
 export interface CompletedWork {
@@ -132,6 +148,11 @@ export interface SessionConstraints {
   readiness: Readiness | null;
   /** -2 (much easier) to 2 (much harder) for the remaining work. */
   intensity: number;
+  /**
+   * The first two lifts today fell well short (Maintenance 26, item 42): the rest takes a low
+   * check-in's treatment, never on top of one. Absent on a session saved before.
+   */
+  badStart?: boolean;
   /** A planned deload week that covers this session, if any. */
   deload: DeloadWindow | null;
   /** A coach focus: the session leads with this muscle. */

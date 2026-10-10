@@ -164,6 +164,11 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
     scope: 'partial',
     evaluating: ['Adjusting sets and effort', REMAINING],
   },
+  'bad-start': {
+    label: 'A hard start',
+    scope: 'partial',
+    evaluating: ['Reading how your first lifts went', 'Adjusting sets and effort', REMAINING],
+  },
   'end-by': {
     label: 'End by exact time',
     scope: 'partial',
@@ -247,6 +252,10 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
       return 'Wrapping up the session';
     case 'intensity':
       return trigger.direction === 'harder' ? 'Making the rest harder' : 'Making the rest easier';
+    case 'bad-start':
+      return trigger.low
+        ? 'Easing the rest after a hard start'
+        : 'Your start no longer falls short';
     case 'end-by':
       return trigger.time ? 'Fitting to an exact end time' : 'Returning to the chosen length';
   }
@@ -259,7 +268,9 @@ export function describeTrigger(
   const definition = TRIGGER_REGISTRY[trigger.type];
   return {
     title: triggerTitle(trigger, context),
-    label: definition.label,
+    // Taken back, the start is no hard start (the third pass of item 42).
+    label:
+      trigger.type === 'bad-start' && !trigger.low ? 'No longer a hard start' : definition.label,
     evaluating: [...definition.evaluating],
     scope: definition.scope,
   };

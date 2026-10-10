@@ -194,6 +194,16 @@ export interface WorkoutSession {
   lastChanges: EntryChange[];
   previous: SessionSnapshot | null;
   log: CalibrationLogEntry[];
+  /**
+   * How the start read when the lifter took back the change it made (`startKey`, Maintenance 26,
+   * the review of item 42): theirs to keep while the start reads the same. Absent otherwise.
+   */
+  startDeclined?: string;
+  /**
+   * How the start read when the change it called for could not be made (`startKey`): not tried
+   * again while the start reads the same (Maintenance 26, the re-check of item 42).
+   */
+  startFailed?: string;
 }
 
 export type CalibrationStatus = 'idle' | 'running' | 'error';
@@ -247,6 +257,8 @@ const ConstraintsSchema = z.looseObject({
   endBy: z.iso.datetime().nullable(),
   readiness: ReadinessSchema.nullable(),
   intensity: z.number().int().min(-2).max(2),
+  // Maintenance 26 (item 42): a session saved before has none; one that fails to read keeps none.
+  badStart: z.boolean().optional().catch(undefined),
   deload: z
     .object({ startsAt: z.iso.datetime(), endsAt: z.iso.datetime() })
     .nullable()
@@ -269,6 +281,10 @@ const CompletedSchema = z.looseObject({
       rir: z.number().min(0).max(10).nullable(),
       completedAt: z.iso.datetime(),
       skipped: z.boolean().optional(),
+      // Maintenance 26, the review of item 42: optional, and dropped rather than refused.
+      byHand: z.boolean().optional().catch(undefined),
+      // The third pass of item 42: the plan's reserve when it was logged.
+      planRir: z.number().min(0).max(10).optional().catch(undefined),
     }),
   ),
 });
@@ -388,6 +404,8 @@ const SessionSchema = z.looseObject({
       durationMs: z.number(),
     }),
   ),
+  startDeclined: z.string().optional().catch(undefined),
+  startFailed: z.string().optional().catch(undefined),
 });
 
 export function computeBaseKey(

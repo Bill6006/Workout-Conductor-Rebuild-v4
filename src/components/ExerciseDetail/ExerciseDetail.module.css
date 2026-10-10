@@ -47,12 +47,16 @@
 
 .demoControls {
   display: flex;
+  flex-shrink: 0;
   gap: 6px;
 }
 
+/* On one line: "Your GIF" never breaks beside a long credit (the review of item 50); 44 px tall,
+   as the app's other tap targets (its re-check). */
 .demoButton {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 12px;
+  white-space: nowrap;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
   background: transparent;
@@ -350,9 +354,22 @@
   object-fit: contain;
 }
 
+/* The clip, or its still, as the button that picks the lifter's own (Maintenance 26, item 50):
+   the button fills the stage, so the clip inside it is held to part of the screen as before. */
+.demoStage > .demoPick {
+  height: 100%;
+}
+
 /* A demonstration with a control over it: the diagram, or the lifter's own GIF or video. */
 .demoFrame {
   position: relative;
+}
+
+/* Play over a picture hands the focus to its frame: its ring drawn inside, which the figure would
+   clip outside (the third pass of item 50). */
+.demoFrame:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 /* Where an own GIF's first frame is still being made: the frame, empty. */
@@ -372,8 +389,16 @@
   gap: 6px;
 }
 
+/* Over a picture (a diagram, the lifter's own): the top corner, clear of a diagram's own label
+   along its foot (Maintenance 26, item 50: Pause stood over "Core anti-extension loop"). */
+.demoOverlayTop {
+  top: 8px;
+  bottom: auto;
+}
+
+/* A thumb's reach over the picture: 44 px tall, as the app's other tap targets (the review of 50). */
 .overlayButton {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 12px;
   border: 1px solid rgb(255 255 255 / 45%);
   border-radius: var(--radius-pill);

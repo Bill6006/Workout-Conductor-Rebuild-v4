@@ -4,7 +4,6 @@ import { requireExercise } from '../../catalog/exercises/catalog';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { mediaFor } from '../../catalog/media/mediaManifest';
 import type { CustomMedia } from '../../core/validation/customExercise';
-import { releaseAllDemos } from './demoHold';
 import { ExerciseDemo, ExerciseThumb } from './ExerciseMedia';
 import { HowToSheet } from './HowToSheet';
 
@@ -16,6 +15,15 @@ import { HowToSheet } from './HowToSheet';
 
 const own = vi.hoisted(() => ({ media: null as CustomMedia | null }));
 vi.mock('../../features/library/useCustomMedia', () => ({ useCustomMedia: () => own.media }));
+// How to sets the lifter's own demonstration too (Maintenance 26, item 50): the same media here.
+vi.mock('../../features/library/useOwnDemonstration', () => ({
+  useOwnDemonstration: () => ({
+    media: own.media,
+    busy: false,
+    pick: () => undefined,
+    remove: () => undefined,
+  }),
+}));
 
 const bench = requireExercise('barbell-bench-press');
 const gif: CustomMedia = {
@@ -60,8 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // A pause held in one test says nothing about the next.
-  releaseAllDemos();
+  // One test's stubs and spies say nothing about the next.
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -125,11 +132,11 @@ describe('the demonstration', () => {
       return found;
     });
     // The play that starts the clip is refused (the app starts it, the phone review).
-    await waitFor(() => expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play'));
+    await waitFor(() => expect(screen.getByTestId('demo-play')).toHaveTextContent('Play'));
     expect(video).toHaveAttribute('data-playing', 'false');
     // Asked to play, refused again: the button still says Play.
-    fireEvent.click(screen.getByTestId('demo-pause'));
-    await waitFor(() => expect(screen.getByTestId('demo-pause')).toHaveTextContent('Play'));
+    fireEvent.click(screen.getByTestId('demo-play'));
+    await waitFor(() => expect(screen.getByTestId('demo-play')).toHaveTextContent('Play'));
   });
 
   it('loads a row’s still only as it scrolls near, and the card’s at once', () => {

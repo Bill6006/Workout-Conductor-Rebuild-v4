@@ -16,7 +16,7 @@ function getSnapshot(): boolean {
   return window.matchMedia(QUERY).matches;
 }
 
-/** True when the user asked the OS to reduce motion; demonstrations then start paused. */
+/** True when the user asked the OS to reduce motion; demonstrations then start still, with Play. */
 export function useReducedMotion(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }

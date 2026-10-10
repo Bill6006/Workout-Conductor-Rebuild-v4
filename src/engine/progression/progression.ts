@@ -7,7 +7,7 @@ import {
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { coachingPolicy, policyLabel } from '../coach/experience';
-import { enteredMaxFor, maxFromSet, type StrengthMaxes } from './maxes';
+import { enteredBy, enteredMaxFor, maxFromSet, type StrengthMaxes } from './maxes';
 import { overrideBias } from './overrides';
 import {
   ENTERED_FRACTION,
@@ -32,7 +32,8 @@ import type {
   SetPrescription,
   ShortRun,
 } from '../workout/types';
-import { restCategory, type Prescription } from './roles';
+import { prescribeFor, restCategory, type Prescription } from './roles';
+import { SHORT_BY_REPS, shortBy } from './shortfall';
 
 /**
  * The progression engine: the next target for an exercise from its actual
@@ -114,6 +115,19 @@ export interface NextTarget {
   hold?: boolean;
   /** A lift done at bodyweight fell short of its floor: there is no weight to take off. */
   short?: ShortRun;
+  /**
+   * The session the target was read from fell short on its first working set: under its floor, or
+   * as far short of what it asked as a hard start reads (Maintenance 26, item 42): a hard start
+   * does not read the lift today.
+   */
+  missed?: boolean;
+  /** An entered max raised the target over the log's (Maintenance 26): a hard start does not read it. */
+  fromMax?: boolean;
+  /**
+   * No session at today's rep range is fresh enough: the target was read from another range
+   * (Maintenance 26, the fourth pass of item 42), and a hard start does not read it.
+   */
+  otherRange?: boolean;
   /** The logged session the target was read from, and whether that day met its reps and reserve. */
   reference?: { recordId: string; exerciseId: string; clean: boolean };
   /** The weights here made less than asked: the load and range its sets stand in for. */
@@ -458,6 +472,16 @@ function exactLoadFromEstimate(e1rm: number, reps: number, rir: number, fraction
   return (e1rm / (1 + effective / 30)) * fraction;
 }
 
+/**
+ * The load a set's reps take with `more` reps more in reserve, by the rule targets are read with
+ * (Epley, reps and reserve read to twelve), before it is rounded (Maintenance 26, the sixth pass of
+ * item 42). At twelve or more already, the load is the same: the reps answer for the reserve.
+ */
+export function loadAtMoreReserve(weight: number, reps: number, rir: number, more: number): number {
+  const e1rm = weight * (1 + Math.min(reps + rir, 12) / 30);
+  return exactLoadFromEstimate(e1rm, reps, rir + more, 1);
+}
+
 /** Load for a rep target at a given reserve from an estimated one-rep max (Epley, inverted). */
 export function loadFromEstimate(
   e1rm: number,
@@ -607,7 +631,12 @@ function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget 
   if (!entry) return target;
   const last = performanceHistory(input.history, input.exercise, 1)[0];
   if (!last || last.viaFamily || last.e1rm === null) return target;
-  if (!(Date.parse(entry.enteredAt) > Date.parse(liftBegan(input.history, last)))) return target;
+  if (
+    !enteredBy(entry.enteredAt, input.now) ||
+    !(Date.parse(entry.enteredAt) > Date.parse(liftBegan(input.history, last)))
+  ) {
+    return target;
+  }
   const units = input.profile.units;
   const entered = enteredMaxFor(maxes, input.exercise.id, units);
   // Judged against the log read as the max was: the same set logged and entered says the same.
@@ -628,6 +657,7 @@ function withEnteredMax(target: NextTarget, input: NextTargetInput): NextTarget 
     {
       ...target,
       weight: lifted,
+      fromMax: true,
       evidence: [
         ...target.evidence,
         `Your max of ${Math.round(entered)} ${units}, entered after you began this lift last time, says more than your logged sets: up ${
@@ -855,6 +885,27 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     setsAdvice: 0,
   };
   const last = points[0];
+  if (newToZone) base.otherRange = true;
+  // The session the target is read from fell short on its first working set: under its floor, or
+  // as far short of what the plan asks as a hard start reads (reps plus the reserve logged, against
+  // the plan's reserve, so a day asked harder or easier neither makes nor breaks the mark). Marked,
+  // so a hard start does not read the lift today (Maintenance 26, item 42: its re-check, and the
+  // third and fourth passes: a beginner who goes to failure at the floor read as a hard start
+  // every session).
+  const firstSet = last?.sets[0];
+  if (
+    firstSet?.targetReps &&
+    (firstSet.reps < firstSet.targetReps[0] ||
+      (firstSet.rir !== null &&
+        shortBy(
+          firstSet.targetReps[0],
+          prescribeFor(exercise, role, profile, history).rir,
+          firstSet.reps,
+          firstSet.rir,
+        ) >= SHORT_BY_REPS))
+  ) {
+    base.missed = true;
+  }
   const maxes = input.maxes ?? null;
   // A max the lifter entered sets the first target of a lift without its own history.
   const entered =
@@ -1070,6 +1121,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     daysSince >= RETURN_AFTER_DAYS &&
     maxes &&
     enteredRecord &&
+    enteredBy(enteredRecord.enteredAt, input.now) &&
     Date.parse(enteredRecord.enteredAt) > Date.parse(liftBegan(input.history, last))
   ) {
     const fresh = enteredMaxFor(maxes, exercise.id, units);
@@ -1430,6 +1482,9 @@ export function summarizeProgression(target: NextTarget): EntryProgression {
     ...(target.short ? { short: target.short } : {}),
     ...(typeof target.from === 'number' ? { from: target.from } : {}),
     ...(target.nudged ? { nudged: target.nudged } : {}),
+    ...(target.missed ? { missed: true } : {}),
+    ...(target.fromMax ? { fromMax: true } : {}),
+    ...(target.otherRange ? { otherRange: true } : {}),
   };
 }
 

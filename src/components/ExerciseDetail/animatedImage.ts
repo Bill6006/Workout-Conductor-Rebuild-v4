@@ -101,7 +101,7 @@ function isSequence(bytes: string): boolean {
  * Whether an image moves: a GIF of more than one frame, an animated WebP, PNG or AVIF (or HEIF
  * sequence), judged by its own bytes. A photo (JPEG, BMP) never moves; an SVG or anything not
  * read here is taken to move, and so is a file whose bytes cannot be read unless its type is a
- * photo's, so that whatever moves can always be stopped.
+ * photo's, so that whatever moves rests on a still under reduced motion.
  */
 export function isAnimatedImage(dataUrl: string): boolean {
   const bytes = bytesOf(dataUrl);
@@ -246,10 +246,10 @@ export function loopingImage(dataUrl: string): string {
 }
 
 /**
- * The first frame of an image as a still, made the first time it is wanted and kept, so Pause
- * after Play shows it at once; freed once a still of another image takes its place, or when the
- * view closes (the tenth review's second re-check: a still freed on Play showed broken on the
- * next Pause). Null until it is made, and where it cannot be.
+ * The first frame of an image as a still, made the first time it is wanted and kept, so a card
+ * that rests again shows it at once; freed once a still of another image takes its place, or when
+ * the view closes (the tenth review's second re-check: a still freed as the motion started showed
+ * broken when it next rested). Null until it is made, and where it cannot be.
  */
 export function useFirstFrame(dataUrl: string | null, wanted = true): string | null {
   const [frame, setFrame] = useState<{ from: string; still: string } | null>(null);

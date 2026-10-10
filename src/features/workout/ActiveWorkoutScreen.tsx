@@ -15,7 +15,6 @@ import {
   type EditActions,
   type TargetNotes,
 } from '../../components/ExerciseDetail/ExerciseDetailSheet';
-import { demoHoldKey } from '../../components/ExerciseDetail/demoHold';
 import { HowToSheet } from '../../components/ExerciseDetail/HowToSheet';
 import { PlateLine } from '../../components/PlateStack/PlateStack';
 import { isCoreStability } from '../../catalog/movementPatterns/movementPatterns';
@@ -49,8 +48,10 @@ import { remainingMinutes } from '../../engine/duration/duration';
 import { plateMath } from '../../engine/plateMath/plateMath';
 import { dropSetWeight } from '../../engine/recalibration/dropSet';
 import { fitWeight, loadingFor, loadingKeyFor, specFor } from '../../engine/loading/loading';
-import { enteredE1rm, maxPromptHidden } from '../../engine/progression/maxes';
+import { enteredE1rm, enteredMaxFor } from '../../engine/progression/maxes';
 import { hasNoLoad, startRatio } from '../../engine/progression/startingLoad';
+import { repsSlip, weightSlip, type SlipQuestion } from '../../engine/progression/slips';
+import type { SetKind } from '../../engine/workout/types';
 import { contextFor } from '../../engine/recalibration/recalibrate';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import {
@@ -75,6 +76,7 @@ import { LoggedSets } from './LoggedSets';
 import { describeSetPosition } from './setFormat';
 import { RatingSheet } from './RatingSheet';
 import { MaxSheet } from './MaxSheet';
+import { offersMax } from './offersMax';
 import { previousPerformance } from './previousPerformance';
 import { liveWeightOn, type LiveWeight } from './liveWeight';
 
@@ -324,17 +326,7 @@ export function ActiveWorkoutScreen() {
 
   // The one-time max offer: a lift without its own history, nothing done yet, not declined.
   const knowMaxFor = (entry: WorkoutEntry, block: WorkoutBlock) => {
-    const mode = entry.progression?.mode;
-    if (mode !== 'start' && mode !== 'estimate' && mode !== 'return') return undefined;
-    const exercise = requireExercise(entry.exerciseId);
-    // A max is read from reps; a hold's seconds say nothing about one.
-    if (startRatio(exercise) === null || isHold(exercise)) return undefined;
-    // With a set done or skipped, its ramp included, or a weight set for today, the lift keeps
-    // its sets and a max counts from the next session (Maintenance 23): there is no first target
-    // left to offer.
-    const touched = session.completed.sets.some((set) => set.entryId === entry.id);
-    if (touched || entry.manual?.weight) return undefined;
-    if (maxPromptHidden(strengthMaxes, entry.exerciseId, new Date().toISOString())) {
+    if (!offersMax(entry, session.completed.sets, strengthMaxes, new Date().toISOString())) {
       return undefined;
     }
     return () => {
@@ -453,6 +445,66 @@ export function ActiveWorkoutScreen() {
       : null;
     const liveWeight = liveWeightOn(liveWeights[entry.id], dialKey);
     const workingLogged = logged.some((set) => set.kind === 'working' && !set.skipped);
+    // Numbers that look like slips are asked about once before they steer anything (item 40,
+    // docs/research/slip-checks.md): a weight far past the lift's history (today's sets and the
+    // max entered count with it) or past what the place loads, a bar lighter than empty, and reps
+    // far past the range and anything the lift has logged. A number kept once is not asked about
+    // again.
+    const heaviest =
+      loading.available && loading.available.length > 0 ? Math.max(...loading.available) : null;
+    const savedMax = enteredMaxFor(strengthMaxes, exercise.id, units);
+    const repsBefore = history.flatMap((record) =>
+      record.entries.flatMap((done) =>
+        done.exerciseId === exercise.id
+          ? done.sets
+              .filter((set) => set.kind === 'working' && set.completed)
+              .map((set) => set.reps)
+          : [],
+      ),
+    );
+    const slipFor =
+      (
+        kind: SetKind,
+        range: readonly [number, number],
+        editing: number | undefined,
+        target: number | null,
+      ) =>
+      (values: SetLoggerValues): SlipQuestion | null => {
+        if (values.reps === 0) return null;
+        // Every set of the lift logged today counts as the lifter's word. The one being corrected
+        // may spare a question, never make one: kept once, or plausible, it is no best (the
+        // re-check of item 40, its third and fourth passes).
+        const today = logged.filter((done) => !done.skipped && done.setIndex !== editing);
+        const own = logged.find((done) => !done.skipped && done.setIndex === editing);
+        const weight =
+          values.weight !== null && values.weight > 0
+            ? weightSlip({
+                exercise,
+                weight: values.weight,
+                reps: values.reps,
+                units,
+                history,
+                today: today.map((done) => ({
+                  weight: done.weight,
+                  reps: done.reps,
+                  working: done.kind === 'working',
+                })),
+                saved: savedMax,
+                profile,
+                heaviest,
+                place: profile.currentLocationId,
+                editing: own ? { weight: own.weight, reps: own.reps, working: false } : null,
+                target,
+                now: new Date(now).toISOString(),
+                maxes: strengthMaxes,
+              })
+            : null;
+        if (weight) return weight;
+        if (hold || kind !== 'working') return null;
+        const repsToday = today.filter((done) => done.kind === 'working').map((done) => done.reps);
+        const repsKept = own ? [own.reps] : [];
+        return repsSlip(values.reps, range, [...repsToday, ...repsKept, ...repsBefore]);
+      };
     // One rule for the dial and the plate line: the dial's own starting value, or the weight
     // the dial has been turned to, or, with no set in front of you, the last working weight
     // logged here. A warm-up's draft never reaches a working set.
@@ -531,6 +583,12 @@ export function ActiveWorkoutScreen() {
             noLoad={hasNoLoad(exercise)}
             weightStep={step}
             onCommit={(values) => commitEdit(entry.id, editingSet.index, values)}
+            question={slipFor(
+              editingSet.kind,
+              editingSet.targetReps,
+              editingSet.index,
+              editingSet.targetWeight,
+            )}
             onCancel={() => setEditing(null)}
             onDelete={() => {
               setEditing(null);
@@ -590,6 +648,12 @@ export function ActiveWorkoutScreen() {
               mode="log"
               weightStep={step}
               onCommit={(values) => commitLog(entry, currentHere.set, values)}
+              question={slipFor(
+                currentHere.kind,
+                currentHere.set.targetReps,
+                undefined,
+                currentHere.set.targetWeight,
+              )}
               disabled={calibrating}
               helper={helper}
               noLoad={hasNoLoad(exercise)}
@@ -675,7 +739,6 @@ export function ActiveWorkoutScreen() {
           onShowDetail={() => setHowTo({ entry, block })}
           onKnowMax={knowMaxFor(entry, block)}
           restStyle={profile.restStyle}
-          demoHoldKey={demoHoldKey(session.id, entry.id, entry.exerciseId)}
         >
           {loggerFor(entry, block)}
         </ExerciseCard>
@@ -708,7 +771,6 @@ export function ActiveWorkoutScreen() {
             onShowDetail={() => setHowTo({ entry, block })}
             onKnowMax={knowMaxFor(entry, block)}
             restStyle={profile.restStyle}
-            demoHoldKey={demoHoldKey(session.id, entry.id, entry.exerciseId)}
           >
             {loggerFor(entry, block)}
           </ExerciseCard>
@@ -1066,7 +1128,6 @@ export function ActiveWorkoutScreen() {
         exercise={howTo ? requireExercise(howTo.entry.exerciseId) : null}
         onClose={() => setHowTo(null)}
         own={howToInstruction}
-        holdKey={howTo ? demoHoldKey(session.id, howTo.entry.id, howTo.entry.exerciseId) : null}
       />
 
       <ExerciseDetailSheet

@@ -31,7 +31,7 @@ const baseURL = deployedURL ?? localURL;
 
 const pixel7 = { ...devices['Pixel 7'], deviceScaleFactor: 2 };
 const smokeSpecs =
-  /(smoke|onboarding|library|duration|recalibration|activeWorkout|startingLoads|coachRound|sessionPolish|cloud|cloudSetup|cloudRecovery|loggerFixes|loadingRound|plates|sessionContext|alerts|maxAndWeights|styles|timing|sessionReopen|barcode|storage|midWorkout|swaps|bodyweight|roundF|roundG|holdAndPain|coachAndHints|coach|progress|media|howTo|dataSafety|a11y|zoom|screenshots)\.spec\.ts/;
+  /(smoke|onboarding|library|duration|recalibration|activeWorkout|startingLoads|coachRound|sessionPolish|cloud|cloudSetup|cloudRecovery|loggerFixes|loadingRound|plates|sessionContext|alerts|maxAndWeights|styles|timing|sessionReopen|barcode|storage|midWorkout|swaps|bodyweight|roundF|roundG|roundH|holdAndPain|coachAndHints|coach|progress|media|howTo|dataSafety|a11y|zoom|screenshots)\.spec\.ts/;
 const pwaSpecs = /pwa\.spec\.ts/;
 /**
  * The installed app moving to a new release (Maintenance 25): two real builds served one at a

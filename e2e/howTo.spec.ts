@@ -5,9 +5,17 @@ import { ensureProfile } from './helpers';
 
 /**
  * Maintenance 25, item 7, in a real browser at a phone's width: How to opens over the workout card
- * with the exercise's own clip large, slowed or paused on a tap, then its steps and its credit;
- * nothing runs off the side, the clip leaves room for the steps, and the card does not grow.
+ * with the exercise's own clip large and slowed on a tap (no Pause: Maintenance 26, item 50), then
+ * its steps and its credit; nothing runs off the side, the clip leaves room for the steps, and the
+ * card does not grow.
  */
+
+/** A one-pixel GIF: synthetic, the lifter's own demonstration in a test. */
+const ONE_PIXEL_GIF = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+/** The same pixel twice over: a two-frame GIF, synthetic, a replacement in a test. */
+const TWO_FRAME_GIF =
+  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAAh+QQBAAAAACwAAAAAAQABAAACAUQAOw==';
+const SESSION_KEY = 'wc.v1.session';
 
 /** A workout started, and the first card's clip playing. */
 async function startedCardClip(page: Page): Promise<Locator> {
@@ -29,24 +37,6 @@ async function startedCardClip(page: Page): Promise<Locator> {
     )
     .toBeGreaterThan(0);
   return clip;
-}
-
-/**
- * The Linux runner draws text in DejaVu Sans, wider than Windows' Segoe UI or Android's Roboto.
- * Verdana stands in for it on every run, so the card is as tall here as there: at 360 px the tap
- * on Options then scrolls the card's clip out of view, where it rests by design (the first deploy
- * of the phone review's fix failed on the runner only).
- */
-async function wideFont(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const add = () => {
-      const style = document.createElement('style');
-      style.textContent = '* { font-family: Verdana, sans-serif !important; }';
-      document.head.append(style);
-    };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add);
-    else add();
-  });
 }
 
 test.describe('How to', () => {
@@ -72,9 +62,9 @@ test.describe('How to', () => {
     expect(await video.evaluate((element: HTMLVideoElement) => element.loop)).toBe(true);
     await sheet.getByTestId('demo-slow').click();
     expect(await video.evaluate((element: HTMLVideoElement) => element.playbackRate)).toBe(0.5);
-    await sheet.getByTestId('demo-pause').click();
-    await expect(video).toHaveAttribute('data-playing', 'false');
-    expect(await video.evaluate((element: HTMLVideoElement) => element.paused)).toBe(true);
+    // No Pause on any demonstration (Maintenance 26, item 50): it plays on.
+    await expect(sheet.getByRole('button', { name: /pause/i })).toHaveCount(0);
+    await expect(video).toHaveAttribute('data-playing', 'true');
 
     for (const name of ['Setup', 'Do it', 'Key cues', 'Avoid']) {
       await expect(sheet.getByRole('heading', { name })).toBeAttached();
@@ -181,81 +171,137 @@ test.describe('How to', () => {
     expect(await clip.evaluate((element, earlier) => element === earlier, before)).toBe(true);
   });
 
-  test('holds the card still with a pause mark while paused in How to, until Play there; a pause in Options holds nothing', async ({
+  test("has no Pause, keeps the card looping, and sets the lifter's own GIF from How to", async ({
     page,
   }) => {
     test.setTimeout(90_000);
-    await wideFont(page);
     const clip = await startedCardClip(page);
     const card = page.getByTestId('exercise-card').first();
-    const thumb = card.getByTestId('exercise-thumb');
     const sheet = page.getByRole('dialog', { name: /^How to: / });
 
     await card.getByTestId('card-thumb').click();
-    await expect(sheet.locator('video[data-testid="exercise-demo"]')).toBeVisible();
-    // Started by the app first, so the tap is a Pause.
-    await expect
-      .poll(() =>
-        sheet
-          .locator('video[data-testid="exercise-demo"]')
-          .evaluate((v: HTMLVideoElement) => v.paused),
-      )
-      .toBe(false);
-    await sheet.getByTestId('demo-pause').click();
+    const video = sheet.locator('video[data-testid="exercise-demo"]');
+    await expect(video).toBeVisible();
+    await expect(sheet.getByRole('button', { name: /pause/i })).toHaveCount(0);
+    // The way to their own: the demonstration itself, or its button.
+    await expect(sheet.getByTestId('demo-pick')).toBeVisible();
+    await expect(sheet.getByTestId('demo-your-gif')).toBeVisible();
+    // A tap on the demonstration opens the phone's file chooser (the review of item 50): a
+    // synthetic one-frame GIF is handed over through it.
+    const chooser = page.waitForEvent('filechooser');
+    await sheet.getByTestId('demo-pick').click();
+    await (
+      await chooser
+    ).setFiles({
+      name: 'mine.gif',
+      mimeType: 'image/gif',
+      buffer: Buffer.from(ONE_PIXEL_GIF, 'base64'),
+    });
+    const own = sheet.getByTestId('custom-demo');
+    await expect(own).toHaveAttribute('src', `data:image/gif;base64,${ONE_PIXEL_GIF}`);
+    await expect(sheet.getByTestId('demo-remove')).toBeVisible();
+    // Replaced through Replace: the new one shows at once, though there is still one.
+    const again = page.waitForEvent('filechooser');
+    await sheet.getByTestId('demo-replace').click();
+    await (
+      await again
+    ).setFiles({
+      name: 'other.gif',
+      mimeType: 'image/gif',
+      buffer: Buffer.from(TWO_FRAME_GIF, 'base64'),
+    });
+    await expect(own).toHaveAttribute('src', /^data:image\/gif;base64,/);
+    await expect(own).not.toHaveAttribute('src', `data:image/gif;base64,${ONE_PIXEL_GIF}`);
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
-    await expect(thumb).toHaveAttribute('data-animated', 'false');
-    await expect(card.getByTestId('thumb-paused')).toBeVisible();
-    // Brought back, the page leaves a held card still.
-    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-    await page.waitForTimeout(1_000);
-    expect(await thumb.evaluate((element) => element.tagName)).toBe('IMG');
+    await expect(card.getByTestId('exercise-thumb')).toHaveAttribute('data-custom', 'true');
 
+    // Removed from How to: the clip again on the card, still under How to while How to's own
+    // plays on (nothing plays a clip as it loads, Maintenance 25), then looping once it closes.
     await card.getByTestId('card-thumb').click();
-    await expect(sheet.getByTestId('demo-pause')).toHaveText('Play');
-    await sheet.getByTestId('demo-pause').click();
-    // The card's clip comes back under How to, and stays where it is until How to closes: the
-    // card and How to never play the same clip at once (the re-check).
-    await expect(clip).toBeAttached({ timeout: 10_000 });
-    await page.waitForTimeout(1_500);
+    await sheet.getByTestId('demo-remove').click();
+    const demo = sheet.locator('video[data-testid="exercise-demo"]');
+    await expect(demo).toBeVisible();
+    await expect(clip).toBeAttached();
+    // At 360 px the tap on Remove scrolled How to's own past the top, where it rests.
+    await demo.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => demo.evaluate((element: HTMLVideoElement) => element.currentTime), {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(0.5);
     expect(await clip.evaluate((element: HTMLVideoElement) => element.paused)).toBe(true);
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
-    await expect(clip).toBeVisible({ timeout: 10_000 });
     await expect
       .poll(
         () =>
           clip.evaluate((element: HTMLVideoElement) => (element.paused ? 0 : element.currentTime)),
-        { timeout: 10_000 },
+        {
+          timeout: 10_000,
+        },
       )
       .toBeGreaterThan(0.2);
-    await expect(card.getByTestId('thumb-paused')).toHaveCount(0);
+  });
 
-    // Options' details have the demonstration too: a pause there is theirs alone.
-    await card.getByTestId('options-tab').click();
-    const options = page.getByRole('dialog');
-    await expect(options.locator('video[data-testid="exercise-demo"]')).toBeVisible({
-      timeout: 10_000,
+  test('a diagram in How to has no Pause over its label, and is tapped to use your own GIF', async ({
+    page,
+  }) => {
+    await ensureProfile(page);
+    // The owner's phone shot: Ab Wheel Rollout, a diagram, with Pause over its label.
+    const stored = await page.evaluate((key) => window.localStorage.getItem(key), SESSION_KEY);
+    const session = JSON.parse(stored ?? '{}') as {
+      workout: { blocks: { kind: string; entries: Record<string, unknown>[] }[] };
+    };
+    const block = session.workout.blocks.find((candidate) => candidate.kind === 'straight');
+    if (!block) throw new Error('no straight block');
+    session.workout.blocks = [block, ...session.workout.blocks.filter((other) => other !== block)];
+    const entry = block.entries[0] as Record<string, unknown>;
+    entry.exerciseId = 'ab-wheel-rollout';
+    delete entry.progression;
+    await page.evaluate(({ key, value }) => window.localStorage.setItem(key, value), {
+      key: SESSION_KEY,
+      value: JSON.stringify(session),
     });
-    await expect
-      .poll(() =>
-        options
-          .locator('video[data-testid="exercise-demo"]')
-          .evaluate((v: HTMLVideoElement) => v.paused),
-      )
-      .toBe(false);
-    await options.getByTestId('demo-pause').click();
-    await expect(options.getByTestId('demo-pause')).toHaveText('Play');
+    await page.reload();
+    await page.getByTestId('start-workout').click();
+    const card = page.getByTestId('exercise-card').first();
+    await card.getByTestId('card-thumb').click();
+    const sheet = page.getByRole('dialog', { name: 'How to: Ab Wheel Rollout' });
+    await expect(sheet.getByTestId('exercise-demo')).toBeVisible();
+    await expect(sheet.getByRole('button', { name: /pause/i })).toHaveCount(0);
+    await expect(sheet.getByTestId('demo-play')).toHaveCount(0);
+    await expect(sheet.getByTestId('demo-credit')).toHaveText(
+      'Diagram · tap it to use your own GIF',
+    );
+    // The diagram itself is the button that picks one, as is "Your GIF" under it, on one line,
+    // in a wide font close to the Linux runner's too: at 360 px it would break there without its
+    // rule (Windows' narrow font fits either way).
+    await expect(sheet.getByTestId('demo-pick').getByTestId('exercise-demo')).toBeVisible();
+    const yourGif = sheet.getByTestId('demo-your-gif');
+    await expect(yourGif).toBeVisible();
+    await page.addStyleTag({ content: '* { font-family: Verdana, sans-serif !important; }' });
+    const lines = await yourGif.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return new Set(Array.from(range.getClientRects(), (rect) => Math.round(rect.top))).size;
+    });
+    expect(lines).toBe(1);
+    expect((await yourGif.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    // Under reduced motion it waits on its still with Play: at the top, clear of the diagram's
+    // label along its foot, and a thumb's height (the review of item 50).
     await page.keyboard.press('Escape');
-    await expect(options).toBeHidden();
-    await expect(thumb).toHaveAttribute('data-animated', 'true');
-    await expect(card.getByTestId('thumb-paused')).toHaveCount(0);
-    // The tap on Options scrolled the page down to it; back in view, the clip plays on.
-    await clip.scrollIntoViewIfNeeded();
-    await expect(clip).toBeInViewport();
-    await expect
-      .poll(() => clip.evaluate((element: HTMLVideoElement) => element.paused), { timeout: 5_000 })
-      .toBe(false);
+    await expect(sheet).toBeHidden();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await card.getByTestId('card-thumb').click();
+    const play = sheet.getByTestId('demo-play');
+    await expect(play).toBeVisible();
+    const playBox = await play.boundingBox();
+    const pictureBox = await sheet.getByTestId('exercise-demo').boundingBox();
+    if (!playBox || !pictureBox) throw new Error('no Play or picture');
+    expect(playBox.height).toBeGreaterThanOrEqual(44);
+    expect(playBox.y + playBox.height).toBeLessThan(pictureBox.y + pictureBox.height / 2);
   });
 
   test("shows the card's still under reduced motion, and plays the clip once motion is allowed", async ({
@@ -294,10 +340,14 @@ test.describe('How to', () => {
     // A portrait clip (3:4) at a phone's width would stand taller than half the screen.
     const viewport = page.viewportSize();
     const limit = Math.min((viewport?.height ?? 0) * 0.52, 420) + 1;
-    // The box the clip sits in, as the text below it sees it.
-    const box = await video.locator('xpath=..').boundingBox();
+    // The stage the clip sits in, as the text below it sees it, and the clip's own box in it (the
+    // picker button around it fills the stage: the re-check of item 50).
+    const box = await sheet.getByTestId('demo-pick').locator('xpath=..').boundingBox();
     expect(box?.height ?? Infinity).toBeLessThanOrEqual(limit);
     expect(box?.height ?? 0).toBeGreaterThan(200);
+    const own = await video.boundingBox();
+    expect(own?.height ?? Infinity).toBeLessThanOrEqual(limit);
+    expect(own?.height ?? 0).toBeGreaterThan(200);
     expect(
       await sheet.evaluate((element) => element.scrollWidth - element.clientWidth),
     ).toBeLessThanOrEqual(1);

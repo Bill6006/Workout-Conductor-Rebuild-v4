@@ -10,6 +10,7 @@ import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import { resolveTargetMinutes } from '../../engine/duration/duration';
 import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
+import { readStart, startKey, type StartReading } from '../../engine/recalibration/badStart';
 import { dropSetWeight, pendingDropSet, withDropWeight } from '../../engine/recalibration/dropSet';
 import {
   LoadingSpecSchema,
@@ -75,7 +76,10 @@ import {
   type StrengthMaxes,
 } from '../../engine/progression/maxes';
 import { loggedLoad } from '../../engine/progression/startingLoad';
-import { recalibrate as runRecalibration } from '../../engine/recalibration/recalibrate';
+import {
+  planUnderTheEase,
+  recalibrate as runRecalibration,
+} from '../../engine/recalibration/recalibrate';
 import { describeTrigger, type TriggerContext } from '../../engine/recalibration/triggers';
 import type {
   CompletedSet,
@@ -93,12 +97,15 @@ import {
 } from '../../engine/workout/sequence';
 import {
   allEntries,
+  asSaved,
   isStopped,
   planOwnExercise,
   withoutStops,
   type DurationChoice,
   type GeneratedWorkout,
+  type WorkoutEntry,
 } from '../../engine/workout/types';
+import { prescribeFor } from '../../engine/progression/roles';
 import { generateWorkout, withSwapLines } from '../../engine/workoutGenerator/generate';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
 import { normalizeName } from '../backup/legacyImport';
@@ -313,6 +320,20 @@ export interface AppState {
   customInstructions: CustomInstruction[];
   savedWorkouts: SavedWorkout[];
   customCounts: { exercises: number; instructions: number; media: number };
+  /**
+   * Bumped whenever a demonstration of the lifter's own is added, replaced or removed, or the
+   * data is read again: a replacement keeps the count, and what shows it must still read it
+   * again (the review of Maintenance 26, item 50).
+   */
+  customMediaRevision: number;
+  /**
+   * Exercises whose own demonstration this session removed, each at the revision its last removal
+   * made: what shows one lets go what it read before, without a read of its own, which may fail, and
+   * shows what it reads after (the eighth to tenth passes of item 50). A mark is never taken off, by
+   * a pick or a read of the data: it lets go only what was read before it (the tenth pass: a sheet
+   * kept shut showed the removed picture again once a pick or a read had cleared it).
+   */
+  customMediaGone: Readonly<Record<string, number>>;
   /** Coach routes for stalled lifts, kept in the meta store and backed up. */
   coachRoutes: CoachRoutes;
   /** Declined coach offers, kept in the meta store and backed up. */
@@ -715,6 +736,18 @@ export class AppStore {
   /** Counts the kept-swap changes shown, so a reload that read the list before one keeps it. */
   private swapsVersion = 0;
   /**
+   * Bumped by every write of the lifter's own demonstrations: a read of the data begun before one
+   * keeps the count it made (Maintenance 26, the re-check of item 50: a hydrate across a pick put
+   * the count back to none, and the demonstration went unshown).
+   */
+  private mediaVersion = 0;
+  /**
+   * The lifter's own media is written one change at a time, each counting what the database holds
+   * once it is written (Maintenance 26, the fourth pass of item 50: a removal and a pick at once,
+   * or a read of the data between a count and its write, left the count off and hid a picture).
+   */
+  private mediaWrites: Promise<unknown> = Promise.resolve();
+  /**
    * Counts the barcode changes shown, so a reload that read the barcodes before a save, a switch
    * or a removal keeps what that change showed (Maintenance 25).
    */
@@ -786,6 +819,8 @@ export class AppStore {
       customExercises: [],
       customInstructions: [],
       customCounts: { exercises: 0, instructions: 0, media: 0 },
+      customMediaRevision: 0,
+      customMediaGone: {},
       coachRoutes: emptyRoutes(),
       coachDeclines: emptyDeclines(),
       deloadWeek: null,
@@ -823,6 +858,7 @@ export class AppStore {
 
   async hydrate(): Promise<void> {
     const swapsSeen = this.swapsVersion;
+    const mediaSeen = this.mediaVersion;
     const barcodesSeen = this.barcodesVersion;
     try {
       const db = await this.getDatabase();
@@ -924,8 +960,9 @@ export class AppStore {
         customCounts: {
           exercises: validCustom.length,
           instructions: validInstructions.length,
-          media: customMedia,
+          media: this.mediaVersion === mediaSeen ? customMedia : this.state.customCounts.media,
         },
+        customMediaRevision: this.state.customMediaRevision + 1,
         coachRoutes: parseCoachRoutes(routesRaw),
         coachDeclines: parseCoachDeclines(declinesRaw),
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
@@ -1152,7 +1189,7 @@ export class AppStore {
    * at least `minOverlayMs` so the change is visible.
    */
   recalibrate(trigger: RecalibrationTrigger, reason?: string): Promise<RecalibrationResult | null> {
-    const run = this.calibrationQueue.then(() => this.runCalibration(trigger, reason));
+    const run = this.calibrationQueue.then(() => this.runCalibration(trigger, reason, false));
     this.calibrationQueue = run.catch(() => undefined);
     return run;
   }
@@ -1160,6 +1197,8 @@ export class AppStore {
   private async runCalibration(
     trigger: RecalibrationTrigger,
     reason: string | undefined,
+    /** Worked out once already on a plan not yet started that was made again meanwhile. */
+    again: boolean,
   ): Promise<RecalibrationResult | null> {
     // A plan left open from an earlier day gives way to today's first, so nothing chosen for that
     // day carries into today; a change to one of its exercises or pairings, or an exercise added to
@@ -1173,6 +1212,17 @@ export class AppStore {
     const session = this.state.session;
     const { profile, history } = this.state;
     if (!session || !profile || session.status === 'completed') return null;
+    if (trigger.type === 'bad-start') {
+      // Read again as it runs: one queued behind another change may no longer be wanted (the
+      // re-check of item 42: two quick undos each queued one, and the second spoke of a check-in).
+      // A reading the lifter took back, or one that could not be made, is not made again here
+      // either (the third pass).
+      const reading = this.readStartOf(session);
+      if (!reading || reading.low === Boolean(session.constraints.badStart)) return null;
+      const key = startKey(reading);
+      if (session.startDeclined === key || session.startFailed === key) return null;
+      trigger = { type: 'bad-start', low: reading.low, lifts: reading.lifts };
+    }
     const described = describeTrigger(trigger, this.triggerContext(trigger, session));
     const startedAt = Date.now();
     this.setState({
@@ -1206,7 +1256,42 @@ export class AppStore {
     const remaining = this.minOverlayMs - (Date.now() - startedAt);
     if (remaining > 0) await sleep(remaining);
 
-    const latest = this.state.session ?? session;
+    const current = this.state.session;
+    // A workout discarded or finished while this ran takes nothing of it: the plan in its place is
+    // not the one it was worked out on (Maintenance 26, the fourth and fifth passes of item 42).
+    if (
+      !current ||
+      (session.status !== 'preview' &&
+        (current.createdAt !== session.createdAt ||
+          current.status === 'preview' ||
+          current.status === 'completed'))
+    ) {
+      this.setState({ calibration: IDLE_CALIBRATION });
+      return null;
+    }
+    // A plan not yet started, made again meanwhile (a workout pulled in, a new day, a profile
+    // saved), has the change worked out again on it: the plan made from the new inputs never goes
+    // back to the old (the sixth pass). A change aimed at one of its exercises has nothing to work
+    // on, its exercises being picked again.
+    if (session.status === 'preview' && current.createdAt !== session.createdAt) {
+      const aimed = 'entryId' in trigger || 'blockId' in trigger || trigger.type === 'add-exercise';
+      if (!aimed && !again) {
+        this.setState({ calibration: IDLE_CALIBRATION });
+        return this.runCalibration(trigger, reason, true);
+      }
+      // Left, it says so: nothing changed, and why (the seventh pass: it was dropped silently).
+      this.setState({
+        calibration: {
+          status: 'error',
+          title: described.title,
+          label: described.label,
+          evaluating: [],
+          error: "Today's plan was made again while this ran, so nothing changed: try it again.",
+        },
+      });
+      return null;
+    }
+    const latest = current;
     const key = this.baseKey() ?? latest.baseKey;
     if (result.ok) {
       const position = currentPosition(result.workout, this.isDoneFor(latest));
@@ -1281,6 +1366,10 @@ export class AppStore {
     }
     const { swapsBefore, swapsAfter } = session.previous;
     const headline = 'Restored the previous workout.';
+    // A hard start's change taken back is the lifter's choice: it does not come straight back on
+    // the next set while the start reads the same (the review of item 42).
+    const reading = session.log[0]?.trigger === 'bad-start' ? this.readStartOf(session) : null;
+    const declined = reading ? startKey(reading) : session.startDeclined;
     const position = currentPosition(session.previous.workout, this.isDoneFor(session));
     const restored = session.previous.workout;
     this.setSession({
@@ -1309,6 +1398,7 @@ export class AppStore {
       rest: restPointingAt(session.rest, session.previous.workout, position),
       hold: holdStillFits(session.hold, session.previous.workout, position),
       previous: null,
+      ...(declined !== undefined ? { startDeclined: declined } : {}),
       lastSummary: {
         headline,
         details: [],
@@ -1497,6 +1587,22 @@ export class AppStore {
       (candidate) => candidate.entryId === entryId && candidate.setIndex === setIndex,
     );
     const isEdit = existingAt >= 0;
+    const earlier = isEdit ? (session.completed.sets[existingAt] as CompletedSet) : null;
+    // Whether its target was set by hand when it was logged, for the hard start (the review of
+    // item 42). A correction keeps what the set said then; a skipped set filled in later is
+    // logged now (the re-check).
+    const byHand =
+      earlier && !earlier.skipped
+        ? earlier.byHand === true
+        : Boolean(entry.manual?.weight || entry.manual?.reps);
+    // The plan's reserve for the lift as it stands now: the hard start reads the set against it,
+    // whatever the profile says later (the third pass of item 42). A correction keeps its own.
+    const planRir =
+      earlier && !earlier.skipped
+        ? earlier.planRir
+        : set.kind === 'working' && !skipped
+          ? this.planRirFor(entry)
+          : undefined;
     const logged: CompletedSet = {
       entryId,
       exerciseId: entry.exerciseId,
@@ -1505,8 +1611,12 @@ export class AppStore {
       reps,
       weight: skipped ? null : values.weight,
       rir: skipped ? null : values.rir,
-      completedAt: isEdit ? (session.completed.sets[existingAt] as CompletedSet).completedAt : now,
+      // A skipped set filled in later is done now: the hard start orders the lifts by it (the
+      // third pass of item 42: one skipped first took the place of a lift begun after it).
+      completedAt: earlier && !earlier.skipped ? earlier.completedAt : now,
       skipped,
+      ...(byHand ? { byHand: true } : {}),
+      ...(planRir !== undefined ? { planRir } : {}),
     };
     const sets = isEdit
       ? session.completed.sets.map((candidate, index) =>
@@ -1556,6 +1666,12 @@ export class AppStore {
 
     // A hold's seconds are not reps: nothing about them moves the load or the target mid-workout.
     const held = isHold(getExercise(entry.exerciseId));
+    // The session just after this tap's own change, if it made one: a hard start it brings on
+    // is told with it, and taken back with it (the review of item 42).
+    let tapped: WorkoutSession | null = null;
+    // The same set's own change failed: its error stays in view, and the start is read on the next
+    // set (the third pass of item 42: the hard start's run cleared it).
+    let failed = false;
     if (!isEdit && set.kind === 'working' && !skipped && !held) {
       const remaining = entry.sets.filter(
         (candidate) =>
@@ -1597,7 +1713,7 @@ export class AppStore {
           units,
         });
         if (plan.kind !== 'none') {
-          await this.recalibrate({
+          const performed = await this.recalibrate({
             type: 'performance',
             entryId,
             setIndex,
@@ -1605,10 +1721,75 @@ export class AppStore {
             actualWeight: values.weight,
             plan,
           });
+          if (performed?.ok) tapped = this.requireSession();
+          else if (performed) failed = true;
         }
       }
     }
     if (set.kind === 'working' && !skipped) this.settleDropSet(entryId);
+    if (set.kind === 'working' && !failed) await this.settleStart(tapped);
+  }
+
+  /** The reserve the plan asks for an entry's lift and role today, before the day's settings. */
+  private planRirFor(entry: WorkoutEntry): number | undefined {
+    const exercise = getExercise(entry.exerciseId);
+    const profile = this.state.profile;
+    if (!exercise || !profile) return undefined;
+    return prescribeFor(exercise, entry.role, profile, this.state.history).rir;
+  }
+
+  /**
+   * How the workout started (Maintenance 26, the owner's item 42, docs/research/bad-start.md): when
+   * the first two lifts that can be judged both fell well short, the rest is rebuilt with a low
+   * check-in's treatment; when an undo or a correction takes that back, without it. A change the
+   * lifter took back stays taken back while the start reads the same, and one that could not be
+   * made is not tried again for the same reading (the review of item 42). `tapped` is the session
+   * just after the same tap's own change: told with this one, and taken back with it.
+   */
+  private async settleStart(tapped: WorkoutSession | null = null): Promise<void> {
+    const session = this.state.session;
+    if (!session || session.status === 'preview' || session.status === 'completed') return;
+    const reading = this.readStartOf(session);
+    if (!reading || reading.low === Boolean(session.constraints.badStart)) return;
+    // A change the lifter took back, or one that could not be made, is not made again: the run
+    // reads the start again as it begins and checks both (the fourth pass of item 42).
+    const key = startKey(reading);
+    const result = await this.recalibrate({
+      type: 'bad-start',
+      low: reading.low,
+      lifts: reading.lifts,
+    });
+    // A run on a workout discarded meanwhile gives nothing back (`runCalibration`).
+    const made = this.state.session;
+    // A change that could not be made is kept with the session: not tried again on every later
+    // set while the start reads the same, and a new session reads its own (the re-check of 42).
+    if (result && !result.ok && made) {
+      this.setSession({ ...made, startFailed: key });
+      return;
+    }
+    if (!result?.ok || !tapped || !made?.lastSummary || !tapped.lastSummary) return;
+    // Told with the set's own change only when nothing ran between them: Undo takes back both,
+    // and never a third (the third pass).
+    if (made.previous?.workout !== tapped.workout) return;
+    this.setSession({
+      ...made,
+      lastSummary: {
+        ...made.lastSummary,
+        headline: `${made.lastSummary.headline} Also from this set: ${tapped.lastSummary.headline}`,
+      },
+      lastChanges: [...tapped.lastChanges, ...made.lastChanges],
+      previous: tapped.previous,
+    });
+  }
+
+  /** How a session's workout started (`readStart`), each lift read against the plan's reserve. */
+  private readStartOf(session: WorkoutSession): StartReading | null {
+    const profile = this.state.profile;
+    if (!profile) return null;
+    return readStart(session.workout.blocks, session.completed.sets, {
+      profile,
+      history: this.state.history,
+    });
   }
 
   /**
@@ -1657,15 +1838,17 @@ export class AppStore {
    */
   async skipExercise(
     entryId: string,
-  ): Promise<{ kind: 'removed' | 'trimmed'; skippedSets: number; name: string }> {
+  ): Promise<{ kind: 'removed' | 'trimmed' | 'unchanged'; skippedSets: number; name: string }> {
     const session = this.requireSession();
     const entry = allEntries(session.workout.blocks).find((candidate) => candidate.id === entryId);
     if (!entry) throw new Error('That exercise is no longer in the workout.');
     const name = requireExercise(entry.exerciseId).name;
     const logged = session.completed.sets.some((done) => done.entryId === entryId);
     if (!logged) {
-      await this.recalibrate({ type: 'skip', entryId });
-      return { kind: 'removed', skippedSets: 0, name };
+      // Removed only when the change was made: one that failed, or was left, says why on its own
+      // (the seventh pass of item 42).
+      const result = await this.recalibrate({ type: 'skip', entryId });
+      return { kind: result?.ok ? 'removed' : 'unchanged', skippedSets: 0, name };
     }
     const isDone = this.isDoneFor(session);
     const remaining = entry.sets.filter((set) => !isDone(entry.id, set.index));
@@ -1749,6 +1932,7 @@ export class AppStore {
       rest: null,
       hold: null,
     });
+    void this.settleStart();
   }
 
   /** Removes one logged set (from an inline correction). */
@@ -1767,6 +1951,7 @@ export class AppStore {
       // A countdown stays only while its set is still the one in front of the lifter.
       hold: hold && next?.entryId === hold.entryId && next.setIndex === hold.setIndex ? hold : null,
     });
+    void this.settleStart();
   }
 
   setDraft(entryId: string, draft: SetDraft): void {
@@ -1950,7 +2135,9 @@ export class AppStore {
       createdAt: this.now(),
       locationId: session.workout.locationId,
       duration: session.duration,
-      workout: session.workout,
+      // The plan under a hard start's ease, with no marks: the ease of today is no part of a plan
+      // for another day (Maintenance 26, the sixth and seventh passes of item 42).
+      workout: planUnderTheEase(session.workout),
     };
     const db = await this.getDatabase();
     const receipt = await putVerified(db, 'savedWorkouts', saved, { now: this.now });
@@ -1972,7 +2159,9 @@ export class AppStore {
     const now = this.now();
     // Made fresh: an exercise stopped on the day it was saved does not come back stopped, and a
     // plan saved before Maintenance 25 says each fitting step once.
-    const fresh = explanationOnce(withoutStops(saved.workout));
+    // Its targets were read on the day it was saved: a hard start does not read them (the third
+    // pass of item 42).
+    const fresh = asSaved(explanationOnce(withoutStops(saved.workout)));
     const workout = {
       ...fresh,
       id: `wk-${now.slice(0, 10)}-saved-${saved.id}`,
@@ -2076,17 +2265,63 @@ export class AppStore {
       source: 'user',
       createdAt: this.now(),
     });
-    const db = await this.getDatabase();
-    const existed = (await db.get<Identified>('customMedia', exerciseId)) !== undefined;
-    const receipt = await putVerified(db, 'customMedia', record, { now: this.now });
-    this.setState({
-      lastReceipt: receipt,
-      customCounts: {
-        ...this.state.customCounts,
-        media: this.state.customCounts.media + (existed ? 0 : 1),
-      },
+    const run = this.mediaWrites.then(async () => {
+      const db = await this.getDatabase();
+      this.mediaVersion += 1;
+      let written = false;
+      try {
+        const receipt = await putVerified(db, 'customMedia', record, { now: this.now });
+        written = true;
+        this.setState({ lastReceipt: receipt });
+        return record;
+      } catch (error) {
+        // A put that landed before its check failed: read once more, and the picture picked found
+        // there is saved (the eighth pass of item 50: an error was said over it, saved and shown).
+        written = await db.get<Identified>('customMedia', exerciseId).then(
+          (raw) => structurallyEqual(raw, record),
+          () => false,
+        );
+        if (!written) throw error;
+        return record;
+      } finally {
+        // A picture verified written is one at least, whatever the count can say (the sixth pass:
+        // a count that failed after a first pick hid it).
+        await this.mediaWritten(db, written ? 1 : 0);
+      }
     });
-    return record;
+    // The queue keeps no result: a picked file is not held in memory until the next write (the
+    // fifth pass of item 50).
+    this.mediaWrites = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /**
+   * Every media write ends here, written or not: the count is what the database holds, the second
+   * mark is made (a hydrate that began after the first counted before the write: the third pass of
+   * item 50), and every picture is read again, so a write that failed part-way never leaves the
+   * screen showing what the database no longer has (the fifth pass).
+   */
+  private async mediaWritten(
+    db: Database,
+    atLeast = 0,
+    /** The exercise whose picture this write removed. */
+    removed: string | null = null,
+  ): Promise<void> {
+    const counted = await db.count('customMedia').catch(() => null);
+    const media =
+      counted ?? (atLeast > 0 ? Math.max(atLeast, this.state.customCounts.media) : null);
+    this.mediaVersion += 1;
+    const revision = this.state.customMediaRevision + 1;
+    this.setState({
+      ...(media !== null ? { customCounts: { ...this.state.customCounts, media } } : {}),
+      customMediaRevision: revision,
+      ...(removed !== null
+        ? { customMediaGone: { ...this.state.customMediaGone, [removed]: revision } }
+        : {}),
+    });
   }
 
   async getCustomMedia(exerciseId: string): Promise<CustomMedia | null> {
@@ -2098,17 +2333,33 @@ export class AppStore {
   }
 
   /** Removes the user's demonstration for an exercise; the placeholder returns. */
-  async deleteCustomMedia(exerciseId: string): Promise<void> {
-    const db = await this.getDatabase();
-    const existed = (await db.get<Identified>('customMedia', exerciseId)) !== undefined;
-    if (!existed) return;
-    await deleteVerified(db, 'customMedia', exerciseId);
-    this.setState({
-      customCounts: {
-        ...this.state.customCounts,
-        media: Math.max(0, this.state.customCounts.media - 1),
-      },
+  deleteCustomMedia(exerciseId: string): Promise<void> {
+    const run = this.mediaWrites.then(async () => {
+      const db = await this.getDatabase();
+      // One already gone (another window, a removal that failed after it landed) is removed again,
+      // harmlessly, and the screen is brought up to date (the fifth pass of item 50).
+      this.mediaVersion += 1;
+      let gone = false;
+      try {
+        await deleteVerified(db, 'customMedia', exerciseId);
+        gone = true;
+      } catch (error) {
+        // A delete that landed before its check failed: read once more, and none found is removed
+        // (the eighth pass of item 50: the store, not each screen, says what the write did).
+        gone = await db.get<Identified>('customMedia', exerciseId).then(
+          (raw) => raw === undefined,
+          () => false,
+        );
+        if (!gone) throw error;
+      } finally {
+        await this.mediaWritten(db, 0, gone ? exerciseId : null);
+      }
     });
+    this.mediaWrites = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   // ---------------------------------------------------------------- durable data
