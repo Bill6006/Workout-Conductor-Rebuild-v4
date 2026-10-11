@@ -184,8 +184,11 @@ item 4 and the review's fixes). Every revert is caught:
 - the privacy scan (769 files, nothing found) and the build check;
 - the browser suite: 399 passed, 14 skipped by design.
 
-The unit tests also pass in UTC, as the CI runner runs them (2351 passed). The live site is checked
-after the deploy (PROJECT_STATUS, Latest commit).
+The unit tests also pass in UTC, as the CI runner runs them (2351 passed).
+
+Live: `0eaa9c5`, deployed by Deploy Pages run 38112423439, whose own verify passed. The live bundle
+carries the commit, and the browser suite against the live site passed: 395 passed, 18
+skipped by design.
 
 ## Review on the phone
 
