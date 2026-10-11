@@ -124,12 +124,13 @@ describe('the resets', () => {
   });
 
   it('keep a field this copy does not know, and merge two records by the later reset', () => {
-    const newer = parseResets({ id: LEARNED_RESETS_ID, habit: RECORD_NOW, pace: at(3) });
-    expect(newer.pace).toBe(at(3));
+    // A field a newer copy writes (pace was one until Maintenance 28 made it this copy's own).
+    const newer = parseResets({ id: LEARNED_RESETS_ID, habit: RECORD_NOW, tempo: at(3) });
+    expect((newer as Record<string, unknown>).tempo).toBe(at(3));
     expect(withReset(newer, 'curves', RECORD_NOW)).toEqual({
       id: LEARNED_RESETS_ID,
       habit: RECORD_NOW,
-      pace: at(3),
+      tempo: at(3),
       curves: RECORD_NOW,
     });
     expect(
@@ -143,10 +144,11 @@ describe('the resets', () => {
         .habit,
     ).toBe(at(1));
     // A field this copy never writes is the saved one's: the one shown may be older.
-    expect(
-      mergeResets({ id: LEARNED_RESETS_ID, pace: at(1) }, { id: LEARNED_RESETS_ID, pace: at(5) })
-        .pace,
-    ).toBe(at(1));
+    const fromNewer = (tempo: string) =>
+      ({ id: LEARNED_RESETS_ID, tempo }) as unknown as Parameters<typeof mergeResets>[0];
+    expect((mergeResets(fromNewer(at(5)), fromNewer(at(1))) as Record<string, unknown>).tempo).toBe(
+      at(5),
+    );
   });
 });
 

@@ -9,7 +9,6 @@ import type { BarcodeCode } from '../../core/validation/placeBarcode';
 import { BarcodeGraphicSvg } from './BarcodeGraphic';
 import { barcodeFromFile } from './barcodeFile';
 import { encodeBarcode, type BarcodeGraphic } from './encode';
-import { useBackCloses } from './useBackCloses';
 import styles from './Barcode.module.css';
 import formStyles from '../../components/Form/Form.module.css';
 
@@ -59,7 +58,6 @@ export function PlaceBarcodeSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const close = useBackCloses('barcodeSheet', onClose);
 
   async function pick(file: File | undefined) {
     if (!file) return;
@@ -95,9 +93,9 @@ export function PlaceBarcodeSheet({
     <Sheet
       open
       title={`${location.name} barcode`}
-      onClose={close}
+      onClose={onClose}
       footer={
-        <Button variant="primary" onClick={close}>
+        <Button variant="primary" onClick={onClose}>
           Done
         </Button>
       }

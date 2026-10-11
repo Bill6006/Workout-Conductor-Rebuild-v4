@@ -124,7 +124,7 @@ describe('the hold timer', () => {
     expect(screen.getByTestId('hold-start')).toHaveTextContent('Start again · 35 s');
   });
 
-  it('buzzes once as a countdown runs out, and never again for it after coming back', () => {
+  it('leaves its buzz to the alerts, with its sounds under the one switch (Maintenance 29)', () => {
     vi.useFakeTimers({ now: Date.parse('2026-09-22T12:00:00.000Z') });
     const vibrate = vi.fn();
     Object.defineProperty(navigator, 'vibrate', { configurable: true, value: vibrate });
@@ -134,14 +134,8 @@ describe('the hold timer', () => {
     act(() => {
       vi.advanceTimersByTime(6_000);
     });
-    expect(vibrate).toHaveBeenCalledTimes(1);
+    expect(vibrate).not.toHaveBeenCalled();
     unmount();
-    // Back from another tab: the countdown that already ran out stays quiet.
-    render(<HoldTimer {...props} hold={running} />);
-    act(() => {
-      vi.advanceTimersByTime(1_000);
-    });
-    expect(vibrate).toHaveBeenCalledTimes(1);
   });
 
   it('freezes while the workout is paused, and nothing starts until it resumes', () => {

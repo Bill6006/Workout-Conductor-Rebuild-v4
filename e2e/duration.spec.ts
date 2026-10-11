@@ -11,7 +11,9 @@ test.describe('workout length', () => {
     await ensureProfile(page);
     const select = page.getByTestId('duration-select');
     await expect(select).toHaveValue('default');
-    await expect(page.getByTestId('workout-estimate')).toContainText('Default time');
+    // The dropdown says the Default's minutes, and nothing says them again (Maintenance 29).
+    await expect(select.locator('option:checked')).toHaveText(/^Default: \d+ min$/);
+    await expect(page.getByTestId('workout-estimate')).toHaveCount(0);
     const defaultCount = await page.getByTestId('workout-entry').count();
     expect(defaultCount).toBeGreaterThanOrEqual(5);
 
@@ -29,7 +31,7 @@ test.describe('workout length', () => {
     expect(midCount).toBeGreaterThanOrEqual(shortCount);
 
     await select.selectOption('default');
-    await expect(page.getByTestId('workout-estimate')).toContainText('Default time');
+    await expect(page.getByTestId('workout-estimate')).toHaveCount(0);
     expect(await page.getByTestId('workout-entry').count()).toBe(defaultCount);
   });
 

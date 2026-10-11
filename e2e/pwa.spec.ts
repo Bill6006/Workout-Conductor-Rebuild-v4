@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ensureProfile } from './helpers';
+import { ensureProfile, sheetGivenBack } from './helpers';
 
 /**
  * PWA behaviour of the app shell, run serially in its own project so that a
@@ -108,6 +108,7 @@ test.describe('PWA shell', () => {
     await expect(sheet.locator('video[data-testid="exercise-demo"]')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
+    await sheetGivenBack(page);
     // Never played (an exercise opened for the first time, in the Library): its still, and the
     // note that the video plays once online.
     await page.goto('./#/settings');

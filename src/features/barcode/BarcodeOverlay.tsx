@@ -4,7 +4,7 @@ import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import type { PlaceBarcode } from '../../core/validation/placeBarcode';
 import { BarcodeGraphicSvg } from './BarcodeGraphic';
 import { encodeBarcode, type BarcodeGraphic } from './encode';
-import { useBackCloses } from './useBackCloses';
+import { useBackCloses } from '../../components/Sheet/useBackCloses';
 import styles from './Barcode.module.css';
 
 /**
@@ -51,7 +51,8 @@ function BarcodeView({
   // Without a read code the picture is all there is; with one, the drawing comes first.
   const [showPicture, setShowPicture] = useState(!code && picture !== undefined);
   useWakeLock();
-  const close = useBackCloses('barcodeOverlay', onClose);
+  useBackCloses(onClose);
+  const close = onClose;
 
   useEffect(() => {
     if (!code) return undefined;

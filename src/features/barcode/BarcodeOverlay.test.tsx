@@ -36,9 +36,10 @@ function renderApp(store: AppStore, hash = '#/today') {
   );
 }
 
-function marked(marker: string): boolean {
+/** How many open views the history entry on top holds (Maintenance 29: one entry each). */
+function held(): number {
   const state = window.history.state as Record<string, unknown> | null;
-  return state?.[marker] === true;
+  return Array.isArray(state?.openViews) ? state.openViews.length : 0;
 }
 
 const popup = () => screen.queryByRole('dialog', { name: 'Gym barcode' });
@@ -57,7 +58,8 @@ describe('the gym barcode at the desk', () => {
       'Code read. Tap it for full screen.',
     );
     expect(within(sheet).queryByText(/stays on this phone/i)).not.toBeInTheDocument();
-    expect(marked('barcodeSheet')).toBe(true);
+    expect(held()).toBe(1);
+    const lengthWithSheet = window.history.length;
 
     await user.click(within(sheet).getByRole('button', { name: 'Show it full screen' }));
     const overlay = await screen.findByTestId('barcode-overlay');
@@ -67,7 +69,9 @@ describe('the gym barcode at the desk', () => {
       'bars',
     );
     expect(within(overlay).getByTestId('barcode-value')).toHaveTextContent('SYNTH-0001');
-    expect(marked('barcodeOverlay')).toBe(true);
+    // The full screen holds an entry of its own, over the popup's (as since Maintenance 26).
+    expect(held()).toBe(2);
+    expect(window.history.length).toBe(lengthWithSheet + 1);
 
     await user.click(within(overlay).getByTestId('barcode-switch'));
     expect(within(overlay).getByTestId('barcode-picture')).toHaveAttribute(
@@ -83,8 +87,7 @@ describe('the gym barcode at the desk', () => {
     await user.click(within(sheet).getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(popup()).not.toBeInTheDocument());
     // Each close spent the entry its view added, so the next Back leaves the screen as usual.
-    expect(marked('barcodeSheet')).toBe(false);
-    expect(marked('barcodeOverlay')).toBe(false);
+    await waitFor(() => expect(held()).toBe(0));
     expect(store.getSnapshot().session?.status).toBe('active');
   });
 

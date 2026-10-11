@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { heldSeconds, type HoldState } from '../../core/state/session';
 import { useWakeLock } from '../../core/screen/useWakeLock';
 import { useTicker } from '../../core/time/useTicker';
@@ -50,21 +49,8 @@ export function HoldTimer({
           ? hold.pausedRemaining
           : (Date.parse(hold.endsAt) - now) / 1000,
       );
+  // Its buzzes go with its sounds, under the one switch, from the app-wide alerts (Maintenance 29).
   useWakeLock(running && !paused);
-
-  // One buzz as a countdown runs out, once for each countdown. One that had already run out when
-  // this timer appeared (back from another tab, the app reopened) has had its end.
-  const ranOut = hold !== null && hold.held === null && finished !== null;
-  const buzzedFor = useRef<string | null>(ranOut && hold ? hold.endsAt : null);
-  useEffect(() => {
-    if (!ranOut || !hold || buzzedFor.current === hold.endsAt) return;
-    buzzedFor.current = hold.endsAt;
-    try {
-      navigator.vibrate?.([120, 60, 120]);
-    } catch {
-      // vibration is optional
-    }
-  }, [ranOut, hold]);
 
   if (running && hold) {
     const fraction = hold.seconds > 0 ? Math.min(1, Math.max(0, 1 - remaining / hold.seconds)) : 1;

@@ -1,7 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { TABS, ensureProfile, skipWarmupIfShown } from './helpers';
+import { ensureProfile, sheetGivenBack, skipWarmupIfShown, TABS } from './helpers';
 
 /**
  * Real screenshots of the working application, used as phase evidence.
@@ -77,7 +77,7 @@ test.describe('screenshots @screenshots', () => {
       await expect(page.getByTestId('workout-estimate')).toContainText('Fitted to 15 min');
       await capture(page, testInfo, 'today-15-min');
       await page.getByTestId('duration-select').selectOption('default');
-      await expect(page.getByTestId('workout-estimate')).toContainText('Default time');
+      await expect(page.getByTestId('workout-estimate')).toHaveCount(0);
 
       // Phase 4: the calibration overlay (held open by ?slowCalibration=1), the change summary,
       // the session-only actions, and the recalibration log.
@@ -144,6 +144,7 @@ test.describe('screenshots @screenshots', () => {
     await expect(page.getByRole('dialog', { name: 'Add a place' })).toBeVisible();
     await capture(page, testInfo, 'plan-add-place');
     await page.keyboard.press('Escape');
+    await sheetGivenBack(page);
 
     // Each Settings row these sheets start from, opened as the lifter opens it (Maintenance 25).
     await page.goto('./#/settings/units');
@@ -340,6 +341,7 @@ test.describe('screenshots @screenshots', () => {
     await expect(page.getByRole('dialog', { name: 'Incline Dumbbell Press' })).toBeVisible();
     await capture(page, testInfo, 'exercise-detail');
     await page.keyboard.press('Escape');
+    await sheetGivenBack(page);
 
     await page.goto('./#/today');
     await page.getByTestId('workout-entry').first().click();

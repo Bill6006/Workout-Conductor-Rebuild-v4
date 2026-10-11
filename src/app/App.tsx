@@ -2,7 +2,10 @@ import { useLayoutEffect } from 'react';
 import { AppShell } from '../components/AppShell/AppShell';
 import { CalibrationOverlay } from '../components/CalibrationOverlay/CalibrationOverlay';
 import { Card } from '../components/Card/Card';
-import { useWorkoutAlerts } from '../core/alerts/useWorkoutAlerts';
+import { UNFINISHED_NUDGE_MINUTES } from '../core/alerts/cues';
+import { lastActivityAt, useWorkoutAlerts } from '../core/alerts/useWorkoutAlerts';
+import { useWakeLock } from '../core/screen/useWakeLock';
+import { useMomentReached } from '../core/time/clock';
 import { useAppState } from '../core/state/useAppStore';
 import { BarcodeLayer } from '../features/barcode/BarcodeLayer';
 import { RestoringScreen } from '../features/onboarding/RestoringScreen';
@@ -18,6 +21,15 @@ export function App() {
   const state = useAppState();
   useSetupLink();
   useWorkoutAlerts();
+  // The screen stays on while a workout runs, on any tab (Maintenance 29, the owner's item 8);
+  // paused, or left half an hour with nothing logged (left open, as the alerts call it), it may
+  // sleep, and the next set logged keeps it on again.
+  const running = state.session?.status === 'active';
+  const lastActive = running && state.session ? lastActivityAt(state.session) : null;
+  const leftOpen = useMomentReached(
+    lastActive ? Date.parse(lastActive) + UNFINISHED_NUDGE_MINUTES * 60_000 : null,
+  );
+  useWakeLock(running && !leftOpen);
 
   // First run (or a storage error with nothing saved) goes straight to setup.
   const needsOnboarding = state.status === 'ready' && state.profile === null;

@@ -45,8 +45,10 @@ describe('AlertsCard', () => {
         <AlertsCard />
       </Providers>,
     );
-    const sounds = screen.getByRole('switch', { name: /Rest timer sounds/ });
+    // One switch for the sounds and the buzzes beside them (Maintenance 29, item 7).
+    const sounds = screen.getByRole('switch', { name: /^Rest timer sounds and vibration/ });
     expect(sounds).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getAllByRole('switch')).toHaveLength(2);
     await user.click(sounds);
     expect(store.getSnapshot().localSettings.restSounds).toBe(false);
   });

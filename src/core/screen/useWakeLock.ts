@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 
 /**
- * Keeps the screen awake while `active`: the barcode at the desk, a hold counting down. The
- * browser drops the lock whenever the page is hidden, so it is taken again on the way back, and
- * a lock that is refused (no user gesture, low battery) only means the screen may dim.
+ * Keeps the screen awake while `active`: a workout running (Maintenance 29, the owner's item 8),
+ * the barcode at the desk, a hold counting down. The browser drops the lock whenever the page is
+ * hidden, so it is taken again on the way back, and a lock that is refused (no user gesture, low
+ * battery) only means the screen may dim.
  */
 export function useWakeLock(active = true): void {
   useEffect(() => {

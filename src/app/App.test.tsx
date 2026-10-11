@@ -106,7 +106,10 @@ describe('App', () => {
     await screen.findByRole('heading', { level: 1, name: 'Today' });
     expect(screen.getByRole('heading', { level: 2, name: 'Push + arms' })).toBeInTheDocument();
     expect(screen.getByTestId('duration-select')).toHaveValue('default');
-    expect(screen.getByTestId('workout-estimate')).toHaveTextContent(/Default time: about \d+ min/);
+    // The dropdown says the Default's minutes; a line under it would only say them again
+    // (Maintenance 29, item 10).
+    expect(screen.getByRole('option', { name: /^Default: \d+ min$/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('workout-estimate')).not.toBeInTheDocument();
     expect(screen.getAllByTestId('workout-entry').length).toBeGreaterThanOrEqual(5);
     expect(screen.getByRole('button', { name: 'Start Workout' })).toBeEnabled();
     expect(store.getSnapshot().profile?.goals.primary).toBe('build-muscle');

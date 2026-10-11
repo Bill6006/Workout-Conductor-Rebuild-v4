@@ -176,6 +176,12 @@ export function WorkoutPreviewCard({
     duration.overByMinutes > 1
       ? `about ${duration.estimatedMinutes} min, ${Math.round(duration.overByMinutes)} over`
       : `about ${duration.estimatedMinutes} min`;
+  // The dropdown already says "Default: N min" (Maintenance 29, the owner's item 10): the line
+  // shows only what it adds, a length chosen or an end time, or a plan running over. At the Default
+  // every rebuild sets the dropdown's minutes too; should the two ever part, the line says the
+  // plan's own.
+  const sayEstimate =
+    fitted || duration.overByMinutes > 1 || duration.estimatedMinutes !== defaultEstimatedMinutes;
   const changeOf = (entry: WorkoutEntry) =>
     changes.find((change) => change.entryId === entry.id)?.kind;
 
@@ -220,11 +226,13 @@ export function WorkoutPreviewCard({
         </button>
       ) : null}
 
-      <p className={styles.estimate} data-testid="workout-estimate">
-        {fitted ? `Fitted to ${duration.targetMinutes} min: ` : 'Default time: '}
-        {estimateLabel}
-        {duration.overByMinutes > 1 ? '. It may run a few minutes over.' : '.'}
-      </p>
+      {sayEstimate ? (
+        <p className={styles.estimate} data-testid="workout-estimate">
+          {fitted ? `Fitted to ${duration.targetMinutes} min: ` : 'Default time: '}
+          {estimateLabel}
+          {duration.overByMinutes > 1 ? '. It may run a few minutes over.' : '.'}
+        </p>
+      ) : null}
 
       {endBy && (duration.overByMinutes > 1 || endBy.on) ? (
         <label className={styles.endBy}>

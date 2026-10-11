@@ -39,9 +39,15 @@ async function reserveOf(page: Page): Promise<number> {
 async function fitTo(page: Page, minutes: '15' | '30' | '45' | 'default'): Promise<void> {
   await page.getByTestId('duration-select').selectOption(minutes);
   await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
-  await expect(page.getByTestId('workout-estimate')).toContainText(
-    minutes === 'default' ? 'Default time' : `Fitted to ${minutes} min`,
-  );
+  if (minutes === 'default') {
+    // At the Default, a line under the dropdown is there only when the plan says more than it.
+    await expect(page.getByTestId('duration-select')).toHaveValue('default');
+    await expect(
+      page.getByTestId('workout-estimate').filter({ hasNotText: 'Default time' }),
+    ).toHaveCount(0);
+  } else {
+    await expect(page.getByTestId('workout-estimate')).toContainText(`Fitted to ${minutes} min`);
+  }
 }
 
 async function checkIn(page: Page, energy: 'Drained' | 'Good'): Promise<void> {

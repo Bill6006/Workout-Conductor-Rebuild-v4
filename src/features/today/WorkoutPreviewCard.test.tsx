@@ -39,13 +39,14 @@ function renderCard(
   workout: GeneratedWorkout,
   logged: ReadonlySet<string>,
   summary: ChangeSummary | null = null,
+  defaultEstimatedMinutes = 60,
 ) {
   const handle = createTestStore();
   render(
     <Providers store={handle.store}>
       <WorkoutPreviewCard
         workout={workout}
-        defaultEstimatedMinutes={60}
+        defaultEstimatedMinutes={defaultEstimatedMinutes}
         location={gym}
         onSelect={() => undefined}
         onDurationChange={() => undefined}
@@ -55,6 +56,50 @@ function renderCard(
     </Providers>,
   );
 }
+
+describe("the time under the length (Maintenance 29, the owner's item 10)", () => {
+  const plan = (duration: 'default' | 15) =>
+    generateWorkout({
+      profile: { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
+      location: gym,
+      history: [],
+      now: TEST_NOW,
+      duration,
+    });
+
+  it('says nothing the dropdown already says', () => {
+    const workout = plan('default');
+    renderCard(workout, new Set(), null, workout.duration.estimatedMinutes);
+    expect(
+      screen.getByRole('option', { name: `Default: ${workout.duration.estimatedMinutes} min` }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('workout-estimate')).not.toBeInTheDocument();
+  });
+
+  it("says the plan's own minutes should they ever part from the dropdown's", () => {
+    const changed = plan('default');
+    renderCard(changed, new Set(), null, changed.duration.estimatedMinutes + 6);
+    expect(screen.getByTestId('workout-estimate')).toHaveTextContent(
+      `Default time: about ${changed.duration.estimatedMinutes} min.`,
+    );
+  });
+
+  it('says a plan running over its length', () => {
+    const over = plan('default');
+    over.duration = { ...over.duration, overByMinutes: 4 };
+    renderCard(over, new Set(), null, over.duration.estimatedMinutes);
+    expect(screen.getByTestId('workout-estimate')).toHaveTextContent(
+      'It may run a few minutes over.',
+    );
+  });
+
+  it('says what a chosen length was fitted to', () => {
+    // Even where its minutes happen to match the Default's.
+    const short = plan(15);
+    renderCard(short, new Set(), null, short.duration.estimatedMinutes);
+    expect(screen.getByTestId('workout-estimate')).toHaveTextContent('Fitted to 15 min');
+  });
+});
 
 describe('why this workout on Today', () => {
   it('shows every line of a list that says one thing twice, each under a key of its own', () => {

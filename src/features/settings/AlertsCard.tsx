@@ -30,8 +30,8 @@ export function AlertsCard() {
     <>
       <div data-testid="alerts-card">
         <Toggle
-          label="Rest timer sounds"
-          description="Three ticks, then a longer tone when the rest ends."
+          label="Rest timer sounds and vibration"
+          description="Three ticks, then a longer tone when a rest or a hold ends, and the phone buzzes with each where it can."
           checked={sounds}
           onChange={(checked) => {
             // The tap that turns sounds on is also what lets the browser play them.

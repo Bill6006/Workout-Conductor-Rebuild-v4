@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ensureProfile } from './helpers';
+import { ensureProfile, sheetGivenBack } from './helpers';
 
 /**
  * Maintenance 14, round D: the rest timer's sounds and the notifications are
@@ -27,7 +27,9 @@ test.describe('alerts', () => {
     const card = page.getByTestId('alerts-card');
     const sounds = card.getByRole('switch', { name: /Rest timer sounds/ });
     await expect(sounds).toHaveAttribute('aria-checked', 'true');
-    await expect(card).toContainText('Three ticks, then a longer tone when the rest ends.');
+    await expect(card).toContainText(
+      'Three ticks, then a longer tone when a rest or a hold ends, and the phone buzzes with each where it can.',
+    );
     await capture(page, testInfo, 'settings-alerts', card);
     await sounds.click();
     await expect(sounds).toHaveAttribute('aria-checked', 'false');
@@ -96,6 +98,7 @@ test.describe('alerts', () => {
     await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
+    await sheetGivenBack(page);
 
     // From Today the same tap lands on the workout with the sheet already open.
     await page.goto('./#/');

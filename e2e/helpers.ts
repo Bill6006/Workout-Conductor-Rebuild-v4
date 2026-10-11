@@ -55,6 +55,20 @@ export const TABS = [
   { id: 'settings', label: 'Settings' },
 ] as const;
 
+/**
+ * A sheet just closed gives its place in the history back once the render settles (Maintenance 29,
+ * item 14): a test going elsewhere at once waits for it, as no hand is that fast.
+ */
+export async function sheetGivenBack(page: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => ((history.state as { openViews?: string[] } | null)?.openViews ?? []).length,
+      ),
+    )
+    .toBe(0);
+}
+
 /** Skips the ramp sets when the exercise has any; a lift at the empty bar starts on its working set. */
 export async function skipWarmupIfShown(page: Page): Promise<void> {
   const skipWarmup = page.getByTestId('skip-warmup');

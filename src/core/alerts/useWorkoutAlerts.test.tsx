@@ -23,6 +23,10 @@ const schedule = vi.fn();
 const cancel = vi.fn();
 const holdSchedule = vi.fn();
 const holdCancel = vi.fn();
+const buzzSchedule = vi.fn();
+const buzzCancel = vi.fn();
+const holdBuzzSchedule = vi.fn();
+const holdBuzzCancel = vi.fn();
 
 vi.mock('../state/useAppStore', () => ({
   useAppSelector: (selector: (value: FakeState) => unknown) => selector(state.current),
@@ -46,6 +50,17 @@ vi.mock('./restSounds', () => ({
     schedule: (...args: unknown[]) => holdSchedule(...args),
     cancel: () => holdCancel(),
     unlock: () => undefined,
+  },
+}));
+
+vi.mock('./restBuzz', () => ({
+  restBuzz: {
+    schedule: (...args: unknown[]) => buzzSchedule(...args),
+    cancel: () => buzzCancel(),
+  },
+  holdBuzz: {
+    schedule: (...args: unknown[]) => holdBuzzSchedule(...args),
+    cancel: () => holdBuzzCancel(),
   },
 }));
 
@@ -82,6 +97,10 @@ describe('the workout alerts', () => {
     cancel.mockClear();
     holdSchedule.mockClear();
     holdCancel.mockClear();
+    buzzSchedule.mockClear();
+    buzzCancel.mockClear();
+    holdBuzzSchedule.mockClear();
+    holdBuzzCancel.mockClear();
     setVisibility('visible');
     state.current = { session: null, localSettings: { restSounds: true, notifications: true } };
   });
@@ -100,10 +119,13 @@ describe('the workout alerts', () => {
     expect(schedule.mock.calls[0]?.[0]).toBe(at(10));
     // The timer fires the moment the window opens: 3.6 seconds before the end.
     expect(schedule.mock.calls[0]?.[1]).toBeCloseTo(3.6, 1);
+    // The buzzes go with them, laid for the same end (Maintenance 29, item 7).
+    expect(buzzSchedule.mock.calls).toEqual(schedule.mock.calls);
     // Fifteen more seconds: the earlier cues are cancelled and the new end is waited for.
     state.current = { ...state.current, session: resting(25) };
     rerender();
     expect(cancel).toHaveBeenCalled();
+    expect(buzzCancel).toHaveBeenCalled();
     unmount();
   });
 
@@ -116,7 +138,9 @@ describe('the workout alerts', () => {
     vi.advanceTimersByTime(16_500);
     expect(holdSchedule).toHaveBeenCalledTimes(1);
     expect(holdSchedule.mock.calls[0]?.[0]).toBe(at(20));
+    expect(holdBuzzSchedule.mock.calls).toEqual(holdSchedule.mock.calls);
     expect(schedule).not.toHaveBeenCalled();
+    expect(buzzSchedule).not.toHaveBeenCalled();
     // The rest changing leaves the hold's sounds alone.
     state.current = {
       ...state.current,
@@ -131,6 +155,7 @@ describe('the workout alerts', () => {
     };
     rerender();
     expect(holdCancel).toHaveBeenCalled();
+    expect(holdBuzzCancel).toHaveBeenCalled();
     unmount();
   });
 
@@ -142,6 +167,8 @@ describe('the workout alerts', () => {
     renderHook(() => useWorkoutAlerts());
     vi.advanceTimersByTime(6000);
     expect(schedule).not.toHaveBeenCalled();
+    // One switch for both: no buzz either.
+    expect(buzzSchedule).not.toHaveBeenCalled();
     state.current = {
       session: resting(5, true),
       localSettings: { restSounds: true, notifications: true },

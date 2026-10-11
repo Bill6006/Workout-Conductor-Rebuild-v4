@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { changeOpenSheets } from './openSheets';
+import { useBackCloses } from './useBackCloses';
 import styles from './Sheet.module.css';
 
 // The last element focused (Maintenance 25): an opener disabled while it works has lost focus by
@@ -26,13 +27,15 @@ interface SheetProps {
 }
 
 /**
- * Bottom sheet for editing and confirmations. Closes on backdrop tap or Escape. It sits on the page
- * itself, not inside what opened it (Maintenance 25): a Settings row closed behind an open sheet
- * keeps its editor in the page, hidden, and a sheet inside it would vanish with it while still
- * holding the page's scroll.
+ * Bottom sheet for editing and confirmations. Closes on backdrop tap, Escape, or the phone's Back,
+ * which closes the sheet and not the screen under it (Maintenance 29, the owner's item 14). It sits
+ * on the page itself, not inside what opened it (Maintenance 25): a Settings row closed behind an
+ * open sheet keeps its editor in the page, hidden, and a sheet inside it would vanish with it while
+ * still holding the page's scroll.
  */
 export function Sheet({ open, title, onClose, children, footer }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onTop = useBackCloses(onClose, open);
 
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -49,7 +52,8 @@ export function Sheet({ open, title, onClose, children, footer }: SheetProps) {
     document.body.style.overflow = 'hidden';
     panelRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCloseRef.current();
+      // Only the sheet on top, as Back closes them one at a time (Maintenance 29).
+      if (event.key === 'Escape' && onTop()) onCloseRef.current();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
@@ -60,7 +64,7 @@ export function Sheet({ open, title, onClose, children, footer }: SheetProps) {
       // focus; the browser refuses it.
       opener?.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, onTop]);
 
   if (!open) return null;
 

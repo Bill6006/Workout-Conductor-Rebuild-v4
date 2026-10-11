@@ -64,7 +64,8 @@ test.describe('onboarding', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'Full body' })).toBeVisible();
     await expect(page.getByText('Back Squat')).toHaveCount(0);
     await expect(page.getByText('Barbell Row', { exact: true })).toHaveCount(0);
-    await expect(page.getByTestId('workout-estimate')).toContainText('Default time');
+    await expect(page.getByTestId('duration-select')).toHaveValue('default');
+    await expect(page.getByTestId('workout-estimate')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Start Workout' })).toBeEnabled();
     await expectNoHorizontalOverflow(page);
     // Finishing setup lands at the top of Today, not where the wizard was scrolled.

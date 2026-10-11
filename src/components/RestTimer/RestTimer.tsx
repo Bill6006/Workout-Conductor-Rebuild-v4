@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import type { RestState } from '../../core/state/session';
 import { useTicker } from '../../core/time/useTicker';
 import styles from './RestTimer.module.css';
@@ -20,9 +19,10 @@ function format(seconds: number): string {
 /**
  * Rest timer driven by an absolute end time, so it keeps counting across
  * screen changes and backgrounding and freezes exactly while the workout is
- * paused. Completion is a visible state change plus one short vibration where
- * the device allows it; the sounds and the background notification are the
- * app-wide alerts' job (`core/alerts/useWorkoutAlerts`), so they work from any tab.
+ * paused. Completion is a visible state change; the sounds, the buzzes beside
+ * them (one switch for both, Maintenance 29) and the background notification are
+ * the app-wide alerts' job (`core/alerts/useWorkoutAlerts`), so they work from any
+ * tab.
  */
 export function RestTimer({ rest, paused, onAdjust, onSkip }: RestTimerProps) {
   const now = useTicker(500, !paused);
@@ -32,17 +32,6 @@ export function RestTimer({ rest, paused, onAdjust, onSkip }: RestTimerProps) {
       : (Date.parse(rest.endsAt) - now) / 1000;
   const done = remaining <= 0;
   const fraction = rest.seconds > 0 ? Math.min(1, Math.max(0, 1 - remaining / rest.seconds)) : 1;
-  const fired = useRef(false);
-
-  useEffect(() => {
-    if (!done || fired.current) return;
-    fired.current = true;
-    try {
-      navigator.vibrate?.([120, 60, 120]);
-    } catch {
-      // vibration is optional
-    }
-  }, [done]);
 
   return (
     <div

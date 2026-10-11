@@ -72,7 +72,8 @@ async function addPicture(page: Page, sheet: Locator): Promise<void> {
     mimeType: 'image/png',
     buffer: await syntheticBarcodePicture(page),
   });
-  await expect(sheet.getByTestId('barcode-section')).toBeVisible();
+  // Reading a picture is the slowest step here: a busy machine can take more than five seconds.
+  await expect(sheet.getByTestId('barcode-section')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Barcode saved on this phone')).toBeVisible();
   await expect(sheet.getByText(/stays on this phone/i)).toHaveCount(0);
 }
