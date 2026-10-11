@@ -4,7 +4,7 @@ import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile, Weekday } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { computeExposure } from '../volume/weeklyVolume';
-import { allEntries } from '../workout/types';
+import { allEntries, pushMarkOf } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
 
 /**
@@ -56,6 +56,8 @@ function syntheticRecord(date: string, workout: ReturnType<typeof generateWorkou
     prs: [],
     entries: allEntries(workout.blocks).map((entry) => ({
       exerciseId: entry.exerciseId,
+      // The week's extra exposure of a lift to push counts as one in the days after it (item 44).
+      ...(pushMarkOf(entry) ? { push: pushMarkOf(entry) } : {}),
       sets: entry.sets
         .filter((set) => set.kind === 'working')
         .map((set) => ({

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { LastingSwap } from '../../engine/planning/lastingSwaps';
 import type { SessionLoading } from '../../engine/loading/loading';
 import type { PersonalRecord } from '../../engine/scoring/personalRecords';
-import { PersonalRecordSchema } from '../validation/workoutRecord';
+import { PersonalRecordSchema, ReserveCheckLogSchema } from '../validation/workoutRecord';
 import { getExercise } from '../../catalog/exercises/catalog';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
@@ -254,6 +254,18 @@ const ConstraintsSchema = z.looseObject({
     .catch([]),
   avoidExerciseIds: z.array(z.string()),
   painJoints: z.array(z.enum(JOINTS)),
+  // Maintenance 27 (item 45): a session saved before has none; a report that fails to read is
+  // dropped, never the rest.
+  painReports: z
+    .array(
+      z
+        .looseObject({ exerciseId: z.string().min(1), joint: z.enum(JOINTS) })
+        .nullable()
+        .catch(null),
+    )
+    .transform((reports) => reports.filter((report) => report !== null))
+    .optional()
+    .catch(undefined),
   endBy: z.iso.datetime().nullable(),
   readiness: ReadinessSchema.nullable(),
   intensity: z.number().int().min(-2).max(2),
@@ -285,6 +297,8 @@ const CompletedSchema = z.looseObject({
       byHand: z.boolean().optional().catch(undefined),
       // The third pass of item 42: the plan's reserve when it was logged.
       planRir: z.number().min(0).max(10).optional().catch(undefined),
+      // Maintenance 27, item 43: a reserve check's reps in all, beside the set at its stop.
+      reserveCheck: ReserveCheckLogSchema.optional().catch(undefined),
     }),
   ),
 });

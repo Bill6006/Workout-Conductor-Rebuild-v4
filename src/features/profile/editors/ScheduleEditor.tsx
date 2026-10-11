@@ -1,6 +1,7 @@
 import { ChipSelect } from '../../../components/Form/ChipSelect';
 import { ChoiceGroup } from '../../../components/Form/ChoiceGroup';
 import { Field } from '../../../components/Form/Field';
+import { nowIso } from '../../../core/time/clock';
 import type { Weekday } from '../../../core/validation/profile';
 import { updateProfile } from '../draft';
 import {
@@ -51,14 +52,17 @@ export function ScheduleEditor({ draft, onChange }: EditorProps) {
           value={toFrequencyValue(profile.schedule.weeklyFrequency)}
           options={FREQUENCY_OPTIONS}
           compact
-          onChange={(value) =>
+          onChange={(value) => {
+            // The choice already made changes nothing, and starts no reading afresh (the review).
+            if (Number(value) === profile.schedule.weeklyFrequency) return;
             onChange(
               updateProfile(draft, (current) => ({
                 ...current,
-                schedule: { ...current.schedule, weeklyFrequency: Number(value) },
+                // Set now: the real week is read afresh from here (item 46).
+                schedule: { ...current.schedule, weeklyFrequency: Number(value), since: nowIso() },
               })),
-            )
-          }
+            );
+          }}
         />
       </Field>
       <Field
@@ -97,6 +101,7 @@ export function ScheduleEditor({ draft, onChange }: EditorProps) {
                   availableDays: WEEKDAY_OPTIONS.map((option) => option.value).filter((day) =>
                     availableDays.includes(day),
                   ),
+                  since: nowIso(),
                 },
               })),
             )

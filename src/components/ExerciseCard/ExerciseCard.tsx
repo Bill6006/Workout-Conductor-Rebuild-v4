@@ -7,7 +7,12 @@ import type { RestStyle, UnitSystem } from '../../core/validation/profile';
 import { entryPushedToEffort } from '../../engine/progression/progression';
 import type { CompletedSet } from '../../engine/recalibration/types';
 import type { SetPosition } from '../../engine/workout/sequence';
-import { workingSets, type WorkoutBlock, type WorkoutEntry } from '../../engine/workout/types';
+import {
+  pushMarkOf,
+  workingSets,
+  type WorkoutBlock,
+  type WorkoutEntry,
+} from '../../engine/workout/types';
 import type { PreviousPerformance } from '../../features/workout/previousPerformance';
 import { useCustomMedia } from '../../features/library/useCustomMedia';
 import { effortGuidance, restGuidance } from '../../features/workout/effort';
@@ -43,6 +48,8 @@ export interface ExerciseCardProps {
 }
 
 function roleLabel(entry: WorkoutEntry): string {
+  // The lift to push says so, in its own place or as the week's extra (Maintenance 27, item 44).
+  if (pushMarkOf(entry)) return 'Lift to push';
   switch (entry.role) {
     case 'primary-strength':
       return 'Main lift';

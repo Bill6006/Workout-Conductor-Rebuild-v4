@@ -50,6 +50,33 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* A reserve check (Maintenance 27, item 43): four dials, two to a row, so each keeps its size. */
+.dials[data-count='4'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.check {
+  display: grid;
+  gap: 4px;
+}
+
+/* A switch a thumb can hit: the whole line is the target. */
+.checkOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.checkOption input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--color-accent);
+}
+
 .dial {
   display: grid;
   grid-template-rows: 40px minmax(64px, auto) 40px auto;

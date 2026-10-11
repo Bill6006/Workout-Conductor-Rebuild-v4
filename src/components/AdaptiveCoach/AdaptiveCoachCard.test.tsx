@@ -41,6 +41,24 @@ function card(level: 'beginner' | 'advanced'): CoachCard {
 }
 
 describe('AdaptiveCoachCard', () => {
+  it("shows a card's help line in full, past the Why lines a lifter's level keeps (item 45)", () => {
+    const base = card('advanced');
+    render(
+      <AdaptiveCoachCard
+        card={{
+          ...base,
+          signal: { ...base.signal, footnote: 'A health professional can check it.' },
+        }}
+        fatigue={fatigue}
+        policy={coachingPolicy('advanced')}
+        onAction={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('coach-footnote')).toHaveTextContent(
+      'A health professional can check it.',
+    );
+  });
+
   it('shows one quiet line to intermediate and advanced lifters when nothing outranks the plan', () => {
     render(
       <AdaptiveCoachCard

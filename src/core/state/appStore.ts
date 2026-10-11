@@ -1,4 +1,13 @@
 import {
+  LEARNED_RESETS_ID,
+  emptyResets,
+  mergeResets,
+  parseResets,
+  withReset,
+  type LearnedKind,
+  type LearnedResets,
+} from '../../engine/learned/resets';
+import {
   allExercises,
   getExercise,
   registerCustomExercises,
@@ -77,13 +86,25 @@ import {
 } from '../../engine/progression/maxes';
 import { loggedLoad } from '../../engine/progression/startingLoad';
 import {
+  lowCheckIn,
   planUnderTheEase,
   recalibrate as runRecalibration,
 } from '../../engine/recalibration/recalibrate';
+import { wouldPair } from '../../engine/progression/personalCurve';
+import {
+  measuredReserve,
+  readReserve,
+  reserveCheckSet,
+  reserveCheckStatus,
+  withReadReserve,
+  type ReserveCheckSet,
+  type ReserveEstimate,
+} from '../../engine/progression/reserveCheck';
 import { describeTrigger, type TriggerContext } from '../../engine/recalibration/triggers';
 import type {
   CompletedSet,
   MaxHeldBy,
+  ReserveCheckLog,
   MaxOutcome,
   RecalibrationRequest,
   RecalibrationResult,
@@ -117,6 +138,7 @@ import {
   restOfferStands,
   restRunning,
   emptyDeclines,
+  mergeDeclines,
   recordDecline,
   setAsideForWorkout,
   setAsideKey,
@@ -227,6 +249,7 @@ import {
   UserProfileSchema,
   type ProgramStyle,
   type UserProfile,
+  type Weekday,
   legacyStyleFor,
   normalizeProfile,
 } from '../validation/profile';
@@ -286,6 +309,12 @@ export interface AppState {
   workoutCount: number;
   /** Parsed workout history, oldest first; drives weekly volume and exposure. */
   history: WorkoutHistoryRecord[];
+  /**
+   * The log as the rules read it (Maintenance 27, item 43): the same records, with a logged reserve
+   * the lifter's checked error covers read through it. For the engines only; screens that show
+   * the log, its exports and its copies use `history`.
+   */
+  readHistory: WorkoutHistoryRecord[];
   /** Today's workout session: the generated workout plus session-only state. */
   session: WorkoutSession | null;
   /** Today asked for the end-of-workout sheet; the workout screen opens it and clears this. */
@@ -346,6 +375,8 @@ export interface AppState {
   coachFocus: CoachFocus | null;
   /** Exercises the lifter swapped in and chose to keep for a few weeks (Maintenance 22). */
   lastingSwaps: LastingSwap[];
+  /** When the lifter reset each thing the app learned (Maintenance 27, item 47). */
+  learnedResets: LearnedResets;
   /** The optional cloud copy: on only while a token is on this device. */
   cloud: CloudStatus;
 }
@@ -425,11 +456,23 @@ function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
   return windowIsPast(week, now) ? null : week;
 }
 
+/**
+ * The declined offers as stored: an entry that does not read (no count, no time) is dropped, never
+ * the rest (the re-check of item 47: one such entry broke the page that lists them).
+ */
 function parseCoachDeclines(raw: unknown): CoachDeclines {
   if (raw && typeof raw === 'object') {
     const declines = (raw as { declines?: unknown }).declines;
-    if (declines && typeof declines === 'object') {
-      return { id: COACH_DECLINES_ID, declines: declines as CoachDeclines['declines'] };
+    if (declines && typeof declines === 'object' && !Array.isArray(declines)) {
+      const kept: CoachDeclines['declines'] = {};
+      for (const [key, entry] of Object.entries(declines as Record<string, unknown>)) {
+        if (!entry || typeof entry !== 'object') continue;
+        const { count, lastAt } = entry as { count?: unknown; lastAt?: unknown };
+        if (typeof count !== 'number' || !Number.isFinite(count) || count < 1) continue;
+        if (typeof lastAt !== 'string' || !Number.isFinite(Date.parse(lastAt))) continue;
+        kept[key] = entry as CoachDeclines['declines'][string];
+      }
+      return { id: COACH_DECLINES_ID, declines: kept };
     }
   }
   return emptyDeclines();
@@ -529,6 +572,11 @@ export interface SetValues {
   weight: number | null;
   reps: number;
   rir: number | null;
+  /**
+   * Today's reserve check (Maintenance 27, item 43): the reps in all, and whether it stalled before
+   * the usual stop or was stopped for pain or form. Kept only on the set the check is on.
+   */
+  reserveCheck?: Pick<ReserveCheckLog, 'total' | 'failedEarly' | 'stopped'>;
 }
 
 export interface NewCustomExercise {
@@ -606,6 +654,10 @@ export function profileTrigger(
       profile.bodyweight ?? null,
       profile.age ?? null,
       profile.sex ?? null,
+      // The lift to push (Maintenance 27, item 44): its lift, target and date are in the plan.
+      profile.pushLift ?? null,
+      // Reserve checks (item 43): the switch decides how the plan reads logged reserve.
+      profile.reserveCheck ?? null,
     ]);
   return relevant(previous) !== relevant(next) ? { type: 'profile' } : null;
 }
@@ -736,6 +788,14 @@ export class AppStore {
   /** Counts the kept-swap changes shown, so a reload that read the list before one keeps it. */
   private swapsVersion = 0;
   /**
+   * Changes to the learned values' resets and to the declined offers made here (Maintenance 27,
+   * item 47, and its review): a reload that read before one keeps it, as for the kept swaps.
+   */
+  private resetsVersion = 0;
+  private declinesVersion = 0;
+  private resetsQueue: Promise<unknown> = Promise.resolve();
+  private declinesQueue: Promise<unknown> = Promise.resolve();
+  /**
    * Bumped by every write of the lifter's own demonstrations: a read of the data begun before one
    * keeps the count it made (Maintenance 26, the re-check of item 50: a hydrate across a pick put
    * the count back to none, and the demonstration went unshown).
@@ -805,6 +865,7 @@ export class AppStore {
       lastReceipt: null,
       workoutCount: 0,
       history: [],
+      readHistory: [],
       savedWorkouts: [],
       session: null,
       finishRequested: false,
@@ -827,6 +888,7 @@ export class AppStore {
       strengthMaxes: emptyMaxes(),
       coachFocus: null,
       lastingSwaps: [],
+      learnedResets: emptyResets(),
       cloud: CLOUD_OFF,
     };
   }
@@ -839,8 +901,87 @@ export class AppStore {
   getSnapshot = (): AppState => this.state;
 
   private setState(patch: Partial<AppState>): void {
-    this.state = { ...this.state, ...patch };
+    const next = { ...this.state, ...patch };
+    // The log the rules read follows the log and the profile (Maintenance 27, item 43).
+    if ('history' in patch || 'profile' in patch || 'learnedResets' in patch) {
+      next.readHistory = this.readHistoryOf(next);
+    }
+    this.state = next;
     for (const listener of this.listeners) listener();
+  }
+
+  /**
+   * The reserve-check estimate the rules read logged reserve through, or none (Maintenance 27,
+   * item 43): only with the lifter's yes, under a style that takes sets to failure, and once enough
+   * readings make it usable.
+   */
+  private reserveReadOf(
+    state: Pick<AppState, 'history' | 'profile' | 'learnedResets'>,
+  ): ReserveEstimate | null {
+    if (!state.profile) return null;
+    const status = reserveCheckStatus({
+      history: state.history,
+      profile: state.profile,
+      now: this.now(),
+      // Reset (item 47): learning starts again from the checks after it.
+      resetAt: state.learnedResets.reserve ?? null,
+    });
+    return status.on && status.estimate.usable ? status.estimate : null;
+  }
+
+  private readHistoryOf(
+    state: Pick<AppState, 'history' | 'profile' | 'learnedResets'>,
+  ): WorkoutHistoryRecord[] {
+    return withReadReserve(state.history, this.reserveReadOf(state)) as WorkoutHistoryRecord[];
+  }
+
+  /** The set today's reserve check is on, if any (Maintenance 27, item 43). */
+  reserveCheckSetFor(session: WorkoutSession | null = this.state.session): ReserveCheckSet | null {
+    const profile = this.state.profile;
+    if (!session || !profile || session.status === 'completed') return null;
+    // A check logged today stays the day's one check: a set added after it is no second set to
+    // failure (the review of item 43).
+    const taken = session.completed.sets.find(
+      (set) => set.reserveCheck !== undefined && !set.skipped,
+    );
+    if (taken) {
+      return { entryId: taken.entryId, setIndex: taken.setIndex, exerciseId: taken.exerciseId };
+    }
+    const now = this.now();
+    const resets = this.state.learnedResets;
+    const status = reserveCheckStatus({
+      history: this.state.history,
+      profile,
+      now,
+      resetAt: resets.reserve ?? null,
+    });
+    return reserveCheckSet({
+      blocks: session.workout.blocks,
+      history: this.state.history,
+      status,
+      now,
+      day: {
+        deload: session.constraints.deload !== null,
+        lowCheckIn: lowCheckIn(session.constraints.readiness),
+        hardStart: session.constraints.badStart === true,
+      },
+      // A check where it would pair with a recent one for the lift's own curve (item 41): its
+      // last working set's top reps plus reserve, about where a set to failure ends.
+      pairs: (exerciseId, entry) => {
+        const working = entry.sets.filter((set) => set.kind === 'working');
+        const last = working[working.length - 1];
+        return last
+          ? wouldPair(
+              this.state.history,
+              exerciseId,
+              last.targetReps[1] + last.targetRir,
+              last.targetWeight,
+              now,
+              resets.curves ?? null,
+            )
+          : false;
+      },
+    });
   }
 
   getDatabase(): Promise<Database> {
@@ -858,6 +999,8 @@ export class AppStore {
 
   async hydrate(): Promise<void> {
     const swapsSeen = this.swapsVersion;
+    const resetsSeen = this.resetsVersion;
+    const declinesSeen = this.declinesVersion;
     const mediaSeen = this.mediaVersion;
     const barcodesSeen = this.barcodesVersion;
     try {
@@ -879,6 +1022,7 @@ export class AppStore {
         maxesRaw,
         focusRaw,
         swapsRaw,
+        resetsRaw,
         deviceRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
@@ -894,6 +1038,7 @@ export class AppStore {
         db.get<Identified>('meta', STRENGTH_MAXES_ID),
         db.get<Identified>('meta', COACH_FOCUS_ID),
         db.get<Identified>('meta', LASTING_SWAPS_ID),
+        db.get<Identified>('meta', LEARNED_RESETS_ID),
         db.getAll<Identified>('device'),
       ]);
       const deviceId = ensureDeviceId(this.storage);
@@ -913,7 +1058,7 @@ export class AppStore {
           customInstructions.length +
           savedRaw.length ===
           0 &&
-        [routesRaw, declinesRaw, deloadRaw, maxesRaw, focusRaw, swapsRaw].every(
+        [routesRaw, declinesRaw, deloadRaw, maxesRaw, focusRaw, swapsRaw, resetsRaw].every(
           (record) => record === undefined,
         );
       await noteDatabaseBirth(db, this.now(), empty).catch(() => null);
@@ -964,7 +1109,13 @@ export class AppStore {
         },
         customMediaRevision: this.state.customMediaRevision + 1,
         coachRoutes: parseCoachRoutes(routesRaw),
-        coachDeclines: parseCoachDeclines(declinesRaw),
+        // A decline or a reset made while this read was under way is newer than what it read.
+        coachDeclines:
+          this.declinesVersion === declinesSeen
+            ? parseCoachDeclines(declinesRaw)
+            : this.state.coachDeclines,
+        learnedResets:
+          this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
         strengthMaxes: parseStrengthMaxes(maxesRaw),
         coachFocus: parseCoachFocus(focusRaw, this.now()),
@@ -1085,11 +1236,12 @@ export class AppStore {
     const workout = generateWorkout({
       profile,
       location: this.currentLocation(),
-      history: this.state.history,
+      history: this.state.readHistory,
       now,
       duration: 'default',
       constraints: { deload, focusMuscle: focus, swaps: this.activeSwaps() },
       maxes: this.state.strengthMaxes,
+      resets: this.state.learnedResets,
     });
     const session = createSession(key, workout, now);
     this.setSession({ ...session, constraints: { ...session.constraints, deload, focus } });
@@ -1102,7 +1254,10 @@ export class AppStore {
 
   /** Re-checks the session against today's inputs; a new day starts a fresh session. */
   refreshSession(): void {
-    if (this.state.status === 'ready') this.ensureSession();
+    if (this.state.status !== 'ready') return;
+    const readHistory = this.readHistoryOf(this.state);
+    if (readHistory !== this.state.readHistory) this.setState({ readHistory });
+    this.ensureSession();
   }
 
   /**
@@ -1152,10 +1307,11 @@ export class AppStore {
       profile,
       location: this.currentLocation(),
       loading: session.loading,
-      history: this.state.history,
+      history: this.state.readHistory,
       constraints: session.constraints,
       maxes: this.state.strengthMaxes,
       swaps: this.activeSwaps(),
+      resets: this.state.learnedResets,
       reason,
       timestamp: this.now(),
       ...overrides,
@@ -1210,7 +1366,8 @@ export class AppStore {
       return null;
     }
     const session = this.state.session;
-    const { profile, history } = this.state;
+    // The log as the rules read it (item 43's checks), as every engine reads it.
+    const { profile, readHistory: history } = this.state;
     if (!session || !profile || session.status === 'completed') return null;
     if (trigger.type === 'bad-start') {
       // Read again as it runs: one queued behind another change may no longer be wanted (the
@@ -1588,6 +1745,8 @@ export class AppStore {
     );
     const isEdit = existingAt >= 0;
     const earlier = isEdit ? (session.completed.sets[existingAt] as CompletedSet) : null;
+    // Today's reserve check, read before this set is in (Maintenance 27, item 43).
+    const checkSet = this.reserveCheckSetFor(session);
     // Whether its target was set by hand when it was logged, for the hard start (the review of
     // item 42). A correction keeps what the set said then; a skipped set filled in later is
     // logged now (the re-check).
@@ -1617,6 +1776,7 @@ export class AppStore {
       skipped,
       ...(byHand ? { byHand: true } : {}),
       ...(planRir !== undefined ? { planRir } : {}),
+      ...this.reserveCheckOf(entryId, setIndex, values, skipped, checkSet, earlier),
     };
     const sets = isEdit
       ? session.completed.sets.map((candidate, index) =>
@@ -1695,15 +1855,31 @@ export class AppStore {
               entry.sets.find((prescribed) => prescribed.index === candidate.setIndex) ?? set,
               {
                 reps: candidate.reps,
-                rir: candidate.rir ?? null,
+                rir:
+                  measuredReserve(candidate) ??
+                  readReserve(
+                    getExercise(entry.exerciseId),
+                    candidate.reps,
+                    candidate.rir ?? null,
+                    this.reserveReadOf(this.state),
+                  ),
                 weight: candidate.weight ?? null,
               },
             ),
           );
         const units = this.state.profile?.units ?? 'lb';
         const exercise = getExercise(entry.exerciseId);
+        // The reserve as the rules read it: through the lifter's checked error where it covers
+        // the set (Maintenance 27, item 43).
+        const estimate = this.reserveReadOf(this.state);
         const plan = autoregulate({
-          set: outcomeFor(set, { reps, rir: values.rir, weight: values.weight }),
+          set: outcomeFor(set, {
+            reps,
+            rir:
+              measuredReserve({ reps, reserveCheck: values.reserveCheck }) ??
+              readReserve(exercise, reps, values.rir, estimate),
+            weight: values.weight,
+          }),
           earlier,
           step: exercise
             ? loadingFor(this.currentLocation()?.loading, session.loading, exercise, units).step
@@ -1728,6 +1904,37 @@ export class AppStore {
     }
     if (set.kind === 'working' && !skipped) this.settleDropSet(entryId);
     if (set.kind === 'working' && !failed) await this.settleStart(tapped);
+  }
+
+  /**
+   * What a logged set keeps of a reserve check (Maintenance 27, item 43): the numbers, on the set
+   * today's check is on (or one that was a check when first logged), never on a skip. A correction
+   * that brings none keeps the numbers it had.
+   */
+  private reserveCheckOf(
+    entryId: string,
+    setIndex: number,
+    values: SetValues,
+    skipped: boolean,
+    checkSet: ReserveCheckSet | null,
+    earlier: CompletedSet | null,
+  ): { reserveCheck?: ReserveCheckLog } {
+    if (skipped) return {};
+    const onCheck =
+      earlier?.reserveCheck !== undefined ||
+      (checkSet?.entryId === entryId && checkSet.setIndex === setIndex);
+    if (!onCheck) return {};
+    const typed = values.reserveCheck;
+    if (!typed) return earlier?.reserveCheck ? { reserveCheck: earlier.reserveCheck } : {};
+    const style = this.state.profile ? resolveStyle(this.state.profile) : undefined;
+    return {
+      reserveCheck: {
+        total: Math.max(0, Math.min(200, Math.round(typed.total))),
+        ...(typed.failedEarly ? { failedEarly: true } : {}),
+        ...(typed.stopped ? { stopped: true } : {}),
+        ...(style ? { style } : {}),
+      },
+    };
   }
 
   /** The reserve the plan asks for an entry's lift and role today, before the day's settings. */
@@ -1786,7 +1993,17 @@ export class AppStore {
   private readStartOf(session: WorkoutSession): StartReading | null {
     const profile = this.state.profile;
     if (!profile) return null;
-    return readStart(session.workout.blocks, session.completed.sets, {
+    const estimate = this.reserveReadOf(this.state);
+    // A check set's measured reserve, whatever the estimate; the error only where one is in force.
+    const sets = session.completed.sets.map((done) => {
+      const rir =
+        measuredReserve(done) ??
+        (estimate
+          ? readReserve(getExercise(done.exerciseId), done.reps, done.rir, estimate)
+          : done.rir);
+      return rir === done.rir ? done : { ...done, rir };
+    });
+    return readStart(session.workout.blocks, sets, {
       profile,
       history: this.state.history,
     });
@@ -2098,7 +2315,15 @@ export class AppStore {
     record.prs = detectPersonalRecords(record, this.state.history, profile.units);
     const db = await this.getDatabase();
     const receipt = await putVerified(db, 'workouts', record, { now: this.now });
-    const completion = buildCompletion(session, record, profile, this.state.history);
+    // The next targets read the log as the rules will, this workout in it (the review of item 47).
+    const completion = buildCompletion(
+      session,
+      record,
+      profile,
+      this.state.history,
+      this.state.learnedResets,
+      this.readHistoryOf({ ...this.state, history: [...this.state.history, record] }),
+    );
     this.setState({
       history: parseWorkoutRecords([...this.state.history, record]),
       workoutCount: this.state.workoutCount + 1,
@@ -3234,7 +3459,7 @@ export class AppStore {
     this.setState({ session: null });
     this.ensureSession();
     const fresh = this.state.session;
-    const { profile, history } = this.state;
+    const { profile, readHistory: history } = this.state;
     if (!fresh || !profile || this.fromEarlierDay(session)) return;
     // An end time already past is no longer a choice for today.
     const endBy =
@@ -3269,6 +3494,7 @@ export class AppStore {
         constraints: { ...today, deload: fresh.constraints.deload, focus: fresh.constraints.focus },
         maxes: this.state.strengthMaxes,
         swaps: this.activeSwaps(),
+        resets: this.state.learnedResets,
         reason: "Today's choices kept",
         timestamp: this.now(),
       });
@@ -3734,6 +3960,97 @@ export class AppStore {
     await this.saveProfile({ ...profile, programStyle: style });
   }
 
+  /**
+   * Moves the schedule to the week the lifter trains (Maintenance 27, item 46): the sessions a week
+   * and the days, set now, so the real week is read afresh from here; the plan is rebuilt under it,
+   * the split following the new number, like any profile change.
+   */
+  async moveSchedule(weeklyFrequency: number, availableDays: readonly Weekday[]): Promise<void> {
+    const profile = this.state.profile;
+    if (!profile) throw new Error('Finish setup first.');
+    await this.saveProfile({
+      ...profile,
+      schedule: {
+        ...profile.schedule,
+        weeklyFrequency,
+        availableDays: [...availableDays],
+        since: this.now(),
+      },
+    });
+  }
+
+  /**
+   * Ends the lift to push (Maintenance 27, item 44): its extra session goes and the plan is rebuilt
+   * without it, like any profile change.
+   */
+  async endPush(): Promise<void> {
+    const profile = this.state.profile;
+    if (!profile?.pushLift) return;
+    const next = { ...profile };
+    delete next.pushLift;
+    await this.saveProfile(next);
+  }
+
+  /**
+   * Resets one thing the app learned (Maintenance 27, item 47): it reads only what is logged from
+   * now on. Nothing logged is deleted. The plan is built again, its targets read afresh.
+   */
+  async resetLearned(kind: LearnedKind): Promise<void> {
+    // One change at a time, each from the record as saved and as shown: a reset a sync brought,
+    // or one made a moment before, is kept (the review of item 47).
+    const run = this.resetsQueue.then(async () => {
+      const db = await this.getDatabase();
+      const saved = parseResets(await db.get<Identified>('meta', LEARNED_RESETS_ID));
+      const next = withReset(mergeResets(saved, this.state.learnedResets), kind, this.now());
+      try {
+        await putVerified(db, 'meta', next, { now: this.now });
+      } catch (error) {
+        // What is saved is shown, whatever the save left: memory and disk never part.
+        const stored = await db.get<Identified>('meta', LEARNED_RESETS_ID).catch(() => null);
+        if (stored !== null) {
+          this.resetsVersion += 1;
+          this.setState({ learnedResets: parseResets(stored) });
+        }
+        throw error;
+      }
+      this.resetsVersion += 1;
+      this.setState({ learnedResets: next });
+    });
+    this.resetsQueue = run.catch(() => undefined);
+    await run;
+    await this.regeneratePreview();
+  }
+
+  /** Forgets every offer the lifter declined (item 47): each may come again. */
+  async clearDeclines(): Promise<void> {
+    await this.changeDeclines(() => emptyDeclines());
+  }
+
+  /** Changes the declined offers one change at a time, each from the list the one before left. */
+  private changeDeclines(change: (current: CoachDeclines) => CoachDeclines): Promise<void> {
+    const run = this.declinesQueue.then(async () => {
+      const db = await this.getDatabase();
+      // From the record as saved and as shown: a decline a sync brought is kept (the re-check).
+      const saved = parseCoachDeclines(await db.get<Identified>('meta', COACH_DECLINES_ID));
+      const next = change(mergeDeclines(saved, this.state.coachDeclines));
+      try {
+        await putVerified(db, 'meta', next, { now: this.now });
+      } catch (error) {
+        // What is saved is shown, whatever the save left: memory and disk never part.
+        const stored = await db.get<Identified>('meta', COACH_DECLINES_ID).catch(() => null);
+        if (stored !== null) {
+          this.declinesVersion += 1;
+          this.setState({ coachDeclines: parseCoachDeclines(stored) });
+        }
+        throw error;
+      }
+      this.declinesVersion += 1;
+      this.setState({ coachDeclines: next });
+    });
+    this.declinesQueue = run.catch(() => undefined);
+    return run;
+  }
+
   async setCoachFocus(muscle: MuscleId): Promise<void> {
     const focus = createFocus(muscle, this.now());
     const db = await this.getDatabase();
@@ -3789,6 +4106,24 @@ export class AppStore {
       await this.changeSwaps((current) => undoSwaps(current, change.before, change.after));
     }
     return result;
+  }
+
+  /**
+   * A coach card's four-week swap (Maintenance 27, items 45 and 49): the swap made and kept, and
+   * only then its route step recorded. A swap not made, or not kept, records nothing (the re-check
+   * of item 49); one that fails says why, here or on the overlay.
+   */
+  async takeCoachSwap(action: Extract<CoachAction, { kind: 'lasting-swap' }>): Promise<void> {
+    const session = this.state.session;
+    const entry = session
+      ? allEntries(session.workout.blocks).find((candidate) => candidate.id === action.entryId)
+      : undefined;
+    const from = entry && session ? planOwnExercise(session.workout.blocks, entry) : undefined;
+    const result = await this.swapExercise(action.entryId, action.exerciseId, true);
+    const kept =
+      result?.ok === true &&
+      this.activeSwaps().some((swap) => swap.from === from && swap.to === action.exerciseId);
+    if (kept) await this.noteCoachAction(action);
   }
 
   /**
@@ -3895,7 +4230,7 @@ export class AppStore {
    */
   async dismissCoachSignal(
     signal: Pick<CoachSignal, 'source' | 'exerciseId'> &
-      Partial<Pick<CoachSignal, 'domain' | 'concern' | 'action'>>,
+      Partial<Pick<CoachSignal, 'domain' | 'concern' | 'action' | 'untilNew'>>,
   ): Promise<void> {
     // Some cards are set aside for this workout only: the one naming a workout left open, a
     // safety card, which is never declined for days, and a card with nothing to tap, which is a
@@ -3918,10 +4253,7 @@ export class AppStore {
 
   /** Remembers a declined offer so the coach stops repeating it for a while. */
   async declineCoachSignal(signal: Pick<CoachSignal, 'source' | 'exerciseId'>): Promise<void> {
-    const next = recordDecline(this.state.coachDeclines, signal, this.now());
-    const db = await this.getDatabase();
-    await putVerified(db, 'meta', next, { now: this.now });
-    this.setState({ coachDeclines: next });
+    await this.changeDeclines((current) => recordDecline(current, signal, this.now()));
   }
 
   /** Asks the workout screen to open its end-of-workout sheet the next time it shows. */
@@ -4031,11 +4363,11 @@ export class AppStore {
     now: string,
   ): Promise<void> {
     const policy = coachingPolicy(profile.experience);
-    const stalls = detectStalls(this.state.history, profile, policy);
+    const stalls = detectStalls(this.state.readHistory, profile, policy);
     const { routes, events } = reconcileRoutes(
       this.state.coachRoutes,
       stalls,
-      this.state.history,
+      this.state.readHistory,
       policy,
       now,
     );

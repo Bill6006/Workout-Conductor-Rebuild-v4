@@ -2,6 +2,7 @@ import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { StrengthMaxes } from '../progression/maxes';
 import type { DeloadWindow } from '../planning/deload';
 import type { LastingSwap } from '../planning/lastingSwaps';
+import type { LearnedResets } from '../learned/resets';
 import type { AutoregulationPlan } from './autoregulate';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
 import type { LocationProfile } from '../../core/validation/location';
@@ -107,6 +108,24 @@ export interface CompletedSet {
    * third pass of item 42): a hard start reads the set against it. Absent on a set logged before.
    */
   planRir?: number;
+  /**
+   * A reserve check (Maintenance 27, item 43): the set went on past the lifter's usual stop to a
+   * rep that stalled. `reps` and `rir` stay as at the stop, so every rule reads the set as a
+   * normal one; this keeps the reps in all. Absent on any other set.
+   */
+  reserveCheck?: ReserveCheckLog;
+}
+
+/** A reserve check's own numbers (Maintenance 27, item 43). */
+export interface ReserveCheckLog {
+  /** Reps in all, to the rep that stalled. */
+  total: number;
+  /** It stalled before the lifter's usual stop: reps to failure, no judgement to check. */
+  failedEarly?: boolean;
+  /** Stopped for pain or form: not a set to failure. */
+  stopped?: boolean;
+  /** The plan's style when it was taken: a change of style starts the learning again. */
+  style?: string;
 }
 
 export interface CompletedWork {
@@ -130,6 +149,12 @@ export interface Postponed {
 }
 
 /** Session-only constraints. None of these touch the saved profile or place. */
+/** A pain report made on an exercise during a workout (Maintenance 27, item 45). */
+export interface PainReportLog {
+  exerciseId: string;
+  joint: Joint;
+}
+
 export interface SessionConstraints {
   /**
    * Equipment marked busy by the app before Maintenance 25, which took every lift needing it out
@@ -143,6 +168,11 @@ export interface SessionConstraints {
   avoidExerciseIds: string[];
   /** Joints reported painful this session, on top of the profile's pain areas. */
   painJoints: Joint[];
+  /**
+   * Each pain report this session and the exercise it was made on (Maintenance 27, item 45), which
+   * the saved workout keeps. Absent on a session saved before.
+   */
+  painReports?: PainReportLog[];
   /** ISO time the session must end by, when the exact-end mode is on. */
   endBy: string | null;
   readiness: Readiness | null;
@@ -179,6 +209,8 @@ export interface RecalibrationRequest {
   maxes?: StrengthMaxes | null;
   /** The lifter's lasting swaps, which a rebuild honours wherever the exercise swapped in fits. */
   swaps?: readonly LastingSwap[];
+  /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
+  resets?: LearnedResets | null;
 }
 
 export type ChangeKind = 'added' | 'removed' | 'replaced' | 'adjusted';

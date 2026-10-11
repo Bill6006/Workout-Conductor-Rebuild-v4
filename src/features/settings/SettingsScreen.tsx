@@ -14,6 +14,7 @@ import { hasGymAccess, setGymAccess } from '../profile/draft';
 import { ExercisePreferencesEditor } from '../profile/editors/ExercisePreferencesEditor';
 import { GoalsEditor } from '../profile/editors/GoalsEditor';
 import { LimitationsEditor } from '../profile/editors/LimitationsEditor';
+import { PushLiftEditor } from '../profile/editors/PushLiftEditor';
 import { ScheduleEditor } from '../profile/editors/ScheduleEditor';
 import { StyleEditor } from '../profile/editors/StyleEditor';
 import { UnitsEditor } from '../profile/editors/UnitsEditor';
@@ -23,6 +24,7 @@ import { BackupCard } from './BackupCard';
 import { CloudCopyCard } from './CloudCopyCard';
 import { DiagnosticsCard } from './DiagnosticsCard';
 import { LegacyImportCard } from './LegacyImportCard';
+import { LearnedValues } from './LearnedValues';
 import { MediaCreditsCard } from './MediaCreditsCard';
 import { SnapshotsCard } from './SnapshotsCard';
 import { StorageCard } from './StorageCard';
@@ -32,6 +34,7 @@ import {
   limitationsSummary,
   preferencesSummary,
   programmingSummary,
+  pushSummary,
   scheduleSummary,
   unitsSummary,
 } from './summaries';
@@ -86,6 +89,14 @@ export function SettingsScreen() {
                 <GoalsEditor draft={draft} onChange={editor.update} />
               </DisclosureRow>
               <DisclosureRow
+                name="push"
+                title="A lift to push"
+                summary={pushSummary(draft.profile)}
+                linked={section === 'push'}
+              >
+                <PushLiftEditor draft={draft} onChange={editor.update} />
+              </DisclosureRow>
+              <DisclosureRow
                 name="programming"
                 title="Programming"
                 summary={programmingSummary(draft.profile)}
@@ -131,6 +142,17 @@ export function SettingsScreen() {
                 linked={section === 'units'}
               >
                 <UnitsEditor draft={draft} onChange={editor.update} autosaves />
+              </DisclosureRow>
+            </Group>
+
+            <Group title="What the app has learned" testId="settings-learned">
+              <DisclosureRow
+                name="learned"
+                title="Learned from your log"
+                summary="Your habit, each lift's curve, how you judge reserve, pain patterns and offers declined, each with a reset"
+                linked={section === 'learned'}
+              >
+                <LearnedValues />
               </DisclosureRow>
             </Group>
 

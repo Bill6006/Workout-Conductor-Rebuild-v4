@@ -9,6 +9,7 @@ import type { LocationProfile } from '../../core/validation/location';
 import type { ChangeSummary, EntryChange } from '../../engine/recalibration/types';
 import {
   isStopped,
+  pushMarkOf,
   workingSets,
   type DurationChoice,
   type GeneratedWorkout,
@@ -114,7 +115,9 @@ function EntryRow({
         <span className={styles.exerciseName}>
           {exercise.name}
           {entry.dropSet ? <span className={styles.badge}>Drop set</span> : null}
-          {entry.role === 'primary-strength' && !stopped ? (
+          {pushMarkOf(entry) && !stopped ? (
+            <span className={styles.badge}>Lift to push</span>
+          ) : entry.role === 'primary-strength' && !stopped ? (
             <span className={styles.badge}>Main lift</span>
           ) : null}
           {change ? <span className={styles.tag}>{CHANGE_TAGS[change]}</span> : null}

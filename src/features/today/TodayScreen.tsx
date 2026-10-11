@@ -142,7 +142,12 @@ export function TodayScreen() {
 
   // Coach actions are taps the user makes; the card never applies anything itself.
   const onCoachAction = (action: CoachAction, signal: CoachSignal) => {
-    void store.noteCoachAction(action);
+    // A four-week swap's route step is recorded once the swap is kept (the review of item 49).
+    if (action.kind !== 'lasting-swap') void store.noteCoachAction(action);
+    // A save that failed says so, rather than leaving the card looking taken (the review).
+    const failed = (fallback: string) => (error: unknown) => {
+      toast.show(error instanceof Error ? error.message : fallback, 'error');
+    };
     switch (action.kind) {
       case 'recalibrate':
         // Once the change lands its route step is recorded, or its offer marked as taken, so the
@@ -195,6 +200,21 @@ export function TodayScreen() {
       case 'style':
         // The plan is rebuilt under the new style by the profile save itself.
         void store.setProgramStyle(action.style).catch(() => undefined);
+        break;
+      case 'end-push':
+        // The plan is rebuilt without the push by the profile save itself (item 44).
+        void store.endPush().catch(failed('The push could not be ended'));
+        break;
+      case 'lasting-swap':
+        // The four-week swap a pain pattern or a variety offer makes (items 45 and 49), as the
+        // keep switch makes it.
+        void store.takeCoachSwap(action).catch(failed('The swap could not be kept'));
+        break;
+      case 'schedule':
+        // The schedule moved to the real week (item 46); the profile save rebuilds the plan.
+        void store
+          .moveSchedule(action.weeklyFrequency, action.availableDays)
+          .catch(failed('The schedule could not be saved'));
         break;
     }
   };

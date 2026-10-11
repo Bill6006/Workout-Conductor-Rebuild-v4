@@ -25,7 +25,9 @@ import {
 } from '../../engine/scoring/analytics';
 import { recentPersonalRecords } from '../../engine/scoring/personalRecords';
 import { amountText, holdById } from '../../engine/workout/setText';
+import { keyedLines } from '../../core/screen/keyedLines';
 import { HistoryDetailSheet } from './HistoryDetailSheet';
+import { pushCard } from './pushCard';
 import styles from './Progress.module.css';
 
 const BAND_TEXT = { under: '▲ under', in: '● in band', over: '▼ over' } as const;
@@ -105,6 +107,7 @@ export function ProgressScreen() {
       techniques: techniqueUsage(history),
       pain: painPatterns(history),
       prs: recentPersonalRecords(history),
+      pushed: pushCard(profile, history, nowIso),
     };
   }, [history, profile, nowIso, units]);
 
@@ -119,8 +122,18 @@ export function ProgressScreen() {
     );
   }
 
-  const { consistency, coverage, progress, strength, ranked, efficiency, techniques, pain, prs } =
-    analytics;
+  const {
+    consistency,
+    coverage,
+    progress,
+    strength,
+    ranked,
+    efficiency,
+    techniques,
+    pain,
+    prs,
+    pushed,
+  } = analytics;
   const coverageScore: Score<null> = {
     value: null,
     definition:
@@ -175,6 +188,21 @@ export function ProgressScreen() {
         />
         <ScorePanel score={consistency} />
       </Card>
+
+      {pushed ? (
+        // The lift to push (Maintenance 27, item 44): its pace toward the target, with its band.
+        <Card eyebrow="A lift to push" title={pushed.title}>
+          <p className={styles.pushHeadline} data-testid="push-pace">
+            {pushed.headline}
+          </p>
+          {keyedLines(pushed.lines).map(({ key, line }) => (
+            <p key={key} className={styles.muted} data-testid="push-line">
+              {line}
+            </p>
+          ))}
+          <p className={styles.method}>{pushed.method}</p>
+        </Card>
+      ) : null}
 
       <Card eyebrow="Muscle volume" title="Weekly coverage against targets">
         <ul className={styles.coverageList}>

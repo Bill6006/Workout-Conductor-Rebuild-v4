@@ -30,7 +30,11 @@ export type CoachParts = Pick<
   | 'locations'
   | 'cloud'
   | 'lastingSwaps'
-> & { lastExportAt: AppState['localSettings']['lastExportAt'] };
+> & {
+  lastExportAt: AppState['localSettings']['lastExportAt'];
+  /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
+  learnedResets?: AppState['learnedResets'];
+};
 
 /**
  * The fatigue, strategy, and coach conductor engines over the current session and history: the
@@ -81,6 +85,7 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
     upcoming: planWeek(profile, location, history, now),
     focus: parts.coachFocus?.muscle ?? null,
     swaps: parts.lastingSwaps.filter((swap) => !swapIsPast(swap, now)),
+    resets: parts.learnedResets ?? null,
   });
   return { card, fatigue, strategy, policy };
 }
@@ -93,7 +98,8 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
 export function useCoach(): CoachContext | null {
   const session = useAppSelector((state) => state.session);
   const profile = useAppSelector((state) => state.profile);
-  const history = useAppSelector((state) => state.history);
+  // The log as the rules read it (Maintenance 27, item 43): reserve through the checked error.
+  const history = useAppSelector((state) => state.readHistory);
   const lastExportAt = useAppSelector((state) => state.localSettings.lastExportAt);
   const workoutCount = useAppSelector((state) => state.workoutCount);
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
@@ -102,6 +108,7 @@ export function useCoach(): CoachContext | null {
   const locations = useAppSelector((state) => state.locations);
   const cloud = useAppSelector((state) => state.cloud);
   const lastingSwaps = useAppSelector((state) => state.lastingSwaps);
+  const learnedResets = useAppSelector((state) => state.learnedResets);
   const minute = useNow();
   // The minute clock, brought to a running rest's end when it comes, so an offer about the rest
   // goes as the rest ends (Maintenance 25).
@@ -125,6 +132,7 @@ export function useCoach(): CoachContext | null {
           locations,
           cloud,
           lastingSwaps,
+          learnedResets,
         },
         nowEpoch,
       ),
@@ -140,6 +148,7 @@ export function useCoach(): CoachContext | null {
       locations,
       cloud,
       lastingSwaps,
+      learnedResets,
       nowEpoch,
     ],
   );

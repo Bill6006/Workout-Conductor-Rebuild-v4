@@ -2,7 +2,7 @@ import { ChoiceGroup } from '../../../components/Form/ChoiceGroup';
 import { Field } from '../../../components/Form/Field';
 import { Toggle } from '../../../components/Form/Toggle';
 import { styleChoice, withStyleChoice, type UserProfile } from '../../../core/validation/profile';
-import { adviseStyle } from '../../../engine/planning/styleAdvice';
+import { adviseStyle, allowsFailure, resolveStyle } from '../../../engine/planning/styleAdvice';
 import { GRADE_LABEL, evidenceLines, styleInfo } from '../../../engine/planning/styles';
 import { updateProfile } from '../draft';
 import { REST_STYLE_OPTIONS, styleOptions } from '../labels';
@@ -105,6 +105,26 @@ export function StyleEditor({ draft, onChange }: EditorProps) {
             description="Only when goal, equipment, and fatigue support them."
             checked={profile.techniques.circuits}
             onChange={(value) => setTechnique('circuits', value)}
+          />
+        </div>
+      </Field>
+      <Field
+        label="Reserve checks"
+        hint="How well you judge the reps you have left, checked now and then (Halperin et al., 2022: most lifters judge about one rep fewer than they have)."
+      >
+        <div className={styles.toggles}>
+          <Toggle
+            label="Check how well I judge reps in reserve"
+            description={
+              allowsFailure(resolveStyle(profile))
+                ? 'Now and then the last set of one machine or cable isolation lift goes on to failure: stop where you usually would, judge the reps left, then keep going until you cannot finish a rep with good form. Weekly until five checks, then every four weeks. Leave it off with high blood pressure or a heart condition, or if the lift hurts.'
+                : 'Your style takes nothing to failure, so it takes no checks.'
+            }
+            checked={profile.reserveCheck === true}
+            disabled={!allowsFailure(resolveStyle(profile))}
+            onChange={(value) =>
+              onChange(updateProfile(draft, (current) => ({ ...current, reserveCheck: value })))
+            }
           />
         </div>
       </Field>

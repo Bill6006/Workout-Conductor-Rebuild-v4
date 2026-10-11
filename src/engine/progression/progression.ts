@@ -1,4 +1,6 @@
 import { getExercise } from '../../catalog/exercises/catalog';
+import { curveLoad, liftCurve } from './personalCurve';
+import { loggedReserveOf } from './reserveCheck';
 import {
   isHold,
   type CatalogExercise,
@@ -9,6 +11,7 @@ import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { coachingPolicy, policyLabel } from '../coach/experience';
 import { enteredBy, enteredMaxFor, maxFromSet, type StrengthMaxes } from './maxes';
 import { overrideBias } from './overrides';
+import type { LearnedResets } from '../learned/resets';
 import {
   ENTERED_FRACTION,
   START_FRACTION,
@@ -50,6 +53,8 @@ export interface PerformanceSet {
   reps: number;
   weight: number | null;
   rir: number | null;
+  /** What was logged, where the rules read the reserve through item 43's checks. */
+  loggedRir?: number | null;
   targetReps: [number, number] | null;
   targetRir: number | null;
   /** What a set the weights at the place pushed stood in for (Maintenance 23). */
@@ -74,6 +79,8 @@ export interface PerformancePoint {
   /** At least one completed working set fell below its floor. */
   under: boolean;
   avgRir: number | null;
+  /** The average reserve as logged, where the rules read it through item 43's checks. */
+  loggedAvgRir?: number | null;
   /** Estimated one-rep max of the best set (Epley), null without a weight. */
   e1rm: number | null;
   plannedSets: number;
@@ -155,12 +162,41 @@ function completedWorking(record: WorkoutRecord, exerciseId: string) {
           reps: set.reps,
           weight: loggedLoad(exercise, set.weight),
           rir: set.rir,
+          ...(loggedReserveOf(set) !== set.rir ? { loggedRir: loggedReserveOf(set) } : {}),
           targetReps: set.targetReps ?? null,
           targetRir: typeof set.targetRir === 'number' ? set.targetRir : null,
           ...(set.asked ? { asked: set.asked, shownWeight: set.targetWeight ?? null } : {}),
           planned: entry.plannedSets ?? 0,
         })),
     );
+}
+
+/**
+ * A session's best loaded set, chosen as its estimate is (the most weight times reps): the set a
+ * lift's own curve reads from (Maintenance 27, item 41).
+ */
+function bestSetOf(
+  point: PerformancePoint,
+): { weight: number; reps: number; rir: number | null } | null {
+  const loaded = point.sets.filter(
+    (set): set is PerformanceSet & { weight: number } => set.weight !== null,
+  );
+  const best = [...loaded].sort(
+    (a, b) => b.weight * b.reps - a.weight * a.reps || b.reps - a.reps,
+  )[0];
+  return best ? { weight: best.weight, reps: best.reps, rir: best.rir } : null;
+}
+
+/**
+ * The reserve a "Last" line quotes: as logged, with what the rules read it as where item 43's
+ * checks read it otherwise (the review of item 43).
+ */
+function reserveText(point: PerformancePoint): string {
+  if (point.avgRir === null) return '';
+  const logged = point.loggedAvgRir;
+  return logged !== undefined && logged !== null && logged !== point.avgRir
+    ? ` @ RIR ${logged}, read as ${point.avgRir} from your reserve checks`
+    : ` @ RIR ${point.avgRir}`;
 }
 
 /** Reps at `target` that match `reps` at `weight`: the same estimated max (Epley). */
@@ -288,10 +324,11 @@ function toPoint(
     plannedSets: logged[0]?.planned ?? 0,
   };
   const sets: PerformanceSet[] = logged.map(
-    ({ reps, weight, rir, targetReps, targetRir, asked, shownWeight }) => ({
+    ({ reps, weight, rir, loggedRir, targetReps, targetRir, asked, shownWeight }) => ({
       reps,
       weight,
       rir,
+      ...(loggedRir !== undefined ? { loggedRir } : {}),
       targetReps,
       targetRir,
       ...(asked ? { asked, shownWeight: shownWeight ?? null } : {}),
@@ -328,6 +365,11 @@ function summarize(meta: PointMeta, sets: PerformanceSet[]): PerformancePoint {
   )[0] as PerformanceSet;
   const withTarget = sets.filter((set) => set.targetReps !== null);
   const rirs = sets.map((set) => set.rir).filter((r): r is number => r !== null);
+  const average = (list: number[]) =>
+    list.length > 0 ? Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 10) / 10 : null;
+  const loggedRirs = sets
+    .map((set) => (set.loggedRir !== undefined ? set.loggedRir : set.rir))
+    .filter((r): r is number => r !== null);
   return {
     date: meta.date,
     recordId: meta.recordId,
@@ -343,10 +385,10 @@ function summarize(meta: PointMeta, sets: PerformanceSet[]): PerformancePoint {
       withTarget.length > 0 &&
       withTarget.every((set) => set.reps >= (set.targetReps as [number, number])[0]),
     under: withTarget.some((set) => set.reps < (set.targetReps as [number, number])[0]),
-    avgRir:
-      rirs.length > 0
-        ? Math.round((rirs.reduce((a, b) => a + b, 0) / rirs.length) * 10) / 10
-        : null,
+    avgRir: average(rirs),
+    ...(sets.some((set) => set.loggedRir !== undefined)
+      ? { loggedAvgRir: average(loggedRirs) }
+      : {}),
     // A hold's reps are seconds: no strength estimate reads from them.
     e1rm:
       best.weight !== null && !isHold(getExercise(meta.exerciseId))
@@ -433,6 +475,11 @@ export interface NextTargetInput {
   maxes?: StrengthMaxes | null;
   /** Session context: overlap-weighted working sets that come before this exercise today. */
   session?: { precedingSets: number };
+  /**
+   * When the lifter reset what the app learned of their habit and of each lift's own curve
+   * (Maintenance 27, item 47): each reads only what was logged after.
+   */
+  resets?: Pick<LearnedResets, 'curves' | 'habit'> | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -775,7 +822,12 @@ function recommendBiasedTarget(input: NextTargetInput): NextTarget {
   // A hold's seconds are decided on the base; the steps after it move only the load.
   const target = isHold(input.exercise) ? withHoldSeconds(base, input) : base;
   if (target.weight === null || !BIASABLE.has(target.mode)) return target;
-  const bias = overrideBias(input.history, input.exercise.id, target.increment);
+  const bias = overrideBias(
+    input.history,
+    input.exercise.id,
+    target.increment,
+    input.resets?.habit ?? null,
+  );
   const evidence = bias.evidence;
   if (bias.steps === 0 || !evidence) return target;
   return stepped(target, bias.steps, () => evidence, input);
@@ -990,9 +1042,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     ) ?? last;
   const lastLine = `Last${shown.viaFamily ? ` (${getExercise(shown.exerciseId)?.name ?? 'same family'})` : ''}: ${
     shown.bestWeight === null ? 'bodyweight' : `${shown.bestWeight} ${units}`
-  } × ${shown.sets.map((set) => set.reps).join(', ')}${
-    shown.avgRir === null ? '' : ` @ RIR ${shown.avgRir}`
-  } (${shortDate(shown.date)})`;
+  } × ${shown.sets.map((set) => set.reps).join(', ')}${reserveText(shown)} (${shortDate(shown.date)})`;
   const evidence: string[] = [lastLine];
   // What a session the weights at a place pushed stood in for (Maintenance 23).
   if (
@@ -1059,6 +1109,36 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   const confidence: NextTarget['confidence'] =
     points.length >= 3 && !last.viaFamily ? 'high' : points.length >= 2 ? 'medium' : 'low';
   const weight = last.bestWeight;
+
+  // A lift's own reps-to-weight curve (Maintenance 27, item 41): where item 43's sets to failure
+  // pin it down, a target turned from the last session's best set at other reps follows it, within
+  // the reps the curve speaks for; elsewhere the rule everyone gets.
+  // Without a clock there is no window for its readings: no curve.
+  const curve =
+    last.viaFamily || !input.now
+      ? null
+      : liftCurve(input.history, exercise.id, input.now, input.resets?.curves ?? null);
+  const fromLast = (fraction: number) => {
+    if (last.e1rm === null) return null;
+    const rule = estimated(last.e1rm, prescription.reps[1], prescription.rir, fraction, step);
+    const best = bestSetOf(last);
+    const exact =
+      curve && best
+        ? curveLoad(curve, rule.exact, best, prescription.reps[1] + prescription.rir)
+        : null;
+    if (exact === null) return { ...rule, lines: [] as string[] };
+    const ownWeight = roundToStep(exact, step);
+    return {
+      weight: ownWeight,
+      exact,
+      lines:
+        ownWeight === rule.weight
+          ? []
+          : [
+              `Your own reps-to-weight curve on ${exercise.name}, from ${curve?.readings ?? 0} sets to failure, sets this weight; the usual rule gives ${rule.weight} ${units}.`,
+            ],
+    };
+  };
 
   const result = (
     mode: ProgressionMode,
@@ -1138,10 +1218,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
         ENTERED_FRACTION,
         step,
       );
-      const fromSets =
-        last.e1rm === null
-          ? null
-          : estimated(last.e1rm, prescription.reps[1], prescription.rir, fraction, step);
+      const fromSets = fromLast(fraction);
       if (fromSets === null || fromMax.weight < fromSets.weight) {
         return result(
           'return',
@@ -1163,23 +1240,28 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
           // The start sits at the max's own estimate only when the two steps reach it.
           ...(weight === fromMax.weight ? { exact: fromMax.exact } : {}),
           evidence: [
+            ...fromSets.lines,
             `Your max of ${Math.round(fresh)} ${units}, entered after you began this lift last time, says more than your logged sets: up ${
               steps === 1 ? 'a step' : `${steps} steps`
             } toward it. Your next logged session takes over.`,
           ],
         });
       }
-      return result('return', fromSets.weight, back, { exact: fromSets.exact });
+      return result('return', fromSets.weight, back, {
+        exact: fromSets.exact,
+        evidence: fromSets.lines,
+      });
     }
   }
-  if (daysSince >= RETURN_AFTER_DAYS && last.e1rm !== null) {
+  const backFrom =
+    daysSince >= RETURN_AFTER_DAYS ? fromLast(daysSince >= LONG_BREAK_DAYS ? 0.85 : 0.9) : null;
+  if (backFrom !== null) {
     const fraction = daysSince >= LONG_BREAK_DAYS ? 0.85 : 0.9;
-    const back = estimated(last.e1rm, prescription.reps[1], prescription.rir, fraction, step);
     return result(
       'return',
-      back.weight,
+      backFrom.weight,
       `${daysSince} days since the last session: back at ${Math.round(fraction * 100)}% of the estimated max (${last.e1rm} ${units}) and rebuilding from there.`,
-      { exact: back.exact },
+      { exact: backFrom.exact, evidence: backFrom.lines },
     );
   }
   // At bodyweight nothing comes off after a break (Maintenance 23): the first session back starts
@@ -1202,14 +1284,14 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       rir,
     });
   }
-  if (newToZone && last.e1rm !== null) {
+  const zone = newToZone ? fromLast(ZONE_FRACTION) : null;
+  if (zone !== null) {
     const range = last.sets.find((set) => set.targetReps !== null)?.targetReps ?? null;
-    const zone = estimated(last.e1rm, prescription.reps[1], prescription.rir, ZONE_FRACTION, step);
     return result(
       'estimate',
       zone.weight,
       `${range ? `Last run at ${range[0]}-${range[1]} reps` : 'Last run at a different rep range'}; today is ${prescription.reps[0]}-${prescription.reps[1]}. The weight follows the reps: ${Math.round(ZONE_FRACTION * 100)}% of what your estimated max (${last.e1rm} ${units}) implies for ${prescription.reps[0]}-${prescription.reps[1]} at RIR ${prescription.rir}; log a set and the target follows.`,
-      { exact: zone.exact },
+      { exact: zone.exact, evidence: zone.lines },
     );
   }
   // At bodyweight there is no weight to take off: the target stays, and the coach offers fewer

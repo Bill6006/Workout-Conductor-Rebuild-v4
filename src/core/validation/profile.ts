@@ -109,6 +109,11 @@ export const UserProfileSchema = z.looseObject({
     weeklyFrequency: z.number().int().min(1).max(7),
     typicalDurationMinutes: z.number().int().min(15).max(180),
     availableDays: z.array(z.enum(WEEKDAYS)).min(1).max(7),
+    /**
+     * When the sessions or the days were last set (Maintenance 27, item 46): the real week is read
+     * from the weeks after it. Absent on a schedule set before.
+     */
+    since: isoDate.optional().catch(undefined),
   }),
   currentLocationId: z.string().min(1),
   exercisePreferences: z.looseObject({
@@ -124,6 +129,25 @@ export const UserProfileSchema = z.looseObject({
   trainingStyle: z.enum(TRAINING_STYLES),
   /** The chosen style, Auto included. Absent on profiles from before it: `trainingStyle` stands. */
   programStyle: z.enum(PROGRAM_STYLES).optional().catch(undefined),
+  /**
+   * The lifter's yes to reserve checks (Maintenance 27, item 43): now and then the last set of one
+   * machine or cable isolation lift goes on to failure. Absent, or anything else, reads as no.
+   */
+  reserveCheck: z.boolean().optional().catch(undefined),
+  /**
+   * A lift to push (Maintenance 27, item 44): one main lift and a target max on it, in `units`,
+   * with an optional date, pushed from `since`. An unreadable one is dropped, never the profile.
+   */
+  pushLift: z
+    .looseObject({
+      exerciseId: z.string().min(1).max(80),
+      target: z.number().positive().max(5000),
+      units: z.enum(UNIT_SYSTEMS),
+      by: isoDate.optional().catch(undefined),
+      since: isoDate,
+    })
+    .optional()
+    .catch(undefined),
   techniques: z.looseObject({
     supersets: z.boolean(),
     dropSets: z.boolean(),

@@ -13,6 +13,7 @@ import {
   type ConflictContext,
 } from '../conflicts/conflictEngine';
 import { preferredIdsOf } from '../conflicts/context';
+import { parsePushLine, pushDay, pushLine, pushRir } from '../planning/pushLift';
 import {
   estimateWorkout,
   generalWarmupMinutes,
@@ -60,7 +61,9 @@ import { DELOAD_LOAD_SCALE, DELOAD_RIR_DELTA } from '../planning/deload';
 import {
   closeAtLogged,
   deloadReason,
+  extraBase,
   generateWorkout,
+  pushedPrescription,
   setFloor,
   mainLiftLine,
   mainLiftName,
@@ -78,6 +81,7 @@ import {
 import {
   allEntries,
   isStopped,
+  pushMarkOf,
   keepsTheEase,
   stoppedBefore,
   roundsOf,
@@ -325,6 +329,10 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
     })),
     avoidExerciseIds: [...constraints.avoidExerciseIds],
     painJoints: [...constraints.painJoints],
+    // Each report keeps its exercise through every later change (the review of item 45).
+    ...(constraints.painReports
+      ? { painReports: constraints.painReports.map((report) => ({ ...report })) }
+      : {}),
     endBy: constraints.endBy,
     readiness: constraints.readiness ? { ...constraints.readiness } : null,
     intensity: constraints.intensity,
@@ -564,6 +572,7 @@ function rebuild(
     duration: choice,
     constraints: generation,
     maxes: request.maxes,
+    resets: request.resets ?? null,
   });
   // The plan puts a kept lift back in its own slot: one moved for busy equipment goes behind what
   // it gave way to again (Maintenance 25), since the equipment may still be taken.
@@ -878,10 +887,22 @@ function keepOrderLines(workout: GeneratedWorkout): void {
   if (!first) return;
   const firstName = requireExercise(first.exerciseId).name;
   // The line on the main lift, while that lift is in the plan: one gone keeps its line as it was.
+  // The lift to push's line leads the same way (Maintenance 27, item 44).
   const reasons = workout.explanation.reasons.map((line) => {
     const named = mainLiftName(line);
     const main = inPlan.find((entry) => requireExercise(entry.exerciseId).name === named);
-    return named !== null && main ? mainLiftLine(named, main.role, main === first) : line;
+    if (named !== null && main) return mainLiftLine(named, main.role, main === first);
+    const pushed = parsePushLine(line);
+    const lift = pushed
+      ? inPlan.find(
+          (entry) =>
+            pushMarkOf(entry) !== undefined &&
+            requireExercise(entry.exerciseId).name === pushed.name,
+        )
+      : undefined;
+    return pushed && lift
+      ? pushLine(pushed.name, pushed.target, pushed.extra, lift === first, pushed.heavy)
+      : line;
   });
   const summary = workout.explanation.summary.replace(
     /, ([^,]+?) first(?=(?:, fitted to [^.]+)?\.$)/,
@@ -986,6 +1007,7 @@ function targetToday(
     now: request.timestamp,
     maxes: request.maxes,
     session: { precedingSets: context.precedingSets },
+    resets: request.resets ?? null,
   });
 }
 
@@ -1592,6 +1614,7 @@ function targetedSets(
     now: request.timestamp,
     maxes: request.maxes,
     session: { precedingSets: context.precedingSets },
+    resets: request.resets ?? null,
   });
   const loading = loadingOf(request, exercise);
   const floor = barWeightFor(exercise, request.profile.units);
@@ -1665,7 +1688,30 @@ function settleKept(
     const { entry, block } = findEntry(workout, kept.id);
     const exercise = requireExercise(entry.exerciseId);
     const base = prescribeFor(exercise, entry.role, request.profile, request.history);
+    // The lift to push and the day's extra take the plan's own rule for them (Maintenance 27, the
+    // re-check of item 44): a fresh plan and a kept lift agree.
+    const mark = pushMarkOf(entry) ?? (entry.push === 'extra' ? ('extra' as const) : undefined);
+    const pushedFor = (settings: SessionConstraints) => {
+      if (!mark) return null;
+      const push = pushDay({
+        profile: request.profile,
+        history: request.history,
+        now: request.timestamp,
+        deload: settings.deload !== null && settings.deload !== undefined,
+      });
+      if (!push || (mark === 'extra' && push.extraSets === null)) return null;
+      const own = mark === 'extra' ? extraBase(exercise, request.profile) : base;
+      return pushedPrescription(
+        push,
+        mark,
+        own,
+        entry.role,
+        dayAdjust(settings),
+        rirFloor(exercise),
+      );
+    };
     const planned = (settings: SessionConstraints) =>
+      pushedFor(settings) ??
       prescriptionForDay(
         base,
         entry.role,
@@ -1673,6 +1719,7 @@ function settleKept(
         settings.deload,
         rirFloor(exercise),
       );
+    const ruled = pushedFor(constraints) !== null && pushedFor(request.constraints) !== null;
     const before = planned(request.constraints);
     const after = planned(constraints);
     if (before.sets === after.sets && before.rir === after.rir) continue;
@@ -1683,16 +1730,23 @@ function settleKept(
         : after.sets > before.sets
           ? Math.max(after.sets, working)
           : working;
+    // The lift to push keeps to the push's sets and never goes to failure (Maintenance 27, the
+    // review of item 44): a harder day adds no set to it and takes its reserve no lower than one.
+    // By the plan's rule it has its count; without one (the push ended since), it adds none.
+    const pushed = mark !== undefined;
+    const sets =
+      pushed && !ruled ? Math.max(Math.min(count, working), Math.min(2, working)) : count;
+    const rir = pushed ? pushRir(after.rir) : after.rir;
     const built = targetedSets(
       next,
       workout,
       entry.id,
       exercise,
       entry.role,
-      Math.min(MAX_WORKING_SETS, count),
+      Math.min(MAX_WORKING_SETS, sets),
       entry.restSeconds,
       {
-        shift: after.rir - prescriptionToday(next, exercise, entry.role).rir,
+        shift: rir - prescriptionToday(next, exercise, entry.role).rir,
         warmups: entry.sets.filter((set) => set.kind === 'warmup').length,
       },
     );
@@ -1951,7 +2005,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
       )
       .replace(/, fitted to the [0-9]+ min left/, ''),
     reasons: plan.explanation.reasons.filter((line) => {
-      const named = mainLiftName(line);
+      const named = mainLiftName(line) ?? parsePushLine(line)?.name ?? null;
       return named === null || held.has(named);
     }),
     fittingSteps: plan.duration.targetMinutes === target ? plan.explanation.fittingSteps : [],
@@ -2259,8 +2313,11 @@ function applySubstitution(
   block: WorkoutBlock,
   exercise: CatalogExercise,
   request: RecalibrationRequest,
-  lock: boolean,
+  locking: boolean,
 ): void {
+  // The day's extra has no place of the plan's to fill again: a swap of it is kept, for comfort or
+  // pain too, as a replacement is (the re-check of item 44).
+  const lock = locking || entry.push === 'extra';
   const earlier = stoppedBefore(workout.blocks, entry).find(
     (candidate) => candidate.exerciseId === exercise.id,
   );
@@ -2379,6 +2436,8 @@ function standIn(
     pinned: false,
     ...(entry.slot === undefined ? {} : { slot: entry.slot }),
     replacedFrom: entry.exerciseId,
+    // The stand-in carries on the day's extra: it leads in its place (the re-check of item 44).
+    ...(entry.push === 'extra' ? { push: 'extra' as const } : {}),
   };
   placeStandIn(workout, entry, block, stand, isDone);
   const built = targetedSets(
@@ -2678,6 +2737,14 @@ function formatClock(iso: string): string {
     : date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+/**
+ * A check-in that eases the day (low energy, sleep or motivation, or soreness): a day a reserve
+ * check never takes (Maintenance 27, item 43). The same rule that eases it.
+ */
+export function lowCheckIn(readiness: Readiness | null): boolean {
+  return readiness !== null && readinessAdjustment(readiness) !== undefined;
+}
+
 function readinessAdjustment(readiness: Readiness): PrescriptionAdjustment | undefined {
   const low = readiness.energy <= 2 || readiness.sleep <= 2 || readiness.motivation <= 2;
   const sore = readiness.soreness >= 4;
@@ -2891,6 +2958,11 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
       const workout = cloneWorkout(request.workout);
       const { entry } = findEntry(workout, trigger.entryId);
       constraints.painJoints = [...new Set([...constraints.painJoints, trigger.joint])];
+      // Which exercise it hurt on, kept into the saved workout (Maintenance 27, item 45).
+      constraints.painReports = [
+        ...(constraints.painReports ?? []),
+        { exerciseId: entry.exerciseId, joint: trigger.joint },
+      ];
       constraints.avoidExerciseIds = [
         ...new Set([...constraints.avoidExerciseIds, entry.exerciseId]),
       ];

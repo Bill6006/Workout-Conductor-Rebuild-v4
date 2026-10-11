@@ -3,7 +3,7 @@ import { isHold, type CatalogExercise, type Joint } from '../../catalog/exercise
 import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 import { UNFINISHED_STALE_HOURS } from '../../core/alerts/cues';
 import type { LocationProfile } from '../../core/validation/location';
-import type { ProgramStyle, UserProfile } from '../../core/validation/profile';
+import type { ProgramStyle, UserProfile, Weekday } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { remainingMinutes } from '../duration/duration';
 import { blockSequence } from '../workout/sequence';
@@ -17,7 +17,20 @@ import type {
 } from '../recalibration/types';
 import type { LastingSwap } from '../planning/lastingSwaps';
 import type { PlannedSession } from '../planning/weeklyPlan';
+import { activePush } from '../planning/pushLift';
+import type { LearnedResets } from '../learned/resets';
+import { dayList, scheduleFit } from '../planning/scheduleFit';
+import { changedRecently, goneFlat, isAccessory, varietyFor } from '../strategy/variety';
+import {
+  PUSH_PACE,
+  READING_RULE,
+  paceReadings,
+  pushPace,
+  shortTwiceRunning,
+  targetIn,
+} from '../planning/pushPace';
 import type { FatigueSignal } from '../recovery/fatigue';
+import { painPatterns } from '../recovery/painPattern';
 import { lastPainReport, painSourceLine } from '../recovery/painReport';
 import { stepsOfSessionLine } from '../recovery/sessionContext';
 import { stepsOfHabitLine } from '../progression/overrides';
@@ -39,7 +52,8 @@ import {
   computeMusclePriorities,
   computeWeeklyVolume,
 } from '../volume/weeklyVolume';
-import { checkExerciseFit } from '../conflicts/conflictEngine';
+import { checkExerciseFit, isBlocked } from '../conflicts/conflictEngine';
+import { buildConflictContext } from '../conflicts/context';
 import { barWeightFor, startRatio } from '../progression/startingLoad';
 import {
   EFFORT_REPS_CEILING,
@@ -53,6 +67,7 @@ import {
   accessoryPicker,
   pickAccessoryFor,
   sessionConflictContext,
+  splitFor,
   swappedOutIds,
 } from '../workoutGenerator/generate';
 import {
@@ -107,7 +122,22 @@ type CoachActionBase =
   /** Opens the end-of-workout sheet, where the day is saved as it stands. */
   | { kind: 'finish'; label: string }
   /** Sets the programming style; the plan is rebuilt under it. */
-  | { kind: 'style'; style: ProgramStyle; label: string };
+  | { kind: 'style'; style: ProgramStyle; label: string }
+  /**
+   * Ends the lift to push (Maintenance 27, item 44): its extra session goes, and the lift keeps its
+   * own place in the plan.
+   */
+  | { kind: 'end-push'; label: string }
+  /**
+   * Uses another exercise in place of the entry's, today and for the next four weeks: a lasting
+   * swap (Maintenance 22), offered by a pain pattern (Maintenance 27, item 45).
+   */
+  | { kind: 'lasting-swap'; entryId: string; exerciseId: string; label: string }
+  /**
+   * Moves the schedule to the week the lifter trains (Maintenance 27, item 46): its sessions a week
+   * and its days; the split follows the new number.
+   */
+  | { kind: 'schedule'; weeklyFrequency: number; availableDays: Weekday[]; label: string };
 
 export type CoachAction = CoachActionBase & { route?: RouteRef };
 
@@ -135,6 +165,13 @@ export interface CoachSignal {
    * that occasion only.
    */
   occasion?: string;
+  /**
+   * Not now keeps the card away until what it is about changes (Maintenance 27, item 45): its
+   * source names the newest report it reads, so a new report brings it back, and nothing else does.
+   */
+  untilNew?: boolean;
+  /** A line under the card that is always shown, never cut with the Why lines. */
+  footnote?: string;
 }
 
 /** Declined offers, kept in the meta store: key `source|exerciseId` (or `*`). */
@@ -153,6 +190,27 @@ export function emptyDeclines(): CoachDeclines {
 
 export function declineKey(signal: Pick<CoachSignal, 'source' | 'exerciseId'>): string {
   return `${signal.source}|${signal.exerciseId ?? '*'}`;
+}
+
+/**
+ * Two records of declined offers as one (the re-check of item 47): every offer either holds, the
+ * higher count and the later time where both hold one.
+ */
+export function mergeDeclines(saved: CoachDeclines, shown: CoachDeclines): CoachDeclines {
+  const declines = { ...saved.declines };
+  for (const [key, entry] of Object.entries(shown.declines)) {
+    const other = declines[key];
+    declines[key] = other
+      ? {
+          ...other,
+          ...entry,
+          count: Math.max(other.count, entry.count),
+          lastAt:
+            Date.parse(other.lastAt) >= Date.parse(entry.lastAt) ? other.lastAt : entry.lastAt,
+        }
+      : entry;
+  }
+  return { ...saved, ...shown, declines };
 }
 
 export function recordDecline(
@@ -182,9 +240,9 @@ export function setAsideKey(
 
 /** Whether Not now puts this card away for the workout rather than declining it for days. */
 export function setAsideForWorkout(
-  signal: Partial<Pick<CoachSignal, 'domain' | 'action'>>,
+  signal: Partial<Pick<CoachSignal, 'domain' | 'action' | 'untilNew'>>,
 ): boolean {
-  return signal.domain === 'safety' || signal.action === null;
+  return (signal.domain === 'safety' && !signal.untilNew) || signal.action === null;
 }
 
 export function isSetAside(accepted: readonly string[] | undefined, signal: CoachSignal): boolean {
@@ -228,8 +286,11 @@ export function isDeclined(
   signal: CoachSignal,
   now: string,
 ): boolean {
-  if (!declines || signal.domain === 'safety') return false;
+  if (!declines) return false;
   const entry = declines.declines[declineKey(signal)];
+  // Put away until what it is about changes: its source names that, so any decline of it holds.
+  if (signal.untilNew) return entry !== undefined;
+  if (signal.domain === 'safety') return false;
   if (!entry) return false;
   if (entry.count >= 2) return true;
   return Date.parse(now) - Date.parse(entry.lastAt) < DECLINE_SUPPRESS_DAYS * DAY_MS;
@@ -278,6 +339,8 @@ export interface CoachInput {
   focus?: MuscleId | null;
   /** The lifter's lasting swaps: an exercise swapped out is never offered. */
   swaps?: readonly LastingSwap[];
+  /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
+  resets?: LearnedResets | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -322,6 +385,8 @@ function pushesForMore(signal: CoachSignal): boolean {
   const trigger = signal.action?.kind === 'recalibrate' ? signal.action.trigger : null;
   // A longer rest pushes for nothing.
   if (trigger?.type === 'rest-adjust') return false;
+  // Moving the schedule to the real week pushes for nothing (Maintenance 27, item 46).
+  if (signal.source === SCHEDULE_SOURCE) return false;
   if (signal.domain === 'plateau' || signal.domain === 'coverage' || signal.source === 'capped') {
     return true;
   }
@@ -462,6 +527,81 @@ function jointsToProtect(input: CoachInput): Joint[] {
   return joints;
 }
 
+/** Where a pain pattern's card comes from; the source names the pair and its newest report. */
+export const PAIN_PATTERN_SOURCE = 'pain pattern';
+
+const shortDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+/** The always-shown line under a pain pattern's card: when to see someone, not swap. */
+export const PAIN_HELP_LINE =
+  'Swelling, numbness or tingling, pain at night, or pain that is severe or getting worse: a health professional can check it, rather than a swap.';
+
+/**
+ * The pain pattern card's footnote, shown at every experience level (a brief card shows only two
+ * reasons): what the card is not, then when to see someone.
+ */
+export const PAIN_PATTERN_FOOTNOTE = `A pattern in what you logged, not a diagnosis. ${PAIN_HELP_LINE}`;
+
+/**
+ * The pain pattern's card (Maintenance 27, item 45, docs/research/pain-patterns.md): it names the
+ * joint, the exercise, the counts and the dates, says it is a pattern in what was logged and not a
+ * diagnosis, and offers the four-week swap to the alternative. No condition, no cause, no promise.
+ */
+function painPatternSignal(
+  input: CoachInput,
+  remaining: readonly WorkoutEntry[],
+): { signal: CoachSignal; joint: Joint } | null {
+  const context = buildConflictContext(input.profile, input.location);
+  const found = painPatterns({
+    history: input.history,
+    now: input.now,
+    swaps: input.swaps,
+    fits: (exercise) => !isBlocked(checkExerciseFit(exercise, context)),
+    since: input.resets?.pain ?? null,
+  });
+  for (const pattern of found) {
+    const entry = remaining.find((candidate) => candidate.exerciseId === pattern.exerciseId);
+    if (!entry) continue;
+    const exercise = requireExercise(pattern.exerciseId);
+    const other = requireExercise(pattern.alternativeId);
+    const joint = jointLabel(pattern.joint);
+    const count = pattern.reportDates.length;
+    const share =
+      count === pattern.sessions
+        ? `in each of your last ${count} sessions`
+        : `in ${count} of your last ${pattern.sessions} sessions`;
+    const latest = pattern.reportDates.at(-1) as string;
+    const signal: CoachSignal = {
+      domain: 'safety',
+      headline: `${joint.charAt(0).toUpperCase()}${joint.slice(1)} pain with ${exercise.name}, not with ${other.name}`,
+      why: [
+        `You noted ${joint} pain ${share} with ${exercise.name}: ${pattern.reportDates.map(shortDay).join(', ')}.`,
+        `None in ${pattern.cleanDates.length} sessions with ${other.name}: ${pattern.cleanDates.map(shortDay).join(', ')}.`,
+        `After 4 weeks ${exercise.name} comes back at a lighter load.`,
+      ],
+      action: {
+        kind: 'lasting-swap',
+        entryId: entry.id,
+        exerciseId: other.id,
+        label: `Use ${other.name} for 4 weeks`,
+      },
+      confidence: 'medium',
+      severity: 2,
+      source: `${PAIN_PATTERN_SOURCE}|${pattern.exerciseId}|${pattern.joint}|${latest}`,
+      exerciseId: pattern.exerciseId,
+      concern: `${pattern.exerciseId}|${pattern.joint}`,
+      untilNew: true,
+      footnote: PAIN_PATTERN_FOOTNOTE,
+    };
+    // One put away holds no place: the next pattern, or the last workout's pain card for the
+    // joint, can show (the review of item 45).
+    if (putAway(input, signal)) continue;
+    return { joint: pattern.joint, signal };
+  }
+  return null;
+}
+
 function safetySignals(input: CoachInput): CoachSignal[] {
   // A finished workout has nothing left to swap: its warnings were for the sets still to come.
   if (input.status === 'completed') return [];
@@ -489,11 +629,20 @@ function safetySignals(input: CoachInput): CoachSignal[] {
       });
     }
   }
+  // A joint that keeps hurting with one exercise and not with its alternative (Maintenance 27,
+  // item 45): one card, for an exercise still to do today, the pattern with the most reports first.
+  const pattern = painPatternSignal(input, remaining);
+  if (pattern) signals.push(pattern.signal);
   // Pain reported where it hurt when the last workout was saved: only exercises that load that
   // joint are named, and never the workout that report came from.
   const report = lastPainReport(input.history);
   // Pain marked on the same joint today already has its own card, and its Not now covers both.
-  if (report && !input.constraints.painJoints.includes(report.joint)) {
+  // A pattern on the same joint says more, and stands in its place.
+  if (
+    report &&
+    !input.constraints.painJoints.includes(report.joint) &&
+    pattern?.joint !== report.joint
+  ) {
     const loading = remaining.filter((entry) => {
       const stress = requireExercise(entry.exerciseId).jointStress[report.joint];
       return (stress === 'moderate' || stress === 'high') && !started(input, entry);
@@ -1401,6 +1550,97 @@ function passedOver(route: CoachRoute): boolean {
   );
 }
 
+/**
+ * An accessory's variety offer (Maintenance 27, item 49): one alternative, named, as a four-week
+ * swap, or null for a main lift or where none fits. Never within four weeks of a change to the lift,
+ * nor on a lift with a pain pattern (its own card and its own swap come first), and the alternative
+ * fits today as every offer reads it: the place, the lifter's limits, what they avoid today and the
+ * joints protected today (the review of item 49).
+ */
+function varietyOffer(
+  input: CoachInput,
+  exercise: CatalogExercise,
+  entry: WorkoutEntry,
+  route?: RouteRef,
+): CoachAction | null {
+  if (!isAccessory(exercise)) return null;
+  if (changedRecently(input.history, exercise.id, input.swaps ?? [], input.now)) return null;
+  const painful = painPatterns({
+    history: input.history,
+    now: input.now,
+    since: input.resets?.pain ?? null,
+  }).some((pattern) => pattern.exerciseId === exercise.id);
+  if (painful) return null;
+  const other = varietyFor({
+    exercise,
+    history: input.history,
+    now: input.now,
+    context: sessionConflictContext(input.profile, input.location, {
+      excludeExerciseIds: input.constraints.avoidExerciseIds,
+      painJoints: jointsToProtect(input),
+    }),
+    swaps: input.swaps,
+    today: allEntries(input.workout.blocks).map((one) => one.exerciseId),
+  });
+  if (!other) return null;
+  return {
+    kind: 'lasting-swap',
+    entryId: entry.id,
+    exerciseId: other.id,
+    label: `Use ${other.name} for 4 weeks`,
+    ...(route ? { route } : {}),
+  };
+}
+
+/** Where a flat accessory's offer comes from. */
+export const VARIETY_SOURCE = 'variety: flat';
+
+/**
+ * An accessory gone flat (Maintenance 27, item 49): in the plan twelve weeks or more and no higher
+ * than eight weeks before, with no stall diagnosed or stall route open on it, not changed in the
+ * last four weeks, and no pain pattern on it (its own card comes first). One alternative, for four
+ * weeks; one put away leaves the place to the next accessory gone flat (the review).
+ */
+function varietySignals(input: CoachInput, stalled: ReadonlySet<string>): CoachSignal[] {
+  if (input.status === 'completed') return [];
+  const signals: CoachSignal[] = [];
+  // A lift with a pain pattern has its own card and its own swap: no variety beside it.
+  const painful = new Set(
+    painPatterns({ history: input.history, now: input.now, since: input.resets?.pain ?? null }).map(
+      (pattern) => pattern.exerciseId,
+    ),
+  );
+  for (const entry of remainingEntries(input)) {
+    const exercise = requireExercise(entry.exerciseId);
+    if (!isAccessory(exercise) || started(input, entry) || stalled.has(exercise.id)) continue;
+    // A route still open waits for its own next step, whatever today's diagnosis reads.
+    if (input.routes?.routes[exercise.id]) continue;
+    if (painful.has(exercise.id)) continue;
+    if (changedRecently(input.history, exercise.id, input.swaps ?? [], input.now)) continue;
+    const flat = goneFlat(input.history, exercise.id, input.now);
+    if (!flat) continue;
+    const action = varietyOffer(input, exercise, entry);
+    if (!action || action.kind !== 'lasting-swap') continue;
+    const units = input.profile.units;
+    const signal: CoachSignal = {
+      domain: 'plateau',
+      headline: `${exercise.name}: no higher in eight weeks`,
+      why: [
+        `Your estimated max on it is about ${Math.round(flat.now)} ${units}, against ${Math.round(flat.before)} ${units} eight weeks ago.`,
+        `${requireExercise(action.exerciseId).name} works the same muscle at least as well. A change offered now and then, not on a timer, neither costs nor adds size (Kassiano et al. 2022), and four weeks gives it time to settle.`,
+      ],
+      action,
+      confidence: 'low',
+      severity: 1,
+      source: VARIETY_SOURCE,
+      exerciseId: exercise.id,
+    };
+    signals.push(signal);
+    if (!putAway(input, signal)) break;
+  }
+  return signals;
+}
+
 function routeAction(
   input: CoachInput,
   entry: WorkoutEntry | undefined,
@@ -1420,16 +1660,18 @@ function routeAction(
       explain: `Step ${route.step + 1} is in place since ${new Date(applied.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}; the next ${policy.exposuresPerRouteStep} exposures decide whether it moved the max.`,
     };
   }
+  // An accessory's change is one alternative, named, for four weeks (Maintenance 27, item 49).
+  const variety = entry && usable ? varietyOffer(input, exercise, entry, ref) : null;
   if (route.exhausted) {
     return {
       action:
         entry && usable
-          ? {
+          ? (variety ?? {
               kind: 'alternatives',
               entryId: entry.id,
               label: 'Pick a different exercise',
               route: ref,
-            }
+            })
           : null,
       explain: passedOver(route)
         ? 'The steps taken did not move the max, and the others were passed over where the weights could not give them: change the exercise for this pattern for a block.'
@@ -1478,10 +1720,16 @@ function routeAction(
       return {
         action:
           entry && usable
-            ? { kind: 'alternatives', entryId: entry.id, label: 'Swap for a variation', route: ref }
+            ? (variety ?? {
+                kind: 'alternatives',
+                entryId: entry.id,
+                label: 'Swap for a variation',
+                route: ref,
+              })
             : null,
-        explain:
-          'Step 2: a variation of the same pattern moves the weak point without losing the lift.',
+        explain: variety
+          ? 'Step 2: another exercise for the same muscle, at least as good for it, for four weeks; the plan looks again after.'
+          : 'Step 2: a variation of the same pattern moves the weak point without losing the lift.',
       };
     case 'deload': {
       const current = first?.targetWeight ?? null;
@@ -1658,6 +1906,178 @@ function styleSignals(input: CoachInput): CoachSignal[] {
   return signals;
 }
 
+/**
+ * While a lift is pushed (Maintenance 27, item 44), the other work for its muscles holds: no offer
+ * adds a set, an exercise or a drop set to a lift that trains one of them, the pushed lift
+ * included, whose sets the push sets.
+ */
+export function addsToPushedMuscles(input: CoachInput, signal: CoachSignal): boolean {
+  const active = activePush(input.profile);
+  const trigger = signal.action?.kind === 'recalibrate' ? signal.action.trigger : null;
+  if (!active || !trigger) return false;
+  const muscles = new Set<MuscleId>(active.exercise.primaryMuscles);
+  const trains = (exerciseId: string | undefined) =>
+    exerciseId !== undefined &&
+    (getExercise(exerciseId)?.primaryMuscles.some((muscle) => muscles.has(muscle)) ?? false);
+  const onEntry = (entryId: string) =>
+    allEntries(input.workout.blocks).find((entry) => entry.id === entryId)?.exerciseId;
+  if (trigger.type === 'add-exercise') {
+    return muscles.has(trigger.muscle) || trains(trigger.exerciseId);
+  }
+  if (trigger.type === 'sets' && trigger.workingDelta > 0) return trains(onEntry(trigger.entryId));
+  if (trigger.type === 'rep-range' && (trigger.workingDelta ?? 0) > 0) {
+    return trains(onEntry(trigger.entryId));
+  }
+  if (trigger.type === 'drop-set' && trigger.on) return trains(onEntry(trigger.entryId));
+  return false;
+}
+
+/** Where a push's offers come from; a new push on the same lift is asked afresh. */
+/**
+ * Where a push's own offers come from: to end it after falling short (each run of it its own,
+ * named by its latest session), to end it at a flat pace, and each twelve-week review. Each has its
+ * own Not now (the review of item 44).
+ */
+export function pushSource(
+  kind: 'short' | 'flat' | 'review',
+  since: string,
+  detail: string | number = 0,
+): string {
+  return kind === 'review'
+    ? `push: review|${since}|${detail}`
+    : `push: stop|${since}|${kind}|${detail}`;
+}
+
+const PERCENT = (share: number) => {
+  const value = Math.round(share * 1000) / 10;
+  return `${value > 0 ? '+' : ''}${value}%`;
+};
+
+/**
+ * The lift to push's own offers (Maintenance 27, item 44, docs/research/push-lift.md): to end it
+ * when its pace has gone flat after six weeks, or when it fell well short two sessions running,
+ * the one marker of overreaching the evidence trusts (Grandou et al. 2020); and a review every
+ * twelve weeks, the length almost all the evidence covers. Each shows on a day the lift is in.
+ */
+function pushSignals(input: CoachInput): CoachSignal[] {
+  const active = activePush(input.profile);
+  if (!active || input.status === 'completed') return [];
+  const { push, exercise } = active;
+  const weeks = (Date.parse(input.now) - Date.parse(push.since)) / (7 * DAY_MS);
+  const state = pushPace({
+    readings: paceReadings(input.history, exercise.id, push.since),
+    since: push.since,
+    now: input.now,
+    target: targetIn(push, input.profile.units),
+  });
+  const band =
+    state.kind === 'pace'
+      ? `about ${PERCENT(state.weekly)} a week (likely ${PERCENT(state.low)} to ${PERCENT(state.high)})`
+      : null;
+  const signals: CoachSignal[] = [];
+  // Only sessions since the push began say anything of it.
+  const falling = shortTwiceRunning(input.history, exercise.id, push.since);
+  const flat = weeks >= PUSH_PACE.STALL_WEEKS && state.kind === 'pace' && state.high <= 0;
+  const ending = 'Ending the push takes away its extra session; the lift keeps its own place.';
+  if (falling || flat) {
+    signals.push({
+      domain: falling ? 'recovery' : 'plateau',
+      headline: falling
+        ? `${exercise.name} fell short two sessions running`
+        : `${exercise.name} has stopped climbing`,
+      why: [
+        falling
+          ? 'Its first working set fell well short of its target in each of its last two sessions: a fall that lasts is the one sign of overreaching the evidence trusts (Grandou et al. 2020).'
+          : `After ${Math.floor(weeks)} weeks of the push, its pace is ${band ?? 'flat'}: no better than flat.`,
+        ending,
+      ],
+      action: { kind: 'end-push', label: 'End the push' },
+      confidence: 'medium',
+      severity: 2,
+      source: falling ? pushSource('short', push.since, falling) : pushSource('flat', push.since),
+      exerciseId: exercise.id,
+    });
+  }
+  const block = Math.floor(weeks / PUSH_PACE.REVIEW_WEEKS);
+  // From twelve weeks a pace shows once there are readings enough: without one, say which.
+  const unclear =
+    state.kind === 'none'
+      ? `No reading of it yet: the pace reads ${READING_RULE}.`
+      : state.kind === 'baseline' && state.sessionsToGo > 0
+        ? `Its pace needs ${state.sessionsToGo} more ${state.sessionsToGo === 1 ? 'reading' : 'readings'} of its first working set.`
+        : 'Its readings do not make a pace yet.';
+  if (block >= 1) {
+    signals.push({
+      domain: 'tips',
+      headline: `${block * PUSH_PACE.REVIEW_WEEKS} weeks of pushing ${exercise.name}`,
+      // Two lines, so what ending the push does is on the card at every experience level.
+      why: [
+        `${band ? `Its pace is ${band}.` : unclear} Almost all the evidence on pushing a lift covers ${PUSH_PACE.STALL_WEEKS} to ${PUSH_PACE.REVIEW_WEEKS} weeks.`,
+        'Keep it, change the target in Settings, or end it: ending takes away its extra session, and the lift keeps its own place.',
+      ],
+      action: { kind: 'end-push', label: 'End the push' },
+      confidence: 'medium',
+      severity: 1,
+      source: pushSource('review', push.since, block),
+      exerciseId: exercise.id,
+    });
+  }
+  return signals;
+}
+
+/** Where the card to move the schedule comes from. */
+export const SCHEDULE_SOURCE = 'schedule move';
+
+/**
+ * The real week against the schedule (Maintenance 27, item 46, docs/research/real-week.md): four
+ * complete weeks of training on one side of the schedule, or on other days, bring one card to move
+ * it. It shows the weeks, the schedule and the move; the split follows the new number on the tap.
+ */
+function scheduleSignals(input: CoachInput): CoachSignal[] {
+  if (input.status === 'completed') return [];
+  const fit = scheduleFit(input.history, input.profile, input.now);
+  if (!fit) return [];
+  const { schedule } = input.profile;
+  const { proposal } = fit;
+  const plural = (count: number) => `${count} ${count === 1 ? 'day' : 'days'}`;
+  // The split follows only where the move changes it (the review of item 46).
+  const moved = {
+    ...input.profile,
+    schedule: { ...schedule, weeklyFrequency: proposal.weeklyFrequency },
+  };
+  const ids = (list: readonly { id: string }[]) => list.map((template) => template.id).join();
+  const follows =
+    ids(splitFor(input.profile)) !== ids(splitFor(moved)) ? ', and the split follows' : '';
+  const fewest =
+    fit.measured !== null && fit.measured < proposal.weeklyFrequency
+      ? ` (the fewest the plan sets)`
+      : fit.measured !== null && fit.measured > proposal.weeklyFrequency
+        ? ` (the most the plan sets)`
+        : '';
+  return [
+    {
+      domain: 'coverage',
+      headline:
+        fit.real !== null && fit.measured !== null
+          ? `You train ${plural(fit.measured)} a week, not ${schedule.weeklyFrequency}`
+          : `You train on ${dayList(fit.regular)}`,
+      why: [
+        `Your last ${fit.weeks.length} weeks of training: ${fit.weeks.map((week) => dayList(week.days)).join('; ')}.`,
+        `Your schedule: ${plural(schedule.weeklyFrequency)} a week, on ${dayList(schedule.availableDays)}. Moved: ${plural(proposal.weeklyFrequency)}${fewest}, on ${dayList(proposal.availableDays)}${follows}; Settings, Schedule, changes it any time.`,
+      ],
+      action: {
+        kind: 'schedule',
+        weeklyFrequency: proposal.weeklyFrequency,
+        availableDays: proposal.availableDays,
+        label: 'Move the schedule',
+      },
+      confidence: 'medium',
+      severity: 1,
+      source: SCHEDULE_SOURCE,
+    },
+  ];
+}
+
 export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
   const policy = rawInput.policy ?? coachingPolicy(rawInput.profile.experience);
   // Stalls are read once: the plateau routes and the style offer both start from them.
@@ -1671,13 +2091,16 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
     ...saveSignals(input),
     ...recoverySignals(input),
     ...plateauSignals(input, policy),
+    ...varietySignals(input, new Set((input.stalls ?? []).map((stall) => stall.exerciseId))),
     ...styleSignals(input),
     ...strategySignals(input),
     ...progressionSignals(input),
     ...restSignals(input),
     ...coverageSignals(input),
+    ...scheduleSignals(input),
     ...tipSignals(input),
-  ];
+    ...pushSignals(input),
+  ].filter((signal) => !addsToPushedMuscles(input, signal));
   return inDeloadWeek(input) ? signals.filter((signal) => !pushesForMore(signal)) : signals;
 }
 

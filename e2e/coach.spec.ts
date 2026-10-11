@@ -167,6 +167,10 @@ test.describe('adaptive coach', () => {
     const card = page.getByTestId('coach-card');
     await expect(card).toHaveAttribute('data-domain', 'plateau');
     await card.getByTestId('coach-dismiss').click();
+    // Four weekly sessions on the default four days also bring the card to move the schedule
+    // (Maintenance 27, item 46), saying the real count: put it away too.
+    await expect(card.getByTestId('coach-headline')).toHaveText('You train 1 day a week, not 4');
+    await card.getByTestId('coach-dismiss').click();
     await expect(card).toHaveAttribute('data-domain', 'clear');
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();

@@ -737,3 +737,66 @@ workout screen), the max sheet, and bodyweight (held back from Settings' autosav
   reading, and the absolute checks at its own weight, and never makes a question. The question's "Change it" stands where the button pressed stood and takes the
   focus; in the set logger "Keep" answers only once its question has shown for 450 ms
   (`COOLDOWN_MS`). The max sheet refuses a recent set of more than thirty reps.
+
+## Round I learners and offers (Maintenance 27)
+
+Each is documented with its evidence in `docs/research/`; this lists where each lives.
+
+- **Reserve checks** (`src/engine/progression/reserveCheck.ts`, item 43,
+  `docs/research/reserve-check.md`). Opt-in (`profile.reserveCheck`), only under a style that takes
+  sets to failure. A check is the last working set of one machine or cable isolation lift with
+  reps plus reserve at most 13; weekly while learning (fewer than five readings), then every 28
+  days; none on a deload day, a low or sore check-in, a hard start, or the first session back after
+  21 days. A reading is `(total - stop) - judged`; the estimate is drawn toward the population's
+  0.95 rep and acts from four readings that agree (scatter at most 2), as a whole-rep correction
+  capped at 2, on machine and cable isolation sets whose reps plus reserve fall in its band, while
+  the checks are on; a check set reads the reserve it measured. The store's `readHistory` is the log
+  with that read in, each changed set keeping what was logged beside it (`loggedRir`, for "Why this
+  target"); the day's plan, every rebuild and the finished workout's next targets read it. The week
+  plan (`planWeek`) reads the log as logged: it names templates and muscles, never targets. One
+  check a session: one logged stays the day's check.
+- **Each lift's own curve** (`src/engine/progression/personalCurve.ts`, item 41,
+  `docs/research/personal-curves.md`). Learned from item 43's sets to failure only, two at
+  least six reps apart and fourteen days of each other, drawn toward Epley's constant 30. It acts
+  when sure (one spread at most 2.5) or clearly different (two spreads past 30, or below what a
+  20% last-set loss could make of 30): a threshold a 2,000-lifter simulation of the app's own code
+  set. It sets a return after a break and a new rep range's first target, within the reps it
+  spans in reps to failure: the rule's load, moved by the lift's own shape between the last set's
+  reps to failure and the target's (`curveLoad`), so the rule's own margin is the same for every
+  lifter.
+- **A lift to push** (`src/engine/planning/pushLift.ts`, `pushPace.ts`, item 44,
+  `docs/research/push-lift.md`). The generator's part is in `docs/workout-engine.md`. The pace:
+  each session's first working set since the push began (up to 12 reps, reserve at most 3) read as
+  `weight × (1 + (reps + reserve) / 30)`; a least-squares line through the logarithms, each rep range
+  at its own level, the reading furthest off set aside when over three spreads from the line fitted
+  without it; shown after six weeks and ten
+  readings once its 95% band is narrower than the pace or twelve weeks have passed; projected only
+  within twelve weeks. The coach offers to end the push after the first working set fell three reps
+  or more short in each of the last two sessions since the push began, or when the pace's band tops
+  out at zero after six weeks, each with its own Not now, and a review each twelve weeks
+  (`pushSignals`); while it runs, no offer adds work to a lift for its muscles
+  (`addsToPushedMuscles`).
+- **Pain patterns** (`src/engine/recovery/painPattern.ts`, item 45,
+  `docs/research/pain-patterns.md`). Each in-session pain report keeps its exercise
+  (`painReports`) through every later change that day. Over 42 days, since the exercise's last
+  break of three weeks or more: two or more reports on it seven calendar days or more apart, in at
+  least half its sessions, the latest included, and an alternative with two clean sessions (a report
+  on it before a set counts) and no more stress on the joint. A check-in's joints never count for an
+  exercise. One safety card (`painPatternSignal`) offers the four-week swap; its Not now holds until
+  a new report (`untilNew`) and leaves its place; its "not a diagnosis" and help lines always show
+  (`footnote`).
+- **The real week** (`src/engine/planning/scheduleFit.ts`, item 46, `docs/research/real-week.md`).
+  Four complete weeks with training, all on one side of the schedule or with a day trained in three
+  of them off it, bring one card (`scheduleSignals`) to move it (`moveSchedule`); the split follows
+  on the tap where the number of days changes it (`splitFor`).
+- **What the app has learned** (`src/engine/learned/`, item 47). One Settings section, each value
+  with what it is read from and a reset (`learned-resets` in meta): the habit (`overrideBias`
+  `since`), the curves (`liftCurve` `resetAt`), the reserve estimate (`reserveCheckStatus`
+  `resetAt`), pain patterns (`painPatterns` `since`), and declined offers (cleared). The pace of
+  workouts (agreed item 4) is shown as not learned yet.
+- **Variety for accessories** (`src/engine/strategy/variety.ts`, item 49,
+  `docs/research/accessory-variety.md`). A stalled accessory's variation step, and an exhausted
+  route, offer one named alternative as a four-week swap, fitting today's limits; an accessory flat
+  for eight weeks after twelve in the plan, since its last break, gets one offer (`varietySignals`),
+  none while its stall route is open, one put away leaving its place to the next. Never a main lift,
+  never within four weeks of a change, never on a lift with a pain pattern.

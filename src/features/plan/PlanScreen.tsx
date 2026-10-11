@@ -61,13 +61,14 @@ export function PlanScreen() {
   const recovery = useMemo(() => recoveryBalance(state.history, nowIso), [state.history, nowIso]);
   const deloadAdvice = useMemo(() => {
     if (!profile) return null;
+    // Fatigue reads logged reserve as the rules do (Maintenance 27, item 43).
     const fatigue = interpretFatigue(
-      state.history,
+      state.readHistory,
       nowIso,
       state.session?.constraints.readiness ?? null,
     );
-    return recommendDeload(state.history, fatigue, profile, nowIso);
-  }, [profile, state.history, state.session, nowIso]);
+    return recommendDeload(state.readHistory, fatigue, profile, nowIso);
+  }, [profile, state.readHistory, state.session, nowIso]);
   const [savedName, setSavedName] = useState('');
   // "#/plan/places" brings the places card into view: Settings links to it.
   const section = useHashSection();

@@ -34,7 +34,7 @@ Strength is built by heavy loads on the lifts done first in a session [1][7]. Mu
 
 ### Hypertrophy focus
 
-More weekly sets meant more growth in a graded dose-response: each added weekly set was associated with a further 0.37% gain [4]. Growth was similar across loads when sets were taken to failure [2][3], so the sets can sit at moderate loads. Training a muscle twice a week beat once a week with volume matched [5].
+More weekly sets meant more growth in a graded dose-response: each added weekly set was associated with a further 0.37% gain [4]. Growth was similar across loads when sets were taken to failure [2][3], so the sets can sit at moderate loads. With weekly sets matched, a muscle grew about the same trained once or several times a week [5], so the sessions can follow the lifter's week. (Corrected in Maintenance 27: an earlier meta-analysis of 10 studies, Schoenfeld, Ogborn and Krieger 2016, PMID 27102172, had found twice a week better than once; its 2019 update of 25 studies, and the 2026 ACSM position stand, found no meaningful difference.)
 
 ### Strength focus
 
@@ -106,7 +106,7 @@ The profile syncs between devices, and a copy of the app from before this round 
 2. Schoenfeld BJ, Grgic J, Ogborn D, Krieger JW. Strength and Hypertrophy Adaptations Between Low- vs. High-Load Resistance Training: A Systematic Review and Meta-analysis. J Strength Cond Res. 2017;31(12):3508-3523. doi:10.1519/JSC.0000000000002200. PMID 28834797.
 3. Lopez P, Radaelli R, Taaffe DR, et al. Resistance Training Load Effects on Muscle Hypertrophy and Strength Gain: Systematic Review and Network Meta-analysis. Med Sci Sports Exerc. 2021;53(6):1206-1216. doi:10.1249/MSS.0000000000002585. PMID 33433148.
 4. Schoenfeld BJ, Ogborn D, Krieger JW. Dose-response relationship between weekly resistance training volume and increases in muscle mass: A systematic review and meta-analysis. J Sports Sci. 2017;35(11):1073-1082. doi:10.1080/02640414.2016.1210197. PMID 27433992.
-5. Schoenfeld BJ, Ogborn D, Krieger JW. Effects of Resistance Training Frequency on Measures of Muscle Hypertrophy: A Systematic Review and Meta-Analysis. Sports Med. 2016;46(11):1689-1697. doi:10.1007/s40279-016-0543-8. PMID 27102172.
+5. Schoenfeld BJ, Grgic J, Krieger J. How many times per week should a muscle be trained to maximize muscle hypertrophy? A systematic review and meta-analysis of studies examining the effects of resistance training frequency. J Sports Sci. 2019;37(11):1286-1295. PMID 30558493. (Replaces Schoenfeld, Ogborn and Krieger 2016, PMID 27102172, in Maintenance 27.)
 6. Grgic J, Schoenfeld BJ, Davies TB, Lazinica B, Krieger JW, Pedisic Z. Effect of Resistance Training Frequency on Gains in Muscular Strength: A Systematic Review and Meta-Analysis. Sports Med. 2018;48(5):1207-1220. doi:10.1007/s40279-018-0872-x. PMID 29470825.
 7. Nunes JP, Grgic J, Cunha PM, et al. What influence does resistance exercise order have on muscular strength gains and muscle hypertrophy? A systematic review and meta-analysis. Eur J Sport Sci. 2021;21(2):149-157. doi:10.1080/17461391.2020.1733672. PMID 32077380.
 8. Grgic J, Schoenfeld BJ, Skrepnik M, Davies TB, Mikulic P. Effects of Rest Interval Duration in Resistance Training on Measures of Muscular Strength: A Systematic Review. Sports Med. 2018;48(1):137-151. doi:10.1007/s40279-017-0788-x. PMID 28933024.

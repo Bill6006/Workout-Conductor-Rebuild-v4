@@ -44,6 +44,7 @@ import {
   MIN_REST_SECONDS,
   ROLE_RANK,
   buildSets,
+  prescribe,
   prescribeFor,
   rampSetsFor,
   restCategory,
@@ -52,6 +53,20 @@ import {
   type RampContext,
 } from '../progression/roles';
 import { allowsFailure, isAutoStyle, resolveStyle } from '../planning/styleAdvice';
+import {
+  PUSH_LIFT,
+  daysToNextSession,
+  pushCap,
+  pushDay,
+  pushLine,
+  pushRir,
+  pushTargetText,
+  sessionDaysAhead,
+  type PlannedWork,
+  type PushDay,
+  type WorkAhead,
+} from '../planning/pushLift';
+import { addLocalDays } from '../../core/time/localDate';
 import { styleInfo } from '../planning/styles';
 import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
@@ -77,10 +92,12 @@ import {
 import {
   allEntries,
   isStopped,
+  pushMarkOf,
   roundsOf,
   roundsRun,
   workingSets,
   type DurationChoice,
+  type PushMark,
   type GeneratedWorkout,
   type MusclePriority,
   type SetPrescription,
@@ -89,6 +106,7 @@ import {
   type WorkoutEntry,
 } from '../workout/types';
 import type { LastingSwap } from '../planning/lastingSwaps';
+import type { LearnedResets } from '../learned/resets';
 
 /**
  * The pure, deterministic workout-generation engine.
@@ -266,6 +284,12 @@ export interface GenerationConstraints {
   sessionLoading?: SessionLoading;
   /** The lifter's lasting swaps: where one fits, it is picked in place of the one swapped out. */
   swaps?: readonly LastingSwap[];
+  /**
+   * Today planned without the week's extra exposure of a lift to push (Maintenance 27, item 44):
+   * the generator's own probe, to see what the next session would be and where the lift's muscles
+   * stand before the extra goes in.
+   */
+  pushProbe?: boolean;
 }
 
 export interface GenerationInput {
@@ -277,6 +301,8 @@ export interface GenerationInput {
   constraints?: GenerationConstraints;
   /** Maxes the lifter entered by hand, for lifts without their own history. */
   maxes?: StrengthMaxes | null;
+  /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
+  resets?: LearnedResets | null;
 }
 
 interface Slot {
@@ -381,6 +407,24 @@ const FULL_BODY: Template = {
 
 export const TEMPLATES: readonly Template[] = [PUSH_ARMS, PULL_ARMS, LOWER, UPPER, FULL_BODY];
 
+/**
+ * The templates the plan rotates (the split), by the sessions a week (Maintenance 27, item 46, and
+ * its review). At equal weekly sets the split itself hardly matters (Schoenfeld et al. 2019, PMID
+ * 30558493; Ramos-Campo et al. 2024, PMID 38595233). From four days, push, pull, lower and upper
+ * (full body too for a strength goal); at three or fewer, and for a new lifter (Foundation), full
+ * body, upper and lower rotate as before item 46: full body alone at one or two days left calves,
+ * abs, side delts and upper chest with no direct sets at all.
+ */
+export function splitFor(profile: UserProfile): readonly Template[] {
+  const style = resolveStyle(profile);
+  const strengthGoal = profile.goals.primary === 'strength' || style === 'strength-focus';
+  return profile.schedule.weeklyFrequency <= 3 || style === 'foundation'
+    ? [FULL_BODY, UPPER, LOWER]
+    : strengthGoal
+      ? [FULL_BODY, LOWER, UPPER, PUSH_ARMS, PULL_ARMS]
+      : [PUSH_ARMS, PULL_ARMS, LOWER, UPPER];
+}
+
 function chooseTemplate(
   profile: UserProfile,
   priorities: MusclePriority[],
@@ -391,14 +435,8 @@ function chooseTemplate(
   const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
   const style = resolveStyle(profile);
   const strengthGoal = profile.goals.primary === 'strength' || style === 'strength-focus';
-  // A new lifter gains most from training each muscle about three times a week (Rhea et al.,
-  // 2003), which full-body and upper/lower sessions give and a four-way split does not.
-  const pool =
-    profile.schedule.weeklyFrequency <= 3 || style === 'foundation'
-      ? [FULL_BODY, UPPER, LOWER]
-      : strengthGoal
-        ? [FULL_BODY, LOWER, UPPER, PUSH_ARMS, PULL_ARMS]
-        : [PUSH_ARMS, PULL_ARMS, LOWER, UPPER];
+  // The split by the sessions a week (item 46).
+  const pool = splitFor(profile);
   const recent = exposure.recentTemplates.slice(0, 2);
   let best = pool[0] as Template;
   let bestScore = -Infinity;
@@ -863,6 +901,179 @@ function adjustPrescription(
   };
 }
 
+/** The template a day would get from this history (the choice `generateWorkout` makes). */
+function templateFor(
+  profile: UserProfile,
+  history: readonly WorkoutRecord[],
+  now: string,
+  focus: MuscleId | null,
+): Template {
+  const volume = computeWeeklyVolume(history, now);
+  const exposure = computeExposure(history, now);
+  const priorities = computeMusclePriorities(profile, volume, exposure);
+  return chooseTemplate(profile, priorities, exposure, muscleLoads(history, profile, now), focus);
+}
+
+/**
+ * The extra's own prescription before the day's settings: the style's strength range, an
+ * undulating plan's heavy day (Maintenance 27, item 44).
+ */
+export function extraBase(exercise: CatalogExercise, profile: UserProfile): Prescription {
+  const style = resolveStyle(profile);
+  return prescribe(exercise, 'primary-strength', profile, {
+    style,
+    ...(style === 'undulating' ? { zone: 'heavy' as const } : {}),
+  });
+}
+
+/**
+ * The lift to push's prescription for the day (Maintenance 27, item 44), one rule for a fresh plan
+ * and for a kept lift a change of the day's settings reaches (the re-check): the extra at the
+ * push's sets, an easier day taking one off and a harder one adding none, never under two; the
+ * lift in its own place at the push's sets for it, the day's change on them and never above them;
+ * either never to failure.
+ */
+export function pushedPrescription(
+  push: Pick<PushDay, 'extraSets' | 'naturalSets'>,
+  mark: PushMark,
+  own: Prescription,
+  role: TrainingRole,
+  adjust: PrescriptionAdjustment | undefined,
+  minRir: number,
+): Prescription {
+  if (mark === 'extra') {
+    const adjusted = adjustPrescription(own, role, adjust, minRir);
+    const sets = push.extraSets ?? own.sets;
+    return {
+      ...adjusted,
+      sets: clamp(sets + Math.min(0, adjust?.sets ?? 0), 2, sets),
+      rir: pushRir(adjusted.rir),
+    };
+  }
+  const base = { ...own, sets: Math.min(own.sets, push.naturalSets) };
+  const day = adjustPrescription(base, role, adjust, minRir);
+  return { ...day, sets: Math.min(day.sets, Math.max(base.sets, 2)), rir: pushRir(day.rir) };
+}
+
+/** Whether an exercise trains one of a lift's primary muscles as one of its own. */
+const sharesPrimary = (exercise: CatalogExercise, lift: CatalogExercise) =>
+  exercise.primaryMuscles.some((muscle) => lift.primaryMuscles.includes(muscle));
+
+/** Under a style that keeps the lift off its heavy range, the extra is not called heavy. */
+const heavyExtra = (profile: UserProfile) =>
+  !['high-rep', 'foundation'].includes(resolveStyle(profile));
+
+/**
+ * A plan as if done as planned, for looking ahead: its working sets, and the lift to push's extra
+ * exposure with the sets it would have, if any (Maintenance 27, item 44).
+ */
+function plannedRecord(
+  workout: Pick<GeneratedWorkout, 'locationId' | 'templateId'> & {
+    blocks: readonly WorkoutBlock[];
+  },
+  now: string,
+  extra: { exerciseId: string; sets: number } | null,
+): WorkoutRecord {
+  const done = (count: number) =>
+    Array.from({ length: count }, () => ({
+      kind: 'working' as const,
+      reps: 1,
+      weight: null,
+      rir: null,
+      completed: true,
+    }));
+  return {
+    id: `planned-${now}`,
+    startedAt: now,
+    completedAt: now,
+    locationId: workout.locationId,
+    templateId: workout.templateId,
+    endedEarly: false,
+    rating: null,
+    skippedExerciseIds: [],
+    painJoints: [],
+    readiness: null,
+    prs: [],
+    entries: [
+      ...(extra
+        ? [{ exerciseId: extra.exerciseId, push: 'extra' as const, sets: done(extra.sets) }]
+        : []),
+      ...allEntries(workout.blocks).map((entry) => ({
+        exerciseId: entry.exerciseId,
+        ...(pushMarkOf(entry) ? { push: pushMarkOf(entry) } : {}),
+        sets: done(entry.sets.filter((set) => set.kind === 'working').length),
+      })),
+    ],
+  };
+}
+
+/** The id the probe gives the extra exposure it weighs: never an entry's. */
+const PROBE_EXTRA_ID = 'push-extra';
+
+/** Entries as the push's cap counts them: an isolation lift's sets may come off unless kept. */
+function plannedWork(entries: readonly WorkoutEntry[], kept: ReadonlySet<string>): PlannedWork[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    exerciseId: entry.exerciseId,
+    workingSets: entry.sets.filter((set) => set.kind === 'working').length,
+    dropSets: entry.sets.filter((set) => set.kind === 'drop').length,
+    trimmable:
+      !kept.has(entry.id) &&
+      !entry.locked &&
+      !entry.pinned &&
+      !isStopped(entry) &&
+      restCategory(entry.role) === 'isolation',
+  }));
+}
+
+/**
+ * The sessions the schedule has in the six days after today, as the plan would build them, each
+ * done as planned before the next and none with an extra of its own (the review of item 44): what
+ * the push's cap reads of the days after the extra.
+ */
+function sessionsAhead(input: GenerationInput, history: readonly WorkoutRecord[]): WorkAhead[] {
+  const out: WorkAhead[] = [];
+  let past: WorkoutRecord[] = [...history];
+  const swaps = input.constraints?.swaps;
+  const focus = input.constraints?.focusMuscle;
+  for (const day of sessionDaysAhead(input.profile, input.now)) {
+    // Calendar days on the device, and the coach focus every plan gets (the re-check of item 44).
+    const at = addLocalDays(input.now, day);
+    const workout = generateWorkout({
+      profile: input.profile,
+      location: input.location,
+      history: past,
+      now: at,
+      duration: 'default',
+      maxes: input.maxes ?? null,
+      resets: input.resets ?? null,
+      constraints: {
+        pushProbe: true,
+        ...(swaps ? { swaps } : {}),
+        ...(focus ? { focusMuscle: focus } : {}),
+      },
+    });
+    out.push({
+      day,
+      work: allEntries(workout.blocks).map((entry) => ({
+        exerciseId: entry.exerciseId,
+        workingSets: entry.sets.filter((set) => set.kind === 'working').length,
+        dropSets: entry.sets.filter((set) => set.kind === 'drop').length,
+      })),
+    });
+    past = [...past, plannedRecord(workout, at, null)];
+  }
+  return out;
+}
+
+/** A plan with one more line in "Why this workout", after the main lift's. */
+function withReason(workout: GeneratedWorkout, line: string): GeneratedWorkout {
+  const reasons = [...workout.explanation.reasons];
+  const after = reasons.map((reason) => isMainLiftLine(reason)).lastIndexOf(true);
+  reasons.splice(after >= 0 ? after + 1 : Math.min(3, reasons.length), 0, line);
+  return { ...workout, explanation: { ...workout.explanation, reasons } };
+}
+
 export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const { profile, location, history, now, duration } = input;
   const constraints = input.constraints ?? {};
@@ -882,6 +1093,67 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       : undefined) ?? chooseTemplate(profile, priorities, exposure, loads, focus);
   const deload = constraints.deload ?? null;
   const adjust = withDeload(constraints.adjust, deload);
+  // A lift to push (Maintenance 27, item 44): it takes the place the plan has for it, or the week's
+  // extra exposure when one is due, and leads. A deload week pauses it.
+  const push = pushDay({ profile, history, now, deload: deload !== null });
+  const pushPlace = (slots: readonly Slot[]) =>
+    push !== null && slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern);
+  // The extra exposure goes on a day with no place for the lift (docs/research/push-lift.md). It
+  // waits when the next session comes within two days and has a place for the lift, which trains
+  // there 48 hours after: the extra the day before would crowd it. It waits too when it would take
+  // one of the lift's muscles further over its weekly cap. Today is planned without it first, to
+  // see both.
+  // The day's extra already in today's workout, kept through a rebuild, swapped for another
+  // exercise, begun, or stopped and stood in for: the rebuild keeps it and weighs no second one
+  // (the review and the re-check of item 44).
+  const extraKept = (constraints.keep ?? []).some((item) => item.entry.push === 'extra');
+  // Swapped out for weeks where the swap-in fits here: out of the whole plan, every slot.
+  const swappedOut = swappedOutIds(constraints.swaps ?? [], context);
+  // The sessions after an extra's day, for its cap (the review of item 44).
+  let ahead: WorkAhead[] | null = null;
+  if (
+    push &&
+    push.extraSets !== null &&
+    constraints.pushProbe === undefined &&
+    !extraKept &&
+    !pushPlace(template.slots) &&
+    // Weighed only where the lift can go in today (the re-check of item 44).
+    !isBlocked(checkExerciseFit(push.exercise, context)) &&
+    !swappedOut.has(push.exercise.id)
+  ) {
+    const plain = generateWorkout({ ...input, constraints: { ...constraints, pushProbe: true } });
+    const waits = (why: string) =>
+      withReason(plain, `No extra ${push.exercise.name} today: ${why}.`);
+    const today = plannedRecord(plain, now, {
+      exerciseId: push.exercise.id,
+      sets: push.extraSets,
+    });
+    if (daysToNextSession(profile, now) < PUSH_LIFT.NEXT_SESSION_DAYS) {
+      const next = addLocalDays(now, 1);
+      if (pushPlace(templateFor(profile, [...history, today], next, focus).slots)) {
+        return waits('the next session has its own place for it');
+      }
+    }
+    ahead = sessionsAhead(input, [...history, today]);
+    const kept = new Set((constraints.keep ?? []).map((item) => item.entry.id));
+    const { over } = pushCap({
+      lift: push.exercise,
+      extraId: PROBE_EXTRA_ID,
+      extraSets: push.extraSets,
+      // Today as the extra's day plans it: no drop set for the lift's muscles (the re-check).
+      planned: plannedWork(allEntries(plain.blocks), kept).map((work) =>
+        sharesPrimary(exerciseOf(work.exerciseId), push.exercise) ? { ...work, dropSets: 0 } : work,
+      ),
+      history,
+      now,
+      ahead,
+    });
+    if (over.length > 0) {
+      const names = over.map((muscle) => muscleName(muscle).toLowerCase()).join(' and ');
+      const verb = over.length === 1 ? muscleVerb(over[0] as MuscleId, 'is', 'are') : 'are';
+      return waits(`${names} ${verb} at the weekly cap`);
+    }
+  }
   const defaultMinutes = profile.schedule.typicalDurationMinutes;
   const targetMinutes =
     constraints.targetMinutesOverride ?? resolveTargetMinutes(duration, defaultMinutes);
@@ -889,8 +1161,6 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
   const completedSets = constraints.completedSets ?? [];
   const compromises: string[] = [];
-  // Swapped out for weeks where the swap-in fits here: out of the whole plan, every slot.
-  const swappedOut = swappedOutIds(constraints.swaps ?? [], context);
   const picker: Picker = { context, preferredIds, exposure, loads, focus, excluded: swappedOut };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 
@@ -985,6 +1255,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       now,
       maxes,
       session: { precedingSets: preceding.sets },
+      resets: input.resets ?? null,
     });
     const floor = barWeightFor(exercise, profile.units);
     // What this place can load: the target lands on a weight that exists here, or holds at
@@ -1067,11 +1338,16 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     return true;
   };
 
-  /** A lasting swap of the lifter's puts the exercise swapped in wherever it fits here. */
+  // A lift to push with no room today gives its place up (Maintenance 27, item 44).
+  const givesWay = push && !push.natural ? [push.exercise.id] : [];
+  /**
+   * A lasting swap of the lifter's puts the exercise swapped in wherever it fits here, never the
+   * lift to push on a day it gives its place up (the re-check of item 44).
+   */
   const swappedIn = (pick: CatalogExercise): CatalogExercise => {
     const swap = swapOf.get(pick.id);
     const next = swap ? getExercise(swap.to) : undefined;
-    if (!swap || !next) return pick;
+    if (!swap || !next || givesWay.includes(next.id)) return pick;
     if (chosenExercises.some((chosen) => chosen.id === next.id)) return pick;
     if (isBlocked(checkExerciseFit(next, context))) return pick;
     if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
@@ -1085,6 +1361,76 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     !chosenExercises.some((chosen) => chosen.id === candidate.id) &&
     !blocksCandidate(checkWorkoutConflicts([...chosenExercises, candidate], context), candidate.id);
 
+  const keptAll = [...[...keptBySlot.values()].flat(), ...keptUnslotted];
+  // The lift swapped away today, from its own place or its extra, stays away for today's rebuilds
+  // (the review of item 44).
+  const pushSwappedAway = keptAll.some((entry) => entry.replacedFrom === push?.exercise.id);
+  /**
+   * Whether the lift to push can join today's plan: it fits here, no lasting swap took it, and it
+   * was not swapped away today.
+   */
+  const pushFits = (lift: CatalogExercise): boolean =>
+    !pushSwappedAway &&
+    !swappedOut.has(lift.id) &&
+    !isBlocked(checkExerciseFit(lift, context)) &&
+    fitsWith(lift);
+  // The place the plan has for the lift, unless a kept entry holds it. The lift leads once it is in
+  // (below); its slot keeps its place, so a stand-in where the lift cannot go here does not lead.
+  const pushSlot =
+    push && push.natural
+      ? template.slots.findIndex(
+          (slotSpec, index) =>
+            slotSpec.pattern === push.exercise.movementPattern && !keptBySlot.has(index),
+        )
+      : -1;
+  // The lift kept from before a rebuild: today has it already. One swapped away today keeps it out
+  // (`pushSwappedAway`): a swap keeps the lift it replaced, through every later swap.
+  const pushKept = keptAll.some(
+    (entry) => !isStopped(entry) && entry.exerciseId === push?.exercise.id,
+  );
+  // The week's extra exposure: on a day with no place for the lift, when one is due (Maintenance
+  // 27, item 44). Heavy and short: the style's strength range (an undulating plan's heavy day), two
+  // to three sets, never to failure; first, so nothing comes before it.
+  let extraId: string | null = null;
+  if (
+    push &&
+    push.extraSets !== null &&
+    constraints.pushProbe !== true &&
+    !pushKept &&
+    !extraKept &&
+    !template.slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern) &&
+    pushFits(push.exercise)
+  ) {
+    const lift = push.exercise;
+    const role: TrainingRole = 'primary-strength';
+    // The day may take a set off (easier), never add one: the push sets the extra's sets.
+    const prescription = pushedPrescription(
+      push,
+      'extra',
+      extraBase(lift, profile),
+      role,
+      adjust,
+      rirFloor(lift),
+    );
+    chosenExercises.push(lift);
+    const id = idFor(template.slots.length);
+    const built = targetedFor(lift, role, prescription);
+    entries.push({
+      id,
+      exerciseId: lift.id,
+      role,
+      sets: built.sets,
+      progression: built.progression,
+      restSeconds: prescription.restSeconds,
+      warmupSets: built.warmupSets,
+      dropSet: false,
+      chosenFor: [...lift.primaryMuscles],
+      locked: false,
+      pinned: false,
+      push: 'extra',
+    });
+    extraId = id;
+  }
   template.slots.forEach((slotSpec, index) => {
     const kept = keptBySlot.get(index);
     const owed = owedBySlot.get(index);
@@ -1103,7 +1449,15 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     const ownPicks = chosenExercises.map((chosen) =>
       mine.has(chosen.id) ? chosen : (ownOf.get(chosen.id) ?? chosen),
     );
-    const natural = pickForSlot(slotSpec, ownPicks, { ...picker, excluded: undefined });
+    // The lift to push takes its own place when it fits here (Maintenance 27, item 44).
+    const pushPick =
+      push && index === pushSlot && pushFits(push.exercise) ? push.exercise : undefined;
+    const slotPicker: Picker = {
+      ...picker,
+      excluded: new Set([...(picker.excluded ?? []), ...givesWay]),
+    };
+    const natural =
+      pushPick ?? pickForSlot(slotSpec, ownPicks, { ...picker, excluded: new Set(givesWay) });
     let pick = natural;
     if (natural && swappedOut.has(natural.id)) {
       const next = swappedIn(natural);
@@ -1112,11 +1466,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       pick =
         next !== natural
           ? next
-          : (pickForSlot(slotSpec, chosenExercises, picker) ??
+          : (pickForSlot(slotSpec, chosenExercises, slotPicker) ??
             (fitsWith(natural) ? natural : undefined));
     } else if (natural && !fitsWith(natural)) {
       // Already in, or clashing with a kept swap's exercise: the next best that fits the plan.
-      pick = pickForSlot(slotSpec, chosenExercises, picker);
+      pick = pickForSlot(slotSpec, chosenExercises, slotPicker);
     }
     if (!pick) {
       compromises.push(
@@ -1127,8 +1481,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     if (natural && pick !== natural) ownOf.set(pick.id, natural);
     chosenExercises.push(pick);
     const id = idFor(index);
-    const basePrescription = prescribeFor(pick, slotSpec.role, profile, history);
-    const adjusted = adjustPrescription(basePrescription, slotSpec.role, adjust, rirFloor(pick));
+    const ownPrescription = prescribeFor(pick, slotSpec.role, profile, history);
+    // The lift to push keeps to the push's sets for the week and never goes to failure.
+    const basePrescription =
+      pushPick && push
+        ? { ...ownPrescription, sets: Math.min(ownPrescription.sets, push.naturalSets) }
+        : ownPrescription;
+    const adjusted =
+      pushPick && push
+        ? pushedPrescription(
+            push,
+            'natural',
+            ownPrescription,
+            slotSpec.role,
+            adjust,
+            rirFloor(pick),
+          )
+        : adjustPrescription(basePrescription, slotSpec.role, adjust, rirFloor(pick));
     // A replacement carries only the working sets its slot still owes.
     const prescription =
       owed === undefined ? adjusted : { ...adjusted, sets: Math.min(adjusted.sets, owed) };
@@ -1155,14 +1524,91 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       pinned: false,
       slot: index,
       ...(natural && pick !== natural ? { standsFor: natural.id } : {}),
+      ...(pushPick ? { push: 'natural' as const } : {}),
     });
   });
   entries.push(...keptUnslotted);
 
+  // The lift to push leads (Maintenance 27, item 44), kept from before a rebuild too. The day's
+  // extra leads whatever it holds now: swapped for another exercise, or stopped and stood in for,
+  // its entries keep the first places in their order (the review and the re-check of item 44).
+  const extras = entries.filter((entry) => entry.push === 'extra');
+  const leading =
+    extras.length > 0
+      ? extras
+      : entries.filter((entry) => !isStopped(entry) && pushMarkOf(entry) !== undefined).slice(0, 1);
+  entries.splice(
+    0,
+    entries.length,
+    ...leading,
+    ...entries.filter((entry) => !leading.includes(entry)),
+  );
+  const pushEntry = leading.find((entry) => !isStopped(entry) && pushMarkOf(entry) !== undefined);
+  const workingCount = (entry: WorkoutEntry) =>
+    entry.sets.filter((set) => set.kind === 'working').length;
+  // The day's extra in the plan, new or kept: its cap and its drop-set rule hold through every
+  // rebuild (the re-check of item 44).
+  const dayExtra =
+    extraId ?? extras.find((entry) => !isStopped(entry))?.id ?? extras[0]?.id ?? null;
+
+  // On the extra exposure's day, the lift's muscles stay under their weekly cap: sets come off an
+  // isolation lift for them first, never more than the extra adds (Maintenance 27, item 44). A
+  // lift kept from before a rebuild keeps its sets.
+  const capTrims: { id: string; count: number }[] = [];
+  if (push && dayExtra !== null) {
+    // A rebuild keeping the day's extra weighed nothing before: it plans the days after now.
+    ahead ??= sessionsAhead(input, [
+      ...history,
+      plannedRecord(
+        {
+          locationId: location?.id ?? null,
+          templateId: template.id,
+          blocks: entries.map((entry) => straightBlock(entry, exerciseOf)),
+        },
+        now,
+        null,
+      ),
+    ]);
+    const { trims } = pushCap({
+      lift: push.exercise,
+      extraId: dayExtra,
+      extraSets:
+        extraId !== null
+          ? (push.extraSets ?? 0)
+          : extras.reduce((sum, entry) => sum + workingCount(entry), 0),
+      planned: plannedWork(entries, keptIds),
+      history,
+      now,
+      ahead,
+    });
+    for (const [id, count] of trims) {
+      const entry = entries.find((candidate) => candidate.id === id);
+      if (!entry || keptIds.has(id)) continue;
+      for (let taken = 0; taken < count; taken += 1) {
+        const last = entry.sets.filter((set) => set.kind === 'working').pop();
+        if (last) entry.sets = entry.sets.filter((set) => set !== last);
+      }
+      capTrims.push({ id, count });
+    }
+  }
+  // Asked to make it harder, the time fit takes back the sets harder added, never one of the lift
+  // to push's or the day's extra's: harder adds none to them (the re-check of item 44).
+  if ((adjust?.sets ?? 0) > 0) {
+    for (const entry of entries) {
+      if (isStopped(entry) || plannedSets.has(entry.id)) continue;
+      if (entry.push === 'extra' || pushMarkOf(entry) !== undefined) {
+        plannedSets.set(entry.id, workingCount(entry));
+      }
+    }
+  }
+
   // The main lift is the first one still to do: a lift stopped at another place is history,
-  // and the stand-in carrying its sets leads in its place.
+  // and the stand-in carrying its sets leads in its place. The week's extra exposure of a lift to
+  // push is not the day's main lift; it leads besides it.
   const anchor =
-    entries.find((entry) => entry.role === 'primary-strength' && !isStopped(entry)) ?? entries[0];
+    entries.find(
+      (entry) => entry.role === 'primary-strength' && !isStopped(entry) && entry.push !== 'extra',
+    ) ?? entries[0];
   const anchorId = anchor?.id;
 
   let blocks: WorkoutBlock[] = entries.map((entry) => straightBlock(entry, exerciseOf));
@@ -1194,7 +1640,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const estimate = (): TimeBreakdown => estimateWorkout(blocks, generalWarmup, exerciseOf, isDone);
 
   const untouchable = (entry: WorkoutEntry) =>
-    entry.id === anchorId || entry.pinned || entry.locked || keptIds.has(entry.id);
+    entry.id === anchorId ||
+    entry.id === pushEntry?.id ||
+    entry.pinned ||
+    entry.locked ||
+    keptIds.has(entry.id);
   // What a session too long for its length leaves out first (Maintenance 24,
   // docs/research/short-sessions.md): the main lifts stay, and an isolation exercise goes first,
   // by leaveOutRank against the main lifts still in the plan. Within a rank, and among the main
@@ -1383,7 +1833,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     ) {
       return false;
     }
-    const floor = entry.id === anchorId ? (hardCap ? 2 : 3) : hardCap ? 1 : 2;
+    // The lift to push keeps two sets at least, as its extra exposure has (item 44).
+    const floor =
+      entry.id === anchorId ? (hardCap ? 2 : 3) : entry.id === pushEntry?.id ? 2 : hardCap ? 1 : 2;
     const planned = hardCap ? 0 : (plannedSets.get(entry.id) ?? 0);
     return remainingWorking(entry).length > Math.max(floor, planned);
   };
@@ -1556,6 +2008,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
             restCategory(entry.role) === 'isolation' &&
             !keptIds.has(entry.id) &&
             exerciseOf(entry.exerciseId).dropSetSafe &&
+            // On the extra exposure's day the extra is its muscles' added volume: no drop set for
+            // them, which the cap could not count (the review of item 44).
+            !(
+              dayExtra !== null &&
+              push !== null &&
+              sharesPrimary(exerciseOf(entry.exerciseId), push.exercise)
+            ) &&
             // A set the weights here pushed to its effort at a light load takes no drop set.
             !entryPushedToEffort(entry) &&
             !blocks.some(
@@ -1609,10 +2068,17 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       (block.entries[0] as WorkoutEntry).chosenFor.some(
         (muscle) => loads[muscle] === 'behind' || muscle === focus,
       );
-    const [first, ...rest] = blocks;
+    // The lift to push and the day's main lift keep the top places (the review of item 44).
+    const holds = (block: WorkoutBlock | undefined, entry: WorkoutEntry | undefined) =>
+      block !== undefined &&
+      entry !== undefined &&
+      block.entries.some((one) => one.id === entry.id);
+    const lead = holds(blocks[0], pushEntry) && holds(blocks[1], anchor) ? 2 : 1;
+    const head = blocks.slice(0, lead);
+    const rest = blocks.slice(lead);
     const led = rest.filter(isBehind);
     if (led.length > 0 && led.length < rest.length) {
-      blocks = [first as WorkoutBlock, ...led, ...rest.filter((block) => !isBehind(block))];
+      blocks = [...head, ...led, ...rest.filter((block) => !isBehind(block))];
       for (const block of led) {
         for (const muscle of (block.entries[0] as WorkoutEntry).chosenFor) {
           if (
@@ -1633,7 +2099,42 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     `Priority muscles today: ${topPriorities.map((priority) => priority.reason).join('; ')}.`,
     `Built for ${location?.name ?? 'your place'} from the equipment saved there, every pick checked by the conflict engine.`,
   ];
-  if (anchorExercise && anchor) reasons.push(mainLiftLine(anchorExercise.name, anchor.role, true));
+  // What leads: the lift to push, else the day's extra swapped or stood in for, else the main lift
+  // (the re-check of item 44: a swapped extra led while the lines named the main lift first).
+  const leaderEntry = pushEntry ?? leading.find((entry) => !isStopped(entry)) ?? anchor;
+  const leader = leaderEntry ? exerciseOf(leaderEntry.exerciseId) : undefined;
+  if (push && pushEntry) {
+    reasons.push(
+      pushLine(
+        push.exercise.name,
+        pushTargetText(push.push, profile.units),
+        pushEntry.push === 'extra',
+        true,
+        // Under Light weights the extra is in the style's longer range, and Foundation keeps a new
+        // lifter off the heavy one: not heavy (the review and the re-check).
+        heavyExtra(profile),
+      ),
+    );
+  }
+  if (anchorExercise && anchor) {
+    reasons.push(mainLiftLine(anchorExercise.name, anchor.role, anchor === leaderEntry));
+  }
+  // The cap's sets off lifts the plan still has: one the time fit left out says nothing here.
+  const inPlan = new Map(allEntries(blocks).map((entry) => [entry.id, entry]));
+  const capLines = capTrims.flatMap(({ id, count }) => {
+    const entry = inPlan.get(id);
+    return entry
+      ? [`${count} ${count === 1 ? 'set' : 'sets'} off ${exerciseOf(entry.exerciseId).name}`]
+      : [];
+  });
+  if (capLines.length > 0 && push) {
+    reasons.push(
+      `With the extra ${push.exercise.name}, its muscles stay under their weekly cap: ${capLines.join(', ')}.`,
+    );
+  }
+  if (push && !pushEntry && !pushPlace(template.slots) && push.noExtra !== null) {
+    reasons.push(`No extra ${push.exercise.name} today: ${push.noExtra}.`);
+  }
   if (keep.length > 0)
     reasons.push(
       `Kept ${keep.length} ${keep.length === 1 ? 'exercise' : 'exercises'} in place: logged sets and pinned picks never move.`,
@@ -1690,7 +2191,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       : fitLog.size > 0 && duration !== 'default'
         ? `, fitted to ${targetMinutes} min`
         : '';
-  const summary = `${template.title}: ${count} exercises in about ${Math.round(time.totalMinutes)} min${anchorExercise ? `, ${anchorExercise.name} first` : ''}${fittedLabel}.`;
+  const summary = `${template.title}: ${count} exercises in about ${Math.round(time.totalMinutes)} min${leader ? `, ${leader.name} first` : ''}${fittedLabel}.`;
 
   return {
     id: `wk-${now.slice(0, 10)}-${template.id}-${duration}`,

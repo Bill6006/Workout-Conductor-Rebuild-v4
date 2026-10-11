@@ -74,6 +74,23 @@ That is what lets a backup written by a newer app version pass through an older 
   history judges the set against the reps it showed and counts it toward the load and range
   asked; an unreadable `asked` is dropped, never the set. The stored plan's progression note
   may carry `from` (the weight a target moved from, for the step rule), dropped when unreadable.
+- Maintenance 27 (round I) added only optional fields, each dropped when unreadable, never the
+  record around it, and extended no stored enum:
+  - `UserProfile.reserveCheck` (the yes to reserve checks, item 43); `UserProfile.pushLift`
+    (`exerciseId`, `target` in `units`, optional `by`, `since`; item 44); `schedule.since` (when
+    the sessions or days were last set, item 46).
+  - A logged set's `reserveCheck` (`total` reps to failure, optional `failedEarly`, `stopped`,
+    `style`; item 43), on the check set only.
+  - A logged exercise's `push` (`natural` | `extra`, the lift to push as the plan had it; item 44).
+  - A workout record's `painReports` (`exerciseId`, `joint`: each in-session pain report with the
+    exercise it was made on; item 45), a report this copy cannot read dropped alone. Every workout
+    saved from item 45 on has it, an empty list too, so a pain joint beyond it is a check-in's; a
+    record without it is older, and its pain joints are read as its reports.
+  - The stored plan's entry `push` and the session constraints' `painReports`, as above.
+  - Meta `learned-resets` (`reserve`, `curves`, `habit`, `pain`: when the lifter reset each learned
+    value; item 47). A reset deletes nothing logged: each learner reads only what is logged after
+    it. A field a newer copy wrote is kept, and a reset is made from the record as saved, so one a
+    sync brought is not written away.
 
 ## Save safety
 

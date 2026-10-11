@@ -128,3 +128,31 @@ describe('style labels', () => {
     expect(styleOptions(profile)).toHaveLength(8);
   });
 });
+
+describe('reserve checks in Programming (Maintenance 27, item 43)', () => {
+  it('are off until the lifter turns them on, and say what they ask', async () => {
+    const { user, draft } = setup();
+    const toggle = screen.getByRole('switch', { name: /Check how well I judge reps in reserve/ });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveTextContent('goes on to failure');
+    expect(toggle).toHaveTextContent('Leave it off with high blood pressure or a heart condition');
+    await user.click(toggle);
+    expect(draft().profile.reserveCheck).toBe(true);
+    await user.click(toggle);
+    expect(draft().profile.reserveCheck).toBe(false);
+  });
+
+  it('cannot be turned on under a style that takes nothing to failure, and says why', async () => {
+    for (const programStyle of ['foundation', 'lean-down'] as const) {
+      const { user, draft } = setup({ programStyle });
+      const toggle = screen.getByRole('switch', { name: /Check how well I judge reps in reserve/ });
+      expect(toggle).toHaveAttribute('aria-disabled', 'true');
+      expect(toggle).toHaveTextContent(
+        'Your style takes nothing to failure, so it takes no checks.',
+      );
+      await user.click(toggle);
+      expect(draft().profile.reserveCheck).toBeUndefined();
+      document.body.innerHTML = '';
+    }
+  });
+});

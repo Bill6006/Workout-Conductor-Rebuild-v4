@@ -94,6 +94,19 @@ function undershot(point: PerformancePoint): boolean {
   return target !== null && point.avgRir !== null && point.avgRir >= target + 1.5;
 }
 
+const tenths = (value: number) => Math.round(value * 10) / 10;
+
+/**
+ * What was logged, where the rules read a point's reserve through item 43's checks (the re-check):
+ * the read reserve is never quoted as if logged.
+ */
+function loggedNote(point: PerformancePoint): string {
+  const logged = point.loggedAvgRir;
+  return logged !== undefined && logged !== null && tenths(logged) !== tenths(point.avgRir ?? 0)
+    ? ` (${tenths(logged)} as logged, read through your reserve checks)`
+    : '';
+}
+
 function shortDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
@@ -156,7 +169,7 @@ function diagnose(
       lastDate: latest.date,
       why: [
         maxLine,
-        `Sets ended ${Math.round((latest.avgRir ?? 0) * 10) / 10} reps in reserve on average, well short of the prescribed effort, in ${under} of ${window.length} exposures.`,
+        `Sets ended ${tenths(latest.avgRir ?? 0)} reps in reserve on average${loggedNote(latest)}, well short of the prescribed effort, in ${under} of ${window.length} exposures.`,
       ],
     };
   }

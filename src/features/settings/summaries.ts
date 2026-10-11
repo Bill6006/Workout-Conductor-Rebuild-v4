@@ -1,6 +1,7 @@
 import { CLOUD_OFFLINE, type CloudStatus } from '../../core/state/appStore';
 import { formatDateTime } from '../../core/time/clock';
 import { styleChoice, type UserProfile } from '../../core/validation/profile';
+import { activePush, pushTargetText } from '../../engine/planning/pushLift';
 import { adviseStyle } from '../../engine/planning/styleAdvice';
 import { styleInfo } from '../../engine/planning/styles';
 import {
@@ -28,6 +29,16 @@ export function goalsSummary(profile: UserProfile): string {
       ? primary
       : `${primary}, then ${labelOf(SECONDARY_GOAL_OPTIONS, profile.goals.secondary).toLowerCase()}`;
   return profile.goals.bodyweight === 'lose' ? `${goals} · losing fat` : goals;
+}
+
+/** The lift to push, its target and its date (Maintenance 27, item 44), or none. */
+export function pushSummary(profile: UserProfile): string {
+  const active = activePush(profile);
+  if (!active) return 'None';
+  const by = active.push.by
+    ? ` by ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(active.push.by))}`
+    : '';
+  return `${active.exercise.name} to ${pushTargetText(active.push, profile.units)}${by}`;
 }
 
 /** "a", "a and b", "a, b and c". */

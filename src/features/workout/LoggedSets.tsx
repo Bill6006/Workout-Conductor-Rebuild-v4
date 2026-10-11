@@ -15,6 +15,8 @@ interface LoggedSetsProps {
   onEdit: (setIndex: number) => void;
   onUndo: () => void;
   compact?: boolean;
+  /** The set today's reserve check is on (Maintenance 27, item 43), if it is this lift's. */
+  checkSetIndex?: number | null;
 }
 
 type RowState = 'done' | 'skipped' | 'upcoming';
@@ -25,7 +27,11 @@ function restLabel(seconds: number): string {
 }
 
 /** What the remaining sets have in common, for the collapsed row. */
-function describeUpcoming(sets: readonly SetPrescription[], hold: boolean): string {
+function describeUpcoming(
+  sets: readonly SetPrescription[],
+  hold: boolean,
+  checkSetIndex: number | null = null,
+): string {
   const working = sets.filter((set) => set.kind === 'working');
   const ramps = sets.filter((set) => set.kind === 'warmup').length;
   const drops = sets.filter((set) => set.kind === 'drop').length;
@@ -40,6 +46,9 @@ function describeUpcoming(sets: readonly SetPrescription[], hold: boolean): stri
   }
   if (ramps > 0) parts.push(`${ramps} warm-up`);
   if (drops > 0) parts.push('1 drop');
+  if (checkSetIndex !== null && sets.some((set) => set.index === checkSetIndex)) {
+    parts.push('the last to failure');
+  }
   return parts.join(' · ');
 }
 
@@ -49,13 +58,18 @@ interface UpcomingGroup {
   count: number;
 }
 
-/** Sets still to come, with a run of identical ones folded into one row. */
-function groupUpcoming(sets: readonly SetPrescription[]): UpcomingGroup[] {
+/** Sets still to come, with a run of identical ones folded into one row; a check is its own. */
+function groupUpcoming(
+  sets: readonly SetPrescription[],
+  checkSetIndex: number | null = null,
+): UpcomingGroup[] {
   const groups: UpcomingGroup[] = [];
   for (const set of sets) {
     const open = groups[groups.length - 1];
     const same =
       open !== undefined &&
+      set.index !== checkSetIndex &&
+      open.last.index !== checkSetIndex &&
       open.last.kind === set.kind &&
       set.kind !== 'drop' &&
       open.last.targetReps[0] === set.targetReps[0] &&
@@ -98,6 +112,7 @@ export function LoggedSets({
   onEdit,
   onUndo,
   compact = false,
+  checkSetIndex = null,
 }: LoggedSetsProps) {
   const [expanded, setExpanded] = useState(false);
   const [rampsOpen, setRampsOpen] = useState(false);
@@ -155,6 +170,7 @@ export function LoggedSets({
               ✓
             </span>
             {formatLogged(done as CompletedSet, units)}
+            {done?.reserveCheck ? ` · ${done.reserveCheck.total} in all` : ''}
           </button>
           {undoneHere(set.index) ? (
             <button type="button" className={styles.undo} onClick={onUndo} data-testid="undo-set">
@@ -172,7 +188,7 @@ export function LoggedSets({
             aria-expanded={false}
             data-testid="sets-summary"
           >
-            ▸ {describeUpcoming(upcoming, holdById(entry.exerciseId))}
+            ▸ {describeUpcoming(upcoming, holdById(entry.exerciseId), checkSetIndex)}
           </button>
           {nextTarget ? (
             <span className={styles.setAside} data-testid="set-aside">
@@ -182,7 +198,7 @@ export function LoggedSets({
         </li>
       ) : null}
       {expanded
-        ? groupUpcoming(upcoming).map(({ first: set, last, count }) => (
+        ? groupUpcoming(upcoming, checkSetIndex).map(({ first: set, last, count }) => (
             <li
               key={set.index}
               className={styles.setRow}
@@ -195,11 +211,13 @@ export function LoggedSets({
                 {targetText(set.targetReps, holdById(entry.exerciseId))}
                 {holdById(entry.exerciseId)
                   ? ''
-                  : set.kind === 'working'
-                    ? ` @ RIR ${set.targetRir}`
-                    : set.kind === 'warmup'
-                      ? ` · easy, RIR ${set.targetRir}`
-                      : ' · last clean rep'}
+                  : set.index === checkSetIndex
+                    ? ` @ RIR ${set.targetRir}, then on to failure`
+                    : set.kind === 'working'
+                      ? ` @ RIR ${set.targetRir}`
+                      : set.kind === 'warmup'
+                        ? ` · easy, RIR ${set.targetRir}`
+                        : ' · last clean rep'}
               </span>
               <span className={styles.setAside} data-testid="set-aside">
                 {set.targetWeight !== null

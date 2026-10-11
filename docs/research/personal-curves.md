@@ -1,4 +1,4 @@
-# Each lift's own reps-to-weight curve (the owner's item 41): validated, not shipped
+# Each lift's own reps-to-weight curve (the owner's item 41)
 
 Approved on 2026-10-09 for Maintenance 26 (round H), with the owner's condition: "validate how the
 personal reps-to-load curve should be learned and bounded." The proposal said: every target uses
@@ -6,14 +6,132 @@ one formula for everyone; people differ; once a lift has sets in two rep ranges,
 own curve, so a new rep range, a return after a break, or a back-off set starts at a weight that
 suits them.
 
-**Status: not shipped.** It was built, reviewed twice and tested by simulation. From the sets the
-app logs, a lift's own curve cannot be learned well enough to beat the one curve everyone gets:
-where it changed a target, the change was more often wrong than right, and most of what it got
-right came from two corrections to the population's rule, not from the lifter's own curve. The
-code was removed before release; every target is worked out as it was in Maintenance 25. What
-would work instead is under "What could work instead" (Proposed, not Agreed).
+**Status: built in Maintenance 27, gated.** In Maintenance 26 it was built from the sets the app
+logs, found to move targets the wrong way more often than the right way, and withdrawn (the record
+below). On 2026-10-10 the owner asked for it after item 43, in these words: "build the complete
+feature now, but do not let its personalized reps-to-load model influence an exercise until the app
+has enough trustworthy calibration data from item 43 for that specific exercise. Research and
+validate the activation threshold rather than using an arbitrary number." It now learns only from
+item 43's sets taken to failure, and the threshold was found by simulation (the next section).
 
-## What the app does (unchanged)
+## Maintenance 27: learned from sets to failure, and when it may act
+
+Every paper below was checked on PubMed (E-utilities) on 2026-10-10.
+
+### What it learns from
+
+Only item 43's reserve checks on the lift: a set taken on past the lifter's usual stop to a rep they
+cannot finish with good form, so its reps are reps to failure, with no judged reserve in them (the
+largest error Maintenance 26's curve fought). A check stopped for pain or form does not count; one
+that stalled before the usual stop does (its reps are still reps to failure). Only checks from the
+last twelve weeks count, since a curve can move with months of training (Braith and colleagues,
+1993, PMID 8423746; Schoenfeld and colleagues, 2015, PMID 25853914; trained athletes in their usual
+training did not change, Brechue and Mayhew, 2009, PMID 19910827).
+
+### How it learns
+
+- **The shape is Epley's with the lift's own constant** `k`: reps to failure `n` at a load `w` and a
+  max `M` follow `n = k × (M / w − 1)`. One personal parameter suits the data: personal
+  load-reps curves from linear or two-parameter models were stable, with an intercept that barely
+  differed between people (Mitter, Csapo, Bauer and Tschan, 2022, PMID 35511896, and 2023, PMID
+  35703009).
+- **Two checks at different loads read `k`**: if both were taken at the same max, `w₁ (1 + n₁/k)`
+  equals `w₂ (1 + n₂/k)`. The max moves between days, so only checks at most fourteen days apart
+  pair, at least six reps to failure apart (closer ones say almost nothing), and each reading pairs
+  once.
+- **Each pair's uncertainty** comes from the reps' own noise, 0.7 to 1.1 reps when a set to failure
+  is retested (Mitter 2022; 1.0 used), and from the max moving between the two days, about 0.5 to
+  2.5% a week for trained lifters in study blocks (Schoenfeld 2015; Androulakis-Korakakis and
+  colleagues, 2020, PMID 31797219; about 0.2 to 0.3% for advanced lifters, Latella and colleagues,
+  2020, PMID 32865942; 1% a week used).
+- **The pairs are drawn toward the population**: a normal prior of 30 with a spread of 6, the
+  between-person spread of reps at a share of the max in trained people net of test error, about a
+  fifth (Nuzzo, Pinto, Nosaka and Steele, 2024, PMID 37792272).
+
+### When it may act: the simulation
+
+`src/engine/progression/personalCurve.simulation.test.ts` runs the app's own `liftCurve` and
+`curveLoad` on simulated lifters (2,000 a case, seeded):
+
+- each with a true constant of 30 ± 6;
+- a max drifting up 0 to 1.5% a week;
+- reps to failure that vary by 0.7 to 1.1 reps;
+- a loss the app cannot know. A check is always a lift's last set, after its working sets, so its
+  reps may run short of a fresh set's. How far is unsettled, so the cases span up to 0, 10 and 20%.
+
+Each lifter takes checks on one of nine schedules:
+
+- the app's own: weekly while learning, five checks, then one every four weeks, so at most six on a
+  lift in the window;
+- several denser ones.
+
+Each schedule alternates two rep ranges, the only way a lift's checks pair. Every target the curve
+would change is scored against the lifter's own right weight on their true, fresh curve, beside the
+rule everyone gets.
+
+- **A precision gate alone** (one standard deviation of `k`):
+  - At 2.5 it was never worse than the rule by more than 1% of the load, in any case.
+  - Looser gates let in lifters whose true constant is near 30. For them the last-set loss biases
+    the learned constant down, and the curve was worse in up to 14% of targets (3.0 and up, at a 20%
+    loss).
+  - On the app's own schedule no lifter reached 2.5.
+- **A gate on a clear difference** acts when `k` is two of its spreads above 30, where a last-set
+  loss could only have hidden more, or two spreads below what the largest loss simulated (20%)
+  could make of 30. At 1.5 spreads it was worse in up to a quarter of a few targets, so that is out.
+- **The app uses both**: it acts when either is met.
+  - On every schedule and loss, at most 2.4% of the targets it changed were worse than the rule by
+    more than 1% of the load, and on average it was closer (about 1 to 2.3% off the right weight,
+    against the rule's 3 to 8%).
+  - **How often it acts:**
+    - On the app's own schedule, 4 to 7 lifters in 2,000 (0.2 to 0.35%), those whose curve is far
+      from most people's.
+    - With a check every week for twelve weeks, 228 to 287 in 2,000.
+    - With checks that never leave one rep range, none (asserted).
+
+**What this means for the lifter:** a lift's own curve moves its targets only when its checks have
+run at two rep ranges (an undulating plan, or a lift moved between ranges) and say plainly that the
+lifter's curve is not most people's. For most lifters on most plans it never moves anything. That
+is the threshold the evidence and the data allow, not a fault: more checks on a lift would teach it
+faster, but each is a set to failure.
+
+### Where it acts
+
+- **Two conversions on the same lift.** A return after three weeks or more, and the first target
+  of a new rep range, each turned from the last session's best set at other reps. A max entered on
+  the max sheet stays on the rule everyone gets: a one-rep max is outside the reps any check spans.
+- **Only within its span.** It speaks for the reps its pairs spanned, one either side, so both
+  counts must lie in that span, each in reps to failure as its readings are: the last set's reps
+  plus the reserve read for it, the target's top reps plus its reserve.
+- **The rule's load, moved by the lift's own shape.** The rule reads the last set at its logged
+  reps, its reserve left out, a margin it keeps for everyone. The curve keeps that reading and
+  moves the rule's load by how its own shape differs from the population's between the last set's
+  reps to failure and the target's, to the same twelve reps the rule reads to. A lift whose curve
+  came out at 30 gets exactly what everyone gets, whatever the reserve, so any difference is its own
+  (in Maintenance 26 an earlier curve's gains had come from reading past twelve, which would be a
+  change for everyone). Built first, the curve used the set's logged reps in its own shape, so a
+  low curve multiplied the rule's margin: a return of 8-10 at 2 in reserve, from 9 reps at 2 in
+  reserve, came out a step lighter than the rule (the review); now the margin is the rule's for
+  every lifter, and the simulation's comparison, of sets at failure, is the same one.
+- **Said where it changes the target**, after rounding to the place's step: "Your own reps-to-weight
+  curve on Cable Curl, from 6 sets to failure, sets this weight; the usual rule gives 100 lb."
+- **Shown and reset.** Each lift's curve is shown on the page of what the app has learned (item 47),
+  with a reset.
+- **Item 43 helps it.** The check goes, among the lifts that suit one, first to a lift whose reading
+  today would pair with a recent one.
+
+### Uncertainty
+
+- The last-set loss is the largest unknown: no study measured the reps a last set loses after sets
+  stopped one to three reps short of failure. The gate holds across 0 to 20%; a larger loss would
+  bias a low curve further, which the gate's 20% bound would not cover.
+- The simulated lifters follow Epley's shape. A real curve can differ in shape (Richens and Cleather,
+  2014, PMID 24899782), which one constant cannot follow, and which makes a personal curve harder to
+  learn, not easier.
+- No study has tested a learned personal curve in an app.
+
+## Maintenance 26: the curve learned from logged sets (withdrawn)
+
+### What the app did
 
 - One curve for everyone and every lift, Epley's: a set of `w` for `r` reps reads as a max of
   `w × (1 + r / 30)`, and a target of `R` reps at a reserve asks `max ÷ (1 + (R + reserve) / 30)`.
@@ -27,7 +145,7 @@ would work instead is under "What could work instead" (Proposed, not Agreed).
   12, so a range high above the reps a lift was trained at starts heavy, and in-session
   autoregulation brings it down.
 
-## What the research says
+### What the research says
 
 Every paper was checked on PubMed (E-utilities) on 2026-10-09.
 
@@ -53,13 +171,15 @@ Every paper was checked on PubMed (E-utilities) on 2026-10-09.
   more than 10 reps in a linear equation (Reynolds, Gordon and Robergs, 2006, Journal of Strength
   and Conditioning Research, PMID 16937972).
 - **The app sees reserve as judged, not reps to failure.** Lifters guessed about one rep fewer than
-  they had left (0.95, 95% CI 0.17 to 1.73), with wide differences between studies (a standard
-  deviation of 1.45 reps), better near failure, worse past twelve reps (Halperin and colleagues,
-  2022, Sports Medicine, PMID 34542869).
+  they had left (0.95, 95% CI 0.17 to 1.73), with wide differences between people (a standard
+  deviation of 1.45 reps between people making one prediction each, so it mixes a person's own lean
+  with that set's noise; corrected in Maintenance 27, which had read it as between studies), better
+  near failure, worse past twelve reps (Halperin and colleagues, 2022, Sports Medicine, PMID
+  34542869).
 - **The max moves from day to day.** A max retested on another day varies by a median 4.2%
   (Grgic, Lazinica, Schoenfeld and Pedisic, 2020, Sports Medicine - Open, PMID 32681399).
 
-## What was built
+### What was built
 
 Epley's shape with the lift's own constant `k` in place of 30: a set reads as `w × (1 + r / k)`
 and a target asks `max ÷ (1 + R / k)`. A different `k` scales the reps the lifter gets at every
@@ -74,7 +194,7 @@ sets went (reps past twelve, up to the reach of its lighter sessions). It was us
 turns an estimate into a target on the same lift (a return after a break, a new rep range, a max
 entered on a lift with logged sets) and shown, with one line, only where it changed the target.
 
-## What the validation found
+### What the validation found
 
 Two independent reviews, each with its own seeded simulation: honest lifters training twice a week
 for ten weeks, 1,000 per case, with the day-to-day variation of the max (Grgic 2020: 4.2%) and a
@@ -126,7 +246,7 @@ scored against it.
    500 to 3,000 logged sessions; a workout of seven lifts with curves took 80 ms against 8 at 1,500
    sessions. That could have been fixed; it bought nothing.
 
-## Why it is not shipped
+### Why it is not shipped
 
 The difference the curve tries to learn is about a quarter of the reps between one lifter and
 another (Nuzzo 2024). Each reading it learns from carries about a rep of error in the judged
@@ -138,7 +258,7 @@ whole spread between lifters. Bounds strict enough to stop false curves leave mo
 that no number becomes a rule without evidence; here the evidence says the rule cannot be learned
 from these data. Targets keep the population curve.
 
-## What could work instead (Proposed, not Agreed)
+### What could work instead (Maintenance 26; its third point is now built)
 
 1. **High-rep targets, for everyone.** The rules count reps up to twelve, so a target of 15-20 reps
    is asked as if it were twelve and starts heavy. Epley's line through twenty reps sits close to
@@ -158,7 +278,7 @@ from these data. Targets keep the population curve.
    well apart, simulated again with that data, and shipped only if it brings targets closer than
    the population curve does.
 
-## Uncertainty
+### Uncertainty (Maintenance 26)
 
 - The simulated lifters follow Epley's shape with their own constant. Real curves differ in shape
   too (Richens and Cleather 2014: runners differed far more at 70% than at 90%), which one

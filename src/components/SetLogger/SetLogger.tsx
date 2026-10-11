@@ -18,6 +18,15 @@ export interface SetLoggerValues {
   weight: number | null;
   reps: number;
   rir: number | null;
+  /** A reserve check's numbers (Maintenance 27, item 43), only from a logger in check mode. */
+  reserveCheck?: ReserveCheckValues;
+}
+
+/** What a reserve check adds to a set: the reps in all, and how it ended. */
+export interface ReserveCheckValues {
+  total: number;
+  failedEarly?: boolean;
+  stopped?: boolean;
 }
 
 export interface SetLoggerTarget {
@@ -65,9 +74,16 @@ interface SetLoggerProps {
    * kept with one tap or changed. Null: they are plausible.
    */
   question?: (values: SetLoggerValues) => SlipQuestion | null;
+  /**
+   * This set is today's reserve check (Maintenance 27, item 43): the reps and reserve dials say
+   * the reps at the lifter's usual stop and the reserve judged there, a fourth dial counts the
+   * reps in all, and two switches say a set stalled early or was stopped for pain or form. The
+   * numbers it starts from, when the set is corrected.
+   */
+  reserveCheck?: Partial<ReserveCheckValues> | null;
 }
 
-type Field = 'weight' | 'reps' | 'rir';
+type Field = 'weight' | 'reps' | 'rir' | 'total';
 
 const COOLDOWN_MS = 450;
 
@@ -104,7 +120,14 @@ export function SetLogger({
   filled = null,
   timer = null,
   question,
+  reserveCheck = null,
 }: SetLoggerProps) {
+  const checking = reserveCheck !== null && !hold;
+  const [total, setTotal] = useState<number>(() =>
+    clampReps(reserveCheck?.total ?? initial.reps + (initial.rir ?? target.rir) + 1),
+  );
+  const [failedEarly, setFailedEarly] = useState(reserveCheck?.failedEarly === true);
+  const [stopped, setStopped] = useState(reserveCheck?.stopped === true);
   const [values, setValues] = useState<SetLoggerValues>(() =>
     filled ? { ...initial, reps: filled.reps } : initial,
   );
@@ -177,12 +200,22 @@ export function SetLogger({
     update({ ...values, reps: clampReps(values.reps + direction) });
   const nudgeRir = (direction: 1 | -1) =>
     update({ ...values, rir: clampRir((values.rir ?? target.rir) + direction) });
+  const nudgeTotal = (direction: 1 | -1) => {
+    setAsking(null);
+    setTotal((current) => clampReps(current + direction));
+  };
 
   const beginTyping = (field: Field) => {
     setAsking(null);
     if (field === 'weight') setTouchedWeight(true);
     const current =
-      field === 'weight' ? values.weight : field === 'reps' ? values.reps : values.rir;
+      field === 'weight'
+        ? values.weight
+        : field === 'reps'
+          ? values.reps
+          : field === 'total'
+            ? total
+            : values.rir;
     setTyped(current === null ? '' : String(current));
     setTyping(field);
   };
@@ -193,36 +226,70 @@ export function SetLogger({
     const valid = parsed !== null && Number.isFinite(parsed);
     if (typing === 'weight') return { ...values, weight: valid ? roundWeight(parsed) : null };
     if (typing === 'reps') return { ...values, reps: valid ? clampReps(parsed) : values.reps };
+    if (typing === 'total') return values;
     return { ...values, rir: valid ? clampRir(parsed) : values.rir };
+  };
+
+  /** The reps in all as typed, while the total dial is open for typing. */
+  const typedTotal = (): number => {
+    if (typing !== 'total') return total;
+    const parsed = typed.trim() === '' ? null : Number(typed);
+    return parsed !== null && Number.isFinite(parsed) ? clampReps(parsed) : total;
   };
 
   const endTyping = () => {
     if (!typing) return;
-    update(typedValues());
+    if (typing === 'total') setTotal(typedTotal());
+    else update(typedValues());
     setTyping(null);
+  };
+
+  /** What a log commits: the numbers as the set keeps them. */
+  const toCommit = (final: SetLoggerValues): SetLoggerValues => {
+    if (!checking) {
+      return {
+        weight: final.weight,
+        reps: clampReps(final.reps),
+        rir: hold || final.rir === null ? null : clampRir(final.rir),
+      };
+    }
+    // A set that stalled before the usual stop was taken to failure there: its reps are the reps
+    // in all, with nothing in reserve (Maintenance 27, item 43).
+    const all = clampReps(final.reserveCheck?.total ?? total);
+    return {
+      weight: final.weight,
+      reps: failedEarly ? all : clampReps(final.reps),
+      rir: failedEarly ? 0 : final.rir === null ? null : clampRir(final.rir),
+      reserveCheck: {
+        total: all,
+        ...(failedEarly ? { failedEarly: true } : {}),
+        ...(stopped ? { stopped: true } : {}),
+      },
+    };
   };
 
   const send = (final: SetLoggerValues) => {
     setCooling(true);
     window.setTimeout(() => setCooling(false), COOLDOWN_MS);
-    onCommit({
-      weight: final.weight,
-      reps: clampReps(final.reps),
-      rir: hold || final.rir === null ? null : clampRir(final.rir),
-    });
+    onCommit(toCommit(final));
   };
 
   const commit = () => {
     if (disabled || cooling) return;
-    const final = typedValues();
+    const typedAll = typedTotal();
+    const final: SetLoggerValues = checking
+      ? { ...typedValues(), reserveCheck: { total: typedAll } }
+      : typedValues();
     if (typing) {
-      update(final);
+      if (typing === 'total') setTotal(typedAll);
+      else update(final);
       setTyping(null);
     }
     // A number that looks like a slip is asked about once, before it steers anything (item 40).
     // Keep waits a moment, so a second tap meant for the log button keeps nothing unread (the
     // re-check: the question's words push the buttons down, and Keep can sit under it).
-    const slip = question?.(final) ?? null;
+    // Asked of the numbers the set will keep: a check that stalled early keeps its reps in all.
+    const slip = question?.(toCommit(final)) ?? null;
     if (slip) {
       setAsking({ question: slip, values: final });
       setKeepReady(false);
@@ -244,14 +311,18 @@ export function SetLogger({
   /** Back to the number asked about, ready to type. */
   const change = () => {
     if (!asking) return;
-    beginTyping(asking.question.field === 'reps' ? 'reps' : 'weight');
+    // A check that stalled early keeps its reps in all: a slip in them is typed there.
+    const reps = checking && failedEarly ? 'total' : 'reps';
+    beginTyping(asking.question.field === 'reps' ? reps : 'weight');
   };
 
   const [low, high] = target.reps;
   // A hold's target is its first number; holding past it is never too much.
   const inRange = values.reps >= low && (hold || values.reps <= high);
   // Zero reps is a skip, and the button says so before the tap rather than after it.
-  const shownReps = typing === 'reps' ? typedValues().reps : values.reps;
+  // A check that stalled early commits its reps in all: those are what a skip reads (the re-check).
+  const shownReps =
+    checking && failedEarly ? typedTotal() : typing === 'reps' ? typedValues().reps : values.reps;
   const skipping = shownReps === 0;
   const buttonLabel =
     mode === 'edit'
@@ -403,7 +474,7 @@ export function SetLogger({
           </span>
         ) : null}
       </div>
-      <div className={styles.dials} data-count={hold ? 2 : 3}>
+      <div className={styles.dials} data-count={hold ? 2 : checking && !failedEarly ? 4 : 3}>
         {dial(
           'weight',
           'Weight',
@@ -416,18 +487,20 @@ export function SetLogger({
           'normal',
           { pulse: wantsMore, onTap: onWeightHintTap },
         )}
-        {dial(
-          'reps',
-          hold ? 'Seconds' : 'Reps',
-          hold ? 'seconds' : 'reps',
-          String(values.reps),
-          hold ? 'seconds' : 'reps',
-          () => nudgeReps(1),
-          () => nudgeReps(-1),
-          repsHint,
-          inRange || target.kind !== 'working' ? 'normal' : 'warn',
-        )}
-        {hold
+        {checking && failedEarly
+          ? null
+          : dial(
+              'reps',
+              hold ? 'Seconds' : checking ? 'Reps at your stop' : 'Reps',
+              hold ? 'seconds' : 'reps',
+              String(values.reps),
+              hold ? 'seconds' : 'reps',
+              () => nudgeReps(1),
+              () => nudgeReps(-1),
+              checking ? 'At your usual stop' : repsHint,
+              inRange || target.kind !== 'working' || checking ? 'normal' : 'warn',
+            )}
+        {hold || (checking && failedEarly)
           ? null
           : dial(
               'rir',
@@ -437,15 +510,69 @@ export function SetLogger({
               'in reserve',
               () => nudgeRir(1),
               () => nudgeRir(-1),
-              easyWarmup
-                ? 'Stop well short'
-                : target.kind === 'warmup'
-                  ? `Easy, RIR ${target.rir}`
-                  : target.kind === 'drop'
-                    ? 'Last clean rep'
-                    : `Target RIR ${target.rir}`,
+              checking
+                ? 'Judged at the stop'
+                : easyWarmup
+                  ? 'Stop well short'
+                  : target.kind === 'warmup'
+                    ? `Easy, RIR ${target.rir}`
+                    : target.kind === 'drop'
+                      ? 'Last clean rep'
+                      : `Target RIR ${target.rir}`,
             )}
+        {checking
+          ? dial(
+              'total',
+              'Reps in all',
+              'reps in all',
+              String(typing === 'total' ? typedTotal() : total),
+              'in all',
+              () => nudgeTotal(1),
+              () => nudgeTotal(-1),
+              failedEarly || stopped || total >= values.reps
+                ? 'Every good rep, in all'
+                : 'At least the reps at your stop',
+              failedEarly || stopped || total >= values.reps ? 'normal' : 'warn',
+            )
+          : null}
       </div>
+      {checking ? (
+        <div className={styles.check} data-testid="check-panel">
+          <p className={styles.note} data-testid="check-note">
+            Reserve check: lift to your usual stop and judge the reps left, then keep going without
+            racking until you cannot finish a rep with good form (a burn is not failure).
+          </p>
+          <label className={styles.checkOption}>
+            <input
+              type="checkbox"
+              checked={failedEarly}
+              onChange={(event) => {
+                setAsking(null);
+                setFailedEarly(event.target.checked);
+                // A set that stalled went to failure; one stopped did not: one or the other.
+                if (event.target.checked) setStopped(false);
+              }}
+              disabled={disabled}
+              data-testid="check-failed-early"
+            />
+            It stalled before my usual stop
+          </label>
+          <label className={styles.checkOption}>
+            <input
+              type="checkbox"
+              checked={stopped}
+              onChange={(event) => {
+                setAsking(null);
+                setStopped(event.target.checked);
+                if (event.target.checked) setFailedEarly(false);
+              }}
+              disabled={disabled}
+              data-testid="check-stopped"
+            />
+            I stopped before failure (pain, form or anything else)
+          </label>
+        </div>
+      ) : null}
       {note ? (
         <p className={styles.note} data-testid="target-note">
           {note}
@@ -473,7 +600,7 @@ export function SetLogger({
               aria-describedby={questionId}
               data-testid="slip-keep"
             >
-              {keepLabel(mode, asking.values, units, hold)}
+              {keepLabel(mode, toCommit(asking.values), units, hold)}
             </button>
             <button
               ref={changeRef}

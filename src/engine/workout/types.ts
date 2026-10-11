@@ -142,6 +142,11 @@ export interface WorkoutEntry {
    * lifter swaps the entry today, which `replacedFrom` then says.
    */
   standsFor?: string;
+  /**
+   * The lift to push (Maintenance 27, item 44): `natural` in a place the plan has for it, `extra`
+   * as the week's extra exposure the push adds. It leads, and the time fit never leaves it out.
+   */
+  push?: PushMark;
   progression?: EntryProgression;
   manual?: ManualEdits;
   /**
@@ -191,6 +196,9 @@ export interface StoppedWork {
    */
   why?: 'place' | 'swap' | 'skip';
 }
+
+/** The lift to push in a plan (Maintenance 27, item 44): in its own place, or the extra exposure. */
+export type PushMark = 'natural' | 'extra';
 
 export type BlockKind = 'straight' | 'superset' | 'circuit';
 
@@ -292,6 +300,17 @@ export function roundsRun(block: WorkoutBlock): number {
  * started. One ended by a copy of the app that wrote no count (Maintenance 19 to 21) is known
  * by having no working set left: every other entry keeps at least one.
  */
+/**
+ * The lift to push's mark on an entry (Maintenance 27, item 44), while the entry holds the exercise
+ * the plan gave it: swapped for another today, the mark is not the other's; swapped back, it is
+ * the lift's again.
+ */
+export function pushMarkOf(
+  entry: Pick<WorkoutEntry, 'push' | 'replacedFrom'>,
+): PushMark | undefined {
+  return entry.replacedFrom === undefined ? entry.push : undefined;
+}
+
 export function isStopped(entry: WorkoutEntry): boolean {
   return entry.stopped !== undefined || !entry.sets.some((set) => set.kind === 'working');
 }

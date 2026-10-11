@@ -30,7 +30,9 @@ Every paper was checked on PubMed (E-utilities) on 2026-10-09.
   short of its usual reps is ordinary variation; three or more is about three times it.
 - **How well lifters judge reps in reserve.** Across 12 studies (414 people), lifters guessed about
   one rep fewer than they had left (0.95, 95% CI 0.17 to 1.73), with very wide differences between
-  studies (a standard deviation of 1.45 reps), and guessed better near failure and in later sets.
+  people (a standard deviation of 1.45 reps between people making one prediction each: a person's
+  own lean and that set's noise together; Maintenance 27 corrected "between studies" here), and
+  guessed better near failure and in later sets.
   The error grew little with the reps to failure up to twelve (0.06 reps for each) and fast past
   twelve (0.47 reps for each) (Halperin and colleagues, 2022, Sports Medicine, scoping review and
   meta-analysis, PMID 34542869). A shortfall read from logged reps and reserve carries that error

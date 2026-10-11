@@ -96,7 +96,7 @@ export function adviseStyle(profile: AdviceProfile): StyleAdvice {
     reasons: [
       'Your goals are about size. Size follows weekly sets, not how heavy the sets are, so the time goes to volume at moderate loads.',
     ],
-    sources: ['volume2017', 'load2017', 'frequency2016'],
+    sources: ['volume2017', 'load2017', 'frequency2019'],
     hint: 'Add Strength progress as a goal if you also want your heaviest lifts to climb.',
   };
 }

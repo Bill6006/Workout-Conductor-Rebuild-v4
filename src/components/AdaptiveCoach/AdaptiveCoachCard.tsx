@@ -113,6 +113,11 @@ export function AdaptiveCoachCard({
           ),
         )}
       </ul>
+      {signal?.footnote ? (
+        <p className={styles.footnote} data-testid="coach-footnote">
+          {signal.footnote}
+        </p>
+      ) : null}
       {/* Every card can be put away, including one with nothing to tap (Maintenance 21). */}
       {action || (signal && onDismiss) ? (
         <div className={styles.actions}>

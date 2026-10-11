@@ -34,10 +34,13 @@ export function overrideBias(
   history: readonly WorkoutRecord[],
   exerciseId: string,
   step: number,
+  /** The lifter reset this habit then (Maintenance 27, item 47): only sessions after it count. */
+  since: string | null = null,
 ): OverrideBias {
-  const newestFirst = [...history].sort((a, b) =>
-    (b.completedAt ?? b.startedAt).localeCompare(a.completedAt ?? a.startedAt),
-  );
+  const from = since === null ? -Infinity : Date.parse(since);
+  const newestFirst = [...history]
+    .filter((record) => Date.parse(record.completedAt ?? record.startedAt) > from)
+    .sort((a, b) => (b.completedAt ?? b.startedAt).localeCompare(a.completedAt ?? a.startedAt));
   let above = 0;
   let below = 0;
   let compared = 0;

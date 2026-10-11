@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultProfile } from '../../core/validation/profile';
 import { RECORD_NOW, record } from '../../test/records';
 import { coachingPolicy } from '../coach/experience';
+import { withReadReserve } from '../progression/reserveCheck';
 import {
   applyRouteStep,
   describeRoute,
@@ -69,6 +70,28 @@ describe('stall detection by exposure', () => {
     const [stall] = detectStalls(easy, profile, intermediate);
     expect(stall?.kind).toBe('undershooting');
     expect(stall?.why[1]).toMatch(/4 reps in reserve on average/);
+  });
+});
+
+describe('a stall read through reserve checks', () => {
+  it('quotes the reserve as logged beside what the rules read it as', () => {
+    const curls = [21, 14, 7, 1].map((d) =>
+      record(
+        d,
+        'cable-curl',
+        [
+          [12, 40, 1],
+          [12, 40, 1],
+        ],
+        [10, 15],
+        1,
+      ),
+    );
+    const read = withReadReserve(curls, { correction: 2, band: [11, 15] });
+    const [stall] = detectStalls(read as typeof curls, profile, intermediate);
+    expect(stall?.why[1]).toMatch(
+      /^Sets ended 3 reps in reserve on average \(1 as logged, read through your reserve checks\)/,
+    );
   });
 });
 

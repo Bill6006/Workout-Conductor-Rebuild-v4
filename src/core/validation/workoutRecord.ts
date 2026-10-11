@@ -9,6 +9,20 @@ import { JOINTS } from '../../catalog/exercises/exerciseSchema';
  * fields from newer versions; defaults keep Phase 3 records readable.
  */
 
+/** A reserve check's own numbers, kept beside a working set (Maintenance 27, item 43). */
+export const ReserveCheckLogSchema = z.looseObject({
+  total: z.number().int().min(0).max(200),
+  failedEarly: z.boolean().optional().catch(undefined),
+  stopped: z.boolean().optional().catch(undefined),
+  style: z.string().optional().catch(undefined),
+});
+
+/** A pain report made on an exercise during the workout (Maintenance 27, item 45). */
+export const PainReportLogSchema = z.looseObject({
+  exerciseId: z.string().min(1),
+  joint: z.enum(JOINTS),
+});
+
 export const LoggedSetSchema = z.looseObject({
   kind: z.enum(['warmup', 'working', 'drop']),
   reps: z.number().int().min(0).max(200),
@@ -32,6 +46,13 @@ export const LoggedSetSchema = z.looseObject({
     })
     .optional()
     .catch(undefined),
+  /**
+   * A reserve check (Maintenance 27, item 43): the set went on past the lifter's usual stop to a
+   * rep that stalled. The set's own reps and reserve stay as at the stop; this keeps the reps in
+   * all, whether it stalled before the stop or was stopped for pain or form, and the plan's style.
+   * An unreadable one is dropped, never the set.
+   */
+  reserveCheck: ReserveCheckLogSchema.optional().catch(undefined),
 });
 
 export const LoggedExerciseSchema = z.looseObject({
@@ -44,6 +65,11 @@ export const LoggedExerciseSchema = z.looseObject({
   plannedSets: z.number().int().min(0).optional(),
   /** Catalog id this exercise replaced during the session, if any. */
   replacedFrom: z.string().optional(),
+  /**
+   * The lift to push as the plan had it (Maintenance 27, item 44): in its own place, or the week's
+   * extra exposure, which the next week's counts read. An unreadable mark is dropped.
+   */
+  push: z.enum(['natural', 'extra']).optional().catch(undefined),
 });
 
 export const SessionRatingSchema = z.looseObject({
@@ -81,6 +107,15 @@ export const WorkoutRecordSchema = z.looseObject({
   skippedExerciseIds: z.array(z.string()).default([]),
   /** Joints reported painful during the session. */
   painJoints: z.array(z.string()).default([]),
+  /**
+   * Each of those reports with the exercise it was made on (Maintenance 27, item 45): what a pain
+   * pattern over weeks reads. A report this copy cannot read is dropped, never the rest.
+   */
+  painReports: z
+    .array(PainReportLogSchema.nullable().catch(null))
+    .transform((reports) => reports.filter((report) => report !== null))
+    .optional()
+    .catch(undefined),
   readiness: z
     .looseObject({
       energy: z.number(),

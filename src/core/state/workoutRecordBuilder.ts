@@ -1,8 +1,15 @@
 import { requireExercise } from '../../catalog/exercises/catalog';
+import type { LearnedResets } from '../../engine/learned/resets';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import { muscleName } from '../../catalog/muscles/muscles';
 import type { CompletedSet } from '../../engine/recalibration/types';
-import { allEntries, isStopped, workingSets, type WorkoutBlock } from '../../engine/workout/types';
+import {
+  allEntries,
+  isStopped,
+  pushMarkOf,
+  workingSets,
+  type WorkoutBlock,
+} from '../../engine/workout/types';
 import { holdById } from '../../engine/workout/setText';
 import { hasNoLoad } from '../../engine/progression/startingLoad';
 import type { UserProfile } from '../validation/profile';
@@ -65,6 +72,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
         role: entry.role,
         plannedSets: workingSets(entry).filter((set) => set.kind === 'working').length,
         replacedFrom: entry.replacedFrom,
+        ...(pushMarkOf(entry) ? { push: pushMarkOf(entry) } : {}),
         sets: entry.sets
           .filter((set) => logged.has(set.index))
           .map((set) => {
@@ -80,6 +88,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
               targetWeight: set.targetWeight,
               targetRir: set.targetRir,
               loggedAt: done.completedAt,
+              ...(done.reserveCheck ? { reserveCheck: { ...done.reserveCheck } } : {}),
               ...(set.asked
                 ? {
                     asked: {
@@ -113,6 +122,9 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
     rating: options.rating,
     skippedExerciseIds,
     painJoints: [...session.constraints.painJoints],
+    // Every report with its exercise, an empty list too: from item 45 on, a pain joint beyond them
+    // is a check-in's, never put on an exercise (the re-check of item 45).
+    painReports: (session.constraints.painReports ?? []).map((report) => ({ ...report })),
     readiness: session.constraints.readiness
       ? {
           ...session.constraints.readiness,
@@ -171,6 +183,13 @@ export function buildCompletion(
   record: WorkoutRecord,
   profile: UserProfile,
   history: readonly WorkoutRecord[] = [],
+  /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
+  resets: LearnedResets | null = null,
+  /**
+   * The log as the rules read it (item 43's checks), this workout in it: the next targets read it
+   * as the next plan will. Without it, the history and this workout as logged.
+   */
+  read: readonly WorkoutRecord[] | null = null,
 ): CompletionSummary {
   const entries = allEntries(session.workout.blocks);
   const completedWorking = (entry: LoggedExercise) =>
@@ -231,7 +250,7 @@ export function buildCompletion(
     );
   if (record.endedEarly) highlights.push('Ended early; logged work is saved exactly as entered.');
 
-  const after = [...history.filter((candidate) => candidate.id !== record.id), record];
+  const after = read ?? [...history.filter((candidate) => candidate.id !== record.id), record];
   const completedAtIso = record.completedAt ?? record.startedAt;
   const nextTargets = trained.slice(0, 6).map((entry) => {
     const exercise = requireExercise(entry.exerciseId);
@@ -242,6 +261,9 @@ export function buildCompletion(
       prescription: prescribeFor(exercise, role, profile, after),
       history: after,
       profile,
+      // A clock, so a lift's own curve (item 41) speaks here as in the next plan.
+      now: completedAtIso,
+      resets,
     });
     if (target.hold) {
       return target.weight === null

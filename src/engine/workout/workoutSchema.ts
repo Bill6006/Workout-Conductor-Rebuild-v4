@@ -83,6 +83,9 @@ export const WorkoutEntrySchema = z.looseObject({
   slot: z.number().int().min(0).optional(),
   replacedFrom: z.string().optional(),
   standsFor: z.string().optional().catch(undefined),
+  // The lift to push (Maintenance 27, item 44): in its own place in the plan, or the week's extra
+  // exposure. An unreadable mark is dropped, never the entry.
+  push: z.enum(['natural', 'extra']).optional().catch(undefined),
   progression: EntryProgressionSchema.optional().catch(undefined),
   manual: z
     .looseObject({

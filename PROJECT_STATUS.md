@@ -1,23 +1,23 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-10-09_
+_Last updated: 2026-10-10_
 
-| Item                   | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Current phase          | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, and 21 at their review gates. Maintenance 25 (round G) at its review gate (YELLOW). Maintenance 27 (round I) being built                                                                                                                      |
-| Phase gate             | Maintenance 26 **GREEN** from the owner on 2026-10-10 (the phone review). Maintenance 25 YELLOW, at its review gate (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 24 **GREEN** from the owner on 2026-09-25 (issue #25). Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open)                                                                                                          |
-| Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Work in progress       | Maintenance 27, round I, being built in the owner's order (2026-10-10): 43 (learning how well the lifter judges reps in reserve), then 41 (each lift's own reps-to-weight curve, used for a lift only once 43 has enough trustworthy sets to failure on it), then 44, 45, 46, 47 and 49, each checked against the evidence first. Maintenance 25 (round G, issue #26) at its review gate (YELLOW). Agreed and waiting: 1, 3, 4, 6 to 8, 10 to 12, 14 and 30 to 32 (listed under Agreed and waiting) |
-| Latest commit          | The owner's GREEN for Maintenance 26 and round I started (this commit, documents only, not deployed); the live app build is `43d50e6`                                                                                                                                                                                                                                                                                                                                                               |
-| Latest deployment      | `43d50e6` (Maintenance 26, round H) deployed by Deploy Pages run 38037382932 (success); browser suite against the live URL: 380 passed + 18 skipped by design, none failed                                                                                                                                                                                                                                                                                                                          |
-| Test totals            | Unit: 2008 passed (211 files). Browser/mobile: 384 passed + 14 skipped by design, none failed, locally in the gate; 380 passed + 18 skipped by design against the live URL. Reverts: 1199 of 1199 caught (330 this round; the rest Maintenance 23 to 25's); 32 of 32 browser reverts caught (9 this round)                                                                                                                                                                                          |
-| Build marker           | Under Settings, About this app (since Maintenance 25; before, under every screen's header): `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                                                                                                                                                                    |
+| Item                   | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Current phase          | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, and 21 at their review gates. Maintenance 25 (round G) and Maintenance 27 (round I) at their review gates (YELLOW)                                                                                                                         |
+| Phase gate             | Maintenance 27 YELLOW, at its review gate (round I, the owner's items 43, 41, 44, 45, 46, 47 and 49). Maintenance 26 **GREEN** from the owner on 2026-10-10 (the phone review). Maintenance 25 YELLOW, at its review gate (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 24 **GREEN** from the owner on 2026-09-25 (issue #25). Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open) |
+| Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Work in progress       | Maintenance 27 (round I) at its review gate (YELLOW): the owner's review on the phone (`docs/reports/maintenance-27.md`, Review on the phone). Maintenance 25 (round G, issue #26) at its review gate (YELLOW). Agreed and waiting: 1, 3, 4, 6 to 8, 10 to 12, 14 and 30 to 32 (listed under Agreed and waiting)                                                                                                                                                                                 |
+| Latest commit          | Maintenance 27, round I: items 43, 41, 44, 45, 46, 47 and 49 (this commit); its deployment and live checks follow in the next                                                                                                                                                                                                                                                                                                                                                                    |
+| Latest deployment      | `43d50e6` (Maintenance 26, round H) deployed by Deploy Pages run 38037382932 (success); browser suite against the live URL: 380 passed + 18 skipped by design, none failed                                                                                                                                                                                                                                                                                                                       |
+| Test totals            | Unit: 2008 passed (211 files). Browser/mobile: 384 passed + 14 skipped by design, none failed, locally in the gate; 380 passed + 18 skipped by design against the live URL. Reverts: 1199 of 1199 caught (330 this round; the rest Maintenance 23 to 25's); 32 of 32 browser reverts caught (9 this round)                                                                                                                                                                                       |
+| Build marker           | Under Settings, About this app (since Maintenance 25; before, under every screen's header): `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                                                                                                                                                                 |
 
 ## Agreed and waiting
 
@@ -42,36 +42,13 @@ owner, 2026-10-09).
 - **31.** Weighted versions of bodyweight moves at the gym, for example a dumbbell reverse lunge
   and a standing calf raise machine.
 - **32.** A second workout on the same day leads with what was missed.
-- **41.** Each lift's own reps-to-weight curve. Validated in Maintenance 26 and not shipped: from
-  the sets the app logs it cannot be learned well enough, and where it changed a target it was
-  more often wrong than right (`docs/research/personal-curves.md`).
-- **43.** Learn how well the lifter judges reps in reserve: opt-in, the last set of one machine or
-  isolation lift every few weeks goes to failure and the app learns the typical error (Halperin
-  et al., 2022); off under Lean-down and Foundation, which take nothing to failure. Whether and how
-  it uses sets to failure, how often, and on which exercises is settled from the evidence first.
-- **44.** A lift to push: one lift and a target; it gets an extra weekly exposure and leads its
-  day while other work for those muscles holds (Ralston et al., 2017; Grgic et al., 2018), and
-  Progress shows the pace toward the target. The extra frequency and volume are checked against
-  the evidence first, so pushing one lift adds no needless fatigue or excess weekly volume.
-- **45.** Pain patterns over weeks: a joint that keeps hurting after one exercise and not after its
-  alternative brings the four-week swap on offer, the pattern named; observational and
-  conservative, never a diagnosis.
-- **46.** Plan for the week the lifter actually trains: days trained other than the schedule for
-  several weeks bring one card to move the schedule, and the split follows the real number of
-  days.
-- **47.** What the app has learned: one page listing each learned value (pace, the habit of
-  lifting above or below the suggested weight, the curves, the reps-in-reserve error, pain
-  patterns, declined offers), each with its evidence and a reset.
-- **49.** Variety for accessories where it helps, settled from the research on exercise variation
-  and adherence first, with no fixed rotation: an exercise that is progressing and working stays;
-  a change is offered for adherence, staleness, repeated stalls or the lifter's preference, tied
-  into the stall monitoring; never the main lifts (Baz-Valle et al., 2019, is one starting point).
 
-Built in Maintenance 26 (GREEN): **40**, **42** and **50**. Being built in Maintenance 27 (round
-I), in the owner's order (2026-10-10): **43** first, then **41** right after it (the complete
-feature, but a lift's own curve moves nothing until item 43 has enough trustworthy sets to failure
-on that lift, the threshold researched and validated, not chosen), then **44**, **45**, **46**,
-**47** and **49**.
+Built in Maintenance 26 (GREEN): **40**, **42** and **50**. Built in Maintenance 27 (round I, at its
+review gate), in the owner's order: **43** (how well the lifter judges reps in reserve), **41** (each
+lift's own reps-to-weight curve, acting on a lift only once item 43's sets to failure on it pass a
+threshold a simulation validated), **44** (a lift to push), **45** (pain patterns over weeks), **46**
+(the week the lifter actually trains), **47** (what the app has learned) and **49** (variety for
+accessories) (`docs/reports/maintenance-27.md`).
 
 Not approved (2026-10-09): **48**, Life Mirror's daily check-in used for workouts.
 
@@ -194,6 +171,33 @@ Not approved (2026-10-09): **48**, Life Mirror's daily check-in used for workout
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 27: round I, the approved learning items (YELLOW)
+
+- Built on the owner's word (2026-10-10), in their order: "1. Build item 43 first. 2. Then build
+  item 41 immediately after 43. 3. Then complete items 44, 45, 46, 47 and 49", every training rule
+  checked against the best evidence first. At its review gate: the owner's review on the phone
+  (`docs/reports/maintenance-27.md`, Review on the phone).
+- 43: reserve checks, opt-in (Settings, Programming): now and then the last set of one machine or
+  cable isolation lift goes on to failure, and the reading is said at once; from four readings that
+  agree, the rules read a logged reserve through the lifter's own error, on lifts like the ones
+  checked. Research: `docs/research/reserve-check.md`.
+- 41: each lift's own reps-to-weight curve, learned only from item 43's sets to failure on it, and
+  acting on a lift only once a simulation of 2,000 lifters says it is sure enough. Research:
+  `docs/research/personal-curves.md`.
+- 44: a lift to push (Settings, A lift to push): it leads, gets one extra session a week where
+  there is room within the evidence's limits, and Progress shows the pace to its target. Research:
+  `docs/research/push-lift.md`.
+- 45: pain reports keep their exercise; a joint that keeps hurting with one exercise and not its
+  alternative brings one card with a four-week swap, never a diagnosis. Research:
+  `docs/research/pain-patterns.md`.
+- 46: four weeks trained off the schedule bring one card to move it. Research:
+  `docs/research/real-week.md`.
+- 47: Settings, What the app has learned: each learned value, what it is read from, and a reset.
+- 49: a stalled or flat accessory gets one named alternative as a four-week swap. Research:
+  `docs/research/accessory-variety.md`.
+- Four adversarial reviews found 43 faults, and a re-check of their fixes 28 more; every fix fails
+  a test when taken out alone (`docs/reports/maintenance-27.md`, The complete revert run).
 
 ## Maintenance 26: round H, intelligence the owner approved (GREEN)
 
@@ -488,6 +492,6 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Build Maintenance 27 (round I) in the owner's order: 43, then 41, then 44, 45, 46, 47 and 49,
-each checked against the evidence first, through the gate to the live site. Maintenance 25 (issue
-#26) and Maintenance 21 (issue #22) wait for the owner's review.
+The owner's review of Maintenance 27 on the phone (`docs/reports/maintenance-27.md`, Review on the
+phone). Maintenance 25 (issue #26) with Phase 8, and Maintenance 21 (issue #22), wait for the
+owner's review.

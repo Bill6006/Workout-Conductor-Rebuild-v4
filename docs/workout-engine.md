@@ -101,3 +101,32 @@ straight accessories for behind muscles are ordered first (never during a recali
 keeps logged work). "Why this workout" says which muscles have had time to recover, which sit out
 because they trained in the last two days, which muscles the accessories lead with, and, during a
 planned deload week, what the week changes.
+
+## The split by days, and a lift to push (Maintenance 27)
+
+- **The pool by the schedule's sessions a week** (`splitFor`, item 46 and its review): three or
+  fewer, full body, upper and lower, as before; four or more, the four-template rotation; Foundation
+  keeps full body, upper and lower at any number. Full body alone at one or two days, built first,
+  left calves, abs, side delts and upper chest without a direct set; the review withdrew it. The schedule itself moves to the real week through the coach's card
+  (`docs/research/real-week.md`).
+- **A lift to push** (`pushDay` in `src/engine/planning/pushLift.ts`, item 44,
+  `docs/research/push-lift.md`). Where today's template has a slot for the lift's movement, the lift
+  takes it and the entry is marked `push: 'natural'`; it gives the place up the day after its last
+  session or once it has three sessions in seven days (two from 60). Days are the device's calendar
+  days, a workout counted on the day it began.
+  On a day without such a slot the week's extra exposure goes first (`push: 'extra'`,
+  primary-strength role, the style's heavy range, two or three sets, never to failure) when it is
+  due: once a calendar week, while the plan's own sessions of the lift come to two a week or fewer,
+  two calendar days after its last session (three after five sets or failure), with room under ten
+  sets a week. Before adding it, the generator plans the day without it once (`pushProbe`): the
+  extra waits when the next session comes within two days and its template has the lift's slot
+  (`templateFor` over a planned record of today), or when a primary muscle would pass twenty sets in
+  any seven days the extra is in, or go further over than the day's plan without it, after sets of an
+  isolation lift for it came off (`pushCap`): the days before as logged, and the schedule's sessions
+  in the six days after as planned (`sessionsAhead`), drop sets counted; no drop set goes on a lift
+  for its muscles that day. A rebuild of a day with its extra under way, or swapped, weighs no second
+  one; a swapped extra keeps its place first, and the lift swapped away stays away. Both the day's
+  main lift and the pushed lift are kept by the time fit, and the main lift stays second; the pushed
+  lift's line ("leads") and the main lift's ("is the ... lift") follow the order through rebuilds
+  (`keepOrderLines`). A lift swapped in for the pushed lift carries no mark (`pushMarkOf`). "Make it
+  harder" adds no set to the pushed lift and leaves it one rep in reserve (`settleKept`).

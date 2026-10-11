@@ -1,9 +1,10 @@
 import { sectionHref } from '../../app/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
 import { HoldTimer } from '../../components/HoldTimer/HoldTimer';
 import { holdById, stoppedNote } from '../../engine/workout/setText';
+import { readingLine } from '../../engine/progression/reserveCheck';
 import { AdaptiveCoachCard } from '../../components/AdaptiveCoach/AdaptiveCoachCard';
 import { holdSounds, restSounds } from '../../core/alerts/restSounds';
 import { Button } from '../../components/Button/Button';
@@ -172,6 +173,13 @@ export function ActiveWorkoutScreen() {
   const session = useAppSelector((state) => state.session);
   const profile = useAppSelector((state) => state.profile);
   const history = useAppSelector((state) => state.history);
+  // The set today's reserve check is on, if any (Maintenance 27, item 43).
+  const checkSet = useMemo(
+    () => store.reserveCheckSetFor(session),
+    // The check follows the session, the log and the lifter's yes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, session, history, profile],
+  );
   const workoutCount = useAppSelector((state) => state.workoutCount);
   // The logging habit line: shown under a working set until any weight has been logged.
   const anyWeights = history.some((record) =>
@@ -336,7 +344,12 @@ export function ActiveWorkoutScreen() {
   };
 
   const onCoachAction = (action: CoachAction, signal: CoachSignal) => {
-    void store.noteCoachAction(action);
+    // A four-week swap's route step is recorded once the swap is kept (the review of item 49).
+    if (action.kind !== 'lasting-swap') void store.noteCoachAction(action);
+    // A save that failed says so, rather than leaving the card looking taken (the review).
+    const failed = (fallback: string) => (error: unknown) => {
+      toast.show(error instanceof Error ? error.message : fallback, 'error');
+    };
     switch (action.kind) {
       case 'recalibrate':
         // Once the change lands its route step is recorded, or its offer marked as taken, so the
@@ -389,6 +402,21 @@ export function ActiveWorkoutScreen() {
         // The plan is rebuilt under the new style by the profile save itself.
         void store.setProgramStyle(action.style).catch(() => undefined);
         break;
+      case 'end-push':
+        // The plan is rebuilt without the push by the profile save itself (item 44).
+        void store.endPush().catch(failed('The push could not be ended'));
+        break;
+      case 'lasting-swap':
+        // The four-week swap a pain pattern or a variety offer makes (items 45 and 49), as the
+        // keep switch makes it.
+        void store.takeCoachSwap(action).catch(failed('The swap could not be kept'));
+        break;
+      case 'schedule':
+        // The schedule moved to the real week (item 46); the profile save rebuilds the plan.
+        void store
+          .moveSchedule(action.weeklyFrequency, action.availableDays)
+          .catch(failed('The schedule could not be saved'));
+        break;
     }
   };
 
@@ -397,9 +425,28 @@ export function ActiveWorkoutScreen() {
     if (soundsOn) restSounds.unlock();
     // The dial's live value belongs to the set just logged; the next set starts from its own rule.
     setLiveWeights((current) => withoutKey(current, entry.id));
-    void store.logSet(entry.id, set.index, values).catch((error: unknown) => {
-      toast.show(error instanceof Error ? error.message : 'Could not log the set', 'error');
-    });
+    void store.logSet(entry.id, set.index, values).then(
+      () => {
+        // A reserve check says what it found at once (Maintenance 27, item 43).
+        const check = values.reserveCheck;
+        // A check logged as a skip read nothing (the re-check of item 43).
+        if (check && values.reps > 0) {
+          toast.show(
+            readingLine({
+              stop: values.reps,
+              judged: values.rir,
+              total: check.total,
+              failedEarly: check.failedEarly === true,
+              stopped: check.stopped === true,
+            }),
+            'info',
+          );
+        }
+      },
+      (error: unknown) => {
+        toast.show(error instanceof Error ? error.message : 'Could not log the set', 'error');
+      },
+    );
   };
 
   const startHold = (entryId: string, setIndex: number, seconds: number) => {
@@ -428,6 +475,8 @@ export function ActiveWorkoutScreen() {
 
   const loggerFor = (entry: WorkoutEntry, block: WorkoutBlock) => {
     const exercise = requireExercise(entry.exerciseId);
+    // Today's reserve check, when it is this lift's (Maintenance 27, item 43).
+    const checkHere = checkSet?.entryId === entry.id ? checkSet.setIndex : null;
     const hold = isHold(exercise);
     // What this place can load for the exercise today: the dial's step, its list, its plates.
     const loading = loadingFor(currentLocation?.loading, session.loading, exercise, units);
@@ -565,6 +614,7 @@ export function ActiveWorkoutScreen() {
           onEdit={(setIndex) => setEditing({ entryId: entry.id, setIndex })}
           onUndo={() => store.undoLastSet()}
           compact={block.kind !== 'straight'}
+          checkSetIndex={checkHere}
         />
         {editingHere && editingSet ? (
           <SetLogger
@@ -578,6 +628,9 @@ export function ActiveWorkoutScreen() {
               label: describeSetPosition(editingSet, entry),
             }}
             initial={loggedValues(session, entry.id, editingSet.index)}
+            reserveCheck={
+              logged.find((set) => set.setIndex === editingSet.index)?.reserveCheck ?? null
+            }
             mode="edit"
             hold={hold}
             noLoad={hasNoLoad(exercise)}
@@ -646,6 +699,7 @@ export function ActiveWorkoutScreen() {
                 currentHere.set.kind === 'working' ? (entry.progression?.rack?.line ?? null) : null
               }
               mode="log"
+              reserveCheck={checkHere === currentHere.setIndex ? {} : null}
               weightStep={step}
               onCommit={(values) => commitLog(entry, currentHere.set, values)}
               question={slipFor(
