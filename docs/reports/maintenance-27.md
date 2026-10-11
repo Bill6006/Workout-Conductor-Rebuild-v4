@@ -214,12 +214,15 @@ the privacy scan read 759 files with no findings; the build check passed; 399 br
 and 14 skipped by design, none failed. They include the phone review's steps as written
 (`e2e/roundIPhone.spec.ts`), so every line the steps quote was read from the app.
 
-**Deployed:** TBD, with the checks against the live site.
+**Deployed** as `8081df3` by Deploy Pages run 38101751291 (success; on the runner, 2,296 unit tests
+passed and the browser suite 399 passed and 14 skipped by design, none failed). The live bundle
+carries commit `8081df3`. Against the live URL, the whole browser suite: 395 passed and 18 skipped
+by design, none failed, the phone review's steps among them.
 
 ## Review on the phone
 
 Live app: https://bill6006.github.io/Workout-Conductor-Rebuild-v4/ , the release to check is build
-TBD, named once deployed (Settings, About this app).
+`8081df3` (Settings, About this app).
 
 None of this needs real training, and none of it touches your log: steps 1 to 11 run in a Chrome
 Incognito tab, which has its own empty storage and no cloud token. Open the live URL in one, set up
