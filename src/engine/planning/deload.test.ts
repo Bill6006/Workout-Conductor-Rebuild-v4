@@ -52,16 +52,31 @@ describe('deload week', () => {
   });
 
   it('starts on the next available training day and runs seven days', () => {
+    const local = (day: number, hour = 0) => new Date(2026, 8, day, hour).toISOString();
     const window = nextWindow(
       { ...profile, schedule: { ...profile.schedule, availableDays: ['mon', 'wed', 'fri'] } },
-      '2026-09-10T15:00:00.000Z',
+      local(10, 15),
     );
-    // Thursday Sep 10 2026: the next available day is Friday.
-    expect(window.startsAt).toBe('2026-09-11T00:00:00.000Z');
-    expect(window.endsAt).toBe('2026-09-18T00:00:00.000Z');
-    expect(inDeloadWindow(window, '2026-09-11T08:00:00.000Z')).toBe(true);
-    expect(inDeloadWindow(window, '2026-09-18T00:00:00.000Z')).toBe(false);
-    expect(windowIsPast(window, '2026-09-19T00:00:00.000Z')).toBe(true);
+    // Thursday Sep 10 2026: the next available day is Friday, from midnight on the device.
+    expect(window.startsAt).toBe(local(11));
+    expect(window.endsAt).toBe(local(18));
+    expect(inDeloadWindow(window, local(11, 8))).toBe(true);
+    expect(inDeloadWindow(window, local(18))).toBe(false);
+    expect(windowIsPast(window, local(19))).toBe(true);
     expect(formatWindow(window)).toBe('Fri, Sep 11 to Thu, Sep 17');
+  });
+
+  it("reads the device's day, late in the evening too (Maintenance 28, item 1)", () => {
+    // Thursday 23:30 on the device, which is Friday in UTC west of it: the next day is Friday.
+    const late = new Date(2026, 8, 10, 23, 30).toISOString();
+    const window = nextWindow(
+      { ...profile, schedule: { ...profile.schedule, availableDays: ['mon', 'wed', 'fri'] } },
+      late,
+    );
+    expect(window.startsAt).toBe(new Date(2026, 8, 11).toISOString());
+    // A window kept from before, at midnight UTC, names the same calendar days.
+    expect(
+      formatWindow({ startsAt: '2026-09-11T00:00:00.000Z', endsAt: '2026-09-18T00:00:00.000Z' }),
+    ).toBe('Fri, Sep 11 to Thu, Sep 17');
   });
 });

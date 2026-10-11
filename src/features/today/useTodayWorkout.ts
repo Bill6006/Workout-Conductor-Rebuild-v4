@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import type { WorkoutSession } from '../../core/state/session';
 import { useNow } from '../../core/time/clock';
+import { localDayKey } from '../../core/time/localDate';
 import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { ConflictContext } from '../../engine/conflicts/conflictEngine';
@@ -28,7 +29,8 @@ export function useTodayWorkout(): TodayWorkout | null {
   const state = useAppState();
   const store = useAppStore();
   const nowEpoch = useNow();
-  const day = new Date(nowEpoch || 0).toISOString().slice(0, 10);
+  // The device's day (Maintenance 28, item 1): a new day's plan at local midnight.
+  const day = localDayKey(new Date(nowEpoch || 0).toISOString());
   const { profile, locations, session } = state;
 
   useEffect(() => {

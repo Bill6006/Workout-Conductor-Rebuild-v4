@@ -39,7 +39,7 @@ export function LearnedValues() {
     setConfirming(null);
     try {
       if (section.key === 'declines') await store.clearDeclines();
-      else if (section.key !== 'pace') await store.resetLearned(section.key);
+      else await store.resetLearned(section.key);
       toast.show(`${section.title}: reset.`, 'success');
     } catch (error) {
       toast.show(error instanceof Error ? error.message : 'The reset did not save.', 'error');

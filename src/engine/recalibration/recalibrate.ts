@@ -20,6 +20,7 @@ import {
   resolveTargetMinutes,
   type SetDonePredicate,
 } from '../duration/duration';
+import type { PersonalPace } from '../duration/trainingTime';
 import { fitWeight, loadingFor, nudge, type Loading } from '../loading/loading';
 import { weightStep } from '../plateMath/plateMath';
 import {
@@ -63,6 +64,8 @@ import {
   deloadReason,
   extraBase,
   generateWorkout,
+  isPaceLine,
+  paceReason,
   pushedPrescription,
   setFloor,
   mainLiftLine,
@@ -1982,7 +1985,13 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
   const plan = withoutStops(restored);
   const target = resolveTargetMinutes(plan.duration.choice, plan.duration.defaultMinutes);
   const general = generalWarmupMinutes(target);
-  const time = estimateWorkout(plan.blocks, general, requireExercise, () => false);
+  const time = estimateWorkout(
+    plan.blocks,
+    general,
+    requireExercise,
+    () => false,
+    plan.duration.pace ?? 1,
+  );
   const entries = allEntries(plan.blocks);
   const overBy = Math.max(0, Math.round((time.totalMinutes - target) * 10) / 10);
   plan.warmup = {
@@ -2024,6 +2033,55 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
     overByMinutes: overBy,
   };
   return withoutEase(plan);
+}
+
+/**
+ * A saved plan as it loads (Maintenance 28, the review of item 4): its lifts as saved, timed at the
+ * lifter's pace as it reads now, with the line that says so. A pace forgotten since the plan was
+ * saved is gone from it, and one learned since is in it.
+ */
+export function planAtPace(workout: GeneratedWorkout, pace: PersonalPace): GeneratedWorkout {
+  const plan = cloneWorkout(workout);
+  const time = estimateWorkout(
+    plan.blocks,
+    plan.warmup.generalMinutes,
+    requireExercise,
+    () => false,
+    pace.factor,
+  );
+  const target = plan.duration.targetMinutes;
+  const overBy = Math.max(0, Math.round((time.totalMinutes - target) * 10) / 10);
+  const reasons = plan.explanation.reasons.filter((line) => !isPaceLine(line));
+  const line = paceReason(pace);
+  if (line) {
+    // Where a plan built today says it: before the line on rests and techniques.
+    const at = reasons.findIndex((reason) => / rests; supersets (on|off), /.test(reason));
+    reasons.splice(at < 0 ? reasons.length : at, 0, line);
+  }
+  plan.explanation = {
+    ...plan.explanation,
+    time,
+    reasons,
+    summary: plan.explanation.summary.replace(
+      /: ([0-9]+) exercises in about [0-9]+ min/,
+      `: $1 exercises in about ${Math.round(time.totalMinutes)} min`,
+    ),
+  };
+  plan.compromises = [
+    ...plan.compromises.filter(
+      (line) => !/^(Runs about|Even the leanest version runs about) [0-9]+ min over /.test(line),
+    ),
+    ...(overBy > 1 ? [`Runs about ${Math.round(overBy)} min over ${target} min.`] : []),
+  ];
+  const duration = {
+    ...plan.duration,
+    estimatedMinutes: Math.round(time.totalMinutes),
+    overByMinutes: overBy,
+  };
+  delete duration.pace;
+  if (pace.factor !== 1) duration.pace = pace.factor;
+  plan.duration = duration;
+  return plan;
 }
 
 /**
@@ -2643,6 +2701,7 @@ function refresh(
     generalWarmup ?? (request.completed.sets.length > 0 ? 0 : workout.warmup.generalMinutes),
     requireExercise,
     isDone,
+    workout.duration.pace ?? 1,
   );
   // Under way, or with an end time, the plan is held to the minutes left, as a rebuild fits it.
   const left = minutesLeft(request, constraints);
@@ -3041,7 +3100,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
       // time kept from the workout's start counted the sets done since).
       const { isDone } = classify(request);
       const timed = (blocks: readonly WorkoutBlock[]) =>
-        estimateWorkout(blocks, 0, requireExercise, isDone).totalMinutes;
+        estimateWorkout(blocks, 0, requireExercise, isDone, layer.shown.duration.pace ?? 1)
+          .totalMinutes;
       const without = cloneWorkout(layer.shown);
       removeEntry(without, trigger.entryId);
       const saved = Math.max(0, Math.round(timed(layer.shown.blocks) - timed(without.blocks)));

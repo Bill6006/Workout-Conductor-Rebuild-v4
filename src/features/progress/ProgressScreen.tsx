@@ -26,6 +26,7 @@ import {
 import { recentPersonalRecords } from '../../engine/scoring/personalRecords';
 import { amountText, holdById } from '../../engine/workout/setText';
 import { keyedLines } from '../../core/screen/keyedLines';
+import { trainingMinutes } from '../../engine/duration/trainingTime';
 import { HistoryDetailSheet } from './HistoryDetailSheet';
 import { pushCard } from './pushCard';
 import styles from './Progress.module.css';
@@ -38,8 +39,9 @@ const PR_KIND = {
   'top-of-range': 'Top of range',
 } as const;
 
+/** Training time, not how long the workout stayed open (Maintenance 28, item 3). */
 function minutesOf(record: WorkoutRecord): number {
-  return Math.round((record.elapsedSeconds ?? 0) / 60);
+  return trainingMinutes(record);
 }
 
 function setsOf(record: WorkoutRecord): number {

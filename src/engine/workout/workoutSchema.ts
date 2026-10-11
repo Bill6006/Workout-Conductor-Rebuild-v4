@@ -167,6 +167,7 @@ export const GeneratedWorkoutSchema = z.looseObject({
     defaultMinutes: z.number(),
     estimatedMinutes: z.number(),
     overByMinutes: z.number(),
+    pace: z.number().positive().optional().catch(undefined),
   }),
   musclePriorities: z.array(
     z.looseObject({
@@ -193,6 +194,8 @@ export const GeneratedWorkoutSchema = z.looseObject({
       workMinutes: z.number(),
       restMinutes: z.number(),
       transitionMinutes: z.number(),
+      // Maintenance 28, the review of item 4: optional, and dropped rather than refused.
+      paceMinutes: z.number().optional().catch(undefined),
       totalMinutes: z.number(),
     }),
   }),

@@ -10,6 +10,7 @@ import { overrideBias, OVERRIDE_MAJORITY, OVERRIDE_WINDOW } from '../progression
 import { RESERVE_CHECK, reserveCheckStatus, reserveReadings } from '../progression/reserveCheck';
 import { resolveStyle } from '../planning/styleAdvice';
 import { painPatterns } from '../recovery/painPattern';
+import { PACE, TRAINING_TIME, paceReadings, personalPace } from '../duration/trainingTime';
 import type { LearnedKind, LearnedResets } from './resets';
 
 /**
@@ -20,7 +21,7 @@ import type { LearnedKind, LearnedResets } from './resets';
 
 /** The page's sections, each a learned value. */
 export interface LearnedSection {
-  key: LearnedKind | 'pace' | 'declines';
+  key: LearnedKind | 'declines';
   title: string;
   /** Where it stands, in one line. */
   status: string;
@@ -301,18 +302,65 @@ export interface LearnedInput {
   declines: CoachDeclines;
 }
 
+/**
+ * The lifter's own pace (Maintenance 28, the owner's item 4): how long their workouts take against
+ * the plan's own estimate, and what plans are fitted to.
+ */
+function paceSection(input: LearnedInput): LearnedSection {
+  const resetAt = input.resets.pace ?? null;
+  const pace = personalPace(input.history, resetAt);
+  const workouts = (count: number) => `${count} ${count === 1 ? 'workout' : 'workouts'}`;
+  const items: string[] = [];
+  let status: string;
+  if (pace.usable && pace.ratio !== null) {
+    const share = Math.round(Math.abs(pace.ratio - 1) * 100);
+    // The workouts it read, which need not be the latest: one too short or too far off is not
+    // read (the review of item 4).
+    const from = `from the last ${workouts(pace.readings)} it could read`;
+    status =
+      share < 2
+        ? `Your workouts take about the plan's own estimate, ${from}.`
+        : `Your workouts take about ${share}% ${pace.ratio > 1 ? 'longer' : 'less time'} than the plan's own estimate, ${from}.`;
+    if (Math.round(Math.abs(pace.factor - 1) * 100) >= 2) {
+      items.push(
+        `Plans are fitted to it: a 45-minute plan holds about ${Math.round(45 / pace.factor)} minutes of the plan's own estimate.`,
+      );
+    }
+    if (pace.factor !== pace.ratio) {
+      items.push(
+        `Plans move no further than ${Math.round((PACE.FACTOR_HIGH - 1) * 100)}% longer or ${Math.round((1 - PACE.FACTOR_LOW) * 100)}% shorter.`,
+      );
+    }
+  } else if (pace.readings > 0) {
+    status = `Still learning: ${workouts(pace.readings)} of the ${PACE.ACT_FROM} it needs.`;
+  } else if (resetAt && paceReadings(input.history).length > 0) {
+    status = `Nothing learned since you reset it on ${shortDay(resetAt)}.`;
+  } else if (
+    input.history.some(
+      (record) =>
+        record.estimatedSeconds !== undefined &&
+        (resetAt === null || Date.parse(record.startedAt) >= Date.parse(resetAt)),
+    )
+  ) {
+    // Workouts finished since this version, none of them one it could read (the review of item 4).
+    status = `Still learning: none yet of the ${PACE.ACT_FROM} workouts it needs.`;
+  } else {
+    status = 'Nothing learned yet: it reads each finished workout from this version on.';
+  }
+  return {
+    key: 'pace',
+    title: 'Your pace',
+    status,
+    items,
+    evidence: `From each finished workout: its training time, read from the log times of the sets you did (a wait counts up to ${TRAINING_TIME.GAP_MINUTES} minutes for each set logged after it, and a skip takes none), against the plan's own estimate of those sets. The middle of your latest ${PACE.READINGS} counts, from ${PACE.ACT_FROM}; a workout the plan puts under ${PACE.MIN_ESTIMATE_MINUTES} minutes, or one more than twice or under half its estimate, does not. It changes how much fits in a length; the rests, weights and reps stay as the length sets them.`,
+    resetAt,
+    reset: 'Forget your pace',
+  };
+}
+
 export function learnedSections(input: LearnedInput): LearnedSection[] {
   return [
-    {
-      key: 'pace',
-      title: 'Your pace',
-      status: 'Not learned yet.',
-      items: [],
-      evidence:
-        'How long your sets and rests take: workout times come from the plan’s own estimate of each set and rest.',
-      resetAt: null,
-      reset: null,
-    },
+    paceSection(input),
     habitSection(input),
     curveSection(input),
     reserveSection(input),

@@ -37,6 +37,12 @@ export interface LegacyExercise {
 export interface LegacySession {
   index: number;
   startedAt: string;
+  /**
+   * The day of a session dated by its day alone (`YYYY-MM-DD`, Maintenance 28, item 1): it is read
+   * as that day on the device, and its id keeps the digits it had when such a date read as
+   * midnight UTC, so a file imported before is still seen as imported.
+   */
+  dayOnly?: string;
   completedAt: string | null;
   title: string | null;
   unit: 'lb' | 'kg' | null;
@@ -61,6 +67,8 @@ function pick(source: Loose, keys: string[]): unknown {
   return undefined;
 }
 
+const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 function toIso(value: unknown): string | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     const ms = value < 1e11 ? value * 1000 : value;
@@ -68,7 +76,12 @@ function toIso(value: unknown): string | null {
     return Number.isNaN(date.getTime()) ? null : date.toISOString();
   }
   if (typeof value === 'string' && value.trim()) {
-    const date = new Date(value);
+    // A date alone names a day, not midnight UTC: noon of that day on the device, so every rule
+    // that reads the device's day reads that day (Maintenance 28, item 1).
+    const day = DAY_ONLY.exec(value.trim());
+    const date = day
+      ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]), 12)
+      : new Date(value);
     return Number.isNaN(date.getTime()) ? null : date.toISOString();
   }
   return null;
@@ -177,8 +190,10 @@ export function parseLegacyExport(text: string, resolve: ExerciseResolver): Lega
   const sessions: LegacySession[] = [];
   found.list.forEach((item, index) => {
     if (!isObject(item)) return;
-    const startedAt = toIso(pick(item, ['startedAt', 'start', 'date', 'timestamp', 'completedAt']));
+    const dated = pick(item, ['startedAt', 'start', 'date', 'timestamp', 'completedAt']);
+    const startedAt = toIso(dated);
     if (!startedAt) return;
+    const dayOnly = typeof dated === 'string' && DAY_ONLY.test(dated.trim()) ? dated.trim() : null;
     const completedAt = toIso(pick(item, ['completedAt', 'end', 'finishedAt'])) ?? null;
     const title = pick(item, ['title', 'name']);
     const exercisesRaw = pick(item, ['exercises', 'entries', 'items']);
@@ -190,6 +205,7 @@ export function parseLegacyExport(text: string, resolve: ExerciseResolver): Lega
     sessions.push({
       index,
       startedAt,
+      ...(dayOnly ? { dayOnly } : {}),
       completedAt,
       title: typeof title === 'string' && title.trim() ? title.trim() : null,
       unit: toUnit(pick(item, ['unit', 'units', 'weightUnit'])),
@@ -232,7 +248,10 @@ function convert(weight: number | null, from: 'lb' | 'kg' | null, to: 'lb' | 'kg
 
 /** Stable id from the session's own date and position, so a second import of the same file changes nothing. */
 export function legacyRecordId(session: LegacySession): string {
-  return `legacy-${session.startedAt.replace(/[^0-9]/g, '').slice(0, 14)}-${session.index}`;
+  const stamp = session.dayOnly
+    ? `${session.dayOnly.replace(/-/g, '')}000000`
+    : session.startedAt.replace(/[^0-9]/g, '').slice(0, 14);
+  return `legacy-${stamp}-${session.index}`;
 }
 
 export function planLegacyImport(

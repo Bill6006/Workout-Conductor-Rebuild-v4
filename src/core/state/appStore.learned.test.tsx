@@ -107,7 +107,9 @@ describe('resetting what the app learned', () => {
     expect(
       within(screen.getByTestId('learned-habit')).getByText(/^Last reset /),
     ).toBeInTheDocument();
-    // Pace is not learned yet, and has nothing to reset.
-    expect(within(screen.getByTestId('learned-pace')).queryByRole('button')).toBeNull();
+    // The pace has its own reset since Maintenance 28 (item 4).
+    expect(
+      within(screen.getByTestId('learned-pace')).getByTestId('learned-reset-pace'),
+    ).toHaveTextContent('Forget your pace');
   });
 });

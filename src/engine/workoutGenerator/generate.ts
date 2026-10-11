@@ -66,7 +66,8 @@ import {
   type PushDay,
   type WorkAhead,
 } from '../planning/pushLift';
-import { addLocalDays } from '../../core/time/localDate';
+import { addLocalDays, localDayKey } from '../../core/time/localDate';
+import { PACE, personalPace, type PersonalPace } from '../duration/trainingTime';
 import { styleInfo } from '../planning/styles';
 import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
@@ -1066,6 +1067,26 @@ function sessionsAhead(input: GenerationInput, history: readonly WorkoutRecord[]
   return out;
 }
 
+/**
+ * What the plan says of the lifter's own pace, when it moves the plan's minutes (item 4): the pace
+ * as Settings reads it, and how far plans go when that is further (the review of item 4).
+ */
+export function paceReason(pace: Pick<PersonalPace, 'ratio' | 'factor'>): string | null {
+  if (pace.factor === 1 || pace.ratio === null) return null;
+  const share = Math.round(Math.abs(pace.ratio - 1) * 100);
+  if (share < 2) return null;
+  const line = `Fitted at your own pace: your workouts take about ${share}% ${pace.ratio > 1 ? 'longer' : 'less time'} than the plan's own estimate`;
+  if (pace.factor === pace.ratio) return `${line}.`;
+  return pace.ratio > 1
+    ? `${line}, and plans move no further than ${Math.round((PACE.FACTOR_HIGH - 1) * 100)}% longer.`
+    : `${line}, and plans move no further than ${Math.round((1 - PACE.FACTOR_LOW) * 100)}% shorter.`;
+}
+
+/** Whether a line of "Why this workout" is the one about the lifter's own pace. */
+export function isPaceLine(line: string): boolean {
+  return line.startsWith('Fitted at your own pace:');
+}
+
 /** A plan with one more line in "Why this workout", after the main lift's. */
 function withReason(workout: GeneratedWorkout, line: string): GeneratedWorkout {
   const reasons = [...workout.explanation.reasons];
@@ -1637,7 +1658,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const fitLog = new FittingLog();
   const generalWarmup =
     constraints.generalWarmupMinutesOverride ?? generalWarmupMinutes(targetMinutes);
-  const estimate = (): TimeBreakdown => estimateWorkout(blocks, generalWarmup, exerciseOf, isDone);
+  // The lifter's own pace (Maintenance 28, item 4): the plan is fitted to how long their
+  // workouts take, read from their finished workouts since the last reset.
+  const pace = personalPace(history, input.resets?.pace ?? null);
+  const estimate = (): TimeBreakdown =>
+    estimateWorkout(blocks, generalWarmup, exerciseOf, isDone, pace.factor);
 
   const untouchable = (entry: WorkoutEntry) =>
     entry.id === anchorId ||
@@ -1955,9 +1980,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     if (placed) onItsOwn(placed.entry, placed.move);
     else giveBackTrimmed();
   };
+  // The rests a length asks for are the plan's own, whatever the lifter's pace: the pace trims sets
+  // and moves, never a rest (the review of item 4: rests cut for it were the ones read against).
+  const overAtPlanPace = (): boolean =>
+    pace.factor === 1 ||
+    estimateWorkout(blocks, generalWarmup, exerciseOf, isDone).totalMinutes > limit;
   while (estimate().totalMinutes > limit && guard < 40) {
     guard += 1;
-    if (!restsExhausted && shortenRests()) continue;
+    if (!restsExhausted && overAtPlanPace() && shortenRests()) continue;
     restsExhausted = true;
     if (trimSets()) continue;
     const lowest = nextToLeaveOut();
@@ -2180,6 +2210,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     );
   }
   if (deload) reasons.push(deloadReason(blocks, deload));
+  const paceLine = paceReason(pace);
+  if (paceLine) reasons.push(paceLine);
   reasons.push(
     `${profile.restStyle.charAt(0).toUpperCase() + profile.restStyle.slice(1)} rests; supersets ${profile.techniques.supersets ? 'on' : 'off'}, drop sets ${profile.techniques.dropSets ? 'on' : 'off'}, circuits ${profile.techniques.circuits ? 'on' : 'off'}.`,
   );
@@ -2194,7 +2226,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const summary = `${template.title}: ${count} exercises in about ${Math.round(time.totalMinutes)} min${leader ? `, ${leader.name} first` : ''}${fittedLabel}.`;
 
   return {
-    id: `wk-${now.slice(0, 10)}-${template.id}-${duration}`,
+    id: `wk-${localDayKey(now)}-${template.id}-${duration}`,
     templateId: template.id,
     title: template.title,
     goal: goalLabel(profile.goals.primary),
@@ -2206,6 +2238,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       defaultMinutes,
       estimatedMinutes: Math.round(time.totalMinutes),
       overByMinutes: overBy,
+      ...(pace.factor !== 1 ? { pace: pace.factor } : {}),
     },
     musclePriorities: priorities,
     blocks,

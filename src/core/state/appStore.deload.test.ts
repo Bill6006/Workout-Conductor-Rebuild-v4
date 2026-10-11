@@ -43,7 +43,10 @@ describe('deload week in the store', () => {
     expect(await db.get<Identified>('meta', DELOAD_WEEK_ID)).toBeDefined();
     const reopened = createTestStore({ factory: handle.factory, storage: handle.storage });
     await reopened.store.hydrate();
-    expect(reopened.store.getSnapshot().deloadWeek?.endsAt).toBe('2026-09-08T00:00:00.000Z');
+    // Kept at midnight UTC, it reads as the same calendar days on the device (Maintenance 28).
+    expect(reopened.store.getSnapshot().deloadWeek?.endsAt).toBe(
+      new Date(2026, 8, 8).toISOString(),
+    );
 
     await handle.store.cancelDeloadWeek();
     expect(handle.store.getSnapshot().deloadWeek).toBeNull();

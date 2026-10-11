@@ -61,6 +61,12 @@ function restLabel(seconds: number): string {
   return seconds >= 60 ? `${Math.round((seconds / 60) * 10) / 10} min rest` : `${seconds} s rest`;
 }
 
+/** What the lifter's own pace adds to the plan's own parts, or takes away (Maintenance 28). */
+function paceText(minutes: number | undefined): string {
+  if (!minutes) return '';
+  return `, ${Math.abs(minutes)} min ${minutes > 0 ? 'more' : 'less'} at your pace`;
+}
+
 /**
  * An exercise stopped at its logged sets (the place could not equip it, or it was swapped out
  * once started) says so, instead of reading as work still to do (Maintenance 22).
@@ -340,11 +346,11 @@ export function WorkoutPreviewCard({
               {line}
             </li>
           ))}
-          <li>
+          <li data-testid="time-breakdown">
             Time: {workout.explanation.time.warmupMinutes} min warm-up,{' '}
             {workout.explanation.time.workMinutes} min work, {workout.explanation.time.restMinutes}{' '}
-            min rest, {workout.explanation.time.transitionMinutes} min setup. Confidence{' '}
-            {workout.confidence}.
+            min rest, {workout.explanation.time.transitionMinutes} min setup
+            {paceText(workout.explanation.time.paceMinutes)}. Confidence {workout.confidence}.
           </li>
         </ul>
       </details>

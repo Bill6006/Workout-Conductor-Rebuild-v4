@@ -1,36 +1,33 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-10-10_
+_Last updated: 2026-10-11_
 
-| Item                   | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Current phase          | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, and 21 at their review gates. Maintenance 25 (round G) and Maintenance 27 (round I) at their review gates (YELLOW)                                                                                                                         |
-| Phase gate             | Maintenance 27 YELLOW, at its review gate (round I, the owner's items 43, 41, 44, 45, 46, 47 and 49). Maintenance 26 **GREEN** from the owner on 2026-10-10 (the phone review). Maintenance 25 YELLOW, at its review gate (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 24 **GREEN** from the owner on 2026-09-25 (issue #25). Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open) |
-| Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Work in progress       | Maintenance 27 (round I) at its review gate (YELLOW): the owner's review on the phone (`docs/reports/maintenance-27.md`, Review on the phone). Maintenance 25 (round G, issue #26) at its review gate (YELLOW). Agreed and waiting: 1, 3, 4, 6 to 8, 10 to 12, 14 and 30 to 32 (listed under Agreed and waiting)                                                                                                                                                                                 |
-| Latest commit          | Maintenance 27 status, live checks and the build to check (this commit, documents only, not deployed); the live app build is `8081df3`                                                                                                                                                                                                                                                                                                                                                           |
-| Latest deployment      | `8081df3` (Maintenance 27, round I) deployed by Deploy Pages run 38101751291 (success); browser suite against the live URL: 395 passed + 18 skipped by design, none failed                                                                                                                                                                                                                                                                                                                       |
-| Test totals            | Unit: 2296 passed (241 files), also in UTC. Browser/mobile: 399 passed + 14 skipped by design, none failed, locally in the gate; 395 passed + 18 skipped by design against the live URL. Reverts: 193 of 193 caught this round, 1199 of 1199 of Maintenance 23 to 26 on this round's code; 32 of 32 browser reverts caught                                                                                                                                                                       |
-| Build marker           | Under Settings, About this app (since Maintenance 25; before, under every screen's header): `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                                                                                                                                                                 |
+| Item                   | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository             | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Live app (permanent)   | https://bill6006.github.io/Workout-Conductor-Rebuild-v4/                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Current phase          | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 21, 25, 27 and 28 YELLOW at their review gates. The agreed backlog is being built round after round without pausing at the gates (the owner, 2026-10-11)                                                                                                                                                          |
+| Phase gate             | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
+| Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Work in progress       | The agreed backlog in five rounds: J = Maintenance 28 (items 1, 3, 4), then K (7, 8, 10, 14), L (6, 30, 31), M (12, 32) and N (11), each researched where training is involved, reviewed, reverted, verified and shipped live                                                                                                                                                                                                                                                                                                                                           |
+| Latest commit          | Maintenance 28, round J: items 1, 3 and 4 (this commit); its deployment and live checks follow in the next                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Latest deployment      | `8081df3` (Maintenance 27, round I) deployed by Deploy Pages run 38101751291 (success); browser suite against the live URL: 395 passed + 18 skipped by design, none failed                                                                                                                                                                                                                                                                                                                                                                                              |
+| Test totals            | Unit: 2296 passed (241 files), also in UTC. Browser/mobile: 399 passed + 14 skipped by design, none failed, locally in the gate; 395 passed + 18 skipped by design against the live URL. Reverts: 193 of 193 caught this round, 1199 of 1199 of Maintenance 23 to 26 on this round's code; 32 of 32 browser reverts caught                                                                                                                                                                                                                                              |
+| Build marker           | Under Settings, About this app (since Maintenance 25; before, under every screen's header): `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## Agreed and waiting
 
-The owner's items as agreed, one line each. Nothing here is built until the owner starts its round.
-Before each is built, its training and physiology rules are checked against the best available
+The owner's items as agreed, one line each, being built round after round since the owner's word
+on 2026-10-11 ("Proceed through ALL remaining already-agreed items"). Before each is built, its training and physiology rules are checked against the best available
 evidence (systematic reviews, meta-analyses, controlled trials, position stands), and the evidence,
 the uncertainty and the reason for each final rule are written down; a number in a proposal is
 not a rule until the evidence backs it. Product and screen choices follow ordinary judgement (the
 owner, 2026-10-09).
 
-- **1.** Use the local date everywhere.
-- **3.** Record training time, not the hours a workout was left open.
-- **4.** Learn your own pace.
 - **6.** Rename the Plates tab to Weights, with weights per place.
 - **7.** Vibration with the rest sounds.
 - **8.** Keep the screen awake during a workout.
@@ -50,7 +47,27 @@ threshold a simulation validated), **44** (a lift to push), **45** (pain pattern
 (the week the lifter actually trains), **47** (what the app has learned) and **49** (variety for
 accessories) (`docs/reports/maintenance-27.md`).
 
+Built in Maintenance 28 (round J, YELLOW): **1** (the local date everywhere), **3** (training
+time, not the hours a workout was left open) and **4** (the lifter's own pace)
+(`docs/reports/maintenance-28.md`).
+
 Not approved (2026-10-09): **48**, Life Mirror's daily check-in used for workouts.
+
+## Waiting for the owner's phone acceptance
+
+The owner, 2026-10-11: no gate pauses the agreed work, and none is GREEN without the owner's review.
+Once every agreed item is live, one consolidated phone review closes all of these, without repeating
+what the owner has already passed:
+
+- **Maintenance 28** (round J: items 1, 3, 4): not yet reviewed.
+- **Maintenance 27** (round I: items 43, 41, 44, 45, 46, 47, 49): its phone steps
+  (`docs/reports/maintenance-27.md`), not yet run.
+- **Maintenance 25** (issue #26): round G steps 1-7 and 9-11 (step 8 replaced by Maintenance 26,
+  already passed); one decision to settle: the gym barcode in the cloud copy.
+- **Phase 8**: acceptance steps 12-19 on the installed app (`docs/reports/maintenance-25.md`).
+- **Maintenance 21** (issue #22), **17** (#18), **16** (#17), **15** (#16), **14** (#15), **11**
+  (#12), **10** (#11), **9** (#10), **8** (#9), **5** (#6) and **4** (#5): review issues still
+  open.
 
 ## Phase checklist
 
@@ -171,6 +188,44 @@ Not approved (2026-10-09): **48**, Life Mirror's daily check-in used for workout
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 28: round J, the date, training time and the lifter's own pace (YELLOW)
+
+- Built on the owner's word (2026-10-11): "Proceed through ALL remaining already-agreed items", the
+  gates no longer pausing the work. Round J is the first of five.
+- 1: the device's date everywhere the app works out what day it is:
+  - the week plan's weekdays and Today row;
+  - today's plan and its choices through the evening;
+  - the deload week and the run of training days;
+  - Progress's weeks and the Consistency average;
+  - a push date;
+  - the dates shown and export names;
+  - the cloud copy's day of a workout.
+
+  A workout counts on the day it began; elapsed time (recovery, breaks) stays elapsed. What was
+  kept from before (a deload week, an evening's plan, an old export's dates) reads as the same
+  calendar days. The day rules' tests also run in New York and fourteen hours east of UTC.
+
+- 3: training time, not the hours a workout was left open. It is read from the log times of the
+  sets done:
+  - a wait counts up to ten minutes for each set logged after it;
+  - a skip takes no time;
+  - training ends with the last set;
+  - never more than the workout's own clock.
+
+  History, a workout's detail, the completion card and Duration efficiency show it. Old workouts are
+  measured the same way, so the 1504-minute workout reads as its 47 minutes of sets.
+
+- 4: the lifter's own pace: training time against the plan's own estimate of the sets done, the
+  middle of the latest eight workouts from three.
+  - Plans are fitted to it, no further than 1.5 or 0.8 times. It trims sets and moves, never a rest.
+  - "Why this workout" says so, and the time line shows it as a part of its own.
+  - Learned from your log shows it, with its reset.
+  - Saved plans load at it; the week ahead reads what was reset.
+- Reviewed: two adversarial reviews found one HIGH (a slow pace shortened the rests, then read
+  slower against them), three MEDIUM and eleven LOW defects. All are fixed with tests and reverts;
+  two limits are documented.
+- Report: `docs/reports/maintenance-28.md`.
 
 ## Maintenance 27: round I, the approved learning items (YELLOW)
 
@@ -492,6 +547,6 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-The owner's review of Maintenance 27 on the phone (`docs/reports/maintenance-27.md`, Review on the
-phone). Maintenance 25 (issue #26) with Phase 8, and Maintenance 21 (issue #22), wait for the
-owner's review.
+Round K (Maintenance 29: items 7, 8, 10 and 14), then L, M and N, without pausing at the gates.
+Once every agreed item is live, the one consolidated phone review (Waiting for the owner's phone
+acceptance).

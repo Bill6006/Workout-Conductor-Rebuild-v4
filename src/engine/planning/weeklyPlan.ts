@@ -3,6 +3,8 @@ import { MUSCLE_IDS, muscleName, type MuscleId } from '../../catalog/muscles/mus
 import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile, Weekday } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { addLocalDays, localDayKey, localWeekday } from '../../core/time/localDate';
+import type { LearnedResets } from '../learned/resets';
 import { computeExposure } from '../volume/weeklyVolume';
 import { allEntries, pushMarkOf } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
@@ -12,9 +14,6 @@ import { generateWorkout } from '../workoutGenerator/generate';
  * user's available days, rotated as if each one were logged, plus a recovery
  * balance per muscle. Pure and cheap; nothing is stored.
  */
-
-const WEEKDAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-const DAY_MS = 86_400_000;
 
 export interface PlannedSession {
   date: string;
@@ -26,10 +25,6 @@ export interface PlannedSession {
   /** Every muscle the session trains directly. */
   muscles: MuscleId[];
   today: boolean;
-}
-
-function weekdayOf(iso: string): Weekday {
-  return WEEKDAYS[(new Date(iso).getUTCDay() + 6) % 7] as Weekday;
 }
 
 function dayLabel(iso: string, today: boolean): string {
@@ -77,11 +72,12 @@ export function planWeek(
   location: LocationProfile | undefined,
   history: readonly WorkoutRecord[],
   now: string,
+  /** What the lifter reset (Maintenance 27, item 47): the week reads as today's plan does. */
+  resets: LearnedResets | null = null,
 ): PlannedSession[] {
   const available = new Set(profile.schedule.availableDays);
-  const trainedToday = history.some(
-    (record) => (record.completedAt ?? record.startedAt).slice(0, 10) === now.slice(0, 10),
-  );
+  // The device's day: a workout counts on the day it began (Maintenance 28, item 1).
+  const trainedToday = history.some((record) => localDayKey(record.startedAt) === localDayKey(now));
   const sessions: PlannedSession[] = [];
   let simulated: WorkoutRecord[] = [...history];
   for (
@@ -89,8 +85,8 @@ export function planWeek(
     offset < 7 && sessions.length < profile.schedule.weeklyFrequency;
     offset += 1
   ) {
-    const date = new Date(Date.parse(now) + offset * DAY_MS).toISOString();
-    const weekday = weekdayOf(date);
+    const date = addLocalDays(now, offset);
+    const weekday = localWeekday(date);
     if (!available.has(weekday)) continue;
     if (offset === 0 && trainedToday) continue;
     const workout = generateWorkout({
@@ -99,6 +95,7 @@ export function planWeek(
       history: simulated,
       now: date,
       duration: 'default',
+      resets,
     });
     const counts = new Map<MuscleId, number>();
     for (const entry of allEntries(workout.blocks)) {

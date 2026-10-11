@@ -264,6 +264,7 @@ export function ActiveWorkoutScreen() {
       elapsedSeconds: elapsed,
       restSecondsLeft,
       holdSecondsDone,
+      pace: workout.duration.pace ?? 1,
     }),
   );
   const currentBlock = position

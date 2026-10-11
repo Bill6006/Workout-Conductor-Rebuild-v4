@@ -67,9 +67,11 @@ describe('backup format', () => {
       });
       expect(parsed.summary.bytes).toBeGreaterThan(100);
     }
-    expect(backupFileName(NOW)).toBe('workout-conductor-backup-20260902-1200.json');
-    expect(historyFileName(NOW)).toBe('workout-conductor-history-20260902-1200.json');
-    expect(settingsFileName(NOW)).toBe('workout-conductor-settings-20260902-1200.json');
+    // The device's date and time (Maintenance 28, item 1).
+    const evening = new Date(2026, 8, 2, 21, 5).toISOString();
+    expect(backupFileName(evening)).toBe('workout-conductor-backup-20260902-2105.json');
+    expect(historyFileName(evening)).toBe('workout-conductor-history-20260902-2105.json');
+    expect(settingsFileName(evening)).toBe('workout-conductor-settings-20260902-2105.json');
   });
 
   it('migrates a schema 1 backup forward and keeps every unknown field', () => {

@@ -101,7 +101,18 @@ export const WorkoutRecordSchema = z.looseObject({
     .union([z.literal(15), z.literal(30), z.literal(45), z.literal('default')])
     .optional(),
   plannedMinutes: z.number().min(0).optional(),
+  /** How long the workout's clock ran, pauses left out: a workout left open runs on. */
   elapsedSeconds: z.number().min(0).optional(),
+  /**
+   * The minutes it was trained (Maintenance 28, item 3): from the sets' own log times, waits of
+   * more than ten minutes left out. A workout from before has none; it is measured the same way.
+   */
+  trainingSeconds: z.number().min(0).optional().catch(undefined),
+  /**
+   * The plan's own estimate, at its own pace, of the sets done (Maintenance 28, item 4): what the
+   * training time is read against to learn the lifter's pace.
+   */
+  estimatedSeconds: z.number().min(0).optional().catch(undefined),
   endedEarly: z.boolean().default(false),
   rating: SessionRatingSchema.nullable().default(null),
   skippedExerciseIds: z.array(z.string()).default([]),

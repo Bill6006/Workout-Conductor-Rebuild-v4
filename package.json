@@ -22,7 +22,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
-    "test:unit": "vitest run",
+    "test:unit": "vitest run && node scripts/test-zones.mjs",
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
     "privacy-scan": "node scripts/privacy-scan.mjs",

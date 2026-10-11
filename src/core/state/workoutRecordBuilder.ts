@@ -25,6 +25,12 @@ import {
 import type { LoggedExercise, SessionRating, WorkoutRecord } from '../validation/workoutRecord';
 import type { CompletionSummary, WorkoutSession } from './session';
 import { painNextLine } from '../../engine/recovery/painReport';
+import {
+  estimateDoneSeconds,
+  measureTrainingSeconds,
+  trainingMinutes,
+  trainingSeconds as trainingSecondsOf,
+} from '../../engine/duration/trainingTime';
 
 /**
  * Turns a session into the durable workout record (one entry per exercise,
@@ -102,6 +108,27 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
       };
     }),
   );
+  // The training time and the plan's estimate of the sets done (Maintenance 28, items 3 and 4).
+  const startedAt = session.completed.startedAt ?? options.now;
+  const trainingSeconds = measureTrainingSeconds({
+    startedAt,
+    completedAt: options.now,
+    elapsedSeconds: options.elapsedSeconds,
+    entries,
+  });
+  const performed = new Set(
+    session.completed.sets
+      .filter((done) => !done.skipped)
+      .map((done) => `${done.entryId}:${done.setIndex}`),
+  );
+  const estimatedSeconds = estimateDoneSeconds(
+    workout.blocks,
+    (entryId, setIndex) => performed.has(`${entryId}:${setIndex}`),
+    // The warm-up the workout started with: a rebuild under way leaves none, or a short one after
+    // a pause, but the run up to the first set was timed with it (the review of item 4).
+    session.completed.warmupMinutes ?? workout.warmup.generalMinutes,
+    requireExercise,
+  );
   const handed = handedOverIds(workout.blocks);
   const skippedExerciseIds = entries
     .filter((entry) => !entry.sets.some((set) => set.kind === 'working' && set.completed))
@@ -109,7 +136,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
     .map((entry) => entry.exerciseId);
   return {
     id: `w-${options.now.replace(/\D/g, '').slice(0, 14)}`,
-    startedAt: session.completed.startedAt ?? options.now,
+    startedAt,
     completedAt: options.now,
     locationId: workout.locationId,
     templateId: workout.templateId,
@@ -118,6 +145,8 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
     durationChoice: session.duration,
     plannedMinutes: workout.duration.targetMinutes,
     elapsedSeconds: options.elapsedSeconds,
+    trainingSeconds,
+    estimatedSeconds,
     endedEarly: options.endedEarly,
     rating: options.rating,
     skippedExerciseIds,
@@ -246,7 +275,7 @@ export function buildCompletion(
     highlights.push(`Best set: ${best.name} ${best.weight} ${profile.units} × ${best.reps}.`);
   if (setsCompleted > 0)
     highlights.push(
-      `${setsCompleted} working ${setsCompleted === 1 ? 'set' : 'sets'} in ${Math.max(1, Math.round(record.elapsedSeconds ?? 0) / 60).toFixed(0)} min.`,
+      `${setsCompleted} working ${setsCompleted === 1 ? 'set' : 'sets'} in ${Math.max(1, trainingMinutes(record))} min.`,
     );
   if (record.endedEarly) highlights.push('Ended early; logged work is saved exactly as entered.');
 
@@ -308,6 +337,7 @@ export function buildCompletion(
     recordId: record.id,
     completedAt: record.completedAt ?? session.completed.startedAt ?? '',
     elapsedSeconds: record.elapsedSeconds ?? 0,
+    trainingSeconds: trainingSecondsOf(record),
     plannedMinutes: record.plannedMinutes ?? session.workout.duration.targetMinutes,
     exercisesCompleted: trained.length,
     exercisesPlanned: entries.length,

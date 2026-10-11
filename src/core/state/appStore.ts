@@ -87,9 +87,11 @@ import {
 import { loggedLoad } from '../../engine/progression/startingLoad';
 import {
   lowCheckIn,
+  planAtPace,
   planUnderTheEase,
   recalibrate as runRecalibration,
 } from '../../engine/recalibration/recalibrate';
+import { personalPace } from '../../engine/duration/trainingTime';
 import { wouldPair } from '../../engine/progression/personalCurve';
 import {
   measuredReserve,
@@ -168,6 +170,7 @@ import {
 import {
   DELOAD_WEEK_ID,
   inDeloadWindow,
+  onDeviceDays,
   windowIsPast,
   type DeloadRecommendation,
   type DeloadWeek,
@@ -200,6 +203,7 @@ import {
   type Identified,
   type StoreName,
 } from '../storage/indexedDb';
+import { localDayKey } from '../time/localDate';
 import {
   LOCAL_SETTINGS_KEY,
   ONBOARDING_DRAFT_KEY,
@@ -444,10 +448,12 @@ function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
   if (!raw || typeof raw !== 'object') return null;
   const candidate = raw as Partial<DeloadWeek>;
   if (typeof candidate.startsAt !== 'string' || typeof candidate.endsAt !== 'string') return null;
+  // A window kept from before Maintenance 28 ran on UTC days: it runs on the device's (item 1).
+  const days = onDeviceDays({ startsAt: candidate.startsAt, endsAt: candidate.endsAt });
   const week: DeloadWeek = {
     id: DELOAD_WEEK_ID,
-    startsAt: candidate.startsAt,
-    endsAt: candidate.endsAt,
+    startsAt: days.startsAt,
+    endsAt: days.endsAt,
     plannedAt: typeof candidate.plannedAt === 'string' ? candidate.plannedAt : now,
     reasons: Array.isArray(candidate.reasons)
       ? candidate.reasons.filter((r): r is string => typeof r === 'string')
@@ -1179,7 +1185,8 @@ export class AppStore {
   private baseKey(): string | null {
     const { profile, history } = this.state;
     if (!profile) return null;
-    return computeBaseKey(this.now().slice(0, 10), profile, this.currentLocation(), history.length);
+    // The device's day (Maintenance 28, item 1).
+    return computeBaseKey(localDayKey(this.now()), profile, this.currentLocation(), history.length);
   }
 
   private setSession(session: WorkoutSession): void {
@@ -1266,7 +1273,7 @@ export class AppStore {
    */
   private fromEarlierDay(session: WorkoutSession): boolean {
     return (
-      session.status === 'preview' && !session.baseKey.startsWith(`${this.now().slice(0, 10)}|`)
+      session.status === 'preview' && !session.baseKey.startsWith(`${localDayKey(this.now())}|`)
     );
   }
 
@@ -1637,6 +1644,9 @@ export class AppStore {
         ...session.completed,
         startedAt: now,
         currentEntryId: position?.entryId ?? null,
+        // The general warm-up the workout starts with: what its sets are timed against, whatever
+        // a rebuild under way leaves of it (Maintenance 28, the review of item 4).
+        warmupMinutes: session.workout.warmup.generalMinutes,
       },
     });
     // At a place with a barcode set to show, its popup comes up for the desk as the workout starts.
@@ -2386,10 +2396,15 @@ export class AppStore {
     // plan saved before Maintenance 25 says each fitting step once.
     // Its targets were read on the day it was saved: a hard start does not read them (the third
     // pass of item 42).
-    const fresh = asSaved(explanationOnce(withoutStops(saved.workout)));
+    // Timed at the lifter's pace as it reads now, not as it read when saved (Maintenance 28, the
+    // review of item 4).
+    const fresh = planAtPace(
+      asSaved(explanationOnce(withoutStops(saved.workout))),
+      personalPace(this.state.readHistory, this.state.learnedResets.pace ?? null),
+    );
     const workout = {
       ...fresh,
-      id: `wk-${now.slice(0, 10)}-saved-${saved.id}`,
+      id: `wk-${localDayKey(now)}-saved-${saved.id}`,
       generatedAt: now,
       recalibration: { version: 1, lastTrigger: null },
       // Its lines about kept swaps say what is true now, not when it was saved.
@@ -2405,7 +2420,7 @@ export class AppStore {
       lastSummary: {
         headline,
         details: [
-          `Saved ${saved.createdAt.slice(0, 10)}. Change the length or any exercise and it recalibrates as usual.`,
+          `Saved ${localDayKey(saved.createdAt)}. Change the length or any exercise and it recalibrates as usual.`,
         ],
         counts: {
           added: 0,

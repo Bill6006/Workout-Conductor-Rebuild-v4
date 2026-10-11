@@ -919,7 +919,9 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
  * everything still to do (the general warm-up included until the first set is logged). Counting
  * only the work still to do made the room grow as the workout went on.
  */
-function spareMinutes(input: CoachInput): number {
+export function spareMinutes(
+  input: Pick<CoachInput, 'completed' | 'elapsedSeconds' | 'workout'>,
+): number {
   const keys = doneKeys(input.completed);
   const elapsed = input.elapsedSeconds ?? 0;
   const left = remainingMinutes({
@@ -930,6 +932,7 @@ function spareMinutes(input: CoachInput): number {
     anythingLogged: input.completed.sets.length > 0,
     elapsedSeconds: elapsed,
     restSecondsLeft: 0,
+    pace: input.workout.duration.pace ?? 1,
   });
   return input.workout.duration.targetMinutes - elapsed / 60 - left;
 }

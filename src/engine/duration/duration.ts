@@ -168,19 +168,37 @@ export function estimateWorkout(
   generalWarmupMin: number,
   exerciseOf: (id: string) => CatalogExercise,
   isDone: SetDonePredicate = NOTHING_DONE,
+  /**
+   * The lifter's own pace (Maintenance 28, item 4). The plan's parts stay the plan's own, its rests
+   * and warm-up as it sets them, and what the pace adds or takes away is a part of its own, so
+   * they still add up (the review of item 4).
+   */
+  pace = 1,
 ): TimeBreakdown {
   const { work, rest, setup } = estimateSeconds(blocks, exerciseOf, isDone);
   const round = (value: number) => Math.round(value * 10) / 10;
+  const warmupMinutes = generalWarmupMin;
   const workMinutes = round(work / 60);
   const restMinutes = round(rest / 60);
   const transitionMinutes = round(setup / 60);
-  const totalMinutes = round(generalWarmupMin + workMinutes + restMinutes + transitionMinutes);
+  const planned = warmupMinutes + workMinutes + restMinutes + transitionMinutes;
+  if (pace === 1) {
+    return {
+      warmupMinutes,
+      workMinutes,
+      restMinutes,
+      transitionMinutes,
+      totalMinutes: round(planned),
+    };
+  }
+  const paceMinutes = round(planned * (pace - 1));
   return {
-    warmupMinutes: generalWarmupMin,
+    warmupMinutes,
     workMinutes,
     restMinutes,
     transitionMinutes,
-    totalMinutes,
+    paceMinutes,
+    totalMinutes: round(planned + paceMinutes),
   };
 }
 
@@ -201,7 +219,10 @@ export function remainingMinutes(input: {
   restSecondsLeft: number;
   /** Seconds of a hold already counted: that much of its set is behind the lifter. */
   holdSecondsDone?: number;
+  /** The lifter's own pace the plan was fitted to (Maintenance 28, item 4). */
+  pace?: number;
 }): number {
+  const pace = input.pace ?? 1;
   const running = Math.max(0, input.restSecondsLeft);
   const { work, rest, setup } = estimateSeconds(
     input.blocks,
@@ -209,9 +230,12 @@ export function remainingMinutes(input: {
     input.isDone,
     running,
   );
+  // What runs on a clock (a rest, a hold, the warm-up as the clock runs) counts down in real time;
+  // the sets still to come go at the lifter's pace (the review of item 4: in a rest, Left fell
+  // faster than the clock).
   const warmup = input.anythingLogged
     ? 0
-    : Math.max(0, input.generalWarmupMinutes * 60 - input.elapsedSeconds);
+    : Math.max(0, input.generalWarmupMinutes * 60 * pace - input.elapsedSeconds);
   const held = Math.max(0, input.holdSecondsDone ?? 0);
-  return (Math.max(0, work - held) + rest + setup + warmup + running) / 60;
+  return (Math.max(0, work * pace - held) + (rest + setup) * pace + warmup + running) / 60;
 }

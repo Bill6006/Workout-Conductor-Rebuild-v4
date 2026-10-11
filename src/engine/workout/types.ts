@@ -232,6 +232,11 @@ export interface TimeBreakdown {
   workMinutes: number;
   restMinutes: number;
   transitionMinutes: number;
+  /**
+   * The minutes the lifter's own pace adds to the plan's own parts, or takes away when below zero
+   * (Maintenance 28, the review of item 4). Absent at the plan's own pace.
+   */
+  paceMinutes?: number;
   totalMinutes: number;
 }
 
@@ -255,6 +260,11 @@ export interface GeneratedWorkout {
     defaultMinutes: number;
     estimatedMinutes: number;
     overByMinutes: number;
+    /**
+     * The lifter's own pace the plan was fitted to (Maintenance 28, item 4): what its minutes are
+     * multiplied by, read again by every later estimate of it. Absent is the plan's own pace.
+     */
+    pace?: number;
   };
   musclePriorities: MusclePriority[];
   blocks: WorkoutBlock[];

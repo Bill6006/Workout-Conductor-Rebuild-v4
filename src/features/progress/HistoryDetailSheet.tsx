@@ -1,5 +1,6 @@
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { FactList } from '../../components/FactList/FactList';
+import { trainingMinutes } from '../../engine/duration/trainingTime';
 import { Sheet } from '../../components/Sheet/Sheet';
 import { formatDateTime } from '../../core/time/clock';
 import type { UnitSystem } from '../../core/validation/profile';
@@ -39,7 +40,7 @@ export function HistoryDetailSheet({ record, units, notesFor, onClose }: History
               { label: 'When', value: formatDateTime(record.completedAt ?? record.startedAt) },
               {
                 label: 'Duration',
-                value: `${Math.round((record.elapsedSeconds ?? 0) / 60)} min${record.plannedMinutes ? ` of ${record.plannedMinutes} planned` : ''}${record.endedEarly ? ', ended early' : ''}`,
+                value: `${trainingMinutes(record)} min${record.plannedMinutes ? ` of ${record.plannedMinutes} planned` : ''}${record.endedEarly ? ', ended early' : ''}`,
               },
               {
                 label: 'Rating',

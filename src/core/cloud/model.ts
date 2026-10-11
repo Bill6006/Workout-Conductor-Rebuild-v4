@@ -1,4 +1,5 @@
 import type { Identified, SyncedStore } from '../storage/indexedDb';
+import { localDayKey } from '../time/localDate';
 
 /**
  * The cloud copy: a Turso database, one per person. Its schema is fixed and
@@ -182,11 +183,16 @@ export function recordTimestamp(store: SyncedStore, record: Loose): string | nul
   }
 }
 
-/** The workout date for workout records; null for everything else. */
+/**
+ * The workout's day for workout records, on the device that saved it: the day it began
+ * (Maintenance 28, item 1; before, the UTC day it was finished). Null for everything else. Nothing
+ * reads it back: each app works out a workout's day from its own times.
+ */
 export function recordDay(store: SyncedStore, record: Loose): string | null {
   if (store !== 'workouts') return null;
-  const stamp = recordTimestamp(store, record);
-  return stamp ? stamp.slice(0, 10) : null;
+  const began = isoOrNull(record.startedAt);
+  const stamp = began ?? recordTimestamp(store, record);
+  return stamp ? localDayKey(stamp) : null;
 }
 
 /**

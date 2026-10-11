@@ -82,7 +82,7 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
     declines: parts.coachDeclines,
     location,
     loading: session.loading,
-    upcoming: planWeek(profile, location, history, now),
+    upcoming: planWeek(profile, location, history, now, parts.learnedResets ?? null),
     focus: parts.coachFocus?.muscle ?? null,
     swaps: parts.lastingSwaps.filter((swap) => !swapIsPast(swap, now)),
     resets: parts.learnedResets ?? null,

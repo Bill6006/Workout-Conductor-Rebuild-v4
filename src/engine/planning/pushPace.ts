@@ -1,3 +1,4 @@
+import { addLocalDays, startOfLocalDay } from '../../core/time/localDate';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { convertWeight, maxFromSet } from '../progression/maxes';
@@ -317,7 +318,10 @@ export function dateCheck(input: {
   current: number | null;
   newLifter: boolean;
 }): { needed: number; likely: boolean | null; ambitious: boolean } | null {
-  const weeks = (Date.parse(input.by) - Date.parse(input.now)) / WEEK_MS;
+  // The day set is the lifter's whole day: it passes as that day ends on the device (the review
+  // of Maintenance 28, item 1; it is kept as its noon).
+  const ends = Date.parse(startOfLocalDay(addLocalDays(input.by, 1)));
+  const weeks = (ends - Date.parse(input.now)) / WEEK_MS;
   const current = input.current;
   if (current === null || current <= 0 || weeks <= 0) return null;
   if (current >= input.target) return { needed: 0, likely: true, ambitious: false };

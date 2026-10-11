@@ -1,4 +1,11 @@
 import type { UserProfile } from '../../core/validation/profile';
+import {
+  addLocalDays,
+  dayOfBoundary,
+  fromUtcMidnight,
+  localWeekday,
+  startOfLocalDay,
+} from '../../core/time/localDate';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { computeExposure } from '../volume/weeklyVolume';
@@ -32,16 +39,9 @@ export const DELOAD_LOAD_SCALE = 0.9;
 export const DELOAD_SETS_DELTA = -1;
 export const DELOAD_RIR_DELTA = 1;
 
-const DAY_MS = 86_400_000;
-const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
-
-function weekdayOf(iso: string): (typeof WEEKDAYS)[number] {
-  return WEEKDAYS[(new Date(iso).getUTCDay() + 6) % 7] as (typeof WEEKDAYS)[number];
-}
-
+/** Midnight on the device `offsetDays` calendar days on (Maintenance 28, item 1). */
 function dayStart(iso: string, offsetDays: number): string {
-  const date = new Date(Date.parse(iso) + offsetDays * DAY_MS);
-  return `${date.toISOString().slice(0, 10)}T00:00:00.000Z`;
+  return startOfLocalDay(addLocalDays(iso, offsetDays));
 }
 
 /** The next available training day after today, then a seven-day window. */
@@ -49,7 +49,7 @@ export function nextWindow(profile: UserProfile, now: string): DeloadWindow {
   const available = new Set<string>(profile.schedule.availableDays);
   for (let offset = 1; offset <= 7; offset += 1) {
     const start = dayStart(now, offset);
-    if (available.size === 0 || available.has(weekdayOf(start))) {
+    if (available.size === 0 || available.has(localWeekday(start))) {
       return { startsAt: start, endsAt: dayStart(start, 7) };
     }
   }
@@ -57,14 +57,23 @@ export function nextWindow(profile: UserProfile, now: string): DeloadWindow {
   return { startsAt: start, endsAt: dayStart(start, 7) };
 }
 
+/**
+ * A window on the device's days (Maintenance 28, item 1): one kept from before then began and ended
+ * at midnight UTC, and runs on the same calendar days here.
+ */
+export function onDeviceDays(window: DeloadWindow): DeloadWindow {
+  return { startsAt: fromUtcMidnight(window.startsAt), endsAt: fromUtcMidnight(window.endsAt) };
+}
+
 export function inDeloadWindow(window: DeloadWindow | null | undefined, now: string): boolean {
   if (!window) return false;
+  const days = onDeviceDays(window);
   const at = Date.parse(now);
-  return at >= Date.parse(window.startsAt) && at < Date.parse(window.endsAt);
+  return at >= Date.parse(days.startsAt) && at < Date.parse(days.endsAt);
 }
 
 export function windowIsPast(window: DeloadWindow, now: string): boolean {
-  return Date.parse(now) >= Date.parse(window.endsAt);
+  return Date.parse(now) >= Date.parse(onDeviceDays(window).endsAt);
 }
 
 /**
@@ -109,14 +118,15 @@ export function recommendDeload(
   };
 }
 
-export function formatWindow(window: DeloadWindow): string {
+export function formatWindow(stored: DeloadWindow): string {
+  // The days on the device, a window kept from before Maintenance 28 on the same days.
+  const window = onDeviceDays(stored);
   const format = (iso: string) =>
     new Date(iso).toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
-      timeZone: 'UTC',
     });
-  const lastDay = new Date(Date.parse(window.endsAt) - DAY_MS).toISOString();
-  return `${format(window.startsAt)} to ${format(lastDay)}`;
+  const lastDay = addLocalDays(dayOfBoundary(window.endsAt), -1);
+  return `${format(dayOfBoundary(window.startsAt))} to ${format(lastDay)}`;
 }

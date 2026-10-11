@@ -179,7 +179,7 @@ describe('the page', () => {
   const section = (list: ReturnType<typeof sections>, key: string) =>
     list.find((one) => one.key === key)!;
 
-  it('lists every learned value in the agreed order, pace first, not learned yet', () => {
+  it('lists every learned value in the agreed order, pace first, nothing learned yet', () => {
     const list = sections([]);
     expect(list.map((one) => one.key)).toEqual([
       'pace',
@@ -189,9 +189,11 @@ describe('the page', () => {
       'pain',
       'declines',
     ]);
-    expect(section(list, 'pace').status).toBe('Not learned yet.');
-    expect(section(list, 'pace').reset).toBeNull();
-    for (const one of list.filter((item) => item.key !== 'pace' && item.key !== 'declines')) {
+    // The pace learns from Maintenance 28 on (item 4), with its own reset.
+    expect(section(list, 'pace').status).toBe(
+      'Nothing learned yet: it reads each finished workout from this version on.',
+    );
+    for (const one of list.filter((item) => item.key !== 'declines')) {
       expect(one.reset).not.toBeNull();
       expect(one.evidence.length).toBeGreaterThan(40);
     }

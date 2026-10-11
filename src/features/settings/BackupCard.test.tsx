@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { serializeBackup } from '../../core/backup/backup';
+import { backupFileName, serializeBackup } from '../../core/backup/backup';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
 import { Providers, TEST_NOW, createTestStore } from '../../test/testStore';
@@ -42,7 +42,8 @@ describe('BackupCard', () => {
     await user.click(screen.getByRole('button', { name: 'Export Full Backup JSON' }));
     await waitFor(() => expect(downloadTextFile).toHaveBeenCalledTimes(1));
     const [filename, text] = downloadTextFile.mock.calls[0] as [string, string];
-    expect(filename).toBe('workout-conductor-backup-20260902-1200.json');
+    expect(filename).toBe(backupFileName(TEST_NOW));
+    expect(filename).toMatch(/^workout-conductor-backup-20260902-\d{4}\.json$/);
     const parsed = JSON.parse(text) as { format: string; data: { locations: unknown[] } };
     expect(parsed.format).toBe('workout-conductor-backup');
     expect(parsed.data.locations).toHaveLength(2);

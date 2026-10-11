@@ -107,8 +107,11 @@ export function serializeBackup(backup: object): string {
   return JSON.stringify(backup, null, 2);
 }
 
+/** The device's date and time of an export, as `YYYYMMDD-HHMM` (Maintenance 28, item 1). */
 function stamp(exportedAt: string): string {
-  return exportedAt.replace(/[-:]/g, '').replace('T', '-').slice(0, 13);
+  const date = new Date(exportedAt);
+  const two = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}${two(date.getMonth() + 1)}${two(date.getDate())}-${two(date.getHours())}${two(date.getMinutes())}`;
 }
 
 export function backupFileName(exportedAt: string): string {

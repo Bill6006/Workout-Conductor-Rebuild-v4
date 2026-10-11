@@ -1,4 +1,5 @@
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { addLocalDays, localDayKey } from '../../core/time/localDate';
 import type { Readiness } from '../recalibration/types';
 import { holdById } from '../workout/setText';
 import { ratingPainWords } from './painReport';
@@ -32,9 +33,8 @@ export interface FatigueSignal {
 
 const DAY_MS = 86_400_000;
 
-function dayKey(iso: string): string {
-  return iso.slice(0, 10);
-}
+/** The device's day (Maintenance 28, item 1). */
+const dayKey = localDayKey;
 
 export function interpretFatigue(
   history: readonly WorkoutRecord[],
@@ -63,13 +63,12 @@ export function interpretFatigue(
     evidence.push('4 sessions in the last 7 days.');
   }
 
-  const days = [
-    ...new Set(qualifying.map((record) => dayKey(record.completedAt ?? record.startedAt))),
-  ];
+  // A workout counts on the day it began.
+  const days = [...new Set(qualifying.map((record) => dayKey(record.startedAt)))];
   let consecutiveDays = 0;
   let cursor = dayKey(nowIso);
   const yesterday = (key: string) =>
-    new Date(Date.parse(`${key}T12:00:00.000Z`) - DAY_MS).toISOString().slice(0, 10);
+    localDayKey(addLocalDays(new Date(`${key}T12:00:00`).toISOString(), -1));
   if (!days.includes(cursor)) cursor = yesterday(cursor);
   while (days.includes(cursor)) {
     consecutiveDays += 1;

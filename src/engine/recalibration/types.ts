@@ -134,6 +134,12 @@ export interface CompletedWork {
   elapsedSeconds: number;
   currentEntryId: string | null;
   sets: CompletedSet[];
+  /**
+   * The general warm-up the workout started with (Maintenance 28, the review of item 4): its sets
+   * are timed against it, whatever a rebuild under way leaves of it. Absent before the start, and
+   * on a workout started before Maintenance 28.
+   */
+  warmupMinutes?: number;
 }
 
 /**

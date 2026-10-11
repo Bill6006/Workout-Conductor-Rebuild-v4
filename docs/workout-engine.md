@@ -75,9 +75,38 @@ of the rests the timer would show.
   the round rest after it, and nothing after the final set of the day.
 - **Set-up** comes from the catalog and counts only where it outlasts the rest that led to it.
 - **The general warm-up** is added on top (`generalWarmupMinutes`).
+- **At the lifter's own pace** (Maintenance 28, the owner's item 4): the plan's own parts stay
+  the plan's own, and what the lifter's pace adds or takes away is a part of its own
+  (`paceMinutes`), so a plan that says 45 minutes takes this lifter about 45 and the parts still add
+  up. The pace (`personalPace` in `duration/trainingTime.ts`) is their training time against the
+  plan's own estimate of the sets they did, the middle of their latest eight workouts, from three. A
+  workout the plan put under ten minutes, or more than twice or under half its estimate, is left
+  out, and the pace moves a plan no further than 1.5 times or 0.8 times.
+  - The plan keeps the pace it was fitted to (`duration.pace`) and every later estimate of it reads
+    that. A saved plan loads at the pace as it reads that day, with the line that says so.
+  - "Why this workout" says the pace as Learned from your log does, and how far plans go when the
+    pace is further, once the pace moves the plan by 2% or more.
+  - The pace decides only how much fits. Rests are shortened only while the plan overruns its length
+    at its own pace, so the rests, weights and reps stay as the length sets them (the review: rests
+    cut for a pace were the very ones its reading was read against). A move a fit brings back on its
+    own takes the rest the length gives that, at any pace (Maintenance 24).
+  - The week ahead on the Plan tab, and the coach's, is planned with what the lifter reset, as
+    today's plan is.
+
+**Training time** (Maintenance 28, the owner's item 3) is what History, the completion summary,
+its Duration and Duration efficiency show. It is read from the log times of the sets done; a skip
+takes no time. The run-up to the first set and every wait between sets count up to ten minutes for
+each set logged after them: the longest rest a plan sets is three and a half minutes, and the rest is
+the set and the walk to the next lift. Sets logged within a minute of one another were logged at one
+go, after they were done, so the wait before them held them all. Training ends with the last set, as
+the plan's own estimate does, and it is never more than the workout's own clock. A workout left open
+for a day counts its sets, not the day. Its sets are timed against the general warm-up the workout
+started with, whatever a rebuild under way leaves of it.
 
 `remainingMinutes` is the workout screen's Left: the remaining timeline, plus the general warm-up
-less the clock until the first set is logged, plus what is left of a rest in progress. So the
+less the clock until the first set is logged, plus what is left of a rest in progress. At the
+lifter's own pace, the sets still to come go at it, while what runs on a clock (a rest, a hold, the
+warm-up as the clock runs) counts down in real time. So the
 length on the dropdown is the clock plus Left.
 
 ## Data model notes

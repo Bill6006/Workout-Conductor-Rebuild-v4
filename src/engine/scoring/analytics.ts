@@ -2,6 +2,8 @@ import { getExercise } from '../../catalog/exercises/catalog';
 import { MUSCLE_IDS, muscleName, type MuscleId } from '../../catalog/muscles/muscles';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { addLocalDays, startOfLocalDay } from '../../core/time/localDate';
+import { trainingSeconds } from '../duration/trainingTime';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
 import { maxFromSet } from '../progression/maxes';
 import { performanceHistory, type PerformancePoint } from '../progression/progression';
@@ -48,11 +50,10 @@ function shortDate(iso: string): string {
     : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/** Monday 00:00 UTC of the week containing the date. */
-function weekStart(iso: string): number {
-  const date = new Date(iso);
-  const day = (date.getUTCDay() + 6) % 7;
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - day);
+/** Monday at midnight on the device, of the week holding the date (Maintenance 28, item 1). */
+function weekStart(iso: string): string {
+  const day = (new Date(iso).getDay() + 6) % 7;
+  return startOfLocalDay(addLocalDays(iso, -day));
 }
 
 export interface WeekBucket {
@@ -81,10 +82,12 @@ export function consistencyScore(
   const currentStart = weekStart(now);
   const buckets: WeekBucket[] = [];
   for (let index = weeks - 1; index >= 0; index -= 1) {
-    const start = currentStart - index * 7 * DAY_MS;
-    const end = start + 7 * DAY_MS;
+    // Calendar weeks on the device: seven days on, whatever a clock change between does.
+    const start = Date.parse(startOfLocalDay(addLocalDays(currentStart, -7 * index)));
+    const end = Date.parse(startOfLocalDay(addLocalDays(currentStart, -7 * index + 7)));
+    // A workout counts in the week of the day it began.
     const count = sessions.filter((record) => {
-      const at = Date.parse(when(record));
+      const at = Date.parse(record.startedAt);
       return at >= start && at < end;
     }).length;
     buckets.push({
@@ -94,10 +97,14 @@ export function consistencyScore(
       planned,
     });
   }
+  // The first workout began the first week counted, as each week counts its workouts by the day
+  // they began (the review of Maintenance 28, item 1).
   const firstSession =
-    sessions.length > 0 ? Date.parse(when(sessions[sessions.length - 1] as WorkoutRecord)) : null;
+    sessions.length > 0
+      ? Math.min(...sessions.map((record) => Date.parse(record.startedAt)))
+      : null;
   const active = buckets.filter(
-    (bucket) => firstSession !== null && Date.parse(bucket.start) + 7 * DAY_MS > firstSession,
+    (bucket) => firstSession !== null && Date.parse(addLocalDays(bucket.start, 7)) > firstSession,
   );
   const averagePerWeek =
     active.length > 0
@@ -135,7 +142,7 @@ export interface EfficiencyValue {
 
 export function durationEfficiency(history: readonly WorkoutRecord[]): Score<EfficiencyValue> {
   const sessions = qualifyingSessions(history)
-    .filter((record) => (record.elapsedSeconds ?? 0) > 0 && (record.plannedMinutes ?? 0) > 0)
+    .filter((record) => trainingSeconds(record) > 0 && (record.plannedMinutes ?? 0) > 0)
     .slice(0, 10);
   if (sessions.length === 0) {
     return {
@@ -146,14 +153,15 @@ export function durationEfficiency(history: readonly WorkoutRecord[]): Score<Eff
         setsPer10Min: null,
       },
       definition:
-        'Actual duration against the planned length, and completed working sets per ten minutes, over the last ten sessions.',
+        'Training time against the planned length, and completed working sets per ten minutes, over the last ten sessions. Training time is read from the sets’ own log times: a wait of more than ten minutes counts as ten.',
       samples: 0,
       confidence: 'none',
       explanation: 'No timed sessions yet.',
       data: [],
     };
   }
-  const actual = sessions.map((record) => (record.elapsedSeconds ?? 0) / 60);
+  // Training time, not how long a workout stayed open (Maintenance 28, item 3).
+  const actual = sessions.map((record) => trainingSeconds(record) / 60);
   const planned = sessions.map((record) => record.plannedMinutes ?? 0);
   const sets = sessions.map((record) =>
     record.entries.reduce(
@@ -175,7 +183,7 @@ export function durationEfficiency(history: readonly WorkoutRecord[]): Score<Eff
   return {
     value: { averageRatio, averageActualMinutes, averagePlannedMinutes, setsPer10Min },
     definition:
-      'Actual duration against the planned length, and completed working sets per ten minutes, over the last ten sessions.',
+      'Training time against the planned length, and completed working sets per ten minutes, over the last ten sessions. Training time is read from the sets’ own log times: a wait of more than ten minutes counts as ten.',
     samples: sessions.length,
     confidence: confidenceFor(sessions.length),
     explanation: `${sessions.length} timed ${sessions.length === 1 ? 'session' : 'sessions'}: about ${averageActualMinutes} min actual against ${averagePlannedMinutes} min planned (${Math.round(averageRatio * 100)}%)${

@@ -33,7 +33,10 @@ export function WorkoutCompletion({ session, units }: WorkoutCompletionProps) {
         <div className={styles.completionGrid} data-testid="completion-summary">
           <div className={styles.stat}>
             <span className={styles.statLabel}>Duration</span>
-            <span className={styles.statValue}>{minutes(summary.elapsedSeconds)}</span>
+            {/* Training time, not the hours it stayed open (Maintenance 28, item 3). */}
+            <span className={styles.statValue}>
+              {minutes(summary.trainingSeconds ?? summary.elapsedSeconds)}
+            </span>
             <span className={styles.statSub}>planned {summary.plannedMinutes} min</span>
           </div>
           <div className={styles.stat}>

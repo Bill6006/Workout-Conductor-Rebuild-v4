@@ -8,9 +8,9 @@
 export const LEARNED_RESETS_ID = 'learned-resets';
 
 /** The learned values a reset applies to: how well reps in reserve are judged (item 43), each
- * lift's own curve (item 41), the habit of lifting above or below the suggested weight, and pain
- * patterns (item 45). */
-export const LEARNED_KINDS = ['reserve', 'curves', 'habit', 'pain'] as const;
+ * lift's own curve (item 41), the habit of lifting above or below the suggested weight, pain
+ * patterns (item 45), and the lifter's own pace (Maintenance 28, item 4). */
+export const LEARNED_KINDS = ['reserve', 'curves', 'habit', 'pain', 'pace'] as const;
 export type LearnedKind = (typeof LEARNED_KINDS)[number];
 
 /**

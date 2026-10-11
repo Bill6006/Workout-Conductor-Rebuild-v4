@@ -18,6 +18,7 @@ import { allEntries, type DurationChoice, type GeneratedWorkout } from '../../en
 import { GeneratedWorkoutSchema } from '../../engine/workout/workoutSchema';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
 import { readJson, removeKey, writeJson, type KeyValueStorage } from '../storage/localSettings';
+import { localDayKey } from '../time/localDate';
 import type { LocationProfile } from '../validation/location';
 import type { UserProfile } from '../validation/profile';
 import { SessionRatingSchema, type SessionRating } from '../validation/workoutRecord';
@@ -120,6 +121,8 @@ export interface CompletionSummary {
   recordId: string;
   completedAt: string;
   elapsedSeconds: number;
+  /** The workout's training time (Maintenance 28, item 3): what Duration shows. */
+  trainingSeconds?: number;
   plannedMinutes: number;
   exercisesCompleted: number;
   exercisesPlanned: number;
@@ -301,6 +304,8 @@ const CompletedSchema = z.looseObject({
       reserveCheck: ReserveCheckLogSchema.optional().catch(undefined),
     }),
   ),
+  // Maintenance 28, the review of item 4: the general warm-up the workout started with.
+  warmupMinutes: z.number().min(0).optional().catch(undefined),
 });
 
 const SummarySchema = z.looseObject({
@@ -355,6 +360,8 @@ const CompletionSchema = z.looseObject({
   recordId: z.string(),
   completedAt: z.iso.datetime(),
   elapsedSeconds: z.number().min(0),
+  // Maintenance 28, the review of item 3: optional, and dropped rather than refused.
+  trainingSeconds: z.number().min(0).optional().catch(undefined),
   plannedMinutes: z.number().min(0),
   exercisesCompleted: z.number().int().min(0),
   exercisesPlanned: z.number().int().min(0),
@@ -567,7 +574,7 @@ export function readSessionOrKeep(
   now: string,
 ): { session: WorkoutSession | null; kept: SessionRecovery | null } {
   const session = readSession(storage);
-  if (session) return { session, kept: null };
+  if (session) return { session: withDeviceDayKey(session), kept: null };
   let raw: string | null;
   try {
     raw = storage.getItem(SESSION_KEY);
@@ -585,6 +592,22 @@ export function readSessionOrKeep(
     storage,
   );
   return { session: null, kept: { keptAt: now, status, setsLogged, saved } };
+}
+
+/**
+ * A preview kept by a build before Maintenance 28 named its day in UTC, so in the evening west of
+ * UTC it named the next day: it names the device's day it was made on instead (item 1), and the
+ * evening's choices are kept that evening, not carried into the morning. A key from this build
+ * always names the device's day it was made on, so it is never touched.
+ */
+export function withDeviceDayKey(session: WorkoutSession): WorkoutSession {
+  if (session.status !== 'preview') return session;
+  const bar = session.baseKey.indexOf('|');
+  if (bar < 0) return session;
+  const day = session.baseKey.slice(0, bar);
+  const local = localDayKey(session.createdAt);
+  if (day === local || day !== session.createdAt.slice(0, 10)) return session;
+  return { ...session, baseKey: `${local}${session.baseKey.slice(bar)}` };
 }
 
 export function writeSession(session: WorkoutSession, storage: KeyValueStorage): void {

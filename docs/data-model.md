@@ -91,6 +91,26 @@ That is what lets a backup written by a newer app version pass through an older 
     value; item 47). A reset deletes nothing logged: each learner reads only what is logged after
     it. A field a newer copy wrote is kept, and a reset is made from the record as saved, so one a
     sync brought is not written away.
+- Maintenance 28 (round J) added only optional fields, each dropped when unreadable, and extended
+  no stored enum:
+  - A workout record's `trainingSeconds` (the minutes trained, read from the `loggedAt` times of
+    the sets done; item 3) and `estimatedSeconds` (the plan's own estimate, at its own pace, of the
+    sets done, with the general warm-up the workout started with; item 4). `elapsedSeconds` keeps
+    what the workout's clock ran. A record from before has neither: its training time is measured
+    from its sets the same way, and it gives no pace.
+  - The stored plan's `duration.pace`: the lifter's pace the plan was fitted to (item 4), read
+    again by every later estimate of it; absent is the plan's own pace. Its
+    `explanation.time.paceMinutes`: the minutes that pace adds to the plan's own parts (below zero,
+    takes away); absent at the plan's own pace.
+  - The session's `completed.warmupMinutes`: the general warm-up the workout started with, set at
+    the start. Its `completion.trainingSeconds`: the training time the completion card shows.
+  - A deload window kept from before at midnight UTC is read as the same calendar days on the
+    device; a preview kept from before, keyed by the UTC day, is keyed by the device's day it was
+    made on. Neither is written back until it next changes.
+  - Meta `learned-resets` gains `pace`, the reset of the lifter's pace (item 4).
+  - The cloud copy's `day` column of a workout is now the device's day the workout began (item 1;
+    before, the UTC day it was finished). Nothing reads it back: each app works out a workout's day
+    from its own times.
 
 ## Save safety
 

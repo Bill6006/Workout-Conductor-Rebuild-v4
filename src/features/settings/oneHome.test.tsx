@@ -338,7 +338,7 @@ describe('Plan, when the week is empty or has no priorities (Maintenance 25)', (
   it('says today’s session is done when the only day set is today, never that no days are set', async () => {
     const now = new Date().toISOString();
     const today = (['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const)[
-      (new Date(now).getUTCDay() + 6) % 7
+      (new Date(now).getDay() + 6) % 7
     ] as UserProfile['schedule']['availableDays'][number];
     const store = await storeWith(
       (profile) => ({

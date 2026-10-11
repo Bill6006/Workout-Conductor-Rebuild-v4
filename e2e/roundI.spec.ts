@@ -145,7 +145,9 @@ test.describe('what the app has learned (item 47)', () => {
     for (const key of ['pace', 'habit', 'curves', 'reserve', 'pain', 'declines']) {
       await expect(page47.getByTestId(`learned-${key}`)).toBeVisible();
     }
-    await expect(page47.getByTestId('learned-pace')).toContainText('Not learned yet.');
+    await expect(page47.getByTestId('learned-pace')).toContainText(
+      'Nothing learned yet: it reads each finished workout from this version on.',
+    );
     const habit = page47.getByTestId('learned-habit');
     await habit.getByTestId('learned-reset-habit').click();
     await expect(habit.getByTestId('learned-confirm-habit')).toBeVisible();

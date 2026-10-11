@@ -5,6 +5,7 @@ import { ScreenHeader } from '../../components/Screen/Screen';
 import { getExercise } from '../../catalog/exercises/catalog';
 import { muscleName } from '../../catalog/muscles/muscles';
 import { useNow } from '../../core/time/clock';
+import { localDayKey } from '../../core/time/localDate';
 import { durationLabel } from '../../engine/duration/duration';
 import { formatWindow, inDeloadWindow, recommendDeload } from '../../engine/planning/deload';
 import { swapIsPast } from '../../engine/planning/lastingSwaps';
@@ -46,8 +47,8 @@ export function PlanScreen() {
     : (profile?.updatedAt ?? '2026-01-01T00:00:00.000Z');
   const location = state.locations.find((item) => item.id === profile?.currentLocationId);
   const week = useMemo(
-    () => (profile ? planWeek(profile, location, state.history, nowIso) : []),
-    [profile, location, state.history, nowIso],
+    () => (profile ? planWeek(profile, location, state.history, nowIso, state.learnedResets) : []),
+    [profile, location, state.history, nowIso, state.learnedResets],
   );
   const coverage = useMemo(
     () =>
@@ -77,7 +78,7 @@ export function PlanScreen() {
     if (section === 'places') placesRef.current?.scrollIntoView?.({ block: 'start' });
   }, [section]);
   const defaultSavedName = state.session
-    ? `${state.session.workout.title} · ${nowIso.slice(0, 10)}`
+    ? `${state.session.workout.title} · ${localDayKey(nowIso)}`
     : '';
 
   return (
@@ -318,7 +319,7 @@ export function PlanScreen() {
                   <span className={styles.locationMeta}>
                     {saved.workout.title} · {allEntries(saved.workout.blocks).length} exercises ·{' '}
                     {durationLabel(saved.duration, saved.workout.duration.defaultMinutes)} · saved{' '}
-                    {saved.createdAt.slice(0, 10)}
+                    {localDayKey(saved.createdAt)}
                   </span>
                 </div>
                 <div className={styles.locationActions}>
