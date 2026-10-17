@@ -1351,6 +1351,28 @@ SUPERSEDED = {
 # Moved by this round's code: the same revert, anchored where the code now is (old, new, nth).
 REANCHORED = {
     **EARLIER_REANCHORED,
+    # Round L (Maintenance 30) moved these four. The plate editor opens on Today in a workout
+    # (Settings opens it on the place's plates); the logger's plates come from platesHere; the
+    # superset line reads a stack; a place's deletion runs inside the place-write queue.
+    "8i the plate editor opens on Today": (
+        "  const [plateMode, setPlateMode] = useState<'today' | 'default'>(today ? 'today' : 'default');",
+        "  const [plateMode, setPlateMode] = useState<'today' | 'default'>('default');", None),
+    "8n the logger draws the plates for the dial": (
+        "        <PlateLine\n          result={platesHere(\n            exercise,\n            draftWeight,\n            units,\n            loading,\n            specFor(currentLocation?.loading, exercise),\n          )}\n        />",
+        "        <span>\n          {\n            platesHere(\n              exercise,\n              draftWeight,\n              units,\n              loading,\n              specFor(currentLocation?.loading, exercise),\n            ).line\n          }\n        </span>", None),
+    "8x a machine in a superset says to set the pin first": (
+        "                        : plates.kind === 'stack' && block.kind === 'superset'",
+        "                        : false", None),
+    # The fourth re-check of Maintenance 30 runs setup's place writes in the place-write queue.
+    "PDp setup run again removes the Gym it leaves out": (
+        "              await this.removeBarcodeNow(db, stale.id);\n            }\n            await deleteVerified(db, 'locations', stale.id);",
+        "              await this.removeBarcodeNow(db, stale.id);\n            }", None),
+    "PDp2 ... the place after it": (
+        "          await this.withBarcodeLock(async () => {\n            if ((await db.get('device', barcodeIdFor(stale.id)))",
+        "          await this.withBarcodeLock(async () => {\n            await deleteVerified(db, 'locations', stale.id);\n            if ((await db.get('device', barcodeIdFor(stale.id)))", None),
+    "PDl a place stays while its barcode cannot be removed": (
+        "        await this.removeBarcodeNow(db, id);\n        await deleteVerified(db, 'locations', id);",
+        "        await deleteVerified(db, 'locations', id);\n        await this.removeBarcodeNow(db, id);", None),
     # The fifteenth pass of item 42: the stand-in and the swap back read the effort from the plan
     # a lift keeping the ease had, and the swap in place from its record.
     "34f a swap keeps the effort": (
