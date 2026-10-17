@@ -53,7 +53,7 @@ import {
   computeWeeklyVolume,
 } from '../volume/weeklyVolume';
 import { checkExerciseFit, isBlocked } from '../conflicts/conflictEngine';
-import { buildConflictContext } from '../conflicts/context';
+import { buildConflictContext, preferredIdsOf } from '../conflicts/context';
 import { barWeightFor, startRatio } from '../progression/startingLoad';
 import {
   EFFORT_REPS_CEILING,
@@ -1068,7 +1068,7 @@ function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | n
   });
   // Never one the lifter swapped out for weeks, nor the same move made heavier: its loaded
   // version is no help to a lifter short of its range at bodyweight (Maintenance 30).
-  const swappedOut = swappedOutIds(input.swaps ?? [], context);
+  const swappedOut = swappedOutIds(input.swaps ?? [], context, preferredIdsOf(input.profile));
   const heavier = new Set(
     (LOADED_VERSIONS[exercise.id] ?? []).filter((id) => ADDS_TO_BODYWEIGHT.has(id)),
   );

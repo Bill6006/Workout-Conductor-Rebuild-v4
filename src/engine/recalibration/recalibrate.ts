@@ -255,7 +255,12 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult 
       // A line about a kept swap says only what is still true of this workout.
       explanation: {
         ...next.explanation,
-        reasons: withSwapLines(next.explanation.reasons, next.blocks, request.swaps ?? []),
+        reasons: withSwapLines(
+          next.explanation.reasons,
+          next.blocks,
+          request.swaps ?? [],
+          preferredIdsOf(request.profile),
+        ),
       },
       recalibration: {
         version: request.workout.recalibration.version + 1,

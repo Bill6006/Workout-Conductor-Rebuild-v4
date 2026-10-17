@@ -167,6 +167,8 @@ import {
   withoutSwap,
   type LastingSwap,
 } from '../../engine/planning/lastingSwaps';
+import { preferredIdsOf } from '../../engine/conflicts/context';
+import { swapBackCovers } from '../../engine/workoutGenerator/loadedVersions';
 import {
   DELOAD_WEEK_ID,
   inDeloadWindow,
@@ -1552,7 +1554,12 @@ export class AppStore {
         ...restored,
         explanation: {
           ...restored.explanation,
-          reasons: withSwapLines(restored.explanation.reasons, restored.blocks, this.activeSwaps()),
+          reasons: withSwapLines(
+            restored.explanation.reasons,
+            restored.blocks,
+            this.activeSwaps(),
+            this.favourites(),
+          ),
         },
       },
       constraints: session.previous.constraints,
@@ -2419,7 +2426,12 @@ export class AppStore {
       // Its lines about kept swaps say what is true now, not when it was saved.
       explanation: {
         ...fresh.explanation,
-        reasons: withSwapLines(fresh.explanation.reasons, fresh.blocks, this.activeSwaps()),
+        reasons: withSwapLines(
+          fresh.explanation.reasons,
+          fresh.blocks,
+          this.activeSwaps(),
+          this.favourites(),
+        ),
       },
     };
     const headline = `Loaded "${saved.name}".`;
@@ -4196,8 +4208,10 @@ export class AppStore {
     const change = await this.changeSwaps((current) => {
       // Undone before its turn: there is nothing to keep.
       if (!stands()) return current;
+      // Keeping the plan's own pick ends a kept swap of it, a swap back that covers it too (the eighth
+      // re-check of Maintenance 30).
       return from === exerciseId
-        ? withoutSwap(current, from)
+        ? withoutSwap(current, from).filter((swap) => !swapBackCovers(swap, from))
         : withSwap(current, from, exerciseId, this.now());
     });
     if (!change.saved) {
@@ -4256,7 +4270,12 @@ export class AppStore {
     const session = this.state.session;
     if (!session) return;
     const { explanation } = session.workout;
-    const reasons = withSwapLines(explanation.reasons, session.workout.blocks, this.activeSwaps());
+    const reasons = withSwapLines(
+      explanation.reasons,
+      session.workout.blocks,
+      this.activeSwaps(),
+      this.favourites(),
+    );
     if (reasons.join('\n') === explanation.reasons.join('\n')) return;
     this.setSession({
       ...session,
@@ -4265,6 +4284,11 @@ export class AppStore {
   }
 
   /** The lasting swaps still running. */
+  /** The lifter's favourites: a kept swap back never covers one (the eighth re-check of M30). */
+  private favourites(): ReadonlySet<string> {
+    return this.state.profile ? preferredIdsOf(this.state.profile) : new Set();
+  }
+
   private activeSwaps(): LastingSwap[] {
     const now = this.now();
     return this.state.lastingSwaps.filter((swap) => !swapIsPast(swap, now));

@@ -57,6 +57,9 @@ T_FAV_BOTH = "src/engine/workoutGenerator/favouriteBothCoach.test.ts"
 T_SECTIONS = "src/features/settings/customMoveSections.test.tsx"
 T_SWAP_BACK_PLAN = "src/engine/workoutGenerator/swapToBodyweightCoachPlan.test.ts"
 T_RACK = "src/features/settings/customRackOnly.test.tsx"
+T_KEEP_OWN = "src/core/state/keepOwnPickSwapBack.test.ts"
+T_FAV_BACK = "src/engine/workoutGenerator/swapBackFavourite.test.ts"
+T_OTHER_SWAP = "src/engine/workoutGenerator/swapBackOtherSwap.test.ts"
 
 # (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 MUTATIONS = [
@@ -372,15 +375,14 @@ MUTATIONS = [
      [T_SECTIONS, T_SETTINGS_ORDER], None),
     # The seventh pass.
     ("VII1 a swap back keeps out every loaded version of the move, in the plan and the coach", GENERATE,
-     "    withSwapsBack(swaps)\n      .filter((swap) => {", "    swaps\n      .filter((swap) => {",
+     "    withSwapsBack(swaps, favourites)\n      .filter((swap) => {", "    swaps\n      .filter((swap) => {",
      [T_SWAP_BACK_PLAN, T_RULE, T_BACK], None),
     ("VII2 ... and puts the bodyweight move in for each", GENERATE,
-     "  const swapOf = new Map(withSwapsBack(constraints.swaps ?? []).map((swap) => [swap.from, swap]));",
-     "  const swapOf = new Map((constraints.swaps ?? []).map((swap) => [swap.from, swap]));",
-     [T_SWAP_BACK_PLAN], None),
+     "  const kept = withSwapsBack(constraints.swaps ?? [], preferredIds);",
+     "  const kept = constraints.swaps ?? [];", [T_SWAP_BACK_PLAN, T_OTHER_SWAP], None),
     ("VII3 ... and says so", GENERATE,
-     "  const byFrom = new Map(withSwapsBack(swaps).map((swap) => [swap.from, swap]));",
-     "  const byFrom = new Map(swaps.map((swap) => [swap.from, swap]));", [T_SWAP_BACK_PLAN], None),
+     "  const kept = withSwapsBack(swaps, favourites);", "  const kept = swaps;",
+     [T_SWAP_BACK_PLAN], None),
     ("VII4 the coach moves a bodyweight move swapped to from anything else", GENERATE,
      "    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -",
      "    (picker.chosen?.has(exercise.id) ? 0 : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -",
@@ -388,11 +390,30 @@ MUTATIONS = [
     ("VII5 a swap back is from one of the move's own loaded versions", RULE,
      "  LOADED_VERSIONS[swap.to]?.includes(swap.from) ?? false;",
      "  LOADED_VERSIONS[swap.to] !== undefined;", [T_RULE, T_SWAP_BACK_PLAN], None),
-    ("VII6 a swap kept from another of those loaded versions stands", RULE,
-     "      if (from.has(id)) continue;\n", "", [T_RULE], None),
+    ("VII6 the swaps the lifter keeps come first, the swap back after them", RULE,
+     "  return [...swaps, ...added];", "  return [...added, ...swaps];", [T_RULE, T_OTHER_SWAP], None),
     ("VII8 a bar's plates come with a bar, never the rack", CUSTOM,
      "  barbell: new Set(['barbell', 'ez-bar', 'trap-bar', 'smith-machine']),",
      "  barbell: BAR_EQUIPMENT,", [T_RACK], None),
+    # The eighth pass.
+    ("VIII1 a swap back never covers a favourite", RULE,
+     "      if (id === swap.from || favourites.has(id) || covered.has(id)) continue;",
+     "      if (id === swap.from || covered.has(id)) continue;", [T_FAV_BACK, T_RULE], None),
+    ("VIII2 ... in the coach's extra work", GENERATE,
+     "  const swappedOut = swappedOutIds(input.swaps ?? [], context, preferredIds);",
+     "  const swappedOut = swappedOutIds(input.swaps ?? [], context);", [T_FAV_BACK], None),
+    ("VIII3 ... nor in the plan", GENERATE,
+     "  const swappedOut = swappedOutIds(constraints.swaps ?? [], context, preferredIds);",
+     "  const swappedOut = swappedOutIds(constraints.swaps ?? [], context);", [T_FAV_BACK], None),
+    ("VIII4 the first of an exercise's swaps that applies, the swap back after the lifter's own", GENERATE,
+     "      if (isBlocked(checkExerciseFit(next, context))) continue;",
+     "      if (isBlocked(checkExerciseFit(next, context))) return pick;", [T_OTHER_SWAP], None),
+    ("VIII5 keeping the plan's own pick ends a swap back that covers it", STORE,
+     "        ? withoutSwap(current, from).filter((swap) => !swapBackCovers(swap, from))",
+     "        ? withoutSwap(current, from)", [T_KEEP_OWN], None),
+    ("VIII6 ... every loaded version it covers", RULE,
+     "  return goesBack(swap) && (LOADED_VERSIONS[swap.to]?.includes(id) ?? false);",
+     "  return goesBack(swap) && swap.from === id;", [T_KEEP_OWN, T_RULE], None),
 ]
 
 

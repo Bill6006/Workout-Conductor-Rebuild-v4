@@ -642,14 +642,16 @@ export function pickAccessoryFor(
 /**
  * The exercises the lifter's lasting swaps keep out of a plan here: each one swapped out whose
  * swap-in fits this place. Where the swap-in does not fit, the plan's own pick stands. A swap back
- * to a bodyweight move keeps out every loaded version of it (the seventh re-check).
+ * to a bodyweight move keeps out every loaded version of it but a favourite (the seventh and eighth
+ * re-checks).
  */
 export function swappedOutIds(
   swaps: readonly LastingSwap[],
   context: ConflictContext,
+  favourites: ReadonlySet<string> = new Set(),
 ): Set<string> {
   return new Set(
-    withSwapsBack(swaps)
+    withSwapsBack(swaps, favourites)
       .filter((swap) => {
         const next = getExercise(swap.to);
         return next !== undefined && !isBlocked(checkExerciseFit(next, context));
@@ -669,10 +671,13 @@ const AROUND_LINE = ', which you swapped out.';
 export function swapLines(
   blocks: readonly WorkoutBlock[],
   swaps: readonly LastingSwap[],
+  favourites: ReadonlySet<string> = new Set(),
 ): string[] {
-  const byFrom = new Map(withSwapsBack(swaps).map((swap) => [swap.from, swap]));
+  const kept = withSwapsBack(swaps, favourites);
   return allEntries(blocks).flatMap((entry) => {
-    const swap = entry.standsFor ? byFrom.get(entry.standsFor) : undefined;
+    // The swap that put this exercise in, else the first of the plan's own pick's.
+    const own = kept.filter((swap) => swap.from === entry.standsFor);
+    const swap = own.find((candidate) => candidate.to === entry.exerciseId) ?? own[0];
     const from = swap ? getExercise(swap.from) : undefined;
     const exercise = getExercise(entry.exerciseId);
     if (!swap || !from || !exercise || isStopped(entry) || entry.replacedFrom) return [];
@@ -689,6 +694,7 @@ export function withSwapLines(
   reasons: readonly string[],
   blocks: readonly WorkoutBlock[],
   swaps: readonly LastingSwap[],
+  favourites: ReadonlySet<string> = new Set(),
 ): string[] {
   const isSwapLine = (line: string) => line.endsWith(KEPT_LINE) || line.endsWith(AROUND_LINE);
   const others = reasons.filter((line) => !isSwapLine(line));
@@ -698,7 +704,7 @@ export function withSwapLines(
     Math.min(others.length, 3) - 1,
   );
   const at = first >= 0 ? first : lead + 1;
-  return [...others.slice(0, at), ...swapLines(blocks, swaps), ...others.slice(at)];
+  return [...others.slice(0, at), ...swapLines(blocks, swaps, favourites), ...others.slice(at)];
 }
 
 export function accessoryPicker(input: {
@@ -715,10 +721,11 @@ export function accessoryPicker(input: {
   swaps?: readonly LastingSwap[];
 }): Picker {
   const context = sessionConflictContext(input.profile, input.location, input.constraints ?? {});
-  const swappedOut = swappedOutIds(input.swaps ?? [], context);
+  const preferredIds = preferredIdsOf(input.profile);
+  const swappedOut = swappedOutIds(input.swaps ?? [], context, preferredIds);
   return {
     context,
-    preferredIds: preferredIdsOf(input.profile),
+    preferredIds,
     exposure: computeExposure(input.history, input.now),
     loads: muscleLoads(input.history, input.profile, input.now),
     focus: input.focus ?? null,
@@ -1182,7 +1189,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   // (the review and the re-check of item 44).
   const extraKept = (constraints.keep ?? []).some((item) => item.entry.push === 'extra');
   // Swapped out for weeks where the swap-in fits here: out of the whole plan, every slot.
-  const swappedOut = swappedOutIds(constraints.swaps ?? [], context);
+  const swappedOut = swappedOutIds(constraints.swaps ?? [], context, preferredIds);
   // The sessions after an extra's day, for its cap (the review of item 44).
   let ahead: WorkAhead[] | null = null;
   if (
@@ -1309,9 +1316,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const plannedSets = new Map<string, number>();
   // Stopped entries that do not fit here were ended again by the caller; the others fit now.
   const closedNow = new Set(keep.filter((kept) => kept.closed).map((kept) => kept.entry.id));
-  // The lifter's lasting swaps, by the exercise swapped out: a swap back to a bodyweight move by each
-  // of its loaded versions (the seventh re-check).
-  const swapOf = new Map(withSwapsBack(constraints.swaps ?? []).map((swap) => [swap.from, swap]));
+  // The lifter's lasting swaps, then a swap back to a bodyweight move for each other loaded version of
+  // it but a favourite (the seventh and eighth re-checks): for an exercise, the first that applies.
+  const kept = withSwapsBack(constraints.swaps ?? [], preferredIds);
   // Each exercise in for the plan's own pick of its slot (a kept swap's, or the next best), by
   // that pick. An entry kept from before a rebuild says it itself (`standsFor`).
   const ownOf = new Map<string, CatalogExercise>();
@@ -1434,15 +1441,17 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    * lift to push on a day it gives its place up (the re-check of item 44).
    */
   const swappedIn = (pick: CatalogExercise): CatalogExercise => {
-    const swap = swapOf.get(pick.id);
-    const next = swap ? getExercise(swap.to) : undefined;
-    if (!swap || !next || givesWay.includes(next.id)) return pick;
-    if (chosenExercises.some((chosen) => chosen.id === next.id)) return pick;
-    if (isBlocked(checkExerciseFit(next, context))) return pick;
-    if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
-      return pick;
+    for (const swap of kept.filter((candidate) => candidate.from === pick.id)) {
+      const next = getExercise(swap.to);
+      if (!next || givesWay.includes(next.id)) continue;
+      if (chosenExercises.some((chosen) => chosen.id === next.id)) continue;
+      if (isBlocked(checkExerciseFit(next, context))) continue;
+      if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
+        continue;
+      }
+      return next;
     }
-    return next;
+    return pick;
   };
 
   /** Whether an exercise can join the exercises in the plan so far: not in, and no clash. */
@@ -2237,7 +2246,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     reasons.push(
       `Kept ${keep.length} ${keep.length === 1 ? 'exercise' : 'exercises'} in place: logged sets and pinned picks never move.`,
     );
-  reasons.push(...swapLines(blocks, constraints.swaps ?? []));
+  reasons.push(...swapLines(blocks, constraints.swaps ?? [], preferredIds));
   if (exposure.sessionsLast14Days === 0)
     reasons.push('No history yet, so weekly volume starts from the plan defaults.');
   if (exposure.sessionsLast14Days > 0) {

@@ -11,6 +11,7 @@ import {
   loadedVersionLine,
   loadedVersionShift,
   outgrownMoves,
+  swapBackCovers,
   waitsForBodyweight,
   withSwapsBack,
   type OutgrownBy,
@@ -195,7 +196,7 @@ describe('the rule among a slot’s candidates', () => {
   });
 });
 
-describe('a kept swap back to a bodyweight move (the seventh re-check)', () => {
+describe('a kept swap back to a bodyweight move (the seventh and eighth re-checks)', () => {
   const swap = (from: string, to: string) => ({ from, to, setAt: RECORD_NOW });
 
   it('stands for every loaded version of the move', () => {
@@ -205,12 +206,28 @@ describe('a kept swap back to a bodyweight move (the seventh re-check)', () => {
     ]);
   });
 
-  it('leaves a swap kept from another of those loaded versions as it is', () => {
-    const own = swap(PRESS_CALF, 'standing-calf-raise-machine');
+  it('puts a swap kept from another of those loaded versions first, the swap back after it', () => {
+    // The lifter's own swap applies wherever its exercise fits; the swap back covers it elsewhere.
+    const own = swap(PRESS_CALF, 'custom-smith-calf-raise');
     expect(withSwapsBack([swap('standing-calf-raise-machine', CALF), own])).toEqual([
       swap('standing-calf-raise-machine', CALF),
       own,
+      swap(PRESS_CALF, CALF),
     ]);
+  });
+
+  it('never covers a favourite', () => {
+    expect(
+      withSwapsBack([swap('standing-calf-raise-machine', CALF)], new Set([PRESS_CALF])),
+    ).toEqual([swap('standing-calf-raise-machine', CALF)]);
+  });
+
+  it('covers every loaded version of its move, for keeping the plan’s own pick to end it', () => {
+    const back = swap('standing-calf-raise-machine', CALF);
+    expect(swapBackCovers(back, PRESS_CALF)).toBe(true);
+    expect(swapBackCovers(back, 'standing-calf-raise-machine')).toBe(true);
+    expect(swapBackCovers(back, DB_BSS)).toBe(false);
+    expect(swapBackCovers(swap('dumbbell-reverse-lunge', BSS), DB_BSS)).toBe(false);
   });
 
   it('is only from one of the move’s own loaded versions', () => {

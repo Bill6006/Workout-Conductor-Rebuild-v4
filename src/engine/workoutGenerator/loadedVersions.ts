@@ -47,24 +47,38 @@ const goesBack = (swap: { from: string; to: string }): boolean =>
   LOADED_VERSIONS[swap.to]?.includes(swap.from) ?? false;
 
 /**
- * The lifter's kept swaps, each swap back to a bodyweight move from one of its loaded versions
- * standing for every loaded version of the move: a swap back, kept, keeps the bodyweight move,
- * whichever loaded version the plan or the coach would pick (the seventh re-check). A swap the
- * lifter keeps from another of those loaded versions stands as it is. A swap to a bodyweight move
- * from anything else applies where the pick is the exercise swapped out, and the rule moves the move
- * as usual elsewhere.
+ * The lifter's kept swaps, then each swap back to a bodyweight move from one of its loaded versions
+ * standing for every other loaded version of the move: a swap back, kept, keeps the bodyweight move,
+ * whichever loaded version the plan or the coach would pick (the seventh re-check). The swaps the
+ * lifter keeps come first, so a swap kept from one of those loaded versions to another exercise
+ * applies wherever that exercise fits, and the swap back covers it where it does not; a favourite
+ * loaded version stays the lifter's own (the eighth). A swap to a bodyweight move from anything else
+ * applies where the pick is the exercise swapped out, and the rule moves the move as usual elsewhere.
+ * A reader takes, for an exercise, the first of its swaps that applies.
  */
-export function withSwapsBack<T extends { from: string; to: string }>(swaps: readonly T[]): T[] {
-  const from = new Set(swaps.map((swap) => swap.from));
+export function withSwapsBack<T extends { from: string; to: string }>(
+  swaps: readonly T[],
+  favourites: ReadonlySet<string> = new Set(),
+): T[] {
+  const covered = new Set<string>();
   const added: T[] = [];
   for (const swap of swaps.filter(goesBack)) {
     for (const id of LOADED_VERSIONS[swap.to] ?? []) {
-      if (from.has(id)) continue;
-      from.add(id);
+      if (id === swap.from || favourites.has(id) || covered.has(id)) continue;
+      covered.add(id);
       added.push({ ...swap, from: id });
     }
   }
   return [...swaps, ...added];
+}
+
+/**
+ * Whether a kept swap back covers this loaded version: keeping the plan's own pick on an entry it
+ * put in ends it, as keeping the plan's own pick ends a kept swap of it (Maintenance 22; the eighth
+ * re-check).
+ */
+export function swapBackCovers(swap: { from: string; to: string }, id: string): boolean {
+  return goesBack(swap) && (LOADED_VERSIONS[swap.to]?.includes(id) ?? false);
 }
 
 /** The reserve read for a set saved without the plan's own. */

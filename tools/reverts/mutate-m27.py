@@ -567,8 +567,10 @@ MUTATIONS = [
      "    !isBlocked(checkExerciseFit(push.exercise, context)) &&\n    !swappedOut.has(push.exercise.id)\n",
      "    true\n", [T_PUSH_RECHECK], None),
     ("R44-18 a lasting swap never brings the lift back the day it gives way", GEN,
-     "    if (!swap || !next || givesWay.includes(next.id)) return pick;",
-     "    if (!swap || !next) return pick;", [T_PUSH_RECHECK], None),
+     # Re-anchored in Maintenance 30's eighth re-check: the plan takes an exercise's first swap
+     # that applies, so a swap-in that gives way is passed over (`continue`).
+     "      if (!next || givesWay.includes(next.id)) continue;",
+     "      if (!next) continue;", [T_PUSH_RECHECK], None),
     ("R44-19 the next session in calendar days", PUSH,
      "    if (availableDays.includes(localWeekday(addLocalDays(now, ahead)))) return ahead;",
      "    if (availableDays.includes(localWeekday(new Date(Date.parse(now) + ahead * 86_400_000).toISOString())))\n      return ahead;",
