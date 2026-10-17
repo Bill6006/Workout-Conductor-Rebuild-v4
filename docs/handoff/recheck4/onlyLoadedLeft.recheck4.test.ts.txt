@@ -1,0 +1,85 @@
+import { describe, expect, it } from 'vitest';
+import { createDefaultLocations } from '../core/validation/location';
+import { createDefaultProfile, type UserProfile } from '../core/validation/profile';
+import type { LastingSwap } from '../engine/planning/lastingSwaps';
+import { allEntries } from '../engine/workout/types';
+import { generateWorkout } from '../engine/workoutGenerator/generate';
+import { RECORD_NOW } from '../test/records';
+
+/**
+ * Fourth re-check of round L, fix 1 (`loadedVersionShift` moves a loaded version down whenever its
+ * bodyweight move does not load now). The report says a loaded version "waits until its bodyweight
+ * move loads, wherever that move is: swapped away, disliked, or in another slot", and the main
+ * suite's own test is "never plans the loaded version of a move the lifter dislikes, before it was
+ * outgrown". The wait is a 40-point shift, not a bar: where the other lunges are ruled out, the
+ * loaded version is the slot's only candidate and is planned anyway, though its bodyweight move was
+ * never outgrown and is disliked or swapped away. Before round L the slot stayed empty (all lunges
+ * ruled out) or kept the plan's own pick ("a kept swap applies where it fits, and never empties a
+ * slot").
+ */
+const [home] = createDefaultLocations({ gymAccess: true }, RECORD_NOW);
+const base = createDefaultProfile(RECORD_NOW, 'home');
+
+function lowerAtHome(changes: Partial<UserProfile>, swaps: LastingSwap[] = []) {
+  const workout = generateWorkout({
+    profile: { ...base, bodyweight: 185, ...changes },
+    location: home!,
+    history: [],
+    now: RECORD_NOW,
+    duration: 'default',
+    constraints: { templateId: 'lower', swaps },
+  });
+  return {
+    ids: allEntries(workout.blocks).map((entry) => entry.exerciseId),
+    reasons: workout.explanation.reasons,
+  };
+}
+
+const sore = { limitations: { ...base.limitations, painAreas: ['knee' as const] } };
+const dislikes = (names: string[]) => ({
+  exercisePreferences: { ...base.exercisePreferences, disliked: names },
+});
+
+describe('a loaded version that is the slot’s only candidate (fourth re-check)', () => {
+  it('baseline, PASSES: a sore knee alone keeps the reverse lunge at bodyweight, its loaded one waiting', () => {
+    const { ids } = lowerAtHome(sore);
+    expect(ids).toContain('reverse-lunge');
+    expect(ids).not.toContain('dumbbell-reverse-lunge');
+  });
+
+  it('never plans the dumbbell reverse lunge for a sore knee whose lifter dislikes the reverse lunge', () => {
+    // A sore knee rules out both split squats; the reverse lunge and the step-up are disliked.
+    // Never outgrown (no history at all), the reverse lunge's loaded version should wait.
+    const { ids } = lowerAtHome({ ...sore, ...dislikes(['Reverse Lunge', 'Step-Up']) });
+    // Fails: the lunge slot is "dumbbell-reverse-lunge", with the plan's own warning
+    // "Dumbbell Reverse Lunge puts moderate stress on the knee you flagged."
+    expect(ids).not.toContain('dumbbell-reverse-lunge');
+  });
+
+  it('never plans the dumbbell split squat for a lifter who dislikes every bodyweight lunge', () => {
+    const { ids } = lowerAtHome(dislikes(['Bulgarian Split Squat', 'Reverse Lunge', 'Step-Up']));
+    // Fails: "dumbbell-bulgarian-split-squat" fills the lunge slot, which stayed empty before.
+    expect(ids).not.toContain('dumbbell-bulgarian-split-squat');
+    expect(ids).not.toContain('dumbbell-reverse-lunge');
+  });
+
+  it('keeps the loaded split squat out of the slot of a kept swap away from the split squat', () => {
+    // The third re-check's case (swapped to the goblet squat, already home's squat), with the
+    // other lunges disliked: the slot's next best is the loaded split squat alone.
+    const swaps: LastingSwap[] = [
+      {
+        from: 'bulgarian-split-squat',
+        to: 'goblet-squat',
+        setAt: RECORD_NOW,
+        until: '2026-12-01T00:00:00.000Z',
+      },
+    ];
+    const { ids, reasons } = lowerAtHome(dislikes(['Reverse Lunge', 'Step-Up']), swaps);
+    // Fails: "dumbbell-bulgarian-split-squat", with the line "Dumbbell Bulgarian Split Squat in
+    // place of Bulgarian Split Squat, which you swapped out." Before round L the plan's own pick
+    // (the split squat) stayed, as nothing else fit.
+    expect(ids).not.toContain('dumbbell-bulgarian-split-squat');
+    expect(ids).not.toContain('dumbbell-reverse-lunge');
+    expect(reasons.join(' ')).not.toContain('Dumbbell Bulgarian Split Squat in place of');
+  });
+});
