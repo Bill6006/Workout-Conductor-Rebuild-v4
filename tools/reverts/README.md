@@ -63,19 +63,13 @@ python3 tools/reverts/mutate-m30.py --repo="$COPY" | tee m30-reverts.log
   is no catch, whatever the runner counts it as: rewrite the entry so it compiles, or run it alone if
   it was load.
 
-## State on 2026-10-17 (the Round L code, branch `cloud/round-l-handoff`)
+## State on 2026-10-17 (the final Round L code)
 
-- `--check`: M27 193/193, M28 83/83, M29 32/32 and M30 87/87 anchors found.
-- **M26 `--all`: 4 of 1199 anchors are gone**, all M25 entries on code Round L changed. Re-anchor them
-  before the next `--all` run:
-  - `8i the plate editor opens on Today`
-  - `8n the logger draws the plates for the dial`
-  - `8x a machine in a superset says to set the pin first` (`EntryPanels.tsx`)
-  - `PDl a place stays while its barcode cannot be removed` (`appStore.ts`: the deletion now runs
-    inside `afterPlaceWrites`)
-- **Last full results:**
-  - M30 87/87 caught on the code after the third review pass.
-  - M29 32/32, M28 83/83 and M27 193/193 caught on the Round L code after its second review pass.
-    Run them again on the final code.
-  - M26 `--all` 1199/1199 caught on the M29 code. One entry read "no tests" under load and was
-    caught when run alone.
+- `--check`: M27 193/193, M28 83/83, M29 32/32 and M30 121/121 anchors found; M26 `--all`
+  1199/1199.
+- **Last full results, on the final Round L code:**
+  - M30 121/121, M29 32/32, M28 83/83 (`--utc`) and M27 193/193 caught.
+  - M26 `--all` 1199/1199 caught on the M29 code. Run it again before the consolidated phone review.
+- **On a machine in UTC** (the cloud): run M28 with `--utc`, so its local-date entries meet the two
+  zones, and M27's three R44-19 calendar-day entries with `TZ=America/New_York`. In UTC they read
+  as SURVIVED, which is no fault of the tests.

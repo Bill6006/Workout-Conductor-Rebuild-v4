@@ -333,7 +333,28 @@ a phone does, and the revert is caught in three runs of three.
 
 ## The complete revert run
 
-REVERTS
+Each rule this round built, and each fix the ten review passes asked for, was reverted on its own in
+a copy of the repository and its tests run (`mutate-m30.py`, 121 entries). Every revert is caught
+on the final code. Two entries were caught only after a test was named or added: one whose own test
+the fifth pass had removed (F1b, now caught by the kept-swap test that already guarded it), and the
+seventh pass's entries for a swap back, which needed tests where another calf raise could come
+next. The fifth pass's rule that the coach never moves a kept swap back was replaced in the seventh
+by the swap back's own reach, and its entry with it.
+
+The earlier rounds' tables were run against this round's final code, so that nothing built since
+blinds a test of theirs:
+
+- Round K's (`mutate-m29.py`, 32 entries): 32 caught.
+- Round J's (`mutate-m28.py --utc`, 83 entries, the tests in UTC and then the day rules in two
+  zones, as CI runs them): 83 caught.
+- Round I's (`mutate-m27.py`, 193 entries): 193 caught. One entry moved with the code (R44-18, a
+  kept swap never brings back the lift that gives way, now in the loop over an exercise's swaps).
+  Its three calendar-day entries are caught only where the device is away from UTC, as on the
+  owner's machine; this cloud machine runs in UTC, so they were run in New York time.
+- Maintenance 26's (`mutate-m26.py --all`, 1199 entries, the tables of Maintenance 23 to 26):
+  sixteen of Maintenance 25's entries were moved to the code this round changed (the plate editor,
+  a place's barcode, setup's place writes), and every anchor is found. The whole run, which takes
+  hours, goes once more before the consolidated phone review.
 
 ## Verification
 
