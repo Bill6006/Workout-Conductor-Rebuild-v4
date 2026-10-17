@@ -31,6 +31,10 @@ const WITHOUT_DEMONSTRATION = [
   'pallof-press',
   // The ninth review: its clip showed a leg press on the hack machine, not the hack squat.
   'hack-squat',
+  // Maintenance 30, the owner's item 31: new, not yet searched for.
+  'dumbbell-reverse-lunge',
+  'dumbbell-bulgarian-split-squat',
+  'standing-calf-raise-machine',
 ];
 
 /** The register's table row for an exercise (prettier pads the cells). */
@@ -63,7 +67,7 @@ function webpSize(file: string): { width: number; height: number } {
 }
 
 describe('the exercises’ demonstrations', () => {
-  it('gives every exercise its own demonstration but the eleven the register explains', () => {
+  it('gives every exercise its own demonstration but those the register explains', () => {
     const without = EXERCISES.filter((exercise) => !DEMONSTRATED_EXERCISE_IDS.has(exercise.id));
     expect(without.map((exercise) => exercise.id).sort()).toEqual(
       [...WITHOUT_DEMONSTRATION].sort(),

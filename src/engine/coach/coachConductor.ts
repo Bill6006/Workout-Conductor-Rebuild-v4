@@ -70,6 +70,7 @@ import {
   splitFor,
   swappedOutIds,
 } from '../workoutGenerator/generate';
+import { ADDS_TO_BODYWEIGHT, LOADED_VERSIONS } from '../workoutGenerator/loadedVersions';
 import {
   allEntries,
   isStopped,
@@ -1065,14 +1066,19 @@ function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | n
     excludeExerciseIds: input.constraints.avoidExerciseIds,
     painJoints: jointsToProtect(input),
   });
-  // Never one the lifter swapped out for weeks.
+  // Never one the lifter swapped out for weeks, nor the same move made heavier: its loaded
+  // version is no help to a lifter short of its range at bodyweight (Maintenance 30).
   const swappedOut = swappedOutIds(input.swaps ?? [], context);
+  const heavier = new Set(
+    (LOADED_VERSIONS[exercise.id] ?? []).filter((id) => ADDS_TO_BODYWEIGHT.has(id)),
+  );
   const swap = exercise.substitutions
     .map((id) => getExercise(id))
     .find(
       (candidate) =>
         candidate !== undefined &&
         startRatio(candidate) !== null &&
+        !heavier.has(candidate.id) &&
         !today.has(candidate.id) &&
         !swappedOut.has(candidate.id) &&
         !checkExerciseFit(candidate, context).some((conflict) => conflict.severity === 'block'),

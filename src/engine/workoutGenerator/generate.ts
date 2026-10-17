@@ -68,6 +68,14 @@ import {
 } from '../planning/pushLift';
 import { addLocalDays, localDayKey } from '../../core/time/localDate';
 import { PACE, personalPace, type PersonalPace } from '../duration/trainingTime';
+import {
+  BODYWEIGHT_VERSION,
+  lastDoneHere,
+  loadedVersionLine,
+  loadedVersionShift,
+  outgrownMoves,
+  type OutgrownBy,
+} from './loadedVersions';
 import { styleInfo } from '../planning/styles';
 import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
@@ -503,6 +511,10 @@ export interface Picker {
   focus: MuscleId | null;
   /** Exercises a lasting swap took out of this plan: no other slot picks them back in. */
   excluded?: ReadonlySet<string>;
+  /** Bodyweight moves the lifter has outgrown: their loaded versions take their place (item 31). */
+  outgrown?: ReadonlyMap<string, OutgrownBy>;
+  /** Exercises a lasting swap took out: a bodyweight move among them stays the plan's own pick. */
+  swappedAway?: ReadonlySet<string>;
 }
 
 function stressPenalty(exercise: CatalogExercise): number {
@@ -528,10 +540,14 @@ function pickForSlot(
         !blocksCandidate(checkWorkoutConflicts([...chosen, exercise], picker.context), exercise.id),
     );
 
+  const candidateIds = new Set(candidates.map((exercise) => exercise.id));
+  const outgrown = picker.outgrown ?? new Map<string, OutgrownBy>();
   const score = (exercise: CatalogExercise) => {
     const suitability = strengthRole
       ? exercise.strengthSuitability * 10 + exercise.hypertrophySuitability
       : exercise.hypertrophySuitability * 10 + exercise.strengthSuitability;
+    // A bodyweight move or its loaded version, as the lifter has outgrown it (item 31).
+    const loadedRule = loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway);
     const preferred = picker.preferredIds.has(exercise.id) ? 15 : 0;
     const days = picker.exposure.daysSinceExercise[exercise.id];
     const familiarity = days === undefined ? 0 : days < 1.5 ? -8 : days <= 21 ? 6 : 0;
@@ -544,7 +560,8 @@ function pickForSlot(
       preferred +
       familiarity +
       behind +
-      focus -
+      focus +
+      loadedRule -
       stressPenalty(exercise) * 2 -
       exercise.setupSeconds / 60
     );
@@ -578,10 +595,13 @@ export function pickAccessoryFor(
       (exercise) =>
         !blocksCandidate(checkWorkoutConflicts([...chosen, exercise], picker.context), exercise.id),
     );
+  const candidateIds = new Set(candidates.map((exercise) => exercise.id));
+  const outgrown = picker.outgrown ?? new Map<string, OutgrownBy>();
   const score = (exercise: CatalogExercise) =>
     exercise.hypertrophySuitability * 10 +
     (exercise.compound ? 0 : 8) +
-    (picker.preferredIds.has(exercise.id) ? 15 : 0) -
+    (picker.preferredIds.has(exercise.id) ? 15 : 0) +
+    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -
     stressPenalty(exercise) * 2 -
     exercise.setupSeconds / 60;
   const tier = (exercise: CatalogExercise) => (picker.preferredIds.has(exercise.id) ? 1 : 0);
@@ -667,13 +687,16 @@ export function accessoryPicker(input: {
   swaps?: readonly LastingSwap[];
 }): Picker {
   const context = sessionConflictContext(input.profile, input.location, input.constraints ?? {});
+  const swappedOut = swappedOutIds(input.swaps ?? [], context);
   return {
     context,
     preferredIds: preferredIdsOf(input.profile),
     exposure: computeExposure(input.history, input.now),
     loads: muscleLoads(input.history, input.profile, input.now),
     focus: input.focus ?? null,
-    excluded: swappedOutIds(input.swaps ?? [], context),
+    excluded: swappedOut,
+    outgrown: outgrownMoves(input.history),
+    swappedAway: swappedOut,
   };
 }
 
@@ -1182,7 +1205,17 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
   const completedSets = constraints.completedSets ?? [];
   const compromises: string[] = [];
-  const picker: Picker = { context, preferredIds, exposure, loads, focus, excluded: swappedOut };
+  const outgrown = outgrownMoves(history);
+  const picker: Picker = {
+    context,
+    preferredIds,
+    exposure,
+    loads,
+    focus,
+    excluded: swappedOut,
+    outgrown,
+    swappedAway: swappedOut,
+  };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 
   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
@@ -2212,6 +2245,18 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   if (deload) reasons.push(deloadReason(blocks, deload));
   const paceLine = paceReason(pace);
   if (paceLine) reasons.push(paceLine);
+  // A loaded version in place of a bodyweight move outgrown, or too light by default (item 31):
+  // said of an entry the rule put in, not one a swap did (the swap says so), and only where the
+  // bodyweight move could stand.
+  const doneHere = lastDoneHere(history, location?.id ?? null);
+  for (const entry of allEntries(blocks)) {
+    if (entry.standsFor !== undefined) continue;
+    const bodyweightId = BODYWEIGHT_VERSION[entry.exerciseId];
+    const bodyweight = bodyweightId ? getExercise(bodyweightId) : undefined;
+    if (!bodyweight || isBlocked(checkExerciseFit(bodyweight, context))) continue;
+    const line = loadedVersionLine(entry.exerciseId, outgrown, swappedOut, doneHere);
+    if (line) reasons.push(line);
+  }
   reasons.push(
     `${profile.restStyle.charAt(0).toUpperCase() + profile.restStyle.slice(1)} rests; supersets ${profile.techniques.supersets ? 'on' : 'off'}, drop sets ${profile.techniques.dropSets ? 'on' : 'off'}, circuits ${profile.techniques.circuits ? 'on' : 'off'}.`,
   );

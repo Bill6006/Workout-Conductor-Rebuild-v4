@@ -9,14 +9,14 @@ _Last updated: 2026-10-11_
 | Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Current phase          | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 21, 25, 27, 28 and 29 YELLOW at their review gates. The agreed backlog is being built round after round without pausing at the gates (the owner, 2026-10-11)                                                                                                                                                                                                           |
-| Phase gate             | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 29 YELLOW (round K: items 7, 8, 10, 14). Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
+| Current phase | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 21, 25, 27, 28, 29 and 30 YELLOW at their review gates. The agreed backlog is being built round after round without pausing at the gates (the owner, 2026-10-11) |
+| Phase gate | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 30 YELLOW (round L: items 6, 30, 31). Maintenance 29 YELLOW (round K: items 7, 8, 10, 14). Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
 | Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Work in progress       | The agreed backlog in five rounds: J = Maintenance 28 (items 1, 3, 4) live; K = Maintenance 29 (7, 8, 10, 14) in this commit; then L (6, 30, 31), M (12, 32) and N (11), each researched where training is involved, reviewed, reverted, verified and shipped live                                                                                                                                                                                                                                                                                                                                                           |
-| Latest commit          | Maintenance 29, round K: items 7, 8, 10 and 14 (this commit); its deployment and live checks follow in the next                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Latest deployment      | `8081df3` (Maintenance 27, round I) deployed by Deploy Pages run 38101751291 (success); browser suite against the live URL: 395 passed + 18 skipped by design, none failed                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Test totals            | Unit: 2296 passed (241 files), also in UTC. Browser/mobile: 399 passed + 14 skipped by design, none failed, locally in the gate; 395 passed + 18 skipped by design against the live URL. Reverts: 193 of 193 caught this round, 1199 of 1199 of Maintenance 23 to 26 on this round's code; 32 of 32 browser reverts caught                                                                                                                                                                                                                                                                                                   |
+| Work in progress | The agreed backlog in five rounds: J = Maintenance 28 (items 1, 3, 4) and K = Maintenance 29 (7, 8, 10, 14) live; L = Maintenance 30 (6, 30, 31) in this commit; then M (12, 32) and N (11), each researched where training is involved, reviewed, reverted, verified and shipped live |
+| Latest commit | Maintenance 30, round L: items 6, 30 and 31 (this commit); its deployment and live checks follow in the next |
+| Latest deployment | `dbd1726` (Maintenance 29, round K) deployed by Deploy Pages run 38119197463 (success); browser suite against the live URL: 404 passed + 18 skipped by design, none failed (a first run during an internet outage failed only on name lookups, and was run again) |
+| Test totals | TOTALS |
 | Build marker           | Under Settings, About this app (since Maintenance 25; before, under every screen's header): `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ## Agreed and waiting
@@ -28,12 +28,8 @@ the uncertainty and the reason for each final rule are written down; a number in
 not a rule until the evidence backs it. Product and screen choices follow ordinary judgement (the
 owner, 2026-10-09).
 
-- **6.** Rename the Plates tab to Weights, with weights per place.
 - **11.** Top set plus back-off sets.
 - **12.** A catch-up session for an unplanned day.
-- **30.** A switch for each machine: pin stack or plates.
-- **31.** Weighted versions of bodyweight moves at the gym, for example a dumbbell reverse lunge
-  and a standing calf raise machine.
 - **32.** A second workout on the same day leads with what was missed.
 
 Built in Maintenance 26 (GREEN): **40**, **42** and **50**. Built in Maintenance 27 (round I, at its
@@ -52,6 +48,14 @@ both), **8** (the screen kept on during a workout), **10** (the Default time lin
 more than the dropdown) and **14** (the phone's Back closes any open sheet)
 (`docs/reports/maintenance-29.md`).
 
+Built in Maintenance 30 (round L, YELLOW): **6** (the Weights tab, and each place's weights in
+Settings), **30** (a machine on its pin stack or on plates) and **31** (weighted versions of
+bodyweight moves) (`docs/reports/maintenance-30.md`).
+
+Proposed in Maintenance 30, not agreed (the owner's decision): a move's load where a place does it
+another way (a face pull with a band at home is planned in pounds), and a loaded calf raise at home
+(`docs/reports/maintenance-30.md`, Proposed).
+
 Not approved (2026-10-09): **48**, Life Mirror's daily check-in used for workouts.
 
 ## Waiting for the owner's phone acceptance
@@ -60,6 +64,7 @@ The owner, 2026-10-11: no gate pauses the agreed work, and none is GREEN without
 Once every agreed item is live, one consolidated phone review closes all of these, without repeating
 what the owner has already passed:
 
+- **Maintenance 30** (round L: items 6, 30, 31): not yet reviewed.
 - **Maintenance 29** (round K: items 7, 8, 10, 14): not yet reviewed.
 - **Maintenance 28** (round J: items 1, 3, 4): not yet reviewed.
 - **Maintenance 27** (round I: items 43, 41, 44, 45, 46, 47, 49): its phone steps
@@ -190,6 +195,32 @@ what the owner has already passed:
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 30: round L, the weights a place has (YELLOW)
+
+- Built on the owner's word (2026-10-11), the third of five rounds; item 31 researched first
+  (`docs/research/loaded-bodyweight-moves.md`).
+- 6: the tab is Plates on a bar and on a machine set to plates, Weights on a pin stack and on
+  dumbbells; a move with no load has none, or shows the weight held. A new Settings row, "Weights at
+  your places", sets each place's plates, dumbbells and machines, by the place's own equipment. The
+  line under the logger no longer reads a weight on a step-up as a pin.
+- 30: the machines that come both ways (the review: the leg press and its calf raise, the hack squat,
+  the chest and shoulder presses, the lat pulldown, the leg extension and curl, the preacher curl,
+  the standing calf raise machine) switch between Pin stack and Plates, one switch per machine (the
+  leg press and the calf raise on it together). On plates a machine's weight is its plates, the sled
+  not counted, starting from the place's rack; back on its stack it gets its stack back, any day.
+- 31: a dumbbell reverse lunge, a dumbbell Bulgarian split squat and a standing calf raise machine
+  join the Library. A bodyweight move stays while it fits its reps; once a set at bodyweight goes a
+  rep past the top of its range at the planned reserve, or a weight is added to it, the plan takes
+  its loaded version where the place has one, and says why once at each place. It stays loaded
+  through bodyweight sets inside the range, and comes back only when bodyweight falls short of the
+  range. A calf raise on two legs is loaded wherever it can be. A favourite and a kept swap stand.
+- Reviewed: one HIGH (a machine's pin stack lost on a switch to plates), four MEDIUM (a weights
+  change undone by a pending Settings save; a kept swap away from an outgrown move dropped; one hotel
+  workout undoing the gym's loaded version; a hand-loaded calf raise, kept as designed with the
+  reason) and seven LOW, all fixed with tests and reverts except the one kept. The re-check of the
+  fixes: RECHECK_LINE
+- Report: `docs/reports/maintenance-30.md`.
 
 ## Maintenance 29: round K, the workout's small comforts (YELLOW)
 
@@ -570,6 +601,6 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Round L (Maintenance 30: items 6, 30 and 31), then M and N, without pausing at the gates.
+Round M (Maintenance 31: items 12 and 32), then N (item 11), without pausing at the gates.
 Once every agreed item is live, the one consolidated phone review (Waiting for the owner's phone
 acceptance).

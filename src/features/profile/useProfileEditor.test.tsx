@@ -254,3 +254,46 @@ describe('Settings around a deletion it is refused (sixth re-check)', () => {
     expect(stored).toMatchObject({ bodyweight: 201, units: 'kg' });
   });
 });
+
+describe('a place Settings saves while its weights change (Maintenance 30, the review)', () => {
+  const PLATES = { kind: 'plates' as const, perSide: [45, 25] };
+  const gymOf = (store: Awaited<ReturnType<typeof settings>>['store']) =>
+    store.getSnapshot().locations.find((place) => place.id === GYM_LOCATION_ID)!;
+
+  it('writes no place it did not edit, so weights saved meanwhile stay', async () => {
+    const { store, editor } = await settings(GYM_LOCATION_ID);
+    const saves = vi.spyOn(store, 'saveLocation');
+    act(() => {
+      editor.result.current.update(
+        updateProfile(editor.result.current.draft!, (profile) => ({ ...profile, bodyweight: 190 })),
+      );
+    });
+    await act(async () => {
+      await store.saveLoadings(GYM_LOCATION_ID, { plates: PLATES });
+    });
+    await act(async () => {
+      await editor.result.current.flush();
+    });
+    expect(store.getSnapshot().profile?.bodyweight).toBe(190);
+    expect(saves).not.toHaveBeenCalled();
+    expect(gymOf(store).loading.plates).toEqual(PLATES);
+  });
+
+  it('saves its own edit of a place and keeps the weights saved meanwhile', async () => {
+    const { store, editor } = await settings(GYM_LOCATION_ID);
+    const without = normalizeEquipment(GYM_DEFAULT_EQUIPMENT.filter((id) => id !== 'hack-squat'));
+    act(() => {
+      editor.result.current.update(
+        setLocationEquipment(editor.result.current.draft!, GYM_LOCATION_ID, without, TEST_NOW),
+      );
+    });
+    await act(async () => {
+      await store.saveLoadings(GYM_LOCATION_ID, { plates: PLATES });
+    });
+    await act(async () => {
+      await editor.result.current.flush();
+    });
+    expect(gymOf(store).equipment).not.toContain('hack-squat');
+    expect(gymOf(store).loading.plates).toEqual(PLATES);
+  });
+});

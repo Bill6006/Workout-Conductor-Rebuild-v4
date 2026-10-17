@@ -848,6 +848,12 @@ export class AppStore {
   private syncRun: Promise<SyncOutcome | null> = Promise.resolve(null);
   /** A sync waiting behind the one under way, not yet started: a later request joins it. */
   private queuedSync: { options: SyncRequest; run: Promise<SyncOutcome | null> } | null = null;
+  /**
+   * The place writes, one at a time: each reads the place as the write before it left it, so a
+   * place's weights saved from one row and its other details from another never undo each other
+   * (Maintenance 30).
+   */
+  private placeWrites: Promise<unknown> = Promise.resolve();
   private cloudTimer: number | null = null;
   private drainTimer: number | null = null;
   private onlineHandler: (() => void) | null = null;
@@ -2631,12 +2637,32 @@ export class AppStore {
    * and re-fits the session's loads to it. Nothing else in the session moves.
    */
   async saveLoading(locationId: string, key: string, spec: LoadingSpec | null): Promise<void> {
-    const location = this.state.locations.find((candidate) => candidate.id === locationId);
-    if (!location) throw new Error('That place is no longer saved.');
-    const loading = { ...location.loading };
-    if (spec) loading[key] = LoadingSpecSchema.parse(spec);
-    else delete loading[key];
-    await this.saveLocation({ ...location, loading });
+    await this.saveLoadings(locationId, { [key]: spec });
+  }
+
+  /**
+   * Records several of a place's loading records in one save, as a machine's switch between its
+   * pin stack and plates does for every exercise done on it (Maintenance 30), and re-fits the
+   * session's loads to them. A null removes that record.
+   */
+  async saveLoadings(
+    locationId: string,
+    specs: Readonly<Record<string, LoadingSpec | null>>,
+  ): Promise<void> {
+    const parsed = Object.entries(specs).map(
+      ([key, spec]) => [key, spec ? LoadingSpecSchema.parse(spec) : null] as const,
+    );
+    await this.writePlace(locationId, (location) => {
+      if (!location) throw new Error('That place is no longer saved.');
+      const loading = { ...location.loading };
+      for (const [key, spec] of parsed) {
+        if (spec) loading[key] = spec;
+        else delete loading[key];
+      }
+      return { ...location, loading };
+    });
+    // As any place's save does when its equipment stays: the plan keeps its key.
+    this.syncSessionKey();
     const session = this.state.session;
     if (
       session &&
@@ -2691,13 +2717,17 @@ export class AppStore {
     if (dropped) this.setSession({ ...session, drafts });
   }
 
-  async saveLocation(location: LocationProfile): Promise<SaveReceipt> {
-    const previous = this.state.locations.find((candidate) => candidate.id === location.id);
-    const next = LocationProfileSchema.parse({ ...location, updatedAt: this.now() });
-    const db = await this.getDatabase();
-    const receipt = await putVerified(db, 'locations', next, { now: this.now });
-    const others = this.state.locations.filter((candidate) => candidate.id !== next.id);
-    this.setState({ locations: sortLocations([...others, next]), lastReceipt: receipt });
+  /**
+   * Saves a place. With `keepLoading`, what it can load stays as stored when the write lands: the
+   * caller edits its other details only (Settings' autosave, Maintenance 30).
+   */
+  async saveLocation(
+    location: LocationProfile,
+    options: { keepLoading?: boolean } = {},
+  ): Promise<SaveReceipt> {
+    const { receipt, previous, next } = await this.writePlace(location.id, (stored) =>
+      options.keepLoading && stored ? { ...location, loading: stored.loading } : location,
+    );
     const isCurrent = this.state.profile?.currentLocationId === next.id;
     if (
       isCurrent &&
@@ -2711,6 +2741,36 @@ export class AppStore {
       this.syncSessionKey();
     }
     return receipt;
+  }
+
+  /**
+   * Writes one place, after any write to a place under way: `change` gets the place as stored once
+   * that write has landed (none for a new place) and returns what to save.
+   */
+  private writePlace(
+    id: string,
+    change: (stored: LocationProfile | undefined) => LocationProfile,
+  ): Promise<{
+    receipt: SaveReceipt;
+    previous: LocationProfile | undefined;
+    next: LocationProfile;
+  }> {
+    return this.afterPlaceWrites(async () => {
+      const previous = this.state.locations.find((candidate) => candidate.id === id);
+      const next = LocationProfileSchema.parse({ ...change(previous), updatedAt: this.now() });
+      const db = await this.getDatabase();
+      const receipt = await putVerified(db, 'locations', next, { now: this.now });
+      const others = this.state.locations.filter((candidate) => candidate.id !== next.id);
+      this.setState({ locations: sortLocations([...others, next]), lastReceipt: receipt });
+      return { receipt, previous, next };
+    });
+  }
+
+  /** Runs one place write or deletion after those before it; a failed one never holds up the next. */
+  private afterPlaceWrites<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.placeWrites.then(work);
+    this.placeWrites = run.catch(() => undefined);
+    return run;
   }
 
   /** Home can never be deleted; deleting the current location falls back to Home. */
@@ -2732,12 +2792,16 @@ export class AppStore {
     // (another window may have saved it), and first: a barcode that cannot be removed keeps its
     // place, so Delete again is a real retry. Both under the barcode lock, so a save in another
     // window comes before (and goes with the place) or finds the place gone (the re-checks).
-    await this.withBarcodeLock(async () => {
-      await this.removeBarcodeNow(db, id);
-      await deleteVerified(db, 'locations', id);
+    // After any place write under way, and before any made later: a weights save read before the
+    // place went can never write it back (the third re-check of Maintenance 30).
+    await this.afterPlaceWrites(async () => {
+      await this.withBarcodeLock(async () => {
+        await this.removeBarcodeNow(db, id);
+        await deleteVerified(db, 'locations', id);
+      });
+      const locations = this.state.locations.filter((location) => location.id !== id);
+      this.setState({ locations });
     });
-    const locations = this.state.locations.filter((location) => location.id !== id);
-    this.setState({ locations });
     if (this.state.barcodeSheet === id) this.setState({ barcodeSheet: null });
     if (this.state.profile?.currentLocationId === id) {
       await this.saveProfile({ ...this.state.profile, currentLocationId: HOME_LOCATION_ID });

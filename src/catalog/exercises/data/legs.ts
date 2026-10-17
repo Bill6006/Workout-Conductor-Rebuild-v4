@@ -226,7 +226,7 @@ export const LEG_EXERCISES = [
     joints: { knee: 'moderate' },
     reps: { hypertrophy: [8, 12] },
     difficulty: 'intermediate',
-    substitutions: ['reverse-lunge', 'step-up', 'leg-press'],
+    substitutions: ['reverse-lunge', 'step-up', 'leg-press', 'dumbbell-bulgarian-split-squat'],
     setup: [
       'Stand about a stride in front of a knee-high bench or box, facing away from it.',
       'Rest the top of one foot on it behind you; hold dumbbells or kettlebells at your sides if loading.',
@@ -248,6 +248,43 @@ export const LEG_EXERCISES = [
       'Letting your front knee cave inward.',
     ],
   }),
+  // Maintenance 30, the owner's item 31: the split squat loaded, once bodyweight is too light.
+  defineExercise({
+    id: 'dumbbell-bulgarian-split-squat',
+    name: 'Dumbbell Bulgarian Split Squat',
+    aliases: ['Dumbbell Rear-Foot Elevated Split Squat', 'Weighted Bulgarian Split Squat'],
+    pattern: 'lunge',
+    primary: ['quads', 'glutes'],
+    secondary: ['hamstrings', 'abs'],
+    equipment: DB,
+    family: 'lunge',
+    strength: 2,
+    hypertrophy: 3,
+    unilateral: true,
+    flags: ['deep-knee-flexion'],
+    joints: { knee: 'moderate' },
+    reps: { hypertrophy: [8, 12] },
+    difficulty: 'intermediate',
+    substitutions: ['bulgarian-split-squat', 'dumbbell-reverse-lunge', 'leg-press'],
+    setup: [
+      'Stand about a stride in front of a knee-high bench or box, facing away from it.',
+      'Rest the top of one foot on it behind you, a dumbbell in each hand at your sides.',
+      'Set your front foot far enough forward that its heel stays down at the bottom.',
+    ],
+    execution: [
+      'Lower straight down until your back knee is just above the floor.',
+      'Drive up through your whole front foot to stand.',
+      'Finish every rep on one leg, then switch legs.',
+    ],
+    cues: [
+      'Keep most of your weight on the front leg; the back foot is mainly for balance.',
+      'Let the dumbbells hang straight down, shoulders level.',
+    ],
+    mistakes: [
+      'Standing so close to the bench or box that your front heel lifts.',
+      'Letting your front knee cave inward.',
+    ],
+  }),
   defineExercise({
     id: 'reverse-lunge',
     name: 'Reverse Lunge',
@@ -262,7 +299,7 @@ export const LEG_EXERCISES = [
     unilateral: true,
     joints: { knee: 'moderate' },
     reps: { hypertrophy: [8, 15] },
-    substitutions: ['bulgarian-split-squat', 'step-up', 'goblet-squat'],
+    substitutions: ['bulgarian-split-squat', 'step-up', 'goblet-squat', 'dumbbell-reverse-lunge'],
     setup: [
       'Stand tall with feet hip-width apart, dumbbells at your sides if adding load.',
       'Fix your eyes on a spot straight ahead at eye level.',
@@ -279,6 +316,40 @@ export const LEG_EXERCISES = [
     mistakes: [
       'A step so short that your front heel lifts and the knee jams forward.',
       'Twisting or leaning your torso to one side.',
+    ],
+  }),
+  // Maintenance 30, the owner's item 31: the reverse lunge loaded, once bodyweight is too light.
+  defineExercise({
+    id: 'dumbbell-reverse-lunge',
+    name: 'Dumbbell Reverse Lunge',
+    aliases: ['Dumbbell Lunge', 'Weighted Reverse Lunge'],
+    pattern: 'lunge',
+    primary: ['quads', 'glutes'],
+    secondary: ['hamstrings'],
+    equipment: DB,
+    family: 'lunge',
+    strength: 2,
+    hypertrophy: 3,
+    unilateral: true,
+    joints: { knee: 'moderate' },
+    reps: { hypertrophy: [8, 15] },
+    substitutions: ['reverse-lunge', 'bulgarian-split-squat', 'goblet-squat'],
+    setup: [
+      'Stand tall with feet hip-width apart, a dumbbell in each hand at your sides.',
+      'Fix your eyes on a spot straight ahead at eye level.',
+    ],
+    execution: [
+      'Take a long step back and land on the ball of that foot.',
+      'Lower until both knees bend to about 90 degrees, back knee just off the floor.',
+      'Push through your front foot to bring the back foot forward and stand tall.',
+    ],
+    cues: [
+      'Keep most of your weight on the front foot, heel flat.',
+      'Let the dumbbells hang straight down, shoulders level.',
+    ],
+    mistakes: [
+      'A step so short that your front heel lifts and the knee jams forward.',
+      'Letting the dumbbells swing or pull you off balance.',
     ],
   }),
   defineExercise({
@@ -635,7 +706,7 @@ export const LEG_EXERCISES = [
     strength: 0,
     hypertrophy: 3,
     reps: { hypertrophy: [12, 20] },
-    substitutions: ['leg-press-calf-raise'],
+    substitutions: ['leg-press-calf-raise', 'standing-calf-raise-machine'],
     setup: [
       'Stand on the balls of your feet on a step, heels hanging over the edge.',
       'Rest one hand on a wall or rack for balance; knees straight but not locked.',
@@ -653,6 +724,37 @@ export const LEG_EXERCISES = [
     mistakes: [
       'Bouncing out of the bottom instead of pausing.',
       'Bending your knees to help yourself up.',
+    ],
+  }),
+  // Maintenance 30, the owner's item 31: the standing calf raise loaded, on its own machine.
+  defineExercise({
+    id: 'standing-calf-raise-machine',
+    name: 'Standing Calf Raise Machine',
+    aliases: ['Machine Calf Raise', 'Standing Calf Machine'],
+    pattern: 'calf-raise',
+    primary: ['calves'],
+    equipment: [['calf-raise-machine']],
+    family: 'calf',
+    strength: 1,
+    hypertrophy: 3,
+    reps: { hypertrophy: [12, 20] },
+    substitutions: ['standing-calf-raise', 'leg-press-calf-raise'],
+    setup: [
+      'Set the shoulder pads so you stand under them with your knees straight, not locked.',
+      'Stand on the balls of your feet on the block, heels hanging free.',
+    ],
+    execution: [
+      'Rise onto the balls of your feet as high as you can, and pause.',
+      'Lower slowly until your heels sink below the block and your calves stretch.',
+      'Hold the stretch for a moment, then rise again.',
+    ],
+    cues: [
+      'Keep your knees straight so the big calf muscle does the lifting.',
+      'Take the full stretch at the bottom on every rep.',
+    ],
+    mistakes: [
+      'Bouncing out of the bottom instead of pausing.',
+      'Bending your knees to push the weight up.',
     ],
   }),
   defineExercise({

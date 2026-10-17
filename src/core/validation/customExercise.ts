@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { ALL_EQUIPMENT_IDS } from '../../catalog/equipment/equipment';
+import {
+  ALL_EQUIPMENT_IDS,
+  CABLE_EQUIPMENT_IDS,
+  MACHINE_EQUIPMENT_IDS,
+} from '../../catalog/equipment/equipment';
 import {
   DEMAND_LEVELS,
   JOINTS,
@@ -92,20 +96,7 @@ export const CustomMediaSchema = z.looseObject({
 
 export type CustomMedia = z.infer<typeof CustomMediaSchema>;
 
-const STACK_EQUIPMENT = new Set([
-  'cable-station',
-  'functional-trainer',
-  'lat-pulldown',
-  'seated-row',
-  'chest-press-machine',
-  'shoulder-press-machine',
-  'pec-deck',
-  'leg-press',
-  'hack-squat',
-  'leg-extension',
-  'leg-curl',
-  'preacher-curl-machine',
-]);
+const STACK_EQUIPMENT = new Set([...CABLE_EQUIPMENT_IDS, ...MACHINE_EQUIPMENT_IDS]);
 const BAR_EQUIPMENT = new Set(['barbell', 'ez-bar', 'trap-bar', 'smith-machine', 'squat-rack']);
 const BAND_EQUIPMENT = new Set(['resistance-bands', 'suspension-trainer']);
 

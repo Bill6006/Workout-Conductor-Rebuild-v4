@@ -59,7 +59,7 @@ describe('LibraryScreen', () => {
     );
     expect(
       await screen.findByText(
-        '83 exercises. 72 show a demonstration of their own; the rest, a diagram of their movement.',
+        '86 exercises. 72 show a demonstration of their own; the rest, a diagram of their movement.',
       ),
     ).toBeInTheDocument();
   });

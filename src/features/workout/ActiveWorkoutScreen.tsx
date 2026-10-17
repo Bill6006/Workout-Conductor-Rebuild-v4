@@ -46,9 +46,15 @@ import type { CoachAction, CoachSignal } from '../../engine/coach/coachConductor
 import { useCoach } from '../coach/useCoach';
 import { ReadinessSheet } from '../today/ReadinessSheet';
 import { remainingMinutes } from '../../engine/duration/duration';
-import { plateMath } from '../../engine/plateMath/plateMath';
 import { dropSetWeight } from '../../engine/recalibration/dropSet';
-import { fitWeight, loadingFor, loadingKeyFor, specFor } from '../../engine/loading/loading';
+import {
+  fitWeight,
+  loadingFor,
+  loadingKeyFor,
+  handWeightsAt,
+  platesHere,
+  specFor,
+} from '../../engine/loading/loading';
 import { enteredE1rm, enteredMaxFor } from '../../engine/progression/maxes';
 import { hasNoLoad, startRatio } from '../../engine/progression/startingLoad';
 import { repsSlip, weightSlip, type SlipQuestion } from '../../engine/progression/slips';
@@ -601,7 +607,15 @@ export function ActiveWorkoutScreen() {
     // The plates for the weight on the dial, drawn as on the Plates panel (Maintenance 25, item 8).
     const helper =
       draftWeight !== null && draftWeight !== undefined && draftWeight > 0 ? (
-        <PlateLine result={plateMath(exercise, draftWeight, units, loading.perSide ?? undefined)} />
+        <PlateLine
+          result={platesHere(
+            exercise,
+            draftWeight,
+            units,
+            loading,
+            specFor(currentLocation?.loading, exercise),
+          )}
+        />
       ) : null;
 
     return (
@@ -695,7 +709,12 @@ export function ActiveWorkoutScreen() {
                 ) : null
               }
               available={loading.available}
-              onWeightHintTap={() => setPlatesRequest({ entryId: entry.id, at: Date.now() })}
+              onWeightHintTap={
+                // A move with no load and no weight held has no Weights tab to open.
+                hasNoLoad(exercise) && !(draftWeight !== null && draftWeight > 0)
+                  ? undefined
+                  : () => setPlatesRequest({ entryId: entry.id, at: Date.now() })
+              }
               note={
                 currentHere.set.kind === 'working' ? (entry.progression?.rack?.line ?? null) : null
               }
@@ -757,11 +776,18 @@ export function ActiveWorkoutScreen() {
           currentWeight={draftWeight}
           loading={loading}
           spec={specFor(currentLocation?.loading, exercise)}
+          placeLoading={currentLocation?.loading}
+          hand={handWeightsAt(currentLocation?.equipment ?? []) ?? undefined}
           placeName={currentLocation?.name ?? 'this place'}
           missingPlates={session.loading.missingPlates}
           onSaveLoading={(spec) =>
             currentLocation
               ? store.saveLoading(currentLocation.id, loadingKeyFor(exercise), spec)
+              : Promise.reject(new Error('Pick a place on Today first.'))
+          }
+          onSaveMachine={(specs) =>
+            currentLocation
+              ? store.saveLoadings(currentLocation.id, specs)
               : Promise.reject(new Error('Pick a place on Today first.'))
           }
           onSetMissingPlates={(plates) => store.setMissingPlates(plates)}
