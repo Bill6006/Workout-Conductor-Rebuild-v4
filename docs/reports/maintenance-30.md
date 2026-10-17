@@ -285,7 +285,17 @@ over more sets" for a calf raise short of its range no longer adds "or swap in L
 Raise", which the lifter's swap back keeps out. A swap from the leg-press calf raise to the
 bodyweight raise kept it out before the round too.
 
-NINTH_PASS
+**A ninth pass** found one more, shown by a failing test; fixed with a test and reverts:
+
+- **LOW:** keeping a favourite loaded calf raise, the plan's own pick, ended every swap back to the
+  calf raise, those that never stood in for the favourite included. A swap back covers the loaded
+  versions the plan and the coach let it cover, the same for the store.
+
+How a swap back ends, from the same pass: keeping, for four weeks, a loaded calf raise the swap back
+stood in for ends the swap back, at every place. A kept swap is stored whole, so it cannot keep the
+bodyweight raise for one loaded version and not another. Undo, straight after, brings it back.
+
+TENTH_PASS
 
 The run of the earlier rounds' reverts against this round's code found one Round K test that its
 own last change had blinded. Its revert (the check after the app's own step back lands) was caught
