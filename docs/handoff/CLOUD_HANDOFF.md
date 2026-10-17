@@ -17,9 +17,10 @@ first; it holds the rules. This file holds the state and the steps._
   checked through the GitHub API; the live marker and the live suite wait until the environment's
   network policy allows `bill6006.github.io`, or run on the owner's machine.
 - **Round M** is in progress on the branch `claude/workout-conductor-round-l-26i4o9`: its
-  `docs/handoff/round-m-wip/round-m.diff`, left out of `main`, is one diff against `11ef050`, whose
-  `src/` is the same as `main` after the squash. Apply it with `git apply` on `main`. It holds the code, its tests, the report draft, its revert table (72 entries), the
-  first review's 23 failing tests in `src/review-m31/`, and part one of their fixes.
+  `docs/handoff/round-m-wip/round-m.diff`, left out of `main`, is one diff against `03a1bef`
+  (`main`). Apply it with `git apply` on `main`. It holds the code, its tests, the report draft,
+  its revert table (103 entries), and the first review's fixes, each finding's test moved into the
+  proper test file.
   - The first review's findings and the calls made on them (each stated in the report):
     - a catch-up is the next app length below the Default (product judgement);
     - the lift to push, the probe set, the extra set and drop sets are off in a catch-up and a
@@ -32,11 +33,13 @@ first; it holds the rules. This file holds the state and the steps._
     - the coach's fewer-reps narrowing stays; keeping a covered loaded version ends the swap back
       everywhere (documented);
     - S6: a new lifter on a day not ticked is told so in one line too.
-  - Left to fix, in the worktree since: S1 and S1b (a profile save re-reads the day's offer), C1
-    (no coach offer adds work off plan), R4 (no swap brings in a resting muscle's lift), T1 (the
-    day note when only remainders went in), S6 (the line on a day not ticked with no catch-up).
-  - Then: update the M31 table (anchors moved, an entry for each fix) and run it with `--utc`; a
-    second review pass until clean; the browser suite; verify; ship.
+  - All twenty are fixed, with S1 and S1b (a profile save re-reads the day's offer), C1 (no coach
+    offer adds work off plan), R4 (no swap brings in a resting muscle's lift), T1 (the day note
+    when only remainders went in) and S6 (the line on a day not ticked with no catch-up). Code the
+    fixes made dead is gone: the template's shared-slot sets (the budget sets them), the push's
+    resting check (off the plan it never goes in), an empty-limit guard.
+  - Next: the M31 table's run with `--utc`; a second review pass until clean; the browser suite on
+    Round M's build; verify; ship.
 
 ### Paused on the owner's word, 2026-10-17 (supersedes the state below)
 
