@@ -20,7 +20,10 @@ test.describe('the weights at each place (items 6 and 30)', () => {
     await expect(weights).toBeVisible();
     await weights.getByRole('radio', { name: 'Gym' }).click();
     await expect(weights.getByTestId('place-weights-plates')).toContainText('Plates at Gym');
-    await expect(weights.getByTestId('place-weights-dumbbells')).toContainText('Dumbbells at Gym');
+    // The default gym has kettlebells too, which share the dumbbells' record: named for both.
+    await expect(weights.getByTestId('place-weights-dumbbells')).toContainText(
+      'Dumbbells and kettlebells at Gym',
+    );
 
     const machines = weights.getByTestId('place-weights-machines');
     await machines.getByTestId('place-weights-machine').selectOption('leg-press-calf-raise');

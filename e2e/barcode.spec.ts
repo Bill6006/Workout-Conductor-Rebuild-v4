@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ensureProfile, expectNoHorizontalOverflow } from './helpers';
+import { ensureProfile, expectNoHorizontalOverflow, sheetGivenBack } from './helpers';
 
 /**
  * Maintenance 18: the gym barcode. Added once to the Gym, on a popup of its own,
@@ -109,6 +109,7 @@ test.describe('the gym barcode', () => {
     await capture(page, testInfo, 'gym-barcode-sheet', sheet.getByTestId('barcode-remove'));
     await sheet.getByRole('button', { name: 'Done' }).click();
     await expect(sheet).toBeHidden();
+    await sheetGivenBack(page);
 
     await page.goto('./#/today');
     await expect(page.getByTestId('barcode-open')).toBeVisible();
@@ -205,6 +206,7 @@ test.describe('the gym barcode', () => {
     await expect(autoShow).toHaveAttribute('aria-checked', 'false');
     await sheet.getByRole('button', { name: 'Done' }).click();
     await expect(sheet).toBeHidden();
+    await sheetGivenBack(page);
 
     await page.goto('./#/today');
     await page.getByTestId('start-workout').click();
