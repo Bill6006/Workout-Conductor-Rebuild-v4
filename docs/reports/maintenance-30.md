@@ -238,7 +238,34 @@ tests and reverts:
   paused, so a deload day with a kept swap away from the split squat planned the loaded split squat
   instead of the swap. The lift to push stands only on a day its push runs.
 
-SIXTH_PASS
+**A sixth pass** over those fixes found two more, each shown by a failing test; both fixed with
+tests and reverts:
+
+- **LOW:** with a bodyweight move and its loaded version both favourites (the standing calf raise
+  and its machine), the coach's extra work named the bodyweight move the plan had just called too
+  light. A favourite moves in the coach's extra work as it does in the plan.
+- **LOW:** Settings listed a lifter's own move at a place through any equipment the place has. A
+  machine saved with no chips put a Machines section at Home; a move saved with the bench chip alone
+  put a Dumbbells section where there are none. A lifter's own move is listed only through a chip
+  there that gives the load it was saved with, in any order.
+- **A test made true to a phone,** from the same pass: the setup race test reached its result only
+  because the test clock stood still. On a clock that moves, as a phone's does, the weights save
+  stamps the Gym anew, and setup, seeing it changed since it began, writes nothing. A test of that
+  is added; the revert of the fix is caught by both.
+
+**A seventh pass** found two more, each shown by a failing test; both fixed with tests and reverts:
+
+- **LOW:** a kept swap back to a bodyweight move held only where the plan's own pick was the
+  exercise swapped out. The calf raise swapped back to from the calf machine gave way to the
+  leg-press calf raise on a day the plan picked that one, while the coach named the bodyweight
+  raise. A swap back, kept, now keeps the bodyweight move against every loaded version of it, in the
+  plan and the coach alike, as the round's rule says. The fifth pass's exemption in the coach is no
+  longer needed and is gone, so a bodyweight move swapped to from anything else (the split squat for
+  the dumbbell reverse lunge) moves in the coach's extra work as it does in the plan.
+- **LOW:** a lifter's own move saved with the squat rack chip alone put a Plates section at a place
+  with a rack and no barbell. A bar's plates come only with a bar's chip.
+
+EIGHTH_PASS
 
 The run of the earlier rounds' reverts against this round's code found one Round K test that its
 own last change had blinded. Its revert (the check after the app's own step back lands) was caught
@@ -259,6 +286,9 @@ a phone does, and the revert is caught in three runs of three.
 - **The switch covers the exercises the catalog knows are done on the same machine.** That is
   only the leg press and its calf raise. A machine of the lifter's own has a switch of its own,
   apart from a catalog machine it shares.
+- **A lifter's own machine saved without a machine chip** (the equipment list had none for it) has
+  its pin stack on its workout tab only. Settings lists a lifter's own move at a place only through
+  a chip there that gives its load, so that a place's sections stay its own equipment's.
 
 ## Proposed (not built; the owner's decision)
 

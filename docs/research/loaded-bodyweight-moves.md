@@ -113,8 +113,11 @@ where marked *.
 7. **The lifter's own choices stand.**
    - A preferred exercise still wins its slot outright, a loaded version too.
    - A loaded version that is a kept swap's own exercise, or the lift to push on a day its push
-     runs, is never held back; nor is a bodyweight move a kept swap brings back.
-   - A lasting swap back to the bodyweight move keeps it.
+     runs, is never held back.
+   - A lasting swap back to the bodyweight move, from one of its loaded versions, keeps it against
+     every loaded version of it, in the plan and in the coach's extra work. A bodyweight move swapped
+     to from another exercise replaces that exercise where the plan picks it, and is loaded as usual
+     elsewhere.
    - A lasting swap away from the bodyweight move, to another exercise, takes its loaded versions
      away too: the same movement. The swap stands as before, loaded or not.
    - Where no loaded version is, a weight typed on the bodyweight move keeps carrying forward there
