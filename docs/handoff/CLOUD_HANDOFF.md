@@ -16,9 +16,9 @@ first; it holds the rules. This file holds the state and the steps._
 - **The live host is blocked from the cloud machine** (`403 host_not_allowed`). The deploy is
   checked through the GitHub API; the live marker and the live suite wait until the environment's
   network policy allows `bill6006.github.io`, or run on the owner's machine.
-- **Round M** is in progress. `docs/handoff/round-m-wip/round-m.diff` is now one diff against
-  `11ef050`, whose `src/` is the same as `main` after the squash. Apply it with `git apply` on
-  `main`. It holds the code, its tests, the report draft, its revert table (72 entries), the
+- **Round M** is in progress on the branch `claude/workout-conductor-round-l-26i4o9`: its
+  `docs/handoff/round-m-wip/round-m.diff`, left out of `main`, is one diff against `11ef050`, whose
+  `src/` is the same as `main` after the squash. Apply it with `git apply` on `main`. It holds the code, its tests, the report draft, its revert table (72 entries), the
   first review's 23 failing tests in `src/review-m31/`, and part one of their fixes.
   - The first review's findings and the calls made on them (each stated in the report):
     - a catch-up is the next app length below the Default (product judgement);
