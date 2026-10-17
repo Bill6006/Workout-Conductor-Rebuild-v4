@@ -26,6 +26,7 @@ import { DiagnosticsCard } from './DiagnosticsCard';
 import { LegacyImportCard } from './LegacyImportCard';
 import { LearnedValues } from './LearnedValues';
 import { MediaCreditsCard } from './MediaCreditsCard';
+import { PlaceWeights } from './PlaceWeights';
 import { SnapshotsCard } from './SnapshotsCard';
 import { StorageCard } from './StorageCard';
 import {
@@ -175,6 +176,14 @@ export function SettingsScreen() {
                 href={sectionHref('plan', 'places')}
                 testId="places-link"
               />
+              <DisclosureRow
+                name="weights"
+                title="Weights at your places"
+                summary="The plates, dumbbells and machines each place has"
+                linked={section === 'weights'}
+              >
+                <PlaceWeights />
+              </DisclosureRow>
             </Group>
           </>
         ) : (

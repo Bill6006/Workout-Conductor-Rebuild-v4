@@ -1,0 +1,28 @@
+Maintenance 30, round L: items 6, 30 and 31
+
+Item 6: the tab under an exercise is Plates on a bar and on a machine set
+to plates, Weights on a pin stack and on dumbbells; a move with no load
+has none, or shows the weight held. A new Settings row, "Weights at your
+places", sets each place's plates, dumbbells and machines, chosen by the
+place's own equipment. A step-up's bench no longer reads as a machine:
+its weight reads as held, moves by 5 lb, and takes no stack.
+
+Item 30: the machines that come both ways switch between Pin stack and
+Plates, one switch per machine (the leg press and the calf raise on it
+together). On plates a machine's weight is its plates, the sled not
+counted, starting from the place's rack; its record keeps the pin stack
+for a switch back. Place writes go one at a time, and Settings' autosave
+never writes a place's weights.
+
+Item 31 (docs/research/loaded-bodyweight-moves.md): a dumbbell reverse
+lunge, a dumbbell Bulgarian split squat and a standing calf raise
+machine join the catalog. A bodyweight move stays while it fits its
+reps; a set past the top of its range at the planned reserve, or a
+weight added to it, outgrows it, and the plan takes its loaded version
+where the place has one, saying why once at each place. A calf raise on
+two legs is loaded wherever it can be. Favourites and kept swaps stand.
+
+Reviewed: one HIGH, four MEDIUM (one kept as designed, with the reason)
+and seven LOW, fixed with tests and reverts; the fixes re-checked. A
+Round K test that jsdom's timing had blinded now holds the browser's
+step back as a phone does.

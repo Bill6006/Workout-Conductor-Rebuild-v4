@@ -1,7 +1,12 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ensureProfile, expectNoHorizontalOverflow, skipWarmupIfShown } from './helpers';
+import {
+  ensureProfile,
+  expectNoHorizontalOverflow,
+  sheetGivenBack,
+  skipWarmupIfShown,
+} from './helpers';
 
 /**
  * Maintenance 22, round D: swaps you can trust. A swap once a set is logged leaves that set with
@@ -94,6 +99,9 @@ test.describe('swaps you can trust', () => {
     await capture(page, testInfo, 'stopped-sheet', sheet.getByTestId('stopped-note'));
     await sheet.getByRole('button', { name: 'Close', exact: true }).first().click();
     await expect(sheet).toBeHidden();
+    // The sheet gives its history place back just after it closes: a goto before that lands is
+    // stepped back by it (Maintenance 29), so the test waits, as no hand is that fast.
+    await sheetGivenBack(page);
 
     // Workout: the dumbbells are up with nothing logged against them, and their dial does not
     // start from the barbell's weight.
@@ -122,6 +130,7 @@ test.describe('swaps you can trust', () => {
     await expect(workoutSheet.getByRole('button', { name: 'Equipment busy' })).toHaveCount(0);
     await workoutSheet.getByRole('button', { name: 'Close', exact: true }).first().click();
     await expect(workoutSheet).toBeHidden();
+    await sheetGivenBack(page);
 
     // The dumbbells' sheet offers the bench press back; taking it picks the bench press up again.
     await page.goto('./#/today');

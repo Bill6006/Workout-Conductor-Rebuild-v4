@@ -42,6 +42,7 @@ export const EQUIPMENT: readonly EquipmentItem[] = [
   { id: 'hack-squat', name: 'Hack squat', category: 'machines' },
   { id: 'leg-extension', name: 'Leg extension', category: 'machines' },
   { id: 'leg-curl', name: 'Leg curl', category: 'machines' },
+  { id: 'calf-raise-machine', name: 'Standing calf raise machine', category: 'machines' },
   { id: 'preacher-curl-machine', name: 'Preacher curl bench / machine', category: 'machines' },
   { id: 'pull-up-bar', name: 'Pull-up bar', category: 'bodyweight' },
   { id: 'dip-station', name: 'Dip station', category: 'bodyweight' },
@@ -56,6 +57,18 @@ const EQUIPMENT_BY_ID: ReadonlyMap<string, EquipmentItem> = new Map(
 );
 
 export const ALL_EQUIPMENT_IDS: readonly string[] = EQUIPMENT.map((item) => item.id);
+
+/**
+ * The machines and the cable stations, read from the list above: the station, gym-only and custom
+ * exercise rules all take them from here, so a machine added to the list is one everywhere
+ * (Maintenance 30, after the standing calf raise machine missed three hand-kept lists).
+ */
+export const MACHINE_EQUIPMENT_IDS: readonly string[] = EQUIPMENT.filter(
+  (item) => item.category === 'machines',
+).map((item) => item.id);
+export const CABLE_EQUIPMENT_IDS: readonly string[] = EQUIPMENT.filter(
+  (item) => item.category === 'cables',
+).map((item) => item.id);
 
 /** A typical commercial gym. */
 export const GYM_DEFAULT_EQUIPMENT: readonly string[] = ALL_EQUIPMENT_IDS.filter(

@@ -4,10 +4,17 @@ import formStyles from '../../components/Form/Form.module.css';
 import type { UnitSystem } from '../../core/validation/profile';
 import {
   DUMBBELLS_KEY,
+  HAND_NAMES,
   PLATES_KEY,
+  comesBothWays,
   describeSpec,
   loadingKeyFor,
+  machinePlatesFor,
+  rackPlates,
+  switchMachine,
+  type HandWeights,
   type Loading,
+  type LoadingMap,
   type LoadingRange,
   type LoadingSpec,
 } from '../../engine/loading/loading';
@@ -24,6 +31,20 @@ interface LoadingEditorProps {
   missingPlates: readonly number[];
   onSave: (spec: LoadingSpec | null) => Promise<void>;
   onSetMissingPlates: (plates: number[]) => Promise<void>;
+  /**
+   * Whether plates missing for this workout only can be marked (the workout's panel). Settings
+   * records only what a place keeps (Maintenance 30, the owner's item 6).
+   */
+  today?: boolean;
+  /**
+   * The place's loading records: a machine set to plates starts with the plates its rack keeps, and
+   * the other exercises done on the same machine switch with it (item 30).
+   */
+  placeLoading?: LoadingMap;
+  /** Saves several records at once: a machine's switch, for every exercise done on it. */
+  onSaveMachine?: (specs: Readonly<Record<string, LoadingSpec | null>>) => Promise<void>;
+  /** What the place holds in the hand: its dumbbells' record covers its kettlebells too. */
+  hand?: HandWeights;
 }
 
 type Row = { from: string; to: string; step: string };
@@ -55,11 +76,12 @@ function parseRows(rows: Row[]): LoadingRange[] | null {
 }
 
 /**
- * Records what this place can load, from the Plates panel: a machine's stack or the dumbbells as
- * ranges with a step, saved with the Save tap; or, for a bar, the plates in two modes that apply
- * each tap at once (Maintenance 25, item 8): Today, a plate missing for this workout only, and
- * Default, the plates this place keeps, saved for it. Every target then lands on a weight that
- * exists here.
+ * Records what this place can load: a machine's stack or the dumbbells as ranges with a step, saved
+ * with the Save tap; or plates, on a bar or on a machine loaded with them (Maintenance 30, the
+ * owner's item 30), in two modes that apply each tap at once (Maintenance 25, item 8): Today, a plate
+ * missing for this workout only, and Default, the plates this place keeps, saved for it. A machine
+ * that comes both ways is set to its pin stack or to plates first. Every target then lands on a
+ * weight that exists here.
  */
 export function LoadingEditor({
   exercise,
@@ -70,15 +92,23 @@ export function LoadingEditor({
   missingPlates,
   onSave,
   onSetMissingPlates,
+  today = true,
+  placeLoading,
+  onSaveMachine,
+  hand,
 }: LoadingEditorProps) {
   const key = loadingKeyFor(exercise);
   const kind: 'stack' | 'dumbbells' | 'plates' =
     key === PLATES_KEY ? 'plates' : key === DUMBBELLS_KEY ? 'dumbbells' : 'stack';
+  /** A machine that comes both ways (item 30), and whether it is on plates here. */
+  const bothWays = kind === 'stack' && comesBothWays(exercise);
+  const machinePlates = kind === 'stack' && spec?.kind === 'plates';
   const [editing, setEditing] = useState(false);
   /** Today is the everyday case, a plate missing for this workout; Default is the place's rack. */
-  const [plateMode, setPlateMode] = useState<'today' | 'default'>('today');
+  const [plateMode, setPlateMode] = useState<'today' | 'default'>(today ? 'today' : 'default');
   const [rows, setRows] = useState<Row[]>(() => rowsFrom(spec, kind === 'plates' ? 'stack' : kind));
   const [busy, setBusy] = useState(false);
+  const handDefault: HandWeights = exercise.load === 'kettlebell' ? 'kettlebells' : 'dumbbells';
   const [problem, setProblem] = useState<string | null>(null);
 
   const run = async (work: () => Promise<void>) => {
@@ -93,20 +123,85 @@ export function LoadingEditor({
     }
   };
 
-  if (kind === 'plates') {
+  // Pin stack or plates, for a machine that comes both ways (item 30): a tap applies at once.
+  const switcher = bothWays ? (
+    <div
+      className={styles.modeSwitch}
+      role="group"
+      aria-label={`How this machine is loaded at ${placeName}`}
+      data-testid="machine-load"
+    >
+      {(
+        [
+          ['stack', 'Pin stack'],
+          ['plates', 'Plates'],
+        ] as const
+      ).map(([mode, label]) => {
+        const on = mode === 'plates' ? machinePlates : !machinePlates;
+        return (
+          <button
+            key={mode}
+            type="button"
+            className={styles.modeButton}
+            aria-pressed={on}
+            disabled={busy}
+            onClick={() => {
+              if (on) return;
+              // The machine's switch, for every exercise done on it: plates start from the ones the
+              // place keeps, and each pin stack is kept in its record for a switch back.
+              const records: LoadingMap = { ...placeLoading };
+              if (spec) records[key] = spec;
+              else delete records[key];
+              const specs = switchMachine(
+                exercise.id,
+                mode,
+                records,
+                rackPlates(placeLoading, units),
+              );
+              const mine = specs[key] ?? null;
+              void run(async () => {
+                if (onSaveMachine) await onSaveMachine(specs);
+                else await onSave(mine);
+                setRows(rowsFrom(mine, 'stack'));
+                setEditing(false);
+              });
+            }}
+            data-testid={`machine-load-${mode}`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
+
+  /** The plates of a machine on plates, for every exercise done on it (item 30). */
+  const saveMachinePlates = (perSide: readonly number[]) => {
+    const records: LoadingMap = { ...placeLoading };
+    if (spec) records[key] = spec;
+    const specs = machinePlatesFor(exercise.id, perSide, records);
+    return onSaveMachine ? onSaveMachine(specs) : onSave(specs[key] ?? null);
+  };
+
+  if (kind === 'plates' || machinePlates) {
     const inventory = PLATE_INVENTORY[units];
     const rack = spec?.kind === 'plates' ? spec.perSide : inventory;
     const onRack = new Set(rack);
     const missing = new Set(missingPlates);
     const isDefault = plateMode === 'default';
+    const what = machinePlates ? 'this machine' : 'the bar';
     const togglePlate = (plate: number) => {
       const next = inventory.filter((size) =>
         size === plate ? !onRack.has(size) : onRack.has(size),
       );
-      // The last plate stays; the full set needs no record of its own.
+      // The last plate stays; on a bar the full set needs no record of its own, while a machine's
+      // record is what says it takes plates.
       if (next.length === 0) return;
+      // A machine's plates are the machine's; each record keeps its pin stack for a switch back.
       void run(() =>
-        onSave(next.length < inventory.length ? { kind: 'plates', perSide: next } : null),
+        machinePlates
+          ? saveMachinePlates(next)
+          : onSave(next.length < inventory.length ? { kind: 'plates', perSide: next } : null),
       );
     };
     const toggleMissing = (plate: number) => {
@@ -116,38 +211,50 @@ export function LoadingEditor({
       void run(() => onSetMissingPlates(next));
     };
     const gone = rack.filter((plate) => missing.has(plate));
-    // With every plate the place keeps missing today, nothing goes on the bar: it does not move.
+    // With every plate the place keeps missing today, nothing goes on: it does not move.
     const none = gone.length === rack.length;
     const note = isDefault
       ? `Saved for ${placeName}: tap a plate it never has.`
       : none
-        ? 'No plates today: the bar stays empty. Back next workout.'
+        ? `No plates today: ${what} stays empty. Back next workout.`
         : gone.length > 0
-          ? `No ${gone.join(' or ')} today: the bar moves by ${loading.step} ${units}. Back next workout.`
-          : `The bar moves by ${loading.step} ${units}.`;
+          ? `No ${gone.join(' or ')} today: ${what} moves by ${loading.step} ${units}. Back next workout.`
+          : `${what === 'the bar' ? 'The bar' : 'This machine'} moves by ${loading.step} ${units}.`;
     // Two modes, each change applied at once (Maintenance 25, item 8). Today: a plate you cannot
     // find, for this workout only. Default: the plates this place keeps, saved for it.
     return (
-      <div data-testid="loading-editor" data-kind="plates" data-mode={plateMode}>
-        <div className={styles.modeSwitch} role="group" aria-label="Which plates to change">
-          {(
-            [
-              ['today', 'Today'],
-              ['default', 'Default'],
-            ] as const
-          ).map(([mode, label]) => (
-            <button
-              key={mode}
-              type="button"
-              className={styles.modeButton}
-              aria-pressed={plateMode === mode}
-              onClick={() => setPlateMode(mode)}
-              data-testid={`plates-mode-${mode}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <div
+        data-testid="loading-editor"
+        data-kind={machinePlates ? 'machine-plates' : 'plates'}
+        data-mode={plateMode}
+      >
+        {switcher}
+        {machinePlates ? (
+          <p className={styles.panelNote} data-testid="machine-plates-note">
+            Its weight is the plates loaded on it, the same on each side; the sled is not counted.
+          </p>
+        ) : null}
+        {today ? (
+          <div className={styles.modeSwitch} role="group" aria-label="Which plates to change">
+            {(
+              [
+                ['today', 'Today'],
+                ['default', 'Default'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                className={styles.modeButton}
+                aria-pressed={plateMode === mode}
+                onClick={() => setPlateMode(mode)}
+                data-testid={`plates-mode-${mode}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <p className={styles.panelLabel} data-testid="plates-mode-hint">
           {isDefault ? `Plates at ${placeName}` : 'Missing a plate today? Tap it'}
         </p>
@@ -191,7 +298,9 @@ export function LoadingEditor({
             <button
               type="button"
               className={styles.textButton}
-              onClick={() => void run(() => onSave(null))}
+              onClick={() =>
+                void run(() => (machinePlates ? saveMachinePlates([...inventory]) : onSave(null)))
+              }
               disabled={busy}
               data-testid="rack-all"
             >
@@ -208,12 +317,16 @@ export function LoadingEditor({
     );
   }
 
+  // Kettlebells share the dumbbells' record: named for what the place holds, or the lift.
+  const handName = HAND_NAMES[hand ?? handDefault];
   const title =
-    kind === 'stack' ? `This machine's weights at ${placeName}` : `Dumbbells at ${placeName}`;
+    kind === 'stack'
+      ? `This machine's weights at ${placeName}`
+      : `${handName.many} at ${placeName}`;
   const hint =
     kind === 'stack'
       ? 'The lightest setting on the stack, the heaviest, and the jump between pins.'
-      : 'One dumbbell: the lightest you have, the heaviest, and the jump between sizes.';
+      : `One ${handName.one}: the lightest you have, the heaviest, and the jump between sizes.`;
   const parsed = parseRows(rows);
   // What the boxes add up to, read back in words as they are typed.
   const readBack =
@@ -226,10 +339,11 @@ export function LoadingEditor({
   if (!editing) {
     return (
       <div data-testid="loading-editor" data-kind={kind}>
+        {switcher}
         <p className={styles.panelLabel}>{title}</p>
         <p className={styles.panelNote} data-testid="loading-summary">
           {spec && spec.kind !== 'plates'
-            ? `${describeSpec(spec, units)}. Targets land on these and stop at ${loading.cap} ${units}.`
+            ? `${describeSpec(spec, units, hand ?? handDefault)}. Targets land on these and stop at ${loading.cap} ${units}.`
             : `Not set yet, so targets move by ${loading.step} ${units} with no upper limit.`}
         </p>
         <div className={styles.panelActions}>
@@ -239,9 +353,18 @@ export function LoadingEditor({
             onClick={() => setEditing(true)}
             data-testid="loading-edit"
           >
-            {spec ? 'Change' : kind === 'stack' ? 'Set this machine' : 'Set my dumbbells'}
+            {spec
+              ? 'Change'
+              : kind === 'stack'
+                ? 'Set this machine'
+                : `Set my ${handName.many.toLowerCase()}`}
           </button>
         </div>
+        {problem ? (
+          <p className={styles.panelNote} role="alert">
+            {problem}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -253,6 +376,7 @@ export function LoadingEditor({
 
   return (
     <div data-testid="loading-editor" data-kind={kind}>
+      {switcher}
       <p className={styles.panelLabel}>{title}</p>
       <p className={styles.panelNote}>{hint}</p>
       {rows.map((row, index) => (

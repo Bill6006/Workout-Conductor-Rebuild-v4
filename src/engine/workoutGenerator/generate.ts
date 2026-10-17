@@ -68,6 +68,16 @@ import {
 } from '../planning/pushLift';
 import { addLocalDays, localDayKey } from '../../core/time/localDate';
 import { PACE, personalPace, type PersonalPace } from '../duration/trainingTime';
+import {
+  BODYWEIGHT_VERSION,
+  lastDoneHere,
+  loadedVersionLine,
+  loadedVersionShift,
+  outgrownMoves,
+  waitsForBodyweight,
+  withSwapsBack,
+  type OutgrownBy,
+} from './loadedVersions';
 import { styleInfo } from '../planning/styles';
 import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
 import type { StrengthMaxes } from '../progression/maxes';
@@ -503,7 +513,28 @@ export interface Picker {
   focus: MuscleId | null;
   /** Exercises a lasting swap took out of this plan: no other slot picks them back in. */
   excluded?: ReadonlySet<string>;
+  /** Bodyweight moves the lifter has outgrown: their loaded versions take their place (item 31). */
+  outgrown?: ReadonlyMap<string, OutgrownBy>;
+  /** Exercises a lasting swap took out: a bodyweight move among them stays the plan's own pick. */
+  swappedAway?: ReadonlySet<string>;
+  /**
+   * Exercises the lifter chose beyond the favourites: each kept swap's own exercise, and the lift to
+   * push while its push runs. The rule never holds one back (the fourth and fifth re-checks).
+   */
+  chosen?: ReadonlySet<string>;
 }
+
+/**
+ * What the lifter chose beyond the favourites: each kept swap's own exercise, and the lift to push
+ * on a day its push runs (a deload week pauses it, the fifth re-check).
+ */
+function chosenBy(swaps: readonly LastingSwap[], push: PushDay | null): Set<string> {
+  return new Set([...swaps.map((swap) => swap.to), ...(push ? [push.exercise.id] : [])]);
+}
+
+/** A favourite or another exercise the lifter chose: the loaded-version rule holds none back. */
+const chosenIn = (picker: Picker): Set<string> =>
+  new Set([...picker.preferredIds, ...(picker.chosen ?? [])]);
 
 function stressPenalty(exercise: CatalogExercise): number {
   return Object.values(exercise.jointStress).reduce(
@@ -519,19 +550,26 @@ function pickForSlot(
 ): CatalogExercise | undefined {
   const chosenIds = new Set([...chosen.map((exercise) => exercise.id), ...(picker.excluded ?? [])]);
   const strengthRole = restCategory(slotSpec.role) === 'strength';
+  const outgrown = picker.outgrown ?? new Map<string, OutgrownBy>();
+  const lifterChose = chosenIn(picker);
   const candidates = exercisesByPattern(slotSpec.pattern)
     .filter((exercise) => !chosenIds.has(exercise.id))
     .filter((exercise) => (strengthRole ? exercise.compound : true))
     .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
+    // A loaded version waits until its bodyweight move loads (item 31).
+    .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
     .filter(
       (exercise) =>
         !blocksCandidate(checkWorkoutConflicts([...chosen, exercise], picker.context), exercise.id),
     );
 
+  const candidateIds = new Set(candidates.map((exercise) => exercise.id));
   const score = (exercise: CatalogExercise) => {
     const suitability = strengthRole
       ? exercise.strengthSuitability * 10 + exercise.hypertrophySuitability
       : exercise.hypertrophySuitability * 10 + exercise.strengthSuitability;
+    // A bodyweight move or its loaded version, as the lifter has outgrown it (item 31).
+    const loadedRule = loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway);
     const preferred = picker.preferredIds.has(exercise.id) ? 15 : 0;
     const days = picker.exposure.daysSinceExercise[exercise.id];
     const familiarity = days === undefined ? 0 : days < 1.5 ? -8 : days <= 21 ? 6 : 0;
@@ -544,7 +582,8 @@ function pickForSlot(
       preferred +
       familiarity +
       behind +
-      focus -
+      focus +
+      loadedRule -
       stressPenalty(exercise) * 2 -
       exercise.setupSeconds / 60
     );
@@ -570,18 +609,26 @@ export function pickAccessoryFor(
   picker: Picker,
 ): CatalogExercise | undefined {
   const chosenIds = new Set([...chosen.map((exercise) => exercise.id), ...(picker.excluded ?? [])]);
+  const outgrown = picker.outgrown ?? new Map<string, OutgrownBy>();
+  const lifterChose = chosenIn(picker);
   const candidates = allExercises()
     .filter((exercise) => exercise.primaryMuscles.includes(muscle))
     .filter((exercise) => !chosenIds.has(exercise.id))
     .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
+    .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
     .filter(
       (exercise) =>
         !blocksCandidate(checkWorkoutConflicts([...chosen, exercise], picker.context), exercise.id),
     );
+  const candidateIds = new Set(candidates.map((exercise) => exercise.id));
   const score = (exercise: CatalogExercise) =>
     exercise.hypertrophySuitability * 10 +
     (exercise.compound ? 0 : 8) +
-    (picker.preferredIds.has(exercise.id) ? 15 : 0) -
+    (picker.preferredIds.has(exercise.id) ? 15 : 0) +
+    // As in a slot's pick, a favourite and a kept swap's own exercise included, so the coach names
+    // what the plan does (the sixth and seventh re-checks). A swap back to a bodyweight move keeps
+    // every loaded version of it out, so nothing moves it down (the fifth and seventh).
+    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -
     stressPenalty(exercise) * 2 -
     exercise.setupSeconds / 60;
   const tier = (exercise: CatalogExercise) => (picker.preferredIds.has(exercise.id) ? 1 : 0);
@@ -594,14 +641,17 @@ export function pickAccessoryFor(
 /** The picker the coach needs, built without generating a workout. */
 /**
  * The exercises the lifter's lasting swaps keep out of a plan here: each one swapped out whose
- * swap-in fits this place. Where the swap-in does not fit, the plan's own pick stands.
+ * swap-in fits this place. Where the swap-in does not fit, the plan's own pick stands. A swap back
+ * to a bodyweight move keeps out every loaded version of it but a favourite (the seventh and eighth
+ * re-checks).
  */
 export function swappedOutIds(
   swaps: readonly LastingSwap[],
   context: ConflictContext,
+  favourites: ReadonlySet<string> = new Set(),
 ): Set<string> {
   return new Set(
-    swaps
+    withSwapsBack(swaps, favourites)
       .filter((swap) => {
         const next = getExercise(swap.to);
         return next !== undefined && !isBlocked(checkExerciseFit(next, context));
@@ -621,10 +671,13 @@ const AROUND_LINE = ', which you swapped out.';
 export function swapLines(
   blocks: readonly WorkoutBlock[],
   swaps: readonly LastingSwap[],
+  favourites: ReadonlySet<string> = new Set(),
 ): string[] {
-  const byFrom = new Map(swaps.map((swap) => [swap.from, swap]));
+  const kept = withSwapsBack(swaps, favourites);
   return allEntries(blocks).flatMap((entry) => {
-    const swap = entry.standsFor ? byFrom.get(entry.standsFor) : undefined;
+    // The swap that put this exercise in, else the first of the plan's own pick's.
+    const own = kept.filter((swap) => swap.from === entry.standsFor);
+    const swap = own.find((candidate) => candidate.to === entry.exerciseId) ?? own[0];
     const from = swap ? getExercise(swap.from) : undefined;
     const exercise = getExercise(entry.exerciseId);
     if (!swap || !from || !exercise || isStopped(entry) || entry.replacedFrom) return [];
@@ -641,6 +694,7 @@ export function withSwapLines(
   reasons: readonly string[],
   blocks: readonly WorkoutBlock[],
   swaps: readonly LastingSwap[],
+  favourites: ReadonlySet<string> = new Set(),
 ): string[] {
   const isSwapLine = (line: string) => line.endsWith(KEPT_LINE) || line.endsWith(AROUND_LINE);
   const others = reasons.filter((line) => !isSwapLine(line));
@@ -650,7 +704,7 @@ export function withSwapLines(
     Math.min(others.length, 3) - 1,
   );
   const at = first >= 0 ? first : lead + 1;
-  return [...others.slice(0, at), ...swapLines(blocks, swaps), ...others.slice(at)];
+  return [...others.slice(0, at), ...swapLines(blocks, swaps, favourites), ...others.slice(at)];
 }
 
 export function accessoryPicker(input: {
@@ -667,13 +721,19 @@ export function accessoryPicker(input: {
   swaps?: readonly LastingSwap[];
 }): Picker {
   const context = sessionConflictContext(input.profile, input.location, input.constraints ?? {});
+  const preferredIds = preferredIdsOf(input.profile);
+  const swappedOut = swappedOutIds(input.swaps ?? [], context, preferredIds);
   return {
     context,
-    preferredIds: preferredIdsOf(input.profile),
+    preferredIds,
     exposure: computeExposure(input.history, input.now),
     loads: muscleLoads(input.history, input.profile, input.now),
     focus: input.focus ?? null,
-    excluded: swappedOutIds(input.swaps ?? [], context),
+    excluded: swappedOut,
+    outgrown: outgrownMoves(input.history),
+    swappedAway: swappedOut,
+    // The lift to push is never the coach's offer: it adds nothing for the pushed lift's muscles.
+    chosen: chosenBy(input.swaps ?? [], null),
   };
 }
 
@@ -1129,7 +1189,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   // (the review and the re-check of item 44).
   const extraKept = (constraints.keep ?? []).some((item) => item.entry.push === 'extra');
   // Swapped out for weeks where the swap-in fits here: out of the whole plan, every slot.
-  const swappedOut = swappedOutIds(constraints.swaps ?? [], context);
+  const swappedOut = swappedOutIds(constraints.swaps ?? [], context, preferredIds);
   // The sessions after an extra's day, for its cap (the review of item 44).
   let ahead: WorkAhead[] | null = null;
   if (
@@ -1182,7 +1242,21 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
   const completedSets = constraints.completedSets ?? [];
   const compromises: string[] = [];
-  const picker: Picker = { context, preferredIds, exposure, loads, focus, excluded: swappedOut };
+  const outgrown = outgrownMoves(history);
+  const picker: Picker = {
+    context,
+    preferredIds,
+    exposure,
+    loads,
+    focus,
+    excluded: swappedOut,
+    outgrown,
+    swappedAway: swappedOut,
+    // The plan judges its own picks as if no swap were kept: a kept swap's own loaded version waits
+    // there like any other, and the swap puts it in for the move it stands for, saying so (the
+    // fourth re-check). The lift to push stands while its push runs today.
+    chosen: chosenBy([], push),
+  };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 
   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
@@ -1242,8 +1316,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const plannedSets = new Map<string, number>();
   // Stopped entries that do not fit here were ended again by the caller; the others fit now.
   const closedNow = new Set(keep.filter((kept) => kept.closed).map((kept) => kept.entry.id));
-  // The lifter's lasting swaps, by the exercise swapped out.
-  const swapOf = new Map((constraints.swaps ?? []).map((swap) => [swap.from, swap]));
+  // The lifter's lasting swaps, then a swap back to a bodyweight move for each other loaded version of
+  // it but a favourite (the seventh and eighth re-checks): for an exercise, the first that applies.
+  const kept = withSwapsBack(constraints.swaps ?? [], preferredIds);
   // Each exercise in for the plan's own pick of its slot (a kept swap's, or the next best), by
   // that pick. An entry kept from before a rebuild says it itself (`standsFor`).
   const ownOf = new Map<string, CatalogExercise>();
@@ -1366,15 +1441,17 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    * lift to push on a day it gives its place up (the re-check of item 44).
    */
   const swappedIn = (pick: CatalogExercise): CatalogExercise => {
-    const swap = swapOf.get(pick.id);
-    const next = swap ? getExercise(swap.to) : undefined;
-    if (!swap || !next || givesWay.includes(next.id)) return pick;
-    if (chosenExercises.some((chosen) => chosen.id === next.id)) return pick;
-    if (isBlocked(checkExerciseFit(next, context))) return pick;
-    if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
-      return pick;
+    for (const swap of kept.filter((candidate) => candidate.from === pick.id)) {
+      const next = getExercise(swap.to);
+      if (!next || givesWay.includes(next.id)) continue;
+      if (chosenExercises.some((chosen) => chosen.id === next.id)) continue;
+      if (isBlocked(checkExerciseFit(next, context))) continue;
+      if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
+        continue;
+      }
+      return next;
     }
-    return next;
+    return pick;
   };
 
   /** Whether an exercise can join the exercises in the plan so far: not in, and no clash. */
@@ -2169,7 +2246,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     reasons.push(
       `Kept ${keep.length} ${keep.length === 1 ? 'exercise' : 'exercises'} in place: logged sets and pinned picks never move.`,
     );
-  reasons.push(...swapLines(blocks, constraints.swaps ?? []));
+  reasons.push(...swapLines(blocks, constraints.swaps ?? [], preferredIds));
   if (exposure.sessionsLast14Days === 0)
     reasons.push('No history yet, so weekly volume starts from the plan defaults.');
   if (exposure.sessionsLast14Days > 0) {
@@ -2212,6 +2289,18 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   if (deload) reasons.push(deloadReason(blocks, deload));
   const paceLine = paceReason(pace);
   if (paceLine) reasons.push(paceLine);
+  // A loaded version in place of a bodyweight move outgrown, or too light by default (item 31):
+  // said of an entry the rule put in, not one a swap did (the swap says so), and only where the
+  // bodyweight move could stand.
+  const doneHere = lastDoneHere(history, location?.id ?? null);
+  for (const entry of allEntries(blocks)) {
+    if (entry.standsFor !== undefined) continue;
+    const bodyweightId = BODYWEIGHT_VERSION[entry.exerciseId];
+    const bodyweight = bodyweightId ? getExercise(bodyweightId) : undefined;
+    if (!bodyweight || isBlocked(checkExerciseFit(bodyweight, context))) continue;
+    const line = loadedVersionLine(entry.exerciseId, outgrown, swappedOut, doneHere);
+    if (line) reasons.push(line);
+  }
   reasons.push(
     `${profile.restStyle.charAt(0).toUpperCase() + profile.restStyle.slice(1)} rests; supersets ${profile.techniques.supersets ? 'on' : 'off'}, drop sets ${profile.techniques.dropSets ? 'on' : 'off'}, circuits ${profile.techniques.circuits ? 'on' : 'off'}.`,
   );

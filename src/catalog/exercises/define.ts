@@ -1,3 +1,4 @@
+import { CABLE_EQUIPMENT_IDS, MACHINE_EQUIPMENT_IDS } from '../equipment/equipment';
 import { isCompoundPattern, type MovementPatternId } from '../movementPatterns/movementPatterns';
 import type { MuscleId } from '../muscles/muscles';
 import { dropSetSuits } from '../../engine/progression/startingLoad';
@@ -97,6 +98,14 @@ function primaryEquipment(groups: string[][]): string | undefined {
   return groups[0]?.[0];
 }
 
+/**
+ * The load one equipment group gives a move: a move done with another group than the one its
+ * catalog entry is loaded by (a face pull with a band) does not take that load there (Maintenance 30).
+ */
+export function loadOfGroup(group: readonly string[]): LoadType {
+  return defaultLoad([[...group]]);
+}
+
 function defaultLoad(groups: string[][]): LoadType {
   const first = primaryEquipment(groups);
   if (!first) return 'bodyweight';
@@ -137,21 +146,7 @@ function defaultStation(groups: string[][]): StationType {
   }
   if (lead === 'pull-up-bar') return 'pull-up-bar';
   if (lead === 'dip-station') return 'dip-station';
-  if (
-    [
-      'chest-press-machine',
-      'shoulder-press-machine',
-      'pec-deck',
-      'leg-press',
-      'hack-squat',
-      'leg-extension',
-      'leg-curl',
-      'preacher-curl-machine',
-      'smith-machine',
-    ].includes(lead)
-  ) {
-    return 'machine';
-  }
+  if ([...MACHINE_EQUIPMENT_IDS, 'smith-machine'].includes(lead)) return 'machine';
   return 'open';
 }
 
@@ -173,18 +168,8 @@ function defaultLocations(groups: string[][]): ('home' | 'gym' | 'travel')[] {
   const gymOnly = [
     'squat-rack',
     'smith-machine',
-    'cable-station',
-    'functional-trainer',
-    'lat-pulldown',
-    'seated-row',
-    'chest-press-machine',
-    'shoulder-press-machine',
-    'pec-deck',
-    'leg-press',
-    'hack-squat',
-    'leg-extension',
-    'leg-curl',
-    'preacher-curl-machine',
+    ...CABLE_EQUIPMENT_IDS,
+    ...MACHINE_EQUIPMENT_IDS,
     'dip-station',
     'trap-bar',
   ];

@@ -167,6 +167,8 @@ import {
   withoutSwap,
   type LastingSwap,
 } from '../../engine/planning/lastingSwaps';
+import { preferredIdsOf } from '../../engine/conflicts/context';
+import { swapBackCovers } from '../../engine/workoutGenerator/loadedVersions';
 import {
   DELOAD_WEEK_ID,
   inDeloadWindow,
@@ -782,6 +784,9 @@ function restLongerBy(rest: RestState, deltaSeconds: number): RestState {
 /** What one sync is asked to do: pull too, ignore the retry delay, walk from the beginning. */
 type SyncRequest = { pull: boolean; force?: boolean; full?: boolean };
 
+/** The profile and places setup starts from, as read from disk. */
+type SetupState = { profile: UserProfile | null; places: LocationProfile[] };
+
 export class AppStore {
   private state: AppState;
   private readonly listeners = new Set<Listener>();
@@ -848,6 +853,12 @@ export class AppStore {
   private syncRun: Promise<SyncOutcome | null> = Promise.resolve(null);
   /** A sync waiting behind the one under way, not yet started: a later request joins it. */
   private queuedSync: { options: SyncRequest; run: Promise<SyncOutcome | null> } | null = null;
+  /**
+   * The place writes, one at a time: each reads the place as the write before it left it, so a
+   * place's weights saved from one row and its other details from another never undo each other
+   * (Maintenance 30).
+   */
+  private placeWrites: Promise<unknown> = Promise.resolve();
   private cloudTimer: number | null = null;
   private drainTimer: number | null = null;
   private onlineHandler: (() => void) | null = null;
@@ -1543,7 +1554,12 @@ export class AppStore {
         ...restored,
         explanation: {
           ...restored.explanation,
-          reasons: withSwapLines(restored.explanation.reasons, restored.blocks, this.activeSwaps()),
+          reasons: withSwapLines(
+            restored.explanation.reasons,
+            restored.blocks,
+            this.activeSwaps(),
+            this.favourites(),
+          ),
         },
       },
       constraints: session.previous.constraints,
@@ -2410,7 +2426,12 @@ export class AppStore {
       // Its lines about kept swaps say what is true now, not when it was saved.
       explanation: {
         ...fresh.explanation,
-        reasons: withSwapLines(fresh.explanation.reasons, fresh.blocks, this.activeSwaps()),
+        reasons: withSwapLines(
+          fresh.explanation.reasons,
+          fresh.blocks,
+          this.activeSwaps(),
+          this.favourites(),
+        ),
       },
     };
     const headline = `Loaded "${saved.name}".`;
@@ -2631,12 +2652,32 @@ export class AppStore {
    * and re-fits the session's loads to it. Nothing else in the session moves.
    */
   async saveLoading(locationId: string, key: string, spec: LoadingSpec | null): Promise<void> {
-    const location = this.state.locations.find((candidate) => candidate.id === locationId);
-    if (!location) throw new Error('That place is no longer saved.');
-    const loading = { ...location.loading };
-    if (spec) loading[key] = LoadingSpecSchema.parse(spec);
-    else delete loading[key];
-    await this.saveLocation({ ...location, loading });
+    await this.saveLoadings(locationId, { [key]: spec });
+  }
+
+  /**
+   * Records several of a place's loading records in one save, as a machine's switch between its
+   * pin stack and plates does for every exercise done on it (Maintenance 30), and re-fits the
+   * session's loads to them. A null removes that record.
+   */
+  async saveLoadings(
+    locationId: string,
+    specs: Readonly<Record<string, LoadingSpec | null>>,
+  ): Promise<void> {
+    const parsed = Object.entries(specs).map(
+      ([key, spec]) => [key, spec ? LoadingSpecSchema.parse(spec) : null] as const,
+    );
+    await this.writePlace(locationId, (location) => {
+      if (!location) throw new Error('That place is no longer saved.');
+      const loading = { ...location.loading };
+      for (const [key, spec] of parsed) {
+        if (spec) loading[key] = spec;
+        else delete loading[key];
+      }
+      return { ...location, loading };
+    });
+    // As any place's save does when its equipment stays: the plan keeps its key.
+    this.syncSessionKey();
     const session = this.state.session;
     if (
       session &&
@@ -2691,13 +2732,17 @@ export class AppStore {
     if (dropped) this.setSession({ ...session, drafts });
   }
 
-  async saveLocation(location: LocationProfile): Promise<SaveReceipt> {
-    const previous = this.state.locations.find((candidate) => candidate.id === location.id);
-    const next = LocationProfileSchema.parse({ ...location, updatedAt: this.now() });
-    const db = await this.getDatabase();
-    const receipt = await putVerified(db, 'locations', next, { now: this.now });
-    const others = this.state.locations.filter((candidate) => candidate.id !== next.id);
-    this.setState({ locations: sortLocations([...others, next]), lastReceipt: receipt });
+  /**
+   * Saves a place. With `keepLoading`, what it can load stays as stored when the write lands: the
+   * caller edits its other details only (Settings' autosave, Maintenance 30).
+   */
+  async saveLocation(
+    location: LocationProfile,
+    options: { keepLoading?: boolean } = {},
+  ): Promise<SaveReceipt> {
+    const { receipt, previous, next } = await this.writePlace(location.id, (stored) =>
+      options.keepLoading && stored ? { ...location, loading: stored.loading } : location,
+    );
     const isCurrent = this.state.profile?.currentLocationId === next.id;
     if (
       isCurrent &&
@@ -2711,6 +2756,36 @@ export class AppStore {
       this.syncSessionKey();
     }
     return receipt;
+  }
+
+  /**
+   * Writes one place, after any write to a place under way: `change` gets the place as stored once
+   * that write has landed (none for a new place) and returns what to save.
+   */
+  private writePlace(
+    id: string,
+    change: (stored: LocationProfile | undefined) => LocationProfile,
+  ): Promise<{
+    receipt: SaveReceipt;
+    previous: LocationProfile | undefined;
+    next: LocationProfile;
+  }> {
+    return this.afterPlaceWrites(async () => {
+      const previous = this.state.locations.find((candidate) => candidate.id === id);
+      const next = LocationProfileSchema.parse({ ...change(previous), updatedAt: this.now() });
+      const db = await this.getDatabase();
+      const receipt = await putVerified(db, 'locations', next, { now: this.now });
+      const others = this.state.locations.filter((candidate) => candidate.id !== next.id);
+      this.setState({ locations: sortLocations([...others, next]), lastReceipt: receipt });
+      return { receipt, previous, next };
+    });
+  }
+
+  /** Runs one place write or deletion after those before it; a failed one never holds up the next. */
+  private afterPlaceWrites<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.placeWrites.then(work);
+    this.placeWrites = run.catch(() => undefined);
+    return run;
   }
 
   /** Home can never be deleted; deleting the current location falls back to Home. */
@@ -2732,12 +2807,16 @@ export class AppStore {
     // (another window may have saved it), and first: a barcode that cannot be removed keeps its
     // place, so Delete again is a real retry. Both under the barcode lock, so a save in another
     // window comes before (and goes with the place) or finds the place gone (the re-checks).
-    await this.withBarcodeLock(async () => {
-      await this.removeBarcodeNow(db, id);
-      await deleteVerified(db, 'locations', id);
+    // After any place write under way, and before any made later: a weights save read before the
+    // place went can never write it back (the third re-check of Maintenance 30).
+    await this.afterPlaceWrites(async () => {
+      await this.withBarcodeLock(async () => {
+        await this.removeBarcodeNow(db, id);
+        await deleteVerified(db, 'locations', id);
+      });
+      const locations = this.state.locations.filter((location) => location.id !== id);
+      this.setState({ locations });
     });
-    const locations = this.state.locations.filter((location) => location.id !== id);
-    this.setState({ locations });
     if (this.state.barcodeSheet === id) this.setState({ barcodeSheet: null });
     if (this.state.profile?.currentLocationId === id) {
       await this.saveProfile({ ...this.state.profile, currentLocationId: HOME_LOCATION_ID });
@@ -3074,89 +3153,117 @@ export class AppStore {
     // came included: then it writes nothing, its draft goes (Run setup again never resumes it),
     // and the screen shows what is there. A first run began from no profile at all (the tenth
     // review's fourth to sixth re-checks: a wizard open across the walk wrote over the copy).
-    const begun = await this.readSetupState(db);
-    if (setupBase(begun.profile, begun.places) !== base) {
+    // What it began from is read and checked in turn with the place writes, as a deletion on
+    // Settings is, and its own place writes follow in the same turn: a weights save under way
+    // lands first and is never written over, nor writes a removed Gym back (the fourth and fifth
+    // re-checks of Maintenance 30).
+    const planned = await this.afterPlaceWrites(
+      async (): Promise<{ begun: SetupState; leftOut: Identified[] } | null> => {
+        const begun = await this.readSetupState(db);
+        if (setupBase(begun.profile, begun.places) !== base) return null;
+        const existing = await db.getAll<Identified>('locations');
+        // After the browser cleared the database, until the first walk of the cloud copy is done, a
+        // place here may be the owner's own coming back: setup leaves the places it does not list,
+        // and their barcodes, alone. The walk's records win over setup's anyway; a barcode, never in
+        // the cloud copy, would be lost for good (the tenth review's third re-check).
+        const birth = await readDatabaseBirth(db).catch(() => ({ at: null, walkedAt: null }));
+        const walkPending =
+          this.state.cloud.configured && birth.at !== null && birth.walkedAt === null;
+        // And it removes only what its own steps can remove: the Gym, when gym access is switched
+        // off, and only a Gym the screen showed. A place setup never lists (one added on Plan that a
+        // draft saved earlier never knew, or one the cloud copy brought back unseen) stays, with its
+        // barcode (the fourth re-check).
+        const shown = new Set(this.state.locations.map((location) => location.id));
+        const leftOut = walkPending
+          ? []
+          : existing.filter(
+              (stale) =>
+                stale.id === GYM_LOCATION_ID &&
+                shown.has(stale.id) &&
+                !locations.some((location) => location.id === stale.id),
+            );
+        try {
+          for (const stale of leftOut) {
+            // Its barcode goes with it, from both copies and first, as when the place is deleted.
+            await this.withBarcodeLock(async () => {
+              if ((await db.get('device', barcodeIdFor(stale.id))) || this.barcodeFor(stale.id)) {
+                await this.removeBarcodeNow(db, stale.id);
+              }
+              await deleteVerified(db, 'locations', stale.id);
+            });
+          }
+          for (const location of checked) {
+            await putVerified(db, 'locations', location, { now: this.now });
+          }
+          // Every place on disk now, setup's and the ones it left alone.
+          const kept = (await db.getAll<Identified>('locations'))
+            .map((record) => LocationProfileSchema.safeParse(record))
+            .filter((result) => result.success)
+            .map((result) => result.data);
+          this.setState({ locations: sortLocations(kept) });
+        } catch (error) {
+          throw await this.setupCutOff(error, db, { begun, checked, leftOut, base });
+        }
+        return { begun, leftOut };
+      },
+    );
+    if (!planned) {
       removeKey(ONBOARDING_DRAFT_KEY, this.storage);
       await this.hydrate();
       return 'restored';
     }
-    const existing = await db.getAll<Identified>('locations');
-    // After the browser cleared the database, until the first walk of the cloud copy is done, a
-    // place here may be the owner's own coming back: setup leaves the places it does not list, and
-    // their barcodes, alone. The walk's records win over setup's anyway; a barcode, never in the
-    // cloud copy, would be lost for good (the tenth review's third re-check).
-    const birth = await readDatabaseBirth(db).catch(() => ({ at: null, walkedAt: null }));
-    const walkPending = this.state.cloud.configured && birth.at !== null && birth.walkedAt === null;
-    // And it removes only what its own steps can remove: the Gym, when gym access is switched
-    // off, and only a Gym the screen showed. A place setup never lists (one added on Plan that a
-    // draft saved earlier never knew, or one the cloud copy brought back unseen) stays, with its
-    // barcode (the fourth re-check).
-    const shown = new Set(this.state.locations.map((location) => location.id));
-    const leftOut = walkPending
-      ? []
-      : existing.filter(
-          (stale) =>
-            stale.id === GYM_LOCATION_ID &&
-            shown.has(stale.id) &&
-            !locations.some((location) => location.id === stale.id),
-        );
     try {
-      for (const stale of leftOut) {
-        // Its barcode goes with it, from both copies and first, as when the place is deleted.
-        await this.withBarcodeLock(async () => {
-          if ((await db.get('device', barcodeIdFor(stale.id))) || this.barcodeFor(stale.id)) {
-            await this.removeBarcodeNow(db, stale.id);
-          }
-          await deleteVerified(db, 'locations', stale.id);
-        });
-      }
-      for (const location of checked) {
-        await putVerified(db, 'locations', location, { now: this.now });
-      }
-      // Every place on disk now, setup's and the ones it left alone.
-      const kept = (await db.getAll<Identified>('locations'))
-        .map((record) => LocationProfileSchema.safeParse(record))
-        .filter((result) => result.success)
-        .map((result) => result.data);
-      this.setState({ locations: sortLocations(kept) });
       await this.saveProfile(profile);
     } catch (error) {
-      // Cut off part-way (a full disk, say). What this run wrote stays. Setup starts again from
-      // the disk as the cut-off left it when every place there is as setup began from it or as
-      // setup meant to write it, and every place gone is one setup removed: a write that landed
-      // though its check failed counts as setup's own, and a place another window wrote meanwhile
-      // still makes Finish again refuse (the tenth review's eleventh to thirteenth re-checks). The
-      // screen shows the places as the cut-off left them, so a reopened setup resumes (unless the
-      // profile's own write landed: see Known limits); the profile it shows stays as it was, so
-      // Finish again rebuilds the plan, and a first setup stays on screen (the fourteenth and
-      // fifteenth re-checks).
-      const removed = new Set(leftOut.map((stale) => stale.id));
-      const left = await this.readSetupState(db)
-        .then((now) => {
-          this.setState({ locations: sortLocations(now.places) });
-          const setupsOwn = (place: LocationProfile) =>
-            begun.places.some((before) => structurallyEqual(before, place)) ||
-            checked.some((meant) => structurallyEqual(meant, place));
-          const ownOnly =
-            now.places.every(setupsOwn) &&
-            begun.places.every(
-              (before) =>
-                removed.has(before.id) || now.places.some((place) => place.id === before.id),
-            );
-          return ownOnly ? setupBase(now.profile, now.places) : base;
-        })
-        .catch(() => base);
-      throw new SetupInterruptedError(error, left);
+      throw await this.setupCutOff(error, db, { ...planned, checked, base });
     }
     removeKey(ONBOARDING_DRAFT_KEY, this.storage);
     this.updateLocalSettings({ onboardingCompletedAt: this.now() });
     return 'saved';
   }
 
-  /** The profile and places setup starts from, read from disk: the profile if it reads, and the places that do. */
-  private async readSetupState(
+  /**
+   * Setup cut off part-way (a full disk, say). What this run wrote stays. Setup starts again from
+   * the disk as the cut-off left it when every place there is as setup began from it or as setup
+   * meant to write it, and every place gone is one setup removed: a write that landed though its
+   * check failed counts as setup's own, and a place another window wrote meanwhile still makes
+   * Finish again refuse (the tenth review's eleventh to thirteenth re-checks). The screen shows
+   * the places as the cut-off left them, so a reopened setup resumes (unless the profile's own
+   * write landed: see Known limits); the profile it shows stays as it was, so Finish again
+   * rebuilds the plan, and a first setup stays on screen (the fourteenth and fifteenth re-checks).
+   */
+  private async setupCutOff(
+    error: unknown,
     db: Database,
-  ): Promise<{ profile: UserProfile | null; places: LocationProfile[] }> {
+    run: {
+      begun: SetupState;
+      checked: readonly LocationProfile[];
+      leftOut: readonly Identified[];
+      base: string | null;
+    },
+  ): Promise<SetupInterruptedError> {
+    const { begun, checked, leftOut, base } = run;
+    const removed = new Set(leftOut.map((stale) => stale.id));
+    const left = await this.readSetupState(db)
+      .then((now) => {
+        this.setState({ locations: sortLocations(now.places) });
+        const setupsOwn = (place: LocationProfile) =>
+          begun.places.some((before) => structurallyEqual(before, place)) ||
+          checked.some((meant) => structurallyEqual(meant, place));
+        const ownOnly =
+          now.places.every(setupsOwn) &&
+          begun.places.every(
+            (before) =>
+              removed.has(before.id) || now.places.some((place) => place.id === before.id),
+          );
+        return ownOnly ? setupBase(now.profile, now.places) : base;
+      })
+      .catch(() => base);
+    return new SetupInterruptedError(error, left);
+  }
+
+  /** The profile and places setup starts from, read from disk: the profile if it reads, and the places that do. */
+  private async readSetupState(db: Database): Promise<SetupState> {
     const [storedProfile] = await db.getAll<Identified>('profile');
     const readProfile = storedProfile ? UserProfileSchema.safeParse(storedProfile) : null;
     const places = (await db.getAll<Identified>('locations'))
@@ -4101,8 +4208,12 @@ export class AppStore {
     const change = await this.changeSwaps((current) => {
       // Undone before its turn: there is nothing to keep.
       if (!stands()) return current;
+      // Keeping the plan's own pick ends a kept swap of it, a swap back that covers it too (the eighth
+      // re-check of Maintenance 30).
       return from === exerciseId
-        ? withoutSwap(current, from)
+        ? withoutSwap(current, from).filter(
+            (swap) => !swapBackCovers(swap, from, this.favourites()),
+          )
         : withSwap(current, from, exerciseId, this.now());
     });
     if (!change.saved) {
@@ -4161,7 +4272,12 @@ export class AppStore {
     const session = this.state.session;
     if (!session) return;
     const { explanation } = session.workout;
-    const reasons = withSwapLines(explanation.reasons, session.workout.blocks, this.activeSwaps());
+    const reasons = withSwapLines(
+      explanation.reasons,
+      session.workout.blocks,
+      this.activeSwaps(),
+      this.favourites(),
+    );
     if (reasons.join('\n') === explanation.reasons.join('\n')) return;
     this.setSession({
       ...session,
@@ -4170,6 +4286,11 @@ export class AppStore {
   }
 
   /** The lasting swaps still running. */
+  /** The lifter's favourites: a kept swap back never covers one (the eighth re-check of M30). */
+  private favourites(): ReadonlySet<string> {
+    return this.state.profile ? preferredIdsOf(this.state.profile) : new Set();
+  }
+
   private activeSwaps(): LastingSwap[] {
     const now = this.now();
     return this.state.lastingSwaps.filter((swap) => !swapIsPast(swap, now));

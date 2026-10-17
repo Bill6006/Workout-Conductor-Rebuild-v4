@@ -135,7 +135,11 @@ a test of theirs:
 - Round I's (`mutate-m27.py`, 193 entries): 192 caught at once. The one survivor was the test that
   Maintenance 28 blinded (above); mended, it is caught.
 - Maintenance 26's (`mutate-m26.py --all`, 1199 entries): six were moved to the code Maintenance 28
-  changed; the run goes on through the deployment, and its result is in the live update.
+  changed, and all 1199 are caught on this round's code. One, the update prompt's reload, read "no
+  tests" under the run's load and was caught when run alone.
+- Run again on Maintenance 30's code, this round's own revert 14m (the check after the app's own
+  step back lands) passed. Its test relied on jsdom delivering the step back before the app's next
+  timer, the reverse of a phone. Maintenance 30 made the test hold the step back as a phone does.
 
 ## Verification
 
@@ -147,8 +151,12 @@ a test of theirs:
 - the privacy scan (776 files, nothing found) and the build check;
 - the browser suite: 408 passed, 14 skipped by design.
 
-The unit tests also pass in UTC, as the CI runner runs them (2373 passed). The live site is checked
-after the deploy (PROJECT_STATUS, Latest commit).
+The unit tests also pass in UTC, as the CI runner runs them (2373 passed).
+
+**Live on 2026-10-11:** `dbd1726`, deployed by Deploy Pages run 38119197463 (success), and the build
+marker on the live site reads it. The browser suite against the live site: 404 passed, 18 skipped by
+design. A first run, during the owner's internet outage, failed only on name lookups
+(`ERR_NAME_NOT_RESOLVED`) and was run again.
 
 ## Review on the phone
 

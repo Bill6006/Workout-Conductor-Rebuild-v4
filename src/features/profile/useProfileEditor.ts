@@ -14,10 +14,14 @@ interface LocalDraft {
 
 export const DEBOUNCE_MS = 450;
 
-/** The store's update stamps: a local draft holds while they are the ones it was made over. */
+/**
+ * The store's update stamps: a local draft holds while they are the ones it was made over. A place
+ * stands for its own details: its weights, set from their own rows, are no edit of Settings', so
+ * a weights save under a waiting edit leaves that edit on the screen (Maintenance 30).
+ */
 function stampsOf(state: Pick<AppState, 'profile' | 'locations'>): string {
   return `${state.profile?.updatedAt ?? 'none'}|${state.locations
-    .map((location) => `${location.id}:${location.updatedAt}`)
+    .map((location) => JSON.stringify({ ...location, loading: null, updatedAt: null }))
     .join(',')}`;
 }
 
@@ -75,8 +79,12 @@ export function useProfileEditor() {
       deleting = false;
       for (const location of next.locations) {
         const existing = current.locations.find((candidate) => candidate.id === location.id);
-        if (!existing || !structurallyEqual(existing, location)) {
-          await store.saveLocation(location);
+        // What a place can load is never edited here: weights saved meanwhile, from this screen's
+        // own Weights row or a workout, stay as stored when the write lands, and a place changed
+        // only by them (its weights and its stamp) is not written again (Maintenance 30).
+        const edited = (place: typeof location) => ({ ...place, loading: {}, updatedAt: '' });
+        if (!existing || !structurallyEqual(edited(existing), edited(location))) {
+          await store.saveLocation(location, { keepLoading: true });
         }
       }
       if (!current.profile || !structurallyEqual(current.profile, next.profile)) {

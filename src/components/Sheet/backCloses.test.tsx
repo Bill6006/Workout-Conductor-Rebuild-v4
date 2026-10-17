@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode, useState } from 'react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sheet } from './Sheet';
 
 /**
@@ -265,6 +265,13 @@ describe("the phone's Back and the sheets", () => {
   });
 
   it("gives back a sheet's entry when it closes while another's step back is on its way", async () => {
+    // A phone's step back lands after the app's next timer, not before it as jsdom's does: held
+    // here for 20 ms, so the first sheet closes while the step is truly on its way (Maintenance 30,
+    // when the revert of the check after a step lands passed with jsdom's order).
+    const go = window.history.go.bind(window.history);
+    const held = vi.spyOn(window.history, 'go').mockImplementation((delta?: number) => {
+      window.setTimeout(() => go(delta), 20);
+    });
     render(<Sheets />);
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Open first' }));
@@ -287,6 +294,7 @@ describe("the phone's Back and the sheets", () => {
     expect(sheet('First')).not.toBeInTheDocument();
     await waitFor(() => expect(views()).toEqual([]));
     expect(window.location.hash).toBe('#/today');
+    held.mockRestore();
     back();
     await waitFor(() => expect(window.location.hash).toBe('#/progress'));
   });

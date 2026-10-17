@@ -2,8 +2,15 @@ import { useState } from 'react';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import type { CustomInstruction } from '../../core/validation/customExercise';
 import type { UnitSystem } from '../../core/validation/profile';
-import type { Loading, LoadingSpec } from '../../engine/loading/loading';
-import { plateMath } from '../../engine/plateMath/plateMath';
+import {
+  onPlates,
+  platesHere,
+  type HandWeights,
+  type Loading,
+  type LoadingMap,
+  type LoadingSpec,
+} from '../../engine/loading/loading';
+import { hasNoLoad } from '../../engine/progression/startingLoad';
 import type { WorkoutBlock, WorkoutEntry } from '../../engine/workout/types';
 import styles from './ActiveWorkout.module.css';
 import { LoadingEditor } from './LoadingEditor';
@@ -24,9 +31,15 @@ export interface EntryPanelsProps {
   /** What this place can load for the exercise today, and the record behind it. */
   loading: Loading;
   spec: LoadingSpec | null;
+  /** The place's loading records: its rack, and the other exercises done on the same machine. */
+  placeLoading?: LoadingMap;
   placeName: string;
   missingPlates: readonly number[];
   onSaveLoading: (spec: LoadingSpec | null) => Promise<void>;
+  /** Saves several of the place's records at once: a machine's switch (Maintenance 30, item 30). */
+  onSaveMachine?: (specs: Readonly<Record<string, LoadingSpec | null>>) => Promise<void>;
+  /** What the place holds in the hand, which its dumbbells' record covers. */
+  hand?: HandWeights;
   onSetMissingPlates: (plates: number[]) => Promise<void>;
   /** Asks the Plates panel to open; a new `at` opens it again. */
   openRequest?: { panel: 'plates'; at: number } | null;
@@ -51,9 +64,12 @@ export function EntryPanels({
   onOptions,
   loading,
   spec,
+  placeLoading,
   placeName,
   missingPlates,
   onSaveLoading,
+  onSaveMachine,
+  hand,
   onSetMissingPlates,
   openRequest = null,
 }: EntryPanelsProps) {
@@ -63,17 +79,24 @@ export function EntryPanels({
   const [saved, setSaved] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const plates =
     currentWeight !== null && currentWeight > 0
-      ? plateMath(exercise, currentWeight, units, loading.perSide ?? undefined)
+      ? platesHere(exercise, currentWeight, units, loading, spec)
       : null;
 
-  // The place's weights can be set on any lift that takes a load, with or without a weight showing.
-  const canLoad = exercise.load !== 'bodyweight' && exercise.load !== 'band';
+  // The place's weights can be set on any lift that takes a load, with or without a weight showing:
+  // the one test for "no weight" (Maintenance 21), so a step-up or a bench dip has none.
+  const canLoad = !hasNoLoad(exercise);
+  // Plates on a bar, or on a machine set to them; Weights on a stack and on dumbbells (Maintenance
+  // 30, the owner's items 6 and 30).
+  const tabName = onPlates(exercise, spec) ? 'Plates' : 'Weights';
+  // The tab, and its panel, only where there is something to show: a weight, or one to set.
+  const weightsTab = plates !== null || canLoad;
 
-  // A new request opens its panel once. Comparing during render keeps setState out of an effect.
-  const [handledRequest, setHandledRequest] = useState(openRequest);
-  if (openRequest !== handledRequest) {
-    setHandledRequest(openRequest);
-    if (openRequest) setOpen(openRequest.panel);
+  // A new request opens its panel once: told apart by when it was made, not by the object, which
+  // the screen builds again at each render. Comparing during render keeps setState out of an effect.
+  const [handledAt, setHandledAt] = useState(openRequest?.at ?? null);
+  if ((openRequest?.at ?? null) !== handledAt) {
+    setHandledAt(openRequest?.at ?? null);
+    if (openRequest && weightsTab) setOpen(openRequest.panel);
   }
 
   const toggle = (panel: Panel) => setOpen((current) => (current === panel ? null : panel));
@@ -118,7 +141,7 @@ export function EntryPanels({
             >
               Notes{instruction && (instruction.notes || instruction.cues.length > 0) ? ' •' : ''}
             </button>
-            {plates || canLoad ? (
+            {weightsTab ? (
               <button
                 type="button"
                 role="tab"
@@ -127,7 +150,7 @@ export function EntryPanels({
                 onClick={() => toggle('plates')}
                 data-testid="plates-tab"
               >
-                Plates
+                {tabName}
               </button>
             ) : null}
           </div>
@@ -193,7 +216,7 @@ export function EntryPanels({
         </div>
       ) : null}
 
-      {open === 'plates' ? (
+      {open === 'plates' && weightsTab ? (
         <div className={styles.panelBody} role="tabpanel" data-testid="plate-math">
           {plates ? (
             plates.kind === 'bar' ? (
@@ -204,23 +227,33 @@ export function EntryPanels({
                 <p className={styles.panelNote}>
                   {plates.kind === 'each-hand'
                     ? 'Dumbbell and kettlebell loads are per hand.'
-                    : block.kind === 'superset'
-                      ? 'Set the pin before the round starts.'
-                      : 'No plates to load.'}
+                    : plates.kind === 'machine-plates'
+                      ? 'The same on each side; the sled is not counted.'
+                      : plates.kind === 'bodyweight'
+                        ? 'Held or worn, on top of your own weight.'
+                        : plates.kind === 'stack' && block.kind === 'superset'
+                          ? 'Set the pin before the round starts.'
+                          : 'No plates to load.'}
                 </p>
               </>
             )
           ) : null}
-          <LoadingEditor
-            exercise={exercise}
-            units={units}
-            loading={loading}
-            spec={spec}
-            placeName={placeName}
-            missingPlates={missingPlates}
-            onSave={onSaveLoading}
-            onSetMissingPlates={onSetMissingPlates}
-          />
+          {/* A move with no load shows the weight held, with nothing for the place to set. */}
+          {canLoad ? (
+            <LoadingEditor
+              exercise={exercise}
+              units={units}
+              loading={loading}
+              spec={spec}
+              placeName={placeName}
+              missingPlates={missingPlates}
+              onSave={onSaveLoading}
+              onSetMissingPlates={onSetMissingPlates}
+              placeLoading={placeLoading}
+              onSaveMachine={onSaveMachine}
+              hand={hand}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

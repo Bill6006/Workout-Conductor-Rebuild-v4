@@ -237,3 +237,11 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* A section of a row's panel, as the weights of each place have (Maintenance 30). */
+.subheading {
+  margin: 16px 0 6px;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: 700;
+}

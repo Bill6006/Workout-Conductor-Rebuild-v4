@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { ALL_EQUIPMENT_IDS } from '../../catalog/equipment/equipment';
+import {
+  ALL_EQUIPMENT_IDS,
+  CABLE_EQUIPMENT_IDS,
+  MACHINE_EQUIPMENT_IDS,
+} from '../../catalog/equipment/equipment';
 import {
   DEMAND_LEVELS,
   JOINTS,
@@ -92,20 +96,7 @@ export const CustomMediaSchema = z.looseObject({
 
 export type CustomMedia = z.infer<typeof CustomMediaSchema>;
 
-const STACK_EQUIPMENT = new Set([
-  'cable-station',
-  'functional-trainer',
-  'lat-pulldown',
-  'seated-row',
-  'chest-press-machine',
-  'shoulder-press-machine',
-  'pec-deck',
-  'leg-press',
-  'hack-squat',
-  'leg-extension',
-  'leg-curl',
-  'preacher-curl-machine',
-]);
+const STACK_EQUIPMENT = new Set([...CABLE_EQUIPMENT_IDS, ...MACHINE_EQUIPMENT_IDS]);
 const BAR_EQUIPMENT = new Set(['barbell', 'ez-bar', 'trap-bar', 'smith-machine', 'squat-rack']);
 const BAND_EQUIPMENT = new Set(['resistance-bands', 'suspension-trainer']);
 
@@ -122,6 +113,30 @@ export function loadFromEquipment(
   if (ids.size === 0 || ids.has('pull-up-bar') || ids.has('dip-station') || ids.has('weight-vest'))
     return 'bodyweight';
   return 'dumbbell-each';
+}
+
+const HAND_EQUIPMENT = new Set(['dumbbells', 'adjustable-dumbbells', 'kettlebells']);
+
+/**
+ * The chips that give each load a lifter's own move is saved with. A bar's plates come with a bar:
+ * the squat rack holds one and gives none (the seventh re-check).
+ */
+const LOAD_EQUIPMENT: Partial<Record<CatalogExercise['load'], ReadonlySet<string>>> = {
+  stack: STACK_EQUIPMENT,
+  barbell: new Set(['barbell', 'ez-bar', 'trap-bar', 'smith-machine']),
+  'dumbbell-each': HAND_EQUIPMENT,
+  kettlebell: HAND_EQUIPMENT,
+  band: BAND_EQUIPMENT,
+};
+
+/**
+ * Whether one of a lifter's own move's equipment groups gives it the load it was saved with: one of
+ * the group's chips does, in the order they were tapped or not (Maintenance 30, the sixth re-check).
+ * A group with no such chip, or with none at all, gives a place no weights to set for the move.
+ */
+export function groupGivesLoad(group: readonly string[], load: CatalogExercise['load']): boolean {
+  const gives = LOAD_EQUIPMENT[load];
+  return gives !== undefined && group.some((id) => gives.has(id));
 }
 
 /** Presents a custom exercise to the engines exactly like a catalog exercise. */

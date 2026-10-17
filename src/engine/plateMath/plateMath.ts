@@ -13,7 +13,8 @@ export const PLATE_INVENTORY: Record<UnitSystem, readonly number[]> = {
   kg: [25, 20, 15, 10, 5, 2.5, 1.25],
 };
 
-export type PlateMathKind = 'bar' | 'each-hand' | 'stack' | 'bodyweight' | 'band';
+export type PlateMathKind =
+  'bar' | 'machine-plates' | 'each-hand' | 'stack' | 'bodyweight' | 'band';
 
 export interface PlateMathResult {
   kind: PlateMathKind;
@@ -111,8 +112,43 @@ export function plateMath(
   target: number,
   units: UnitSystem,
   inventory: readonly number[] = PLATE_INVENTORY[units],
+  /** A machine loaded with plates here (Maintenance 30, item 30): the plates a side, no bar. */
+  machinePlates = false,
 ): PlateMathResult {
   const base = { units, target, perSide: [] as number[], remainder: 0 };
+  if (machinePlates && exercise.load === 'stack') {
+    const amount = (value: number) => `${value}\u00a0${units}`;
+    const perSide = target > 0 ? platesFor(round(target / 2), inventory) : [];
+    if (perSide !== null) {
+      return {
+        ...base,
+        kind: 'machine-plates',
+        barWeight: null,
+        perSide,
+        line:
+          perSide.length > 0
+            ? `${perSide.join(', ')} each side · ${amount(target)}`
+            : 'No plates on it',
+      };
+    }
+    const heaviest = Math.max(...inventory, 0);
+    const totals = sideWeights(inventory, round(target / 2) + heaviest).map((side) =>
+      round(side * 2),
+    );
+    const below = [...totals].reverse().find((total) => total < target) ?? 0;
+    const above = totals.find((total) => total > target);
+    return {
+      ...base,
+      kind: 'machine-plates',
+      barWeight: null,
+      remainder: round(target - below),
+      nearestBelow: { total: below, perSide: platesFor(round(below / 2), inventory) ?? [] },
+      line:
+        above === undefined
+          ? `The plates here make ${below}, not ${amount(target)}`
+          : `The plates here make ${below} or ${above}, not ${amount(target)}`,
+    };
+  }
   switch (exercise.load) {
     case 'barbell':
     case 'ez-bar':

@@ -59,7 +59,7 @@ That is what lets a backup written by a newer app version pass through an older 
   `techniques.supersets` / `.dropSets` / `.circuits`, `restStyle`, `units`, optional `bodyweight`,
   `createdAt`, `updatedAt`.
 - `LocationProfile`: `id`, `name`, `kind` (home | gym | travel | custom), `equipment` (catalog ids
-  from `src/catalog/equipment/equipment.ts`, normalized), `notes`, `loading` (what the place can load, keyed by exercise id, `dumbbells`, or `plates`: ranges with a step, or plates per side; Maintenance 12), timestamps. `home` always
+  from `src/catalog/equipment/equipment.ts`, normalized), `notes`, `loading` (what the place can load, keyed by exercise id, `dumbbells`, or `plates`: ranges with a step, or plates per side; Maintenance 12. A machine's own key holding plates per side means that machine is loaded with plates here, its weight the plates on it with no bar or sled counted, and an optional `stack` there keeps the pin stack it had, for a switch back; an older copy drops that field; Maintenance 30), timestamps. `home` always
   exists and cannot be deleted; deleting the current location falls back to Home.
 - `LocalSettings` (`schemaVersion: 1`): `onboardingCompletedAt`, `lastExportAt`, `lastImportAt`.
 - `Backup` (`format: "workout-conductor-backup"`, `schemaVersion: 2`): `exportedAt`, `app`,
