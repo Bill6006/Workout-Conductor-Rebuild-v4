@@ -1363,13 +1363,41 @@ REANCHORED = {
     "8x a machine in a superset says to set the pin first": (
         "                        : plates.kind === 'stack' && block.kind === 'superset'",
         "                        : false", None),
-    # The fourth re-check of Maintenance 30 runs setup's place writes in the place-write queue.
+    # The fourth and fifth re-checks of Maintenance 30 run setup's check and its place writes in one
+    # turn of the place-write queue, and its cut-off's reading in a method of its own.
     "PDp setup run again removes the Gym it leaves out": (
-        "              await this.removeBarcodeNow(db, stale.id);\n            }\n            await deleteVerified(db, 'locations', stale.id);",
-        "              await this.removeBarcodeNow(db, stale.id);\n            }", None),
+        "                await this.removeBarcodeNow(db, stale.id);\n              }\n              await deleteVerified(db, 'locations', stale.id);",
+        "                await this.removeBarcodeNow(db, stale.id);\n              }", None),
     "PDp2 ... the place after it": (
-        "          await this.withBarcodeLock(async () => {\n            if ((await db.get('device', barcodeIdFor(stale.id)))",
-        "          await this.withBarcodeLock(async () => {\n            await deleteVerified(db, 'locations', stale.id);\n            if ((await db.get('device', barcodeIdFor(stale.id)))", None),
+        "            await this.withBarcodeLock(async () => {\n              if ((await db.get('device', barcodeIdFor(stale.id)))",
+        "            await this.withBarcodeLock(async () => {\n              await deleteVerified(db, 'locations', stale.id);\n              if ((await db.get('device', barcodeIdFor(stale.id)))", None),
+    "PDq setup leaves the first walk's places, and their barcodes, alone": (
+        "          this.state.cloud.configured && birth.at !== null && birth.walkedAt === null;",
+        "          false;", None),
+    "PDu setup never writes over data it did not begin from": (
+        "        if (setupBase(begun.profile, begun.places) !== base) return null;",
+        "        if (false) return null;", None),
+    "PGa ... on disk too, when no profile can be read": (
+        "        if (setupBase(begun.profile, begun.places) !== base) return null;",
+        "        if ((begun.profile ? setupBase(begun.profile, begun.places) : null) !== base) return null;", None),
+    "PGd a setup cut off part-way says what it wrote": (
+        "    return new SetupInterruptedError(error, left);",
+        "    return error as SetupInterruptedError;", None),
+    "PGg a cut-off setup starts again from its own writes only": (
+        "        return ownOnly ? setupBase(now.profile, now.places) : base;",
+        "        return setupBase(now.profile, now.places);", None),
+    "PGh ... and the store shows the places as the cut-off left them": (
+        "        this.setState({ locations: sortLocations(now.places) });\n", "", None),
+    "PGk a place written as setup meant counts as its own after a cut-off": (
+        "          checked.some((meant) => structurallyEqual(meant, place));", "          false;", None),
+    "PGn a place as setup began from it counts as its own after a cut-off": (
+        "          begun.places.some((before) => structurallyEqual(before, place)) ||\n", "", None),
+    "PGo a place gone that setup did not remove makes Finish again refuse": (
+        "              removed.has(before.id) || now.places.some((place) => place.id === before.id),",
+        "              true,", None),
+    "PGq a cut-off leaves the profile shown as it was": (
+        "        this.setState({ locations: sortLocations(now.places) });",
+        "        this.setState({ locations: sortLocations(now.places), ...(now.profile ? { profile: now.profile } : {}) });", None),
     "PDl a place stays while its barcode cannot be removed": (
         "        await this.removeBarcodeNow(db, id);\n        await deleteVerified(db, 'locations', id);",
         "        await deleteVerified(db, 'locations', id);\n        await this.removeBarcodeNow(db, id);", None),

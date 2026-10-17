@@ -55,7 +55,6 @@ import {
 import { allowsFailure, isAutoStyle, resolveStyle } from '../planning/styleAdvice';
 import {
   PUSH_LIFT,
-  activePush,
   daysToNextSession,
   pushCap,
   pushDay,
@@ -518,16 +517,18 @@ export interface Picker {
   /** Exercises a lasting swap took out: a bodyweight move among them stays the plan's own pick. */
   swappedAway?: ReadonlySet<string>;
   /**
-   * Exercises the lifter chose beyond the favourites: each kept swap's own exercise and the lift to
-   * push. A loaded version among them never waits for its bodyweight move (the fourth re-check).
+   * Exercises the lifter chose beyond the favourites: each kept swap's own exercise, and the lift to
+   * push while its push runs. The rule never holds one back (the fourth and fifth re-checks).
    */
   chosen?: ReadonlySet<string>;
 }
 
-/** What the lifter chose beyond the favourites: each kept swap's own exercise, the lift to push. */
-function chosenBy(profile: UserProfile, swaps: readonly LastingSwap[]): Set<string> {
-  const push = activePush(profile)?.exercise.id;
-  return new Set([...swaps.map((swap) => swap.to), ...(push ? [push] : [])]);
+/**
+ * What the lifter chose beyond the favourites: each kept swap's own exercise, and the lift to push
+ * on a day its push runs (a deload week pauses it, the fifth re-check).
+ */
+function chosenBy(swaps: readonly LastingSwap[], push: PushDay | null): Set<string> {
+  return new Set([...swaps.map((swap) => swap.to), ...(push ? [push.exercise.id] : [])]);
 }
 
 /** A favourite or another exercise the lifter chose: the loaded-version rule holds none back. */
@@ -623,7 +624,11 @@ export function pickAccessoryFor(
     exercise.hypertrophySuitability * 10 +
     (exercise.compound ? 0 : 8) +
     (picker.preferredIds.has(exercise.id) ? 15 : 0) +
-    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -
+    // Never one the lifter chose: a kept swap back to a bodyweight move keeps it (the fifth
+    // re-check).
+    (lifterChose.has(exercise.id)
+      ? 0
+      : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -
     stressPenalty(exercise) * 2 -
     exercise.setupSeconds / 60;
   const tier = (exercise: CatalogExercise) => (picker.preferredIds.has(exercise.id) ? 1 : 0);
@@ -719,7 +724,8 @@ export function accessoryPicker(input: {
     excluded: swappedOut,
     outgrown: outgrownMoves(input.history),
     swappedAway: swappedOut,
-    chosen: chosenBy(input.profile, input.swaps ?? []),
+    // The lift to push is never the coach's offer: it adds nothing for the pushed lift's muscles.
+    chosen: chosenBy(input.swaps ?? [], null),
   };
 }
 
@@ -1240,8 +1246,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     swappedAway: swappedOut,
     // The plan judges its own picks as if no swap were kept: a kept swap's own loaded version waits
     // there like any other, and the swap puts it in for the move it stands for, saying so (the
-    // fourth re-check).
-    chosen: chosenBy(profile, []),
+    // fourth re-check). The lift to push stands while its push runs today.
+    chosen: chosenBy([], push),
   };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 

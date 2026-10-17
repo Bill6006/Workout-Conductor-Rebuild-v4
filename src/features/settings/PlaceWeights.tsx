@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { allExercises } from '../../catalog/exercises/catalog';
 import { loadOfGroup } from '../../catalog/exercises/define';
+import { CUSTOM_ID_PREFIX } from '../../core/validation/customExercise';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { ChoiceGroup } from '../../components/Form/ChoiceGroup';
 import formStyles from '../../components/Form/Form.module.css';
@@ -46,11 +47,14 @@ export function PlaceWeights() {
 
   const equipment = new Set(place.equipment);
   // A move takes its own load here only through equipment that gives that load: a reverse curl
-  // done with dumbbells at home puts no bar there, a face pull with a band no pin stack.
+  // done with dumbbells at home puts no bar there, a face pull with a band no pin stack. A lifter's
+  // own move is done the one way it was saved, its chips in any order (the fifth re-check).
   const loadedHere = allExercises()
     .filter((exercise) =>
       exercise.equipment.some(
-        (group) => group.every((id) => equipment.has(id)) && loadOfGroup(group) === exercise.load,
+        (group) =>
+          group.every((id) => equipment.has(id)) &&
+          (exercise.id.startsWith(CUSTOM_ID_PREFIX) || loadOfGroup(group) === exercise.load),
       ),
     )
     .sort((a, b) => a.name.localeCompare(b.name));

@@ -552,29 +552,31 @@ describe('the plan at a place', () => {
     );
   });
 
-  it('gives the coach’s extra work the lift to push when it is a loaded version', () => {
-    const dislikes = {
-      exercisePreferences: {
-        ...profile().exercisePreferences,
-        disliked: ['Bulgarian Split Squat'],
+  it('pauses the lift to push in a deload week: a loaded one waits, and a swap away from its move applies', () => {
+    // The push on the dumbbell split squat, a swap away from the split squat kept: in a deload
+    // week the push stands down, so the loaded split squat waits like any loaded version, and the
+    // swap takes the movement away as it always does.
+    const workout = generateWorkout({
+      profile: profile({
+        pushLift: { exerciseId: DB_BSS, target: 100, units: 'lb', since: RECORD_NOW },
+      }),
+      location: gym!,
+      history: [],
+      now: RECORD_NOW,
+      duration: 'default',
+      constraints: {
+        templateId: 'lower',
+        deload: { startsAt: '2026-09-07T00:00:00.000Z', endsAt: '2026-09-14T00:00:00.000Z' },
+        swaps: [
+          { from: BSS, to: 'reverse-lunge', setAt: RECORD_NOW, until: '2026-12-01T00:00:00.000Z' },
+        ],
       },
-    };
-    const quads = (overrides: Partial<UserProfile>) =>
-      pickAccessoryFor(
-        'quads',
-        [],
-        accessoryPicker({
-          profile: profile(overrides),
-          location: home!,
-          history: [],
-          now: RECORD_NOW,
-        }),
-      )?.id;
-    // Never outgrown, the loaded split squat waits for the coach too.
-    expect(quads(dislikes)).not.toBe(DB_BSS);
-    const push = {
-      pushLift: { exerciseId: DB_BSS, target: 100, units: 'lb' as const, since: RECORD_NOW },
-    };
-    expect(quads({ ...dislikes, ...push })).toBe(DB_BSS);
+    });
+    const ids = allEntries(workout.blocks).map((entry) => entry.exerciseId);
+    expect(ids).toContain('reverse-lunge');
+    expect(ids).not.toContain(DB_BSS);
+    expect(workout.explanation.reasons).toContain(
+      'Reverse Lunge in place of Bulgarian Split Squat, the swap you chose to keep.',
+    );
   });
 });

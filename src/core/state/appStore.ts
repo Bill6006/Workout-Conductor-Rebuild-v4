@@ -782,6 +782,9 @@ function restLongerBy(rest: RestState, deltaSeconds: number): RestState {
 /** What one sync is asked to do: pull too, ignore the retry delay, walk from the beginning. */
 type SyncRequest = { pull: boolean; force?: boolean; full?: boolean };
 
+/** The profile and places setup starts from, as read from disk. */
+type SetupState = { profile: UserProfile | null; places: LocationProfile[] };
+
 export class AppStore {
   private state: AppState;
   private readonly listeners = new Set<Listener>();
@@ -3138,93 +3141,117 @@ export class AppStore {
     // came included: then it writes nothing, its draft goes (Run setup again never resumes it),
     // and the screen shows what is there. A first run began from no profile at all (the tenth
     // review's fourth to sixth re-checks: a wizard open across the walk wrote over the copy).
-    const begun = await this.readSetupState(db);
-    if (setupBase(begun.profile, begun.places) !== base) {
+    // What it began from is read and checked in turn with the place writes, as a deletion on
+    // Settings is, and its own place writes follow in the same turn: a weights save under way
+    // lands first and is never written over, nor writes a removed Gym back (the fourth and fifth
+    // re-checks of Maintenance 30).
+    const planned = await this.afterPlaceWrites(
+      async (): Promise<{ begun: SetupState; leftOut: Identified[] } | null> => {
+        const begun = await this.readSetupState(db);
+        if (setupBase(begun.profile, begun.places) !== base) return null;
+        const existing = await db.getAll<Identified>('locations');
+        // After the browser cleared the database, until the first walk of the cloud copy is done, a
+        // place here may be the owner's own coming back: setup leaves the places it does not list,
+        // and their barcodes, alone. The walk's records win over setup's anyway; a barcode, never in
+        // the cloud copy, would be lost for good (the tenth review's third re-check).
+        const birth = await readDatabaseBirth(db).catch(() => ({ at: null, walkedAt: null }));
+        const walkPending =
+          this.state.cloud.configured && birth.at !== null && birth.walkedAt === null;
+        // And it removes only what its own steps can remove: the Gym, when gym access is switched
+        // off, and only a Gym the screen showed. A place setup never lists (one added on Plan that a
+        // draft saved earlier never knew, or one the cloud copy brought back unseen) stays, with its
+        // barcode (the fourth re-check).
+        const shown = new Set(this.state.locations.map((location) => location.id));
+        const leftOut = walkPending
+          ? []
+          : existing.filter(
+              (stale) =>
+                stale.id === GYM_LOCATION_ID &&
+                shown.has(stale.id) &&
+                !locations.some((location) => location.id === stale.id),
+            );
+        try {
+          for (const stale of leftOut) {
+            // Its barcode goes with it, from both copies and first, as when the place is deleted.
+            await this.withBarcodeLock(async () => {
+              if ((await db.get('device', barcodeIdFor(stale.id))) || this.barcodeFor(stale.id)) {
+                await this.removeBarcodeNow(db, stale.id);
+              }
+              await deleteVerified(db, 'locations', stale.id);
+            });
+          }
+          for (const location of checked) {
+            await putVerified(db, 'locations', location, { now: this.now });
+          }
+          // Every place on disk now, setup's and the ones it left alone.
+          const kept = (await db.getAll<Identified>('locations'))
+            .map((record) => LocationProfileSchema.safeParse(record))
+            .filter((result) => result.success)
+            .map((result) => result.data);
+          this.setState({ locations: sortLocations(kept) });
+        } catch (error) {
+          throw await this.setupCutOff(error, db, { begun, checked, leftOut, base });
+        }
+        return { begun, leftOut };
+      },
+    );
+    if (!planned) {
       removeKey(ONBOARDING_DRAFT_KEY, this.storage);
       await this.hydrate();
       return 'restored';
     }
-    const existing = await db.getAll<Identified>('locations');
-    // After the browser cleared the database, until the first walk of the cloud copy is done, a
-    // place here may be the owner's own coming back: setup leaves the places it does not list, and
-    // their barcodes, alone. The walk's records win over setup's anyway; a barcode, never in the
-    // cloud copy, would be lost for good (the tenth review's third re-check).
-    const birth = await readDatabaseBirth(db).catch(() => ({ at: null, walkedAt: null }));
-    const walkPending = this.state.cloud.configured && birth.at !== null && birth.walkedAt === null;
-    // And it removes only what its own steps can remove: the Gym, when gym access is switched
-    // off, and only a Gym the screen showed. A place setup never lists (one added on Plan that a
-    // draft saved earlier never knew, or one the cloud copy brought back unseen) stays, with its
-    // barcode (the fourth re-check).
-    const shown = new Set(this.state.locations.map((location) => location.id));
-    const leftOut = walkPending
-      ? []
-      : existing.filter(
-          (stale) =>
-            stale.id === GYM_LOCATION_ID &&
-            shown.has(stale.id) &&
-            !locations.some((location) => location.id === stale.id),
-        );
     try {
-      // In turn with the place writes, as a deletion on Settings is: a weights save under way lands
-      // first and never writes a removed Gym back (the fourth re-check of Maintenance 30).
-      await this.afterPlaceWrites(async () => {
-        for (const stale of leftOut) {
-          // Its barcode goes with it, from both copies and first, as when the place is deleted.
-          await this.withBarcodeLock(async () => {
-            if ((await db.get('device', barcodeIdFor(stale.id))) || this.barcodeFor(stale.id)) {
-              await this.removeBarcodeNow(db, stale.id);
-            }
-            await deleteVerified(db, 'locations', stale.id);
-          });
-        }
-        for (const location of checked) {
-          await putVerified(db, 'locations', location, { now: this.now });
-        }
-        // Every place on disk now, setup's and the ones it left alone.
-        const kept = (await db.getAll<Identified>('locations'))
-          .map((record) => LocationProfileSchema.safeParse(record))
-          .filter((result) => result.success)
-          .map((result) => result.data);
-        this.setState({ locations: sortLocations(kept) });
-      });
       await this.saveProfile(profile);
     } catch (error) {
-      // Cut off part-way (a full disk, say). What this run wrote stays. Setup starts again from
-      // the disk as the cut-off left it when every place there is as setup began from it or as
-      // setup meant to write it, and every place gone is one setup removed: a write that landed
-      // though its check failed counts as setup's own, and a place another window wrote meanwhile
-      // still makes Finish again refuse (the tenth review's eleventh to thirteenth re-checks). The
-      // screen shows the places as the cut-off left them, so a reopened setup resumes (unless the
-      // profile's own write landed: see Known limits); the profile it shows stays as it was, so
-      // Finish again rebuilds the plan, and a first setup stays on screen (the fourteenth and
-      // fifteenth re-checks).
-      const removed = new Set(leftOut.map((stale) => stale.id));
-      const left = await this.readSetupState(db)
-        .then((now) => {
-          this.setState({ locations: sortLocations(now.places) });
-          const setupsOwn = (place: LocationProfile) =>
-            begun.places.some((before) => structurallyEqual(before, place)) ||
-            checked.some((meant) => structurallyEqual(meant, place));
-          const ownOnly =
-            now.places.every(setupsOwn) &&
-            begun.places.every(
-              (before) =>
-                removed.has(before.id) || now.places.some((place) => place.id === before.id),
-            );
-          return ownOnly ? setupBase(now.profile, now.places) : base;
-        })
-        .catch(() => base);
-      throw new SetupInterruptedError(error, left);
+      throw await this.setupCutOff(error, db, { ...planned, checked, base });
     }
     removeKey(ONBOARDING_DRAFT_KEY, this.storage);
     this.updateLocalSettings({ onboardingCompletedAt: this.now() });
     return 'saved';
   }
 
-  /** The profile and places setup starts from, read from disk: the profile if it reads, and the places that do. */
-  private async readSetupState(
+  /**
+   * Setup cut off part-way (a full disk, say). What this run wrote stays. Setup starts again from
+   * the disk as the cut-off left it when every place there is as setup began from it or as setup
+   * meant to write it, and every place gone is one setup removed: a write that landed though its
+   * check failed counts as setup's own, and a place another window wrote meanwhile still makes
+   * Finish again refuse (the tenth review's eleventh to thirteenth re-checks). The screen shows
+   * the places as the cut-off left them, so a reopened setup resumes (unless the profile's own
+   * write landed: see Known limits); the profile it shows stays as it was, so Finish again
+   * rebuilds the plan, and a first setup stays on screen (the fourteenth and fifteenth re-checks).
+   */
+  private async setupCutOff(
+    error: unknown,
     db: Database,
-  ): Promise<{ profile: UserProfile | null; places: LocationProfile[] }> {
+    run: {
+      begun: SetupState;
+      checked: readonly LocationProfile[];
+      leftOut: readonly Identified[];
+      base: string | null;
+    },
+  ): Promise<SetupInterruptedError> {
+    const { begun, checked, leftOut, base } = run;
+    const removed = new Set(leftOut.map((stale) => stale.id));
+    const left = await this.readSetupState(db)
+      .then((now) => {
+        this.setState({ locations: sortLocations(now.places) });
+        const setupsOwn = (place: LocationProfile) =>
+          begun.places.some((before) => structurallyEqual(before, place)) ||
+          checked.some((meant) => structurallyEqual(meant, place));
+        const ownOnly =
+          now.places.every(setupsOwn) &&
+          begun.places.every(
+            (before) =>
+              removed.has(before.id) || now.places.some((place) => place.id === before.id),
+          );
+        return ownOnly ? setupBase(now.profile, now.places) : base;
+      })
+      .catch(() => base);
+    return new SetupInterruptedError(error, left);
+  }
+
+  /** The profile and places setup starts from, read from disk: the profile if it reads, and the places that do. */
+  private async readSetupState(db: Database): Promise<SetupState> {
     const [storedProfile] = await db.getAll<Identified>('profile');
     const readProfile = storedProfile ? UserProfileSchema.safeParse(storedProfile) : null;
     const places = (await db.getAll<Identified>('locations'))
