@@ -265,7 +265,27 @@ tests and reverts:
 - **LOW:** a lifter's own move saved with the squat rack chip alone put a Plates section at a place
   with a rack and no barbell. A bar's plates come only with a bar's chip.
 
-EIGHTH_PASS
+**An eighth pass** found three more, all in that swap back and all on the calf raise, the one
+bodyweight move with two loaded versions. Each was shown by a failing test; all fixed with tests and
+reverts:
+
+- **LOW:** keeping the plan's own pick on an entry the swap back put in (the leg-press calf raise,
+  kept for four weeks) left the swap back in place, so the next lower day put the bodyweight raise
+  back. Keeping the plan's own pick now ends a swap back that covers it, as it ends a kept swap of
+  it (Maintenance 22).
+- **LOW:** the swap back replaced a favourite loaded calf raise the lifter had never swapped away,
+  and said it was "the swap you chose to keep". A swap back never covers a favourite.
+- **LOW:** beside a kept swap of the calf machine to an exercise a place lacks (a Smith calf raise
+  at a gym without a Smith machine), the calf machine was left uncovered there, and the coach named
+  it again. The swaps the lifter keeps come first and the swap back after them: for each exercise
+  the plan takes the first swap that applies.
+
+From the same pass: with a swap back to the bodyweight calf raise kept, the coach's "fewer reps
+over more sets" for a calf raise short of its range no longer adds "or swap in Leg Press Calf
+Raise", which the lifter's swap back keeps out. A swap from the leg-press calf raise to the
+bodyweight raise kept it out before the round too.
+
+NINTH_PASS
 
 The run of the earlier rounds' reverts against this round's code found one Round K test that its
 own last change had blinded. Its revert (the check after the app's own step back lands) was caught
