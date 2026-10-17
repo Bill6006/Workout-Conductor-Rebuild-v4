@@ -42,6 +42,38 @@ Nothing is merged to `main` or deployed: `main` and the live build are still `db
 - **Then** sections 3 to 9 as written: Round N (item 11), the readiness core, time intelligence,
   item 48 (switch off), the schedule watch, and the presets question to the owner.
 
+**Background work stopped at the pause, and how to restart each** (none left results to keep):
+
+1. **The eighth review pass** (a subagent), stopped part-way with nothing reported.
+   - Start a fresh reviewer on `git diff 3755e6b 8a7a9f1 -- src/`, plus the moving-clock test in
+     `b327173`.
+   - Focus areas, as briefed:
+     - the swap-back expansion's reach (`withSwapsBack`): a swap back next to another swap from the
+       same loaded versions; a swap back to a move that does not fit or is disliked; a push day or
+       a deload day; stopping a swap; the store's swap checks; recalibrate's `withSwapLines`; the
+       coach's swap offer that uses `swappedOutIds`;
+     - whether removing the coach's exemption reopens the fifth pass's finding;
+     - the rack-chip change for older custom moves;
+     - any revert entry blinded.
+   - Each finding needs a failing test. The reviewer changes no product code.
+2. **The full browser suite on Round M's build**, stopped part-way with no results. After applying
+   the diff:
+   - run `npm run build`;
+   - run the suite with the local wrapper described below.
+3. **Not stopped, external:** CI run 39055259582 on `8a7a9f1`. Read its result through the GitHub
+   tools before going on.
+
+**Local set-up that does not survive a reclaimed container** (recreate it):
+
+- **The browser tests.** Playwright cannot download its own Chromium here. Run them through a
+  small config outside the repository that imports `playwright.config.ts` and adds
+  `launchOptions.executablePath = '/opt/pw-browsers/chromium'` to each project (Chromium 141). CI
+  runs the real config; it is the authoritative browser run.
+- **The revert copies.** Each is an rsync copy of the repository with its own `npm ci`, at
+  `../wc4-revert` (see `tools/reverts/README.md`). Exclude `node_modules`, `.git` and `.claude`.
+  A second copy can symlink the first's `node_modules`.
+- **Round M's worktree.** Make a local branch from `8a7a9f1`, then `git apply` the diff.
+
 **Verify it before changing anything:**
 
 ```bash
