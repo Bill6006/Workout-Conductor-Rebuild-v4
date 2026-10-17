@@ -127,6 +127,28 @@ index 0000000..25863c4
 +
 +At the owner's word (2026-10-11), no review gate pauses the agreed work. This round's checks are in
 +the one consolidated phone review given once every agreed item is live.
+diff --git a/e2e/helpers.ts b/e2e/helpers.ts
+index 155c582..6694318 100644
+--- a/e2e/helpers.ts
++++ b/e2e/helpers.ts
+@@ -74,3 +74,17 @@ export async function skipWarmupIfShown(page: Page): Promise<void> {
+   const skipWarmup = page.getByTestId('skip-warmup');
+   if (await skipWarmup.isVisible()) await skipWarmup.click();
+ }
++
++/**
++ * Takes the full session where Today offers a catch-up instead (Maintenance 31, item 12): a day the
++ * default schedule does not tick offers one to a lifter with a workout in the last two weeks. A
++ * test of the day's usual plan takes the full session first; any other day it does nothing.
++ */
++export async function takeFullSessionIfOffered(page: Page): Promise<void> {
++  const action = page.getByTestId('day-note-action');
++  await expect(page.getByTestId('start-workout').or(action).first()).toBeVisible();
++  if ((await action.count()) > 0 && (await action.textContent()) === 'Full session') {
++    await action.click();
++    await expect(action).toHaveText('Catch-up instead');
++  }
++}
 diff --git a/e2e/roundM.spec.ts b/e2e/roundM.spec.ts
 new file mode 100644
 index 0000000..b9c4dba
