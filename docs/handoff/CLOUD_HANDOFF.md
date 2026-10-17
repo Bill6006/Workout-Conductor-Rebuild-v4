@@ -10,21 +10,23 @@ first; it holds the rules. This file holds the state and the steps._
 ```bash
 git fetch origin
 git log --oneline -1 origin/main                     # dbd1726 Maintenance 29, round K: items 7, 8, 10 and 14
-git log --oneline -3 origin/cloud/round-l-handoff    # the handoff commit, f490dda (WIP), dbd1726
+git log --oneline -4 origin/cloud/round-l-handoff    # the handoff commits, f490dda (WIP), dbd1726
 B=https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
 JS=$(curl -s "$B" | grep -o 'assets/index-[^"]*\.js' | head -1)
 curl -s "$B$JS" | grep -o 'shortCommit:.\{0,10\}'     # live build: dbd1726
 ```
 
 If `origin/main` has moved past `dbd1726`, or the branch differs, stop and work out why before
-going on: someone else has worked since.
+going on: someone else has worked since. The live-build check needs network access to
+`bill6006.github.io` (section 9). If it is blocked, say so, and go on with Round L, which needs no
+live check until it ships.
 
 | What | Where | State |
 |---|---|---|
 | Round K (Maintenance 29: items 7, 8, 10, 14) | `main` at `dbd1726` | **Live** (Deploy Pages run 38119197463). The live suite passed 404, with 18 skipped by design. YELLOW until the owner's phone review. |
 | Round K's live-result docs | in `f490dda` (`maintenance-29.md`, `PROJECT_STATUS.md`) | Written, not shipped. They ship with Round L, as planned. |
 | Round L (Maintenance 30: items 6, 30, 31) | branch `cloud/round-l-handoff`, commit `f490dda` | **Built, not shipped.** Three review passes done and fixed. The fourth pass has **three open findings** (section 2). Not merged, not deployed. |
-| This handoff (`CLAUDE.md`, `docs/handoff/`, `docs/proposals/`, six `docs/research/` reports, `tools/reverts/`) | the commit after `f490dda` on the same branch | Docs and tools only. No product code. |
+| This handoff (`CLAUDE.md`, `docs/handoff/`, `docs/proposals/`, six `docs/research/` reports, `tools/reverts/`) | the commits after `f490dda` on the same branch | Docs and tools only. No product code. |
 
 `f490dda` is the Round L working tree exactly as it stood when work stopped on 2026-10-11, unchanged.
 It holds the code and tests for 6/30/31, `e2e/roundL.spec.ts`,
@@ -39,8 +41,21 @@ the status edits.
   - `node scripts/test-zones.mjs`: the day rules' tests, 22 passed in each of its two zones;
   - privacy scan: 0 findings;
   - build and verify-build: passed (JS 1233.5 KB raw, 361.3 KB gzip).
-  - Not run on it: e2e. Pushing this branch runs CI on the handoff head (the same product code);
-    read that run as the Linux baseline, e2e included.
+- **CI on this branch** (run 39042884292, on `27a7f9e`, whose product code is `f490dda`'s):
+  - every step passed up to the browser tests (lint, type check, unit with the zone runs, build,
+    privacy scan, verify-build);
+  - **the browser tests failed: 405 passed, 3 failed, 1 flaky, 14 skipped.** This is the Linux
+    baseline: Round L's e2e had not been run since its second and third review passes.
+  - **The 3 failures** are one test in all three projects: `e2e/roundL.spec.ts:14` ("a machine set
+    to plates at the gym stays so, and Home shows its dumbbells only"). Line 23 still expects
+    "Dumbbells at Gym". Since the second review pass, the hand-weights section is named for the
+    place's equipment (`HAND_NAMES` / `handWeightsAt` in `loading.ts`). The default gym has
+    kettlebells, so it reads "Dumbbells and kettlebells at Gym". The test is almost certainly out of
+    date rather than the app: confirm against that fix's intent (`maintenance-30.md`, Review), then
+    update it and check the rest of the test.
+  - **The flaky one:** `e2e/swaps.spec.ts:44` on android-412 timed out waiting for the bench press
+    entry, then passed on retry. Run it repeatedly (`--repeat-each=5`) to rule out a Round L
+    regression before calling it load.
 - **Revert runs** (`tools/reverts/README.md`):
   - M30: 87/87 caught on the code after the third review pass.
   - M29 32/32, M28 83/83 and M27 193/193 caught on the Round L code after its second pass.
@@ -49,6 +64,9 @@ the status edits.
 
 ## 2. Finish Round L, in this order
 
+0. **Make the browser tests green on the WIP.** Fix the stale expectation in `e2e/roundL.spec.ts`
+   and check `swaps.spec.ts:44` (section 1, CI). Run `npx playwright test e2e/roundL.spec.ts` after
+   `npm run build`; if Playwright can't install here, push the branch and read CI.
 1. **Port the fourth pass's failing tests** from `docs/handoff/recheck4/*.txt` into `src/`. Drop the
    `.txt` and fix the relative imports (they were written for `src/recheck4/`). Confirm each fails on
    `f490dda` for the reason its comment gives; the baseline cases in them must pass.
@@ -197,12 +215,14 @@ passed (Maintenance 26 is GREEN). Only the owner can check:
 ## 7. Life Mirror (item 48)
 
 - Everything item 48 needs from Life Mirror is in `docs/proposals/item-48-life-mirror-check-in.md`:
-  the readings, scales, blocks, the synced row shape and the missing and stale rules.
-- Life Mirror's public repository (`Bill6006/life-mirror`) may be attached to the cloud session as a
-  read-only reference if a fact is missing.
-  - Never attach `Bill6006/life-mirror-private`.
+  the readings and their ids, scales, blocks, the day format, the synced row shape, and the missing
+  and stale rules.
+- **Don't attach Life Mirror's repositories to the cloud session.** Its public repository has its own
+  `CLAUDE.md`, whose rules would load into this session, and an attached repository can be pushed to.
+  - If a fact is truly missing, ask the owner.
+  - Never use `Bill6006/life-mirror-private`.
   - Never edit, commit to or push to either repository.
-  - Never read or copy private fields: notes, day context, extras.
+  - Never read or copy Life Mirror's private fields: notes, day context, extras.
 - **Tests** use synthetic Life Mirror rows in the fake cloud (`src/test/fakeCloud.ts`). The fake must
   refuse what the live table refuses (`body` NOT NULL; deletions carry `'{}'`).
 - The disclosure line in Life Mirror is Life Mirror's own workstream. Name it as pending in the final
@@ -215,21 +235,42 @@ passed (Maintenance 26 is GREEN). Only the owner can check:
 | Install, lint, type check, unit, build, privacy scan, e2e | No secret | none | n/a |
 | Push a branch or `main` | The cloud session's GitHub access to this repository | none in the repo (the session's own connection) | `git push --dry-run origin HEAD` fails with an auth error or 403: stop and report |
 | Deploy | No secret: `pages.yml` deploys on a push to `main` with the workflow's own token | none | the Deploy Pages run fails: read its log |
-| Watch Actions runs | Optional | the session's GitHub connection, or `gh` if it is signed in | `gh auth status` fails: poll the live marker with `curl` instead |
-| Live checks (marker, live suite) | Network access to `bill6006.github.io` | none | `curl -sfI https://bill6006.github.io/Workout-Conductor-Rebuild-v4/` fails: report it; the owner's phone review then carries the live check |
+| Watch Actions runs | Optional | the session's GitHub connection. In cloud sessions `gh pr` and `gh issue` (GraphQL) are refused; use REST, `gh api repos/Bill6006/Workout-Conductor-Rebuild-v4/actions/runs?branch=main&per_page=3` | the call fails: poll the live marker with `curl` instead |
+| Live checks (marker, live suite) | Network access to `bill6006.github.io`, which the default "Trusted" network level does **not** allow | none | `curl -sI https://bill6006.github.io/Workout-Conductor-Rebuild-v4/` answers 403 with `x-deny-reason: host_not_allowed`: ask the owner to allow the host (section 9). Never report a live check as passed without it |
 | The owner's Turso database (cloud copy, item 48) | **Never in the cloud.** The token lives only on the owner's phone, in the app's IndexedDB | **none: never create a `TURSO_*` variable, never ask for the token** | n/a: every cloud-copy and item 48 test runs on `src/test/fakeCloud.ts` |
 | PubMed checks for research | Optional network access to `eutils.ncbi.nlm.nih.gov` | none (no API key needed at this rate) | `curl` fails: use web search if available, or mark the claim unverified |
 
 ## 9. The cloud environment
 
-- **Node 22** (`.nvmrc`), then `npm ci`.
-- **Playwright** needs `npx playwright install --with-deps chromium`. If the download is blocked, push
-  to a non-`main` branch: CI runs the whole check, e2e included, without deploying.
-- Each push costs a CI run (and a deploy on `main`), so batch the pushes.
+From Claude Code's cloud documentation as read on 2026-10-17. Probe anything that matters rather
+than trusting this list.
+
+- **Machine:** Ubuntu 24.04 on x86_64, about 4 vCPU and 16 GB of memory. Node 22 is preinstalled and
+  on PATH (`.nvmrc` asks for 22). Run `npm ci`.
+- **Network.** The default level, "Trusted", allows package registries and GitHub (GitHub goes
+  through its own proxy at every level). It does not allow:
+  - `bill6006.github.io`: the live marker and the live suite;
+  - the Playwright browser download (`cdn.playwright.dev`, `playwright.download.prss.microsoft.com`,
+    `playwright.azureedge.net`): local e2e;
+  - `eutils.ncbi.nlm.nih.gov`: PubMed checks.
+
+  The owner allows them in the environment's settings: Network access → Custom, with those hosts
+  listed and "Also include default list of common package managers" ticked. A blocked request
+  answers 403 with `x-deny-reason: host_not_allowed`.
+- **Playwright.** Run `npx playwright install --with-deps chromium`. If the download stays blocked,
+  push to a non-`main` branch: CI runs the whole check, e2e included, without deploying.
+- **Command time limits.** A foreground command times out after 2 minutes by default, 10 at most.
+  Run `npm run verify`, the unit suite and every revert table in the background, with output to a
+  log file, and read the log. Split M26 `--all` (1199 entries, hours) by name prefixes, and use
+  `--resume=`.
+- **Idle and reclaim.** The machine pauses after a few idle minutes and can be replaced. Background
+  work and uncommitted changes don't survive a replacement. Commit work in progress at each step and
+  push it to the working branch, never to `main` before it ships. Each push costs a CI run, and on
+  `main` a deploy, so batch them sensibly.
 - **Time zones:** the machine may run in UTC. Local-day rules are covered by
   `node scripts/test-zones.mjs`, part of `npm run test:unit`.
-- **Load:** heavy suites can pass their 15 s time-outs under parallel load. Read the error text
-  before calling a test red; run verify and the revert runs alone.
+- **Load:** heavy suites can pass their 15 s time-outs under parallel load, all the more on 4 vCPU.
+  Read the error text before calling a test red, and run verify and the revert runs one at a time.
 - **Not available in the cloud:**
   - the owner's phone, the installed app, real data and the gym barcode;
   - the local scratchpad (raw abstracts, logs);

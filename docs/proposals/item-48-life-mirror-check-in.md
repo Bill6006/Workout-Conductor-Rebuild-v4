@@ -36,6 +36,16 @@ Workout Conductor never edits Life Mirror, its code, its database rows or its re
 - **On the phone:** Dexie database `life-mirror` (schema version 18), store `checkins`
   (`'++id, &[day+block], day, completedAt'`). A record is
   `{id, day, block, asked[], startedAt, completedAt|null, updatedAt, answers{id: 1-5}, activeMs, extras}`.
+- **The record's fields** (checked against Life Mirror's `blocks.ts`, `readings.json` and `db.ts` on
+  2026-10-17):
+  - `day` is the local date as `YYYY-MM-DD`. A check-in before 04:00 belongs to the previous day's
+    evening block.
+  - `block` is `'morning'`, `'afternoon'` or `'evening'`.
+  - `answers` is keyed by reading id. The ids Workout Conductor may read are `energy`, `mood`,
+    `stress`, `sleepHours`, `sleepQuality` and `motivation`; it ignores every other key.
+  - `completedAt` is an ISO time or null; `updatedAt` is an ISO time.
+  - These facts are enough to parse a row defensively, so the cloud session does not need Life
+    Mirror's repository.
 - **In the shared Turso database** (`life-record`, table
   `records(app, store, id, day, body, updated_at, deleted, device_id, synced_at)`):
   - Life Mirror writes `app='life-mirror', store='checkins'`, with id = its local id, day and
