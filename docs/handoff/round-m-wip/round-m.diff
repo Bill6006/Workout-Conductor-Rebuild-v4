@@ -1,9 +1,9 @@
 diff --git a/docs/reports/maintenance-31.md b/docs/reports/maintenance-31.md
 new file mode 100644
-index 0000000..25863c4
+index 0000000..a17b678
 --- /dev/null
 +++ b/docs/reports/maintenance-31.md
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,145 @@
 +# Maintenance 31: round M, the week as it stands
 +
 +Built on 2026-10-17 on the owner's word to build the whole agreed queue, round by round, to live,
@@ -25,7 +25,8 @@ index 0000000..25863c4
 +
 +A set counts in full for each of its exercise's main muscles and half for each secondary one, as
 +the weekly volume already does (Pelland et al. 2026). A warm-up counts for nothing, and a set not
-+done counts for nothing.
++done counts for nothing. A muscle counts as trained today only with sets for it directly: one a
++lift touched as a secondary muscle was not trained today.
 +
 +The sessions still to come are the days ticked after today, and today while it is ticked and no
 +workout was begun. With more days ticked than sessions a week, only as many as the week has left.
@@ -45,9 +46,14 @@ index 0000000..25863c4
 +  training days: a 25-minute catch-up for what is behind this week." The button beside it, **Full
 +  session**, gives the usual plan; there, **Catch-up instead** gives the catch-up back. The choice
 +  holds for the day.
++- It is the next length the app offers below the Default: 45 minutes for a Default of an hour
++  (product judgement: the owner asked for a shorter session, and the evidence sets no length). A
++  length the lifter picks stands.
 +- The catch-up is built only from the muscles behind this week, each with its own main lift, the
 +  strength lifts first, the largest share behind first. Muscles that share a lift share it (the
-+  squat for the quads and the glutes), never two lifts for one slot.
++  squat for the quads and the glutes), never two lifts for one slot, at the fewer sets either is
++  short. Every lift that works a muscle directly counts against its sets, so no muscle gets more
++  than it lacks, through another muscle's lift included.
 +- Each muscle gets 3 working sets, or 2 for a beginner (the settled question 1). Never more than
 +  the week is short, nor than the muscle's sets in one of the plan's own sessions, and never fewer
 +  than 2: a muscle short by less than 2 sets is left for the week's own sessions.
@@ -57,13 +63,23 @@ index 0000000..25863c4
 +  quads trained yesterday, take the Romanian deadlift rather than a squat. A muscle whose every lift
 +  would work one waits for the week's own sessions, and the plan names only the muscles it caught
 +  up.
-+- No lift to push is weighed and no extra session of one put in: a catch-up is the week's missing
-+  sets, and the push waits for a planned day.
++- Off the plan, in a catch-up or a second workout: no lift to push in any form (its own place, the
++  check set, the extra session), no drop set, and the coach offers nothing that adds work (a set, a
++  drop set, a longer range, an exercise). A catch-up is the week's missing sets, and the push waits
++  for a planned day. The full session, one tap away, is the usual plan in full.
++- No swap brings in a lift for a muscle the day leaves alone: not a kept swap, nor the one
++  **Hurts**, **Uncomfortable** or a place that cannot do a lift makes.
 +- "Why this workout" says what it is for: "A catch-up for what this week still lacks: side delts
 +  and chest, a few sets each and none to failure."
 +- Who is offered one: a lifter in training, with a workout in the last two weeks. A new lifter, or
 +  one back after a break, has no week to catch up yet and gets the full session on any day
-+  (product judgement). Nor in a deload week: the deload's lighter week stands.
++  (product judgement). Nor in a deload week: the deload's lighter week stands. On such a day,
++  Today still says "Not one of your training days.", with nothing to choose.
++- A schedule, an experience or a place saved reads the day's offer again for a plan not yet
++  started: tick today and the catch-up gives way to the usual plan, untick it and the catch-up
++  comes. A workout already begun keeps its offer.
++- A catch-up leaves the split's rotation as it was: the next planned day plans as if the catch-up
++  had held none of the split's sessions.
 +- With nothing behind, the line says so ("Not one of your training days, and nothing is behind this
 +  week.") and the plan is the usual one, as before the round. So too when nothing behind can be
 +  caught up today, each lift for it working a muscle trained in the last two days ("Not one of your
@@ -76,17 +92,23 @@ index 0000000..25863c4
 +
 +**Delivered:**
 +
-+- On a day a workout was begun, the next plan is a second workout. Today says so in one line: "You
-+  trained today: this one leads with what you missed and goes easy on the rest."
++- On a day a workout was begun and a working set of it done, the next plan is a second workout (a
++  workout begun by mistake and ended with nothing logged is no first workout). Today says so in one
++  line: "You trained today: this one leads with what you missed and goes easy on the rest."
 +- It leads with the muscles behind this week that were not trained today and are outside the
 +  48 hours, dosed as a catch-up's.
-+- A muscle trained today takes at most what is left of one session's dose, three or more reps short
-+  of failure, and only while the week is still short (the settled question 4). In the usual case,
-+  a full first session, nothing is left, and it sits out. A beginner's muscles trained today always
-+  sit out (the settled question 5).
++- A muscle trained today takes at most what is left of the dose today's own session gave it, three
++  or more reps short of failure, and only while the week is still short (the settled question 4).
++  In the usual case, a full first session, nothing is left, and it sits out. A muscle trained in the
++  48 hours before today as well takes nothing more (the 48-hour rule). A beginner's muscles trained
++  today always sit out (the settled question 5).
++- When nothing missed could go in, only what is left of today's, the line says so: "You trained
++  today: this one goes easy, with only what is left of today's work."
++- In a deload week a second workout is still offered, going easy on what was done.
 +- A muscle that sits out gets no lift that works it directly, through another muscle's lift
 +  included, and the coach offers no work for it. A lift two muscles share, one of them trained
-+  today, takes the lighter dose: what is left for that one, at its reserve.
++  today, takes the lighter dose: what is left for that one, at its reserve, three or more short of
++  failure, with no drop set.
 +- "Why this workout" says so: "A second workout today: it leads with what you missed, chest.",
 +  "Quads take only what is left of one session, three or more reps short of failure.",
 +  "Hamstrings, trained today, sit out."

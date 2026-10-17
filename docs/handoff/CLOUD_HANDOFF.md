@@ -5,7 +5,28 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
-### Resumed on the owner's word, 2026-10-17 (supersedes the states below)
+### Paused again on the owner's word, 2026-10-17 (supersedes the states below)
+
+The owner asked for a pause ("running out of credits"). `main` and the live build are `03a1bef`
+(Round L, live). Round M is saved in `docs/handoff/round-m-wip/round-m.diff`, one diff against
+`03a1bef`, with its report brought up to the first review's fixes.
+
+**Stopped at the pause, and how to restart each:**
+
+1. **The M31 revert run** (`mutate-m31.py --utc`, 103 entries): stopped after 32 entries, all 32
+   caught, none survived. Restart it whole on a copy of `main` with the diff applied:
+   `python3 tools/reverts/mutate-m31.py --repo=COPY --utc`. Every entry must end KILLED.
+2. **The second review pass** of the first review's fixes: stopped as it began, with nothing found
+   or written. Start a fresh reviewer on the fixes (`git diff` of the review's tests commit against
+   the latest), with the decisions listed below as taken; each finding needs a failing test, and
+   the reviewer changes no product code.
+
+**Then, in order:** the browser suite on Round M's build (today's real date decides whether the
+catch-up shows: specs that seed a recent workout may need `takeFullSessionIfOffered` from
+`e2e/helpers.ts`); fill REVIEW, LIMITS, REVERTS and VERIFY in `docs/reports/maintenance-31.md`;
+verify; squash onto `main`; deploy; the status and report docs.
+
+### Resumed on the owner's word, 2026-10-17 (superseded by the pause above)
 
 - **Round L** is live: squashed onto `main` as `0f4b9bd` and deployed by Deploy Pages run
   39076937311 (success). The live marker and the live suite wait for the host (below). Ten review passes; the tenth found nothing new. Revert tables on
