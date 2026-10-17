@@ -80,6 +80,40 @@ describe('a place’s weights and its deletion at once', () => {
     expect(await placesOnDisk(handle)).not.toContain('gym');
   });
 
+  it('the same on a clock that moves, as a phone’s does: setup writes nothing, the Gym keeps the save', async () => {
+    // The test above keeps the clock still, so the save leaves the Gym as setup began from it. On a
+    // phone the save stamps the Gym anew, and setup, seeing it changed since it began, writes
+    // nothing, as it always does then (the sixth re-check).
+    let tick = 0;
+    const handle = createTestStore({
+      now: () => new Date(Date.parse(TEST_NOW) + (tick += 1)).toISOString(),
+    });
+    await handle.store.hydrate();
+    await handle.store.completeOnboarding(
+      { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
+      createDefaultLocations({ gymAccess: true }, TEST_NOW),
+    );
+    const store = handle.store as unknown as { getDatabase: () => Promise<unknown> };
+    const database = store.getDatabase.bind(handle.store);
+    let calls = 0;
+    vi.spyOn(store, 'getDatabase').mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) await new Promise((resolve) => setTimeout(resolve, 50));
+      return database();
+    });
+    const profile = handle.store.getSnapshot().profile!;
+    const save = handle.store.saveLoadings('gym', { plates: PLATES });
+    const setup = handle.store.completeOnboarding(
+      profile,
+      createDefaultLocations({ gymAccess: false }, TEST_NOW),
+    );
+    await Promise.allSettled([save, setup]);
+    await expect(setup).resolves.toBe('restored');
+    const gym = handle.store.getSnapshot().locations.find((place) => place.id === 'gym');
+    expect(gym?.loading.plates).toEqual(PLATES);
+    expect(await placesOnDisk(handle)).toContain('gym');
+  });
+
   it('a refused write never holds up the next', async () => {
     const handle = await withGym();
     await handle.store.deleteLocation('gym');
