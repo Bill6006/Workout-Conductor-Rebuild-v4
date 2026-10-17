@@ -295,7 +295,7 @@ How a swap back ends, from the same pass: keeping, for four weeks, a loaded calf
 stood in for ends the swap back, at every place. A kept swap is stored whole, so it cannot keep the
 bodyweight raise for one loaded version and not another. Undo, straight after, brings it back.
 
-TENTH_PASS
+**A tenth pass** over that fix found nothing new: the review ends here.
 
 The run of the earlier rounds' reverts against this round's code found one Round K test that its
 own last change had blinded. Its revert (the check after the app's own step back lands) was caught

@@ -233,7 +233,8 @@ what the owner has already passed:
   change undone by a pending Settings save; a kept swap away from an outgrown move dropped; one hotel
   workout undoing the gym's loaded version; a hand-loaded calf raise, kept as designed with the
   reason) and seven LOW, all fixed with tests and reverts except the one kept. The re-check of the
-  fixes: RECHECK_LINE
+  fixes, and seven passes after it, found five MEDIUM and twenty LOW and two races, each shown by
+  a failing test, all fixed with tests and reverts; the tenth pass found nothing new.
 - Report: `docs/reports/maintenance-30.md`.
 
 ## Maintenance 29: round K, the workout's small comforts (YELLOW)
