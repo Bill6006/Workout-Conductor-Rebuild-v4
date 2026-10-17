@@ -117,10 +117,13 @@ export function loadFromEquipment(
 
 const HAND_EQUIPMENT = new Set(['dumbbells', 'adjustable-dumbbells', 'kettlebells']);
 
-/** The chips that give each load a lifter's own move is saved with. */
+/**
+ * The chips that give each load a lifter's own move is saved with. A bar's plates come with a bar:
+ * the squat rack holds one and gives none (the seventh re-check).
+ */
 const LOAD_EQUIPMENT: Partial<Record<CatalogExercise['load'], ReadonlySet<string>>> = {
   stack: STACK_EQUIPMENT,
-  barbell: BAR_EQUIPMENT,
+  barbell: new Set(['barbell', 'ez-bar', 'trap-bar', 'smith-machine']),
   'dumbbell-each': HAND_EQUIPMENT,
   kettlebell: HAND_EQUIPMENT,
   band: BAND_EQUIPMENT,

@@ -42,6 +42,31 @@ export const ADDS_TO_BODYWEIGHT: ReadonlySet<string> = new Set([
 /** Too light on two legs for nearly any adult (Monteiro 2017): loaded wherever it can be. */
 export const LOADED_BY_DEFAULT: ReadonlySet<string> = new Set(['standing-calf-raise']);
 
+/** Whether a kept swap goes back to a bodyweight move from one of its own loaded versions. */
+const goesBack = (swap: { from: string; to: string }): boolean =>
+  LOADED_VERSIONS[swap.to]?.includes(swap.from) ?? false;
+
+/**
+ * The lifter's kept swaps, each swap back to a bodyweight move from one of its loaded versions
+ * standing for every loaded version of the move: a swap back, kept, keeps the bodyweight move,
+ * whichever loaded version the plan or the coach would pick (the seventh re-check). A swap the
+ * lifter keeps from another of those loaded versions stands as it is. A swap to a bodyweight move
+ * from anything else applies where the pick is the exercise swapped out, and the rule moves the move
+ * as usual elsewhere.
+ */
+export function withSwapsBack<T extends { from: string; to: string }>(swaps: readonly T[]): T[] {
+  const from = new Set(swaps.map((swap) => swap.from));
+  const added: T[] = [];
+  for (const swap of swaps.filter(goesBack)) {
+    for (const id of LOADED_VERSIONS[swap.to] ?? []) {
+      if (from.has(id)) continue;
+      from.add(id);
+      added.push({ ...swap, from: id });
+    }
+  }
+  return [...swaps, ...added];
+}
+
 /** The reserve read for a set saved without the plan's own. */
 const PLANNED_RESERVE = 2;
 

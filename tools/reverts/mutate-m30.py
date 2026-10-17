@@ -55,6 +55,8 @@ T_BACK = "src/engine/workoutGenerator/swapBackToBodyweightCoach.test.ts"
 T_SETTINGS_ORDER = "src/features/settings/customMachineSettingsOrder.test.tsx"
 T_FAV_BOTH = "src/engine/workoutGenerator/favouriteBothCoach.test.ts"
 T_SECTIONS = "src/features/settings/customMoveSections.test.tsx"
+T_SWAP_BACK_PLAN = "src/engine/workoutGenerator/swapToBodyweightCoachPlan.test.ts"
+T_RACK = "src/features/settings/customRackOnly.test.tsx"
 
 # (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 MUTATIONS = [
@@ -195,8 +197,8 @@ MUTATIONS = [
     ("31s a slot's pick follows the rule", GENERATE,
      "      focus +\n      loadedRule -", "      focus -", [T_RULE], None),
     ("31t the coach's extra work follows it too", GENERATE,
-     "      : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -",
-     "      : 0) -", [T_RULE], None),
+     "    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -",
+     "    0 -", [T_RULE], None),
     ("31u ... reading what is outgrown", GENERATE,
      "    outgrown: outgrownMoves(input.history),\n", "", [T_RULE], None),
     ("31v the split squat's loaded version", RULE,
@@ -345,10 +347,6 @@ MUTATIONS = [
      "    const planned = await this.afterPlaceWrites(\n      async (): Promise<{ begun: SetupState; leftOut: Identified[] } | null> => {\n        const begun = await this.readSetupState(db);",
      "    const early = await this.readSetupState(db);\n    const planned = await this.afterPlaceWrites(\n      async (): Promise<{ begun: SetupState; leftOut: Identified[] } | null> => {\n        const begun = early;",
      [T_SETUP_KEEPS], None),
-    ("V2 the coach never moves a kept swap's own exercise", GENERATE,
-     "    (picker.chosen?.has(exercise.id)\n      ? 0\n      : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -",
-     "    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -",
-     [T_BACK], None),
     ("V3 Settings lists a lifter's own machine with its chips in any order", PLACES,
      "(exercise.id.startsWith(CUSTOM_ID_PREFIX)\n            ? groupGivesLoad(group, exercise.load)\n            : loadOfGroup(group) === exercise.load)",
      "loadOfGroup(group) === exercise.load", [T_SETTINGS_ORDER, T_SECTIONS], None),
@@ -358,8 +356,9 @@ MUTATIONS = [
      [T_RULE], None),
     # The sixth pass.
     ("VI1 a favourite moves in the coach's extra work as in a slot's pick", GENERATE,
-     "    (picker.chosen?.has(exercise.id)\n      ? 0\n",
-     "    (chosenIn(picker).has(exercise.id)\n      ? 0\n", [T_FAV_BOTH], None),
+     "    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -",
+     "    (chosenIn(picker).has(exercise.id) ? 0 : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -",
+     [T_FAV_BOTH], None),
     ("VI2 Settings lists a lifter's own move only through a chip that gives its load", PLACES,
      "            ? groupGivesLoad(group, exercise.load)\n", "            ? true\n",
      [T_SECTIONS], None),
@@ -371,6 +370,29 @@ MUTATIONS = [
      "  return gives !== undefined && group.some((id) => gives.has(id));",
      "  return gives !== undefined && group.every((id) => gives.has(id));",
      [T_SECTIONS, T_SETTINGS_ORDER], None),
+    # The seventh pass.
+    ("VII1 a swap back keeps out every loaded version of the move, in the plan and the coach", GENERATE,
+     "    withSwapsBack(swaps)\n      .filter((swap) => {", "    swaps\n      .filter((swap) => {",
+     [T_SWAP_BACK_PLAN, T_RULE, T_BACK], None),
+    ("VII2 ... and puts the bodyweight move in for each", GENERATE,
+     "  const swapOf = new Map(withSwapsBack(constraints.swaps ?? []).map((swap) => [swap.from, swap]));",
+     "  const swapOf = new Map((constraints.swaps ?? []).map((swap) => [swap.from, swap]));",
+     [T_SWAP_BACK_PLAN], None),
+    ("VII3 ... and says so", GENERATE,
+     "  const byFrom = new Map(withSwapsBack(swaps).map((swap) => [swap.from, swap]));",
+     "  const byFrom = new Map(swaps.map((swap) => [swap.from, swap]));", [T_SWAP_BACK_PLAN], None),
+    ("VII4 the coach moves a bodyweight move swapped to from anything else", GENERATE,
+     "    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -",
+     "    (picker.chosen?.has(exercise.id) ? 0 : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -",
+     [T_SWAP_BACK_PLAN], None),
+    ("VII5 a swap back is from one of the move's own loaded versions", RULE,
+     "  LOADED_VERSIONS[swap.to]?.includes(swap.from) ?? false;",
+     "  LOADED_VERSIONS[swap.to] !== undefined;", [T_RULE, T_SWAP_BACK_PLAN], None),
+    ("VII6 a swap kept from another of those loaded versions stands", RULE,
+     "      if (from.has(id)) continue;\n", "", [T_RULE], None),
+    ("VII8 a bar's plates come with a bar, never the rack", CUSTOM,
+     "  barbell: new Set(['barbell', 'ez-bar', 'trap-bar', 'smith-machine']),",
+     "  barbell: BAR_EQUIPMENT,", [T_RACK], None),
 ]
 
 

@@ -75,6 +75,7 @@ import {
   loadedVersionShift,
   outgrownMoves,
   waitsForBodyweight,
+  withSwapsBack,
   type OutgrownBy,
 } from './loadedVersions';
 import { styleInfo } from '../planning/styles';
@@ -624,12 +625,10 @@ export function pickAccessoryFor(
     exercise.hypertrophySuitability * 10 +
     (exercise.compound ? 0 : 8) +
     (picker.preferredIds.has(exercise.id) ? 15 : 0) +
-    // Never a kept swap's own exercise: a swap back to a bodyweight move keeps it (the fifth
-    // re-check). A favourite moves as in a slot's pick, so the coach names what the plan does (the
-    // sixth).
-    (picker.chosen?.has(exercise.id)
-      ? 0
-      : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -
+    // As in a slot's pick, a favourite and a kept swap's own exercise included, so the coach names
+    // what the plan does (the sixth and seventh re-checks). A swap back to a bodyweight move keeps
+    // every loaded version of it out, so nothing moves it down (the fifth and seventh).
+    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -
     stressPenalty(exercise) * 2 -
     exercise.setupSeconds / 60;
   const tier = (exercise: CatalogExercise) => (picker.preferredIds.has(exercise.id) ? 1 : 0);
@@ -642,14 +641,15 @@ export function pickAccessoryFor(
 /** The picker the coach needs, built without generating a workout. */
 /**
  * The exercises the lifter's lasting swaps keep out of a plan here: each one swapped out whose
- * swap-in fits this place. Where the swap-in does not fit, the plan's own pick stands.
+ * swap-in fits this place. Where the swap-in does not fit, the plan's own pick stands. A swap back
+ * to a bodyweight move keeps out every loaded version of it (the seventh re-check).
  */
 export function swappedOutIds(
   swaps: readonly LastingSwap[],
   context: ConflictContext,
 ): Set<string> {
   return new Set(
-    swaps
+    withSwapsBack(swaps)
       .filter((swap) => {
         const next = getExercise(swap.to);
         return next !== undefined && !isBlocked(checkExerciseFit(next, context));
@@ -670,7 +670,7 @@ export function swapLines(
   blocks: readonly WorkoutBlock[],
   swaps: readonly LastingSwap[],
 ): string[] {
-  const byFrom = new Map(swaps.map((swap) => [swap.from, swap]));
+  const byFrom = new Map(withSwapsBack(swaps).map((swap) => [swap.from, swap]));
   return allEntries(blocks).flatMap((entry) => {
     const swap = entry.standsFor ? byFrom.get(entry.standsFor) : undefined;
     const from = swap ? getExercise(swap.from) : undefined;
@@ -1309,8 +1309,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const plannedSets = new Map<string, number>();
   // Stopped entries that do not fit here were ended again by the caller; the others fit now.
   const closedNow = new Set(keep.filter((kept) => kept.closed).map((kept) => kept.entry.id));
-  // The lifter's lasting swaps, by the exercise swapped out.
-  const swapOf = new Map((constraints.swaps ?? []).map((swap) => [swap.from, swap]));
+  // The lifter's lasting swaps, by the exercise swapped out: a swap back to a bodyweight move by each
+  // of its loaded versions (the seventh re-check).
+  const swapOf = new Map(withSwapsBack(constraints.swaps ?? []).map((swap) => [swap.from, swap]));
   // Each exercise in for the plan's own pick of its slot (a kept swap's, or the next best), by
   // that pick. An entry kept from before a rebuild says it itself (`standsFor`).
   const ownOf = new Map<string, CatalogExercise>();

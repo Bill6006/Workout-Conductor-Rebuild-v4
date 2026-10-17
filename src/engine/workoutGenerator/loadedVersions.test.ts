@@ -12,6 +12,7 @@ import {
   loadedVersionShift,
   outgrownMoves,
   waitsForBodyweight,
+  withSwapsBack,
   type OutgrownBy,
 } from './loadedVersions';
 
@@ -191,6 +192,30 @@ describe('the rule among a slot’s candidates', () => {
     expect(
       loadedVersionShift({ id: CALF }, new Set([CALF, PRESS_CALF]), none, new Set([CALF])),
     ).toBe(0);
+  });
+});
+
+describe('a kept swap back to a bodyweight move (the seventh re-check)', () => {
+  const swap = (from: string, to: string) => ({ from, to, setAt: RECORD_NOW });
+
+  it('stands for every loaded version of the move', () => {
+    expect(withSwapsBack([swap('standing-calf-raise-machine', CALF)])).toEqual([
+      swap('standing-calf-raise-machine', CALF),
+      swap(PRESS_CALF, CALF),
+    ]);
+  });
+
+  it('leaves a swap kept from another of those loaded versions as it is', () => {
+    const own = swap(PRESS_CALF, 'standing-calf-raise-machine');
+    expect(withSwapsBack([swap('standing-calf-raise-machine', CALF), own])).toEqual([
+      swap('standing-calf-raise-machine', CALF),
+      own,
+    ]);
+  });
+
+  it('is only from one of the move’s own loaded versions', () => {
+    const across = swap('dumbbell-reverse-lunge', BSS);
+    expect(withSwapsBack([across])).toEqual([across]);
   });
 });
 
