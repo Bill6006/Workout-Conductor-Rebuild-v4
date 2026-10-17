@@ -56,6 +56,30 @@ describe('a place’s weights and its deletion at once', () => {
     expect(await placesOnDisk(handle)).not.toContain('gym');
   });
 
+  it('a weights save, then setup run again without the Gym: the Gym stays gone', async () => {
+    const handle = await withGym();
+    // The save's write held up a moment, as a slow disk would: setup, finished just after it,
+    // removes the Gym only once the save has landed, so the save never writes it back.
+    const store = handle.store as unknown as { getDatabase: () => Promise<unknown> };
+    const database = store.getDatabase.bind(handle.store);
+    let calls = 0;
+    vi.spyOn(store, 'getDatabase').mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) await new Promise((resolve) => setTimeout(resolve, 50));
+      return database();
+    });
+    const profile = handle.store.getSnapshot().profile!;
+    const save = handle.store.saveLoadings('gym', { plates: PLATES });
+    const setup = handle.store.completeOnboarding(
+      profile,
+      createDefaultLocations({ gymAccess: false }, TEST_NOW),
+    );
+    await Promise.allSettled([save, setup]);
+    await expect(setup).resolves.toBe('saved');
+    expect(handle.store.getSnapshot().locations.map((place) => place.id)).not.toContain('gym');
+    expect(await placesOnDisk(handle)).not.toContain('gym');
+  });
+
   it('a refused write never holds up the next', async () => {
     const handle = await withGym();
     await handle.store.deleteLocation('gym');

@@ -108,10 +108,26 @@ export function loadsNow(
 }
 
 /**
+ * Whether a loaded version waits: until its bodyweight move loads, wherever that move is (one
+ * swapped away, or disliked, never loads the movement it stands for), it is no candidate at all,
+ * so a slot with nothing else keeps the plan's own pick, as before the rule. One the lifter chose
+ * stands: a favourite, a kept swap's own exercise, the lift to push (the fourth re-check).
+ */
+export function waitsForBodyweight(
+  exercise: Pick<CatalogExercise, 'id'>,
+  outgrown: ReadonlyMap<string, OutgrownBy>,
+  swappedAway: ReadonlySet<string> = new Set(),
+  chosen: ReadonlySet<string> = new Set(),
+): boolean {
+  const bodyweight = BODYWEIGHT_VERSION[exercise.id];
+  if (bodyweight === undefined || chosen.has(exercise.id)) return false;
+  return !loadsNow(bodyweight, outgrown, swappedAway);
+}
+
+/**
  * What the rule moves a candidate by, among the candidates a slot has here: a bodyweight move down
- * once it loads now, where a loaded version is a candidate; a loaded version down until its
- * bodyweight move loads, wherever that move is (one swapped away, or disliked, never loads the
- * movement it stands for).
+ * once it loads now, where a loaded version is a candidate. A loaded version is never moved: it
+ * waits outright (`waitsForBodyweight`), or competes as itself.
  */
 export function loadedVersionShift(
   exercise: Pick<CatalogExercise, 'id'>,
@@ -120,12 +136,8 @@ export function loadedVersionShift(
   swappedAway: ReadonlySet<string> = new Set(),
 ): number {
   const loaded = LOADED_VERSIONS[exercise.id];
-  if (loaded?.some((id) => candidateIds.has(id))) {
-    return loadsNow(exercise.id, outgrown, swappedAway) ? -LOAD_SHIFT : 0;
-  }
-  const bodyweight = BODYWEIGHT_VERSION[exercise.id];
-  if (bodyweight) return loadsNow(bodyweight, outgrown, swappedAway) ? 0 : -LOAD_SHIFT;
-  return 0;
+  if (!loaded?.some((id) => candidateIds.has(id))) return 0;
+  return loadsNow(exercise.id, outgrown, swappedAway) ? -LOAD_SHIFT : 0;
 }
 
 /**

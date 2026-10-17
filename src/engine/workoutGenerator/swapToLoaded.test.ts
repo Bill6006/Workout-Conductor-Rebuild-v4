@@ -1,29 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { requireExercise } from '../catalog/exercises/catalog';
-import { createDefaultLocations } from '../core/validation/location';
-import { createDefaultProfile } from '../core/validation/profile';
-import type { WorkoutRecord } from '../core/validation/workoutRecord';
-import { gatherSignals, type CoachInput } from '../engine/coach/coachConductor';
-import type { LastingSwap } from '../engine/planning/lastingSwaps';
-import { emptyCompleted, emptyConstraints } from '../engine/recalibration/recalibrate';
-import { interpretFatigue } from '../engine/recovery/fatigue';
-import { analyzeStrategy } from '../engine/strategy/strategy';
-import { allEntries } from '../engine/workout/types';
-import {
-  accessoryPicker,
-  generateWorkout,
-  pickAccessoryFor,
-} from '../engine/workoutGenerator/generate';
-import { RECORD_NOW, record } from '../test/records';
+import { requireExercise } from '../../catalog/exercises/catalog';
+import { createDefaultLocations } from '../../core/validation/location';
+import { createDefaultProfile } from '../../core/validation/profile';
+import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { gatherSignals, type CoachInput } from '../coach/coachConductor';
+import type { LastingSwap } from '../planning/lastingSwaps';
+import { emptyCompleted, emptyConstraints } from '../recalibration/recalibrate';
+import { interpretFatigue } from '../recovery/fatigue';
+import { analyzeStrategy } from '../strategy/strategy';
+import { allEntries } from '../workout/types';
+import { accessoryPicker, generateWorkout, pickAccessoryFor } from './generate';
+import { RECORD_NOW, record } from '../../test/records';
 
 /**
- * Fourth re-check of round L, fix 1. `swappedOutIds` holds only a kept swap's `from`, and `loadsNow`
- * reads every bodyweight move in it as one that never loads. A kept swap from the bulgarian split
- * squat TO its own loaded version (now in its substitutions, so the swap sheet offers it) is read as
- * a swap away from loading it: since the latest fix the loaded split squat the lifter chose is moved
- * down 40 wherever the swap itself does not put it in, so the coach's extra work never offers it.
- * Before the latest fix the coach's pick, with the split squat swapped out, was that loaded split
- * squat; with no swap it is the split squat itself.
+ * Maintenance 30, the fourth re-check of round L: a kept swap from the Bulgarian split squat to its
+ * own loaded version (in its substitutions, so the swap sheet offers it). The swap keeps the split
+ * squat out, which reads as one that never loads, so the loaded split squat the lifter chose was held
+ * down wherever the swap itself did not put it in: the coach's extra work never offered it. A kept
+ * swap's own exercise is the lifter's choice, and the rule never holds it back.
  */
 const BSS = 'bulgarian-split-squat';
 const DB_BSS = 'dumbbell-bulgarian-split-squat';
@@ -73,8 +67,8 @@ function upperDay(swaps: LastingSwap[]): CoachInput {
 const coverageAction = (input: CoachInput) =>
   gatherSignals(input).find((signal) => signal.source === 'weekly coverage')?.action;
 
-describe('a kept swap from the split squat to its loaded version (fourth re-check)', () => {
-  it('baseline, PASSES: the swap applies in the plan, and with no swap the coach offers the split squat', () => {
+describe('a kept swap from the split squat to its loaded version', () => {
+  it('applies the swap in the plan; with no swap, the coach offers the split squat', () => {
     const lower = generateWorkout({
       profile,
       location: home,
@@ -85,12 +79,14 @@ describe('a kept swap from the split squat to its loaded version (fourth re-chec
     });
     expect(allEntries(lower.blocks).map((entry) => entry.exerciseId)).toContain(DB_BSS);
     const action = coverageAction(upperDay([]));
-    expect(action?.kind === 'recalibrate' && action.label).toBe('Add 2 sets of Bulgarian Split Squat');
+    expect(action?.kind === 'recalibrate' && action.label).toBe(
+      'Add 2 sets of Bulgarian Split Squat',
+    );
   });
 
   it('the coach’s extra work offers the loaded split squat the lifter swapped to', () => {
     const action = coverageAction(upperDay(toLoaded));
-    // Fails: "Add 2 sets of Dumbbell Romanian Deadlift".
+    // Not "Add 2 sets of Dumbbell Romanian Deadlift".
     expect(action?.kind === 'recalibrate' && action.label).toBe(
       'Add 2 sets of Dumbbell Bulgarian Split Squat',
     );
@@ -98,9 +94,17 @@ describe('a kept swap from the split squat to its loaded version (fourth re-chec
 
   it('the coach’s extra quad work does not hold the chosen loaded split squat below every other', () => {
     const input = upperDay(toLoaded);
-    const today = allEntries(input.workout.blocks).map((entry) => requireExercise(entry.exerciseId));
-    const picker = accessoryPicker({ profile, location: home, history: [], now: NOW, swaps: toLoaded });
-    // Fails: "reverse-lunge", a bodyweight lunge the lifter never chose, over the one they did.
+    const today = allEntries(input.workout.blocks).map((entry) =>
+      requireExercise(entry.exerciseId),
+    );
+    const picker = accessoryPicker({
+      profile,
+      location: home,
+      history: [],
+      now: NOW,
+      swaps: toLoaded,
+    });
+    // Not the reverse lunge, a bodyweight lunge the lifter never chose, over the one they did.
     expect(pickAccessoryFor('quads', today, picker)?.id).toBe(DB_BSS);
   });
 });

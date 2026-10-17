@@ -270,12 +270,12 @@ export function comesBothWays(
   exercise: Pick<CatalogExercise, 'id' | 'load' | 'equipment'>,
 ): boolean {
   if (MACHINES_BOTH_WAYS.has(exercise.id)) return true;
-  const machine = exercise.equipment[0]?.[0];
+  // The custom sheet saves its chips in the order they were tapped: any of them is the machine.
+  const machines = bothWaysMachines();
   return (
     exercise.id.startsWith(CUSTOM_ID_PREFIX) &&
     exercise.load === 'stack' &&
-    machine !== undefined &&
-    bothWaysMachines().has(machine)
+    (exercise.equipment[0] ?? []).some((id) => machines.has(id))
   );
 }
 

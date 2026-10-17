@@ -3165,24 +3165,28 @@ export class AppStore {
             !locations.some((location) => location.id === stale.id),
         );
     try {
-      for (const stale of leftOut) {
-        // Its barcode goes with it, from both copies and first, as when the place is deleted.
-        await this.withBarcodeLock(async () => {
-          if ((await db.get('device', barcodeIdFor(stale.id))) || this.barcodeFor(stale.id)) {
-            await this.removeBarcodeNow(db, stale.id);
-          }
-          await deleteVerified(db, 'locations', stale.id);
-        });
-      }
-      for (const location of checked) {
-        await putVerified(db, 'locations', location, { now: this.now });
-      }
-      // Every place on disk now, setup's and the ones it left alone.
-      const kept = (await db.getAll<Identified>('locations'))
-        .map((record) => LocationProfileSchema.safeParse(record))
-        .filter((result) => result.success)
-        .map((result) => result.data);
-      this.setState({ locations: sortLocations(kept) });
+      // In turn with the place writes, as a deletion on Settings is: a weights save under way lands
+      // first and never writes a removed Gym back (the fourth re-check of Maintenance 30).
+      await this.afterPlaceWrites(async () => {
+        for (const stale of leftOut) {
+          // Its barcode goes with it, from both copies and first, as when the place is deleted.
+          await this.withBarcodeLock(async () => {
+            if ((await db.get('device', barcodeIdFor(stale.id))) || this.barcodeFor(stale.id)) {
+              await this.removeBarcodeNow(db, stale.id);
+            }
+            await deleteVerified(db, 'locations', stale.id);
+          });
+        }
+        for (const location of checked) {
+          await putVerified(db, 'locations', location, { now: this.now });
+        }
+        // Every place on disk now, setup's and the ones it left alone.
+        const kept = (await db.getAll<Identified>('locations'))
+          .map((record) => LocationProfileSchema.safeParse(record))
+          .filter((result) => result.success)
+          .map((result) => result.data);
+        this.setState({ locations: sortLocations(kept) });
+      });
       await this.saveProfile(profile);
     } catch (error) {
       // Cut off part-way (a full disk, say). What this run wrote stays. Setup starts again from

@@ -1,21 +1,20 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { registerCustomExercises } from '../catalog/exercises/catalog';
+import { registerCustomExercises } from '../../catalog/exercises/catalog';
 import {
   CustomExerciseSchema,
   customToCatalogExercise,
   loadFromEquipment,
-} from '../core/validation/customExercise';
-import { comesBothWays, loadingFor } from '../engine/loading/loading';
-import { LoadingEditor } from '../features/workout/LoadingEditor';
+} from '../../core/validation/customExercise';
+import { comesBothWays, loadingFor } from '../../engine/loading/loading';
+import { LoadingEditor } from './LoadingEditor';
 
 /**
- * Fourth re-check of round L, fix 3 (`comesBothWays` for a lifter's own move: only when its first
- * equipment's first item is a machine that comes both ways). The custom-exercise sheet saves one
- * equipment group in the order the chips were tapped, and decides the load from any item in it
- * (`loadFromEquipment`): a plate-loaded belt squat made with "Barbell + plates" and "Hack squat" is a
- * machine stack either way, but has the Pin stack / Plates switch only when Hack squat was tapped
- * first. Tapped the other way round it is stuck on a pin stack it does not have.
+ * Maintenance 30, the fourth re-check of round L: the custom-exercise sheet saves one equipment group
+ * in the order the chips were tapped, and decides the load from any item in it (`loadFromEquipment`).
+ * A plate-loaded belt squat made with "Barbell + plates" and "Hack squat" is a machine either way, so
+ * it has the Pin stack / Plates switch either way. It had it only with Hack squat tapped first, and
+ * was otherwise stuck on a pin stack it does not have.
  */
 const NOW = '2026-09-18T12:00:00.000Z';
 afterEach(() => registerCustomExercises([]));
@@ -38,7 +37,7 @@ function beltSquat(group: string[]) {
 }
 
 describe('a lifter’s own move on a machine that comes both ways, chips tapped in either order', () => {
-  it('baseline, PASSES: the same load either way, and the switch with the machine tapped first', () => {
+  it('is the same load either way, with the switch when the machine is tapped first', () => {
     expect(loadFromEquipment([['hack-squat', 'barbell']])).toBe('stack');
     expect(loadFromEquipment([['barbell', 'hack-squat']])).toBe('stack');
     expect(comesBothWays(beltSquat(['hack-squat', 'barbell']))).toBe(true);
@@ -60,7 +59,7 @@ describe('a lifter’s own move on a machine that comes both ways, chips tapped 
         onSetMissingPlates={vi.fn(() => Promise.resolve())}
       />,
     );
-    // Fails: no "machine-load" switch; only a pin stack editor for a plate-loaded machine.
+    // The switch, not only a pin stack editor for a plate-loaded machine.
     expect(screen.queryByTestId('machine-load')).toBeInTheDocument();
   });
 });

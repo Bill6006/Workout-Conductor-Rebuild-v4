@@ -11,6 +11,7 @@ import {
   loadedVersionLine,
   loadedVersionShift,
   outgrownMoves,
+  waitsForBodyweight,
   type OutgrownBy,
 } from './loadedVersions';
 
@@ -145,8 +146,11 @@ describe('the rule among a slot’s candidates', () => {
   const outgrown = new Map<string, OutgrownBy>([[BSS, 'reps']]);
   it('keeps the bodyweight move until it is outgrown, then the loaded one', () => {
     expect(loadedVersionShift({ id: BSS }, both, none)).toBe(0);
-    expect(loadedVersionShift({ id: DB_BSS }, both, none)).toBe(-LOAD_SHIFT);
+    expect(waitsForBodyweight({ id: DB_BSS }, none)).toBe(true);
     expect(loadedVersionShift({ id: BSS }, both, outgrown)).toBe(-LOAD_SHIFT);
+    expect(waitsForBodyweight({ id: DB_BSS }, outgrown)).toBe(false);
+    // A loaded version is never moved: it waits, or competes as itself.
+    expect(loadedVersionShift({ id: DB_BSS }, both, none)).toBe(0);
     expect(loadedVersionShift({ id: DB_BSS }, both, outgrown)).toBe(0);
   });
 
@@ -157,25 +161,33 @@ describe('the rule among a slot’s candidates', () => {
 
   it('holds a loaded version back until its bodyweight move loads, wherever that move is', () => {
     // The split squat out of the running (disliked, swapped away, in another slot): its loaded
-    // version still waits until it is outgrown.
-    expect(loadedVersionShift({ id: DB_BSS }, new Set([DB_BSS]), none)).toBe(-LOAD_SHIFT);
-    expect(loadedVersionShift({ id: DB_BSS }, new Set([DB_BSS]), outgrown)).toBe(0);
-    expect(loadedVersionShift({ id: DB_BSS }, new Set([DB_BSS]), outgrown, new Set([BSS]))).toBe(
-      -LOAD_SHIFT,
-    );
+    // version still waits until it is outgrown, as no candidate at all.
+    expect(waitsForBodyweight({ id: DB_BSS }, none)).toBe(true);
+    expect(waitsForBodyweight({ id: DB_BSS }, outgrown)).toBe(false);
+    expect(waitsForBodyweight({ id: DB_BSS }, outgrown, new Set([BSS]))).toBe(true);
+    // Never a move that is no loaded version.
+    expect(waitsForBodyweight({ id: BSS }, none)).toBe(false);
+    expect(waitsForBodyweight({ id: 'leg-press' }, none)).toBe(false);
+  });
+
+  it('never holds back a loaded version the lifter chose', () => {
+    // A favourite, a kept swap's own exercise, the lift to push: the caller names them.
+    expect(waitsForBodyweight({ id: DB_BSS }, none, away, new Set([DB_BSS]))).toBe(false);
+    expect(waitsForBodyweight({ id: DB_BSS }, none, new Set([BSS]), new Set([DB_BSS]))).toBe(false);
+    expect(waitsForBodyweight({ id: DB_BSS }, none, away, new Set([BSS]))).toBe(true);
   });
 
   it('loads a calf raise on two legs wherever a loaded one is, with no history', () => {
     const calves = new Set([CALF, PRESS_CALF]);
     expect(loadedVersionShift({ id: CALF }, calves, none)).toBe(-LOAD_SHIFT);
-    expect(loadedVersionShift({ id: PRESS_CALF }, calves, none)).toBe(0);
+    expect(waitsForBodyweight({ id: PRESS_CALF }, none)).toBe(false);
     expect(loadedVersionShift({ id: CALF }, new Set([CALF]), none)).toBe(0);
   });
 
   it('leaves a bodyweight move the lifter swapped away from as the plan’s own pick', () => {
     const swapped = new Set([BSS]);
     expect(loadedVersionShift({ id: BSS }, both, outgrown, swapped)).toBe(0);
-    expect(loadedVersionShift({ id: DB_BSS }, both, outgrown, swapped)).toBe(-LOAD_SHIFT);
+    expect(waitsForBodyweight({ id: DB_BSS }, outgrown, swapped)).toBe(true);
     expect(
       loadedVersionShift({ id: CALF }, new Set([CALF, PRESS_CALF]), none, new Set([CALF])),
     ).toBe(0);
@@ -489,5 +501,80 @@ describe('the plan at a place', () => {
     // The swap keeps the split squat out, not its loaded version.
     expect(picker.excluded?.has(BSS)).toBe(true);
     expect(picker.excluded?.has(DB_BSS)).toBe(false);
+  });
+
+  // The fourth re-check: a loaded version waits outright, unless the lifter chose it.
+  it('plans a favourite loaded version before its bodyweight move is outgrown', () => {
+    const favourite = {
+      exercisePreferences: {
+        ...profile().exercisePreferences,
+        preferred: ['Dumbbell Bulgarian Split Squat'],
+      },
+    };
+    const { ids, reasons } = lower([], gym!, favourite);
+    expect(ids).toContain(DB_BSS);
+    expect(ids).not.toContain(BSS);
+    // A favourite, not the rule: nothing said of a change.
+    expect(inPlaceOf(reasons, 'Bulgarian Split Squat')).toEqual([]);
+  });
+
+  it('keeps the calf machine a lifter swapped the bodyweight calf raise for, and says so', () => {
+    // The leg-press calf raise is the plan's own loaded calf raise at the gym: the swap still puts
+    // in the machine the lifter chose, never the plan's pick in its place.
+    const { ids, reasons } = lower([], gym!, {}, [
+      { from: CALF, to: 'standing-calf-raise-machine' },
+    ]);
+    expect(ids).toContain('standing-calf-raise-machine');
+    expect(ids).not.toContain(PRESS_CALF);
+    expect(reasons).toContain(
+      'Standing Calf Raise Machine in place of Standing Calf Raise, the swap you chose to keep.',
+    );
+  });
+
+  it('says the swap of an outgrown move for its own loaded version is the lifter’s', () => {
+    const { ids, reasons } = lower(outgrown, gym!, {}, [{ from: BSS, to: DB_BSS }]);
+    expect(ids).toContain(DB_BSS);
+    expect(reasons).toContain(
+      'Dumbbell Bulgarian Split Squat in place of Bulgarian Split Squat, the swap you chose to keep.',
+    );
+  });
+
+  it('applies a kept swap away from a lift to push that is a loaded version', () => {
+    const push = {
+      pushLift: { exerciseId: DB_BSS, target: 100, units: 'lb' as const, since: RECORD_NOW },
+    };
+    // The lift to push is the slot's own pick, so its swap applies, never left for the split squat.
+    const { ids, reasons } = lower([], gym!, push, [{ from: DB_BSS, to: 'reverse-lunge' }]);
+    expect(ids).toContain('reverse-lunge');
+    expect(ids).not.toContain(BSS);
+    expect(reasons).toContain(
+      'Reverse Lunge in place of Dumbbell Bulgarian Split Squat, the swap you chose to keep.',
+    );
+  });
+
+  it('gives the coach’s extra work the lift to push when it is a loaded version', () => {
+    const dislikes = {
+      exercisePreferences: {
+        ...profile().exercisePreferences,
+        disliked: ['Bulgarian Split Squat'],
+      },
+    };
+    const quads = (overrides: Partial<UserProfile>) =>
+      pickAccessoryFor(
+        'quads',
+        [],
+        accessoryPicker({
+          profile: profile(overrides),
+          location: home!,
+          history: [],
+          now: RECORD_NOW,
+        }),
+      )?.id;
+    // Never outgrown, the loaded split squat waits for the coach too.
+    expect(quads(dislikes)).not.toBe(DB_BSS);
+    const push = {
+      pushLift: { exerciseId: DB_BSS, target: 100, units: 'lb' as const, since: RECORD_NOW },
+    };
+    expect(quads({ ...dislikes, ...push })).toBe(DB_BSS);
   });
 });

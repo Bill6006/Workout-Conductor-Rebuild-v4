@@ -55,6 +55,7 @@ import {
 import { allowsFailure, isAutoStyle, resolveStyle } from '../planning/styleAdvice';
 import {
   PUSH_LIFT,
+  activePush,
   daysToNextSession,
   pushCap,
   pushDay,
@@ -74,6 +75,7 @@ import {
   loadedVersionLine,
   loadedVersionShift,
   outgrownMoves,
+  waitsForBodyweight,
   type OutgrownBy,
 } from './loadedVersions';
 import { styleInfo } from '../planning/styles';
@@ -515,7 +517,22 @@ export interface Picker {
   outgrown?: ReadonlyMap<string, OutgrownBy>;
   /** Exercises a lasting swap took out: a bodyweight move among them stays the plan's own pick. */
   swappedAway?: ReadonlySet<string>;
+  /**
+   * Exercises the lifter chose beyond the favourites: each kept swap's own exercise and the lift to
+   * push. A loaded version among them never waits for its bodyweight move (the fourth re-check).
+   */
+  chosen?: ReadonlySet<string>;
 }
+
+/** What the lifter chose beyond the favourites: each kept swap's own exercise, the lift to push. */
+function chosenBy(profile: UserProfile, swaps: readonly LastingSwap[]): Set<string> {
+  const push = activePush(profile)?.exercise.id;
+  return new Set([...swaps.map((swap) => swap.to), ...(push ? [push] : [])]);
+}
+
+/** A favourite or another exercise the lifter chose: the loaded-version rule holds none back. */
+const chosenIn = (picker: Picker): Set<string> =>
+  new Set([...picker.preferredIds, ...(picker.chosen ?? [])]);
 
 function stressPenalty(exercise: CatalogExercise): number {
   return Object.values(exercise.jointStress).reduce(
@@ -531,17 +548,20 @@ function pickForSlot(
 ): CatalogExercise | undefined {
   const chosenIds = new Set([...chosen.map((exercise) => exercise.id), ...(picker.excluded ?? [])]);
   const strengthRole = restCategory(slotSpec.role) === 'strength';
+  const outgrown = picker.outgrown ?? new Map<string, OutgrownBy>();
+  const lifterChose = chosenIn(picker);
   const candidates = exercisesByPattern(slotSpec.pattern)
     .filter((exercise) => !chosenIds.has(exercise.id))
     .filter((exercise) => (strengthRole ? exercise.compound : true))
     .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
+    // A loaded version waits until its bodyweight move loads (item 31).
+    .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
     .filter(
       (exercise) =>
         !blocksCandidate(checkWorkoutConflicts([...chosen, exercise], picker.context), exercise.id),
     );
 
   const candidateIds = new Set(candidates.map((exercise) => exercise.id));
-  const outgrown = picker.outgrown ?? new Map<string, OutgrownBy>();
   const score = (exercise: CatalogExercise) => {
     const suitability = strengthRole
       ? exercise.strengthSuitability * 10 + exercise.hypertrophySuitability
@@ -587,16 +607,18 @@ export function pickAccessoryFor(
   picker: Picker,
 ): CatalogExercise | undefined {
   const chosenIds = new Set([...chosen.map((exercise) => exercise.id), ...(picker.excluded ?? [])]);
+  const outgrown = picker.outgrown ?? new Map<string, OutgrownBy>();
+  const lifterChose = chosenIn(picker);
   const candidates = allExercises()
     .filter((exercise) => exercise.primaryMuscles.includes(muscle))
     .filter((exercise) => !chosenIds.has(exercise.id))
     .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
+    .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
     .filter(
       (exercise) =>
         !blocksCandidate(checkWorkoutConflicts([...chosen, exercise], picker.context), exercise.id),
     );
   const candidateIds = new Set(candidates.map((exercise) => exercise.id));
-  const outgrown = picker.outgrown ?? new Map<string, OutgrownBy>();
   const score = (exercise: CatalogExercise) =>
     exercise.hypertrophySuitability * 10 +
     (exercise.compound ? 0 : 8) +
@@ -697,6 +719,7 @@ export function accessoryPicker(input: {
     excluded: swappedOut,
     outgrown: outgrownMoves(input.history),
     swappedAway: swappedOut,
+    chosen: chosenBy(input.profile, input.swaps ?? []),
   };
 }
 
@@ -1215,6 +1238,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     excluded: swappedOut,
     outgrown,
     swappedAway: swappedOut,
+    // The plan judges its own picks as if no swap were kept: a kept swap's own loaded version waits
+    // there like any other, and the swap puts it in for the move it stands for, saying so (the
+    // fourth re-check).
+    chosen: chosenBy(profile, []),
   };
   const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
 
