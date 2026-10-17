@@ -230,6 +230,13 @@ describe('a kept swap back to a bodyweight move (the seventh and eighth re-check
     expect(swapBackCovers(swap('dumbbell-reverse-lunge', BSS), DB_BSS)).toBe(false);
   });
 
+  it('never covers a favourite but its own', () => {
+    const back = swap('standing-calf-raise-machine', CALF);
+    expect(swapBackCovers(back, PRESS_CALF, new Set([PRESS_CALF]))).toBe(false);
+    const machine = new Set(['standing-calf-raise-machine']);
+    expect(swapBackCovers(back, 'standing-calf-raise-machine', machine)).toBe(true);
+  });
+
   it('is only from one of the move’s own loaded versions', () => {
     const across = swap('dumbbell-reverse-lunge', BSS);
     expect(withSwapsBack([across])).toEqual([across]);

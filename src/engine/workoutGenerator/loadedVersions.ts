@@ -73,12 +73,19 @@ export function withSwapsBack<T extends { from: string; to: string }>(
 }
 
 /**
- * Whether a kept swap back covers this loaded version: keeping the plan's own pick on an entry it
- * put in ends it, as keeping the plan's own pick ends a kept swap of it (Maintenance 22; the eighth
- * re-check).
+ * Whether a kept swap back covers this loaded version: its own, or another but a favourite, as the
+ * readers take it. Keeping the plan's own pick on an entry it put in ends it, as keeping the plan's
+ * own pick ends a kept swap of it (Maintenance 22; the eighth and ninth re-checks).
  */
-export function swapBackCovers(swap: { from: string; to: string }, id: string): boolean {
-  return goesBack(swap) && (LOADED_VERSIONS[swap.to]?.includes(id) ?? false);
+export function swapBackCovers(
+  swap: { from: string; to: string },
+  id: string,
+  favourites: ReadonlySet<string> = new Set(),
+): boolean {
+  if (!goesBack(swap)) return false;
+  return (
+    id === swap.from || ((LOADED_VERSIONS[swap.to]?.includes(id) ?? false) && !favourites.has(id))
+  );
 }
 
 /** The reserve read for a set saved without the plan's own. */

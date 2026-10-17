@@ -60,6 +60,7 @@ T_RACK = "src/features/settings/customRackOnly.test.tsx"
 T_KEEP_OWN = "src/core/state/keepOwnPickSwapBack.test.ts"
 T_FAV_BACK = "src/engine/workoutGenerator/swapBackFavourite.test.ts"
 T_OTHER_SWAP = "src/engine/workoutGenerator/swapBackOtherSwap.test.ts"
+T_KEEP_FAV = "src/core/state/keepOwnPickFavourite.test.ts"
 
 # (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 MUTATIONS = [
@@ -409,11 +410,18 @@ MUTATIONS = [
      "      if (isBlocked(checkExerciseFit(next, context))) continue;",
      "      if (isBlocked(checkExerciseFit(next, context))) return pick;", [T_OTHER_SWAP], None),
     ("VIII5 keeping the plan's own pick ends a swap back that covers it", STORE,
-     "        ? withoutSwap(current, from).filter((swap) => !swapBackCovers(swap, from))",
+     "        ? withoutSwap(current, from).filter(\n            (swap) => !swapBackCovers(swap, from, this.favourites()),\n          )",
      "        ? withoutSwap(current, from)", [T_KEEP_OWN], None),
     ("VIII6 ... every loaded version it covers", RULE,
-     "  return goesBack(swap) && (LOADED_VERSIONS[swap.to]?.includes(id) ?? false);",
-     "  return goesBack(swap) && swap.from === id;", [T_KEEP_OWN, T_RULE], None),
+     "    id === swap.from || ((LOADED_VERSIONS[swap.to]?.includes(id) ?? false) && !favourites.has(id))",
+     "    id === swap.from", [T_KEEP_OWN, T_RULE], None),
+    # The ninth pass.
+    ("IX1 keeping a favourite ends no swap back but its own", RULE,
+     "    id === swap.from || ((LOADED_VERSIONS[swap.to]?.includes(id) ?? false) && !favourites.has(id))",
+     "    id === swap.from || (LOADED_VERSIONS[swap.to]?.includes(id) ?? false)", [T_KEEP_FAV, T_RULE], None),
+    ("IX2 ... as the store reads it", STORE,
+     "            (swap) => !swapBackCovers(swap, from, this.favourites()),",
+     "            (swap) => !swapBackCovers(swap, from),", [T_KEEP_FAV], None),
 ]
 
 

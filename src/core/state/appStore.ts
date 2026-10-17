@@ -4211,7 +4211,9 @@ export class AppStore {
       // Keeping the plan's own pick ends a kept swap of it, a swap back that covers it too (the eighth
       // re-check of Maintenance 30).
       return from === exerciseId
-        ? withoutSwap(current, from).filter((swap) => !swapBackCovers(swap, from))
+        ? withoutSwap(current, from).filter(
+            (swap) => !swapBackCovers(swap, from, this.favourites()),
+          )
         : withSwap(current, from, exerciseId, this.now());
     });
     if (!change.saved) {
