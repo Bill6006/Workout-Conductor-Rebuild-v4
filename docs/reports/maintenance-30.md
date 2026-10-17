@@ -372,6 +372,12 @@ blinds a test of theirs:
 CI ran the whole of it on the same code (`71b0eb3`, run 39073083667), with Playwright's own
 Chromium: every step passed, the browser suite with 417 passed and 14 skipped by design.
 
+**Live on 2026-10-17:** `0f4b9bd`, deployed by Deploy Pages run 39076937311 (success), whose checks
+passed again on the runner, the browser suite with 417 passed and 14 skipped by design. The live
+marker and the browser suite against the live site were not run: this cloud machine's network
+policy blocks `bill6006.github.io` (`403 host_not_allowed`). They run on the owner's machine, or
+here once the environment allows the host.
+
 ## Review on the phone
 
 At the owner's word (2026-10-11), no review gate pauses the agreed work. This round's checks are in

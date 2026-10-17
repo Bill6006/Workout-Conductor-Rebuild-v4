@@ -7,8 +7,8 @@ first; it holds the rules. This file holds the state and the steps._
 
 ### Resumed on the owner's word, 2026-10-17 (supersedes the states below)
 
-- **Round L** is reviewed, reverted, verified and squashed onto `main` as one commit; the deploy
-  and the live checks follow it. Ten review passes; the tenth found nothing new. Revert tables on
+- **Round L** is live: squashed onto `main` as `0f4b9bd` and deployed by Deploy Pages run
+  39076937311 (success). The live marker and the live suite wait for the host (below). Ten review passes; the tenth found nothing new. Revert tables on
   the final code (`71b0eb3`): M30 121 of 121, M29 32 of 32, M28 83 of 83 (`--utc`), M27 193 of 193
   (its R44-19 entries in New York time). CI on `71b0eb3` (run 39073083667): every step passed, the
   browser suite 417 passed and 14 skipped by design. The cloud machine's Chromium cannot play the
@@ -32,12 +32,11 @@ first; it holds the rules. This file holds the state and the steps._
     - the coach's fewer-reps narrowing stays; keeping a covered loaded version ends the swap back
       everywhere (documented);
     - S6: a new lifter on a day not ticked is told so in one line too.
-  - Left to fix: S1 and S1b (a profile save re-reads the day's offer), C1 (no coach drop set off
-    plan), R4 (the coach's alternative respects resting muscles), T1 (the day note when only
-    remainders are covered), S6 (the line on a day not ticked with no catch-up).
-  - Then: run `src/review-m31/` until it passes, restyle its tests into the proper test files,
-    update the M31 table (G8 and G9 re-anchored to `!offPlan`, an entry for each fix) and run it
-    with `--utc`; a second review pass until clean; the browser suite; verify; ship.
+  - Left to fix, in the worktree since: S1 and S1b (a profile save re-reads the day's offer), C1
+    (no coach offer adds work off plan), R4 (no swap brings in a resting muscle's lift), T1 (the
+    day note when only remainders went in), S6 (the line on a day not ticked with no catch-up).
+  - Then: update the M31 table (anchors moved, an entry for each fix) and run it with `--utc`; a
+    second review pass until clean; the browser suite; verify; ship.
 
 ### Paused on the owner's word, 2026-10-17 (supersedes the state below)
 
