@@ -255,7 +255,7 @@ MUTATIONS = [
      "", [T_RULE, T_ONLY], None),
     ("F1b ... and in the coach's extra work", GENERATE,
      "    .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))\n",
-     "", [T_TO_LOADED, T_RULE], 1),
+     "", [T_TO_LOADED, T_RULE, T_SWAP], 1),
     ("F1c one the lifter chose never waits", RULE,
      "  if (bodyweight === undefined || chosen.has(exercise.id)) return false;",
      "  if (bodyweight === undefined) return false;", [T_RULE, T_TO_LOADED], None),

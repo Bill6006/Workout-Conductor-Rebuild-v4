@@ -1,6 +1,6 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-10-11_
+_Last updated: 2026-10-17_
 
 | Item                   | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -13,7 +13,7 @@ _Last updated: 2026-10-11_
 | Phase gate | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 30 YELLOW (round L: items 6, 30, 31). Maintenance 29 YELLOW (round K: items 7, 8, 10, 14). Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
 | Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Work in progress | The agreed backlog in five rounds: J = Maintenance 28 (items 1, 3, 4) and K = Maintenance 29 (7, 8, 10, 14) live; L = Maintenance 30 (6, 30, 31) in this commit; then M (12, 32) and N (11), each researched where training is involved, reviewed, reverted, verified and shipped live |
+| Work in progress | The agreed backlog, round after round: J = Maintenance 28 (items 1, 3, 4) and K = Maintenance 29 (7, 8, 10, 14) live; L = Maintenance 30 (6, 30, 31) in this commit; then M (12, 32), N (11), the recovery and readiness core, time intelligence, item 48 and the schedule watch, each researched where training is involved, reviewed, reverted, verified and shipped live |
 | Latest commit | Maintenance 30, round L: items 6, 30 and 31 (this commit); its deployment and live checks follow in the next |
 | Latest deployment | `dbd1726` (Maintenance 29, round K) deployed by Deploy Pages run 38119197463 (success); browser suite against the live URL: 404 passed + 18 skipped by design, none failed (a first run during an internet outage failed only on name lookups, and was run again) |
 | Test totals | TOTALS |
@@ -31,6 +31,20 @@ owner, 2026-10-09).
 - **11.** Top set plus back-off sets.
 - **12.** A catch-up session for an unplanned day.
 - **32.** A second workout on the same day leads with what was missed.
+- **The recovery and readiness core** (approved 2026-10-17): per-muscle recovery estimates, the
+  first-set check, the illness and pain gates, in place of the day-count fatigue rule
+  (`docs/proposals/week-model-readiness-time.md`).
+- **Time intelligence** (approved 2026-10-17): the week forecast at real lengths, the need carried
+  forward, the "longer would help" suggestion with cooldowns, the honest goals-versus-time check.
+- **48.** Life Mirror's daily check-in, read-only, behind a switch that stays off until the owner
+  turns it on (back in scope 2026-10-11, approved 2026-10-17;
+  `docs/proposals/item-48-life-mirror-check-in.md`).
+- **The schedule watch** (approved 2026-10-17): it needs 8+ weeks of data after a move, so it
+  switches on last.
+- **Custom equipment presets** (approved 2026-10-17): its definition is to come from the owner.
+
+The owner's answers to the proposal's five decisions and item 11's seven questions (2026-10-17) are
+in the reports of the rounds that build them.
 
 Built in Maintenance 26 (GREEN): **40**, **42** and **50**. Built in Maintenance 27 (round I, at its
 review gate), in the owner's order: **43** (how well the lifter judges reps in reserve), **41** (each
@@ -56,7 +70,7 @@ Proposed in Maintenance 30, not agreed (the owner's decision): a move's load whe
 another way (a face pull with a band at home is planned in pounds), and a loaded calf raise at home
 (`docs/reports/maintenance-30.md`, Proposed).
 
-Not approved (2026-10-09): **48**, Life Mirror's daily check-in used for workouts.
+Item 48, not approved on 2026-10-09, came back in scope on 2026-10-11 and is agreed (above).
 
 ## Waiting for the owner's phone acceptance
 
@@ -601,6 +615,7 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Round M (Maintenance 31: items 12 and 32), then N (item 11), without pausing at the gates.
-Once every agreed item is live, the one consolidated phone review (Waiting for the owner's phone
-acceptance).
+Round M (Maintenance 31: items 12 and 32), then N (item 11), the recovery and readiness core, time
+intelligence, item 48 and the schedule watch, without pausing at the gates; the custom equipment
+presets once the owner defines them. Once every agreed item is live, the one consolidated phone
+review (Waiting for the owner's phone acceptance).

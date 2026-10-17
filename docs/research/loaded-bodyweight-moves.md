@@ -80,7 +80,9 @@ where marked *.
 
 2. **Bodyweight while it fits.** A bodyweight move keeps its place while bodyweight still fits its
    reps. With no history it starts at bodyweight: the first set measures it (Nuzzo 2024*, 37792272:
-   reps at a given load vary most at light loads).
+   reps at a given load vary most at light loads). Until then its loaded version is no candidate at
+   all, wherever the bodyweight move is (swapped away, disliked, or in another slot): a slot with
+   nothing else stays as it was before the loaded versions existed (Maintenance 30's fourth review).
 3. **Outgrown, it is loaded.** A move is outgrown by either of two things:
    - a working set at bodyweight that goes a rep past the top of its range at the reserve the plan
      asked for (reps plus reps in reserve, less the planned reserve, at or above the top plus one; a
@@ -109,7 +111,9 @@ where marked *.
      lifter's limits rule out.
 
 7. **The lifter's own choices stand.**
-   - A preferred exercise still wins its slot outright.
+   - A preferred exercise still wins its slot outright, a loaded version too.
+   - A loaded version that is a kept swap's own exercise, or the lift to push on a day its push
+     runs, is never held back; nor is a bodyweight move a kept swap brings back.
    - A lasting swap back to the bodyweight move keeps it.
    - A lasting swap away from the bodyweight move, to another exercise, takes its loaded versions
      away too: the same movement. The swap stands as before, loaded or not.

@@ -199,6 +199,47 @@ fixed with tests and reverts:
   Settings' gym switch sits beside the new Weights row. The deletion now waits its turn with the
   place writes.
 
+**A fourth pass** over the third pass's fixes found three more, each shown by a failing test; all
+fixed with tests and reverts:
+
+- **MEDIUM:** the wait was a shift in the ranking, not a bar. Where the other moves were ruled
+  out, the loaded version was the slot's only candidate and was planned anyway, its bodyweight move
+  never outgrown: a sore knee with the reverse lunge and the step-up disliked got the dumbbell
+  reverse lunge, and a lifter who dislikes every bodyweight lunge got the dumbbell split squat. A
+  loaded version now waits as no candidate at all, so such a slot is as before the round: empty
+  when every move is ruled out, or the plan's own pick where a kept swap cannot apply. One the
+  lifter chose stands: a favourite, a kept swap's own exercise, the lift to push.
+- **LOW:** a kept swap from the split squat to its own loaded version, which the swap sheet offers,
+  held that loaded version down in the coach's extra work, which offered a Romanian deadlift
+  instead. A kept swap's own exercise is the lifter's choice there now. The fix first proposed,
+  counting such a swap as no swap away, was checked and not built: the plan then put a different
+  loaded version in place of the one chosen (the leg-press calf raise for a swap to the calf
+  machine) and dropped the swap's line. The plan still judges its own picks as if no swap were
+  kept, and the swap puts its own exercise in.
+- **LOW:** a lifter's own move took the Pin stack / Plates switch only when its machine's chip was
+  tapped first. Any of its chips counts now.
+- **The race, once more:** setup run again without the Gym could see the Gym written back by a
+  weights save still under way. Setup's place writes now wait their turn, as a deletion on Settings
+  does.
+
+**A fifth pass** over those fixes found three more, each shown by a failing test; all fixed with
+tests and reverts:
+
+- **LOW:** setup checked what it began from before its turn among the place writes, so a weights
+  save under way when Finish was tapped landed after the check, and setup put the Gym it began from
+  over it. The check and setup's writes now take one turn: such a save lands first, and setup,
+  seeing the Gym changed since it began, writes nothing, as it always does then.
+- **LOW:** a kept swap back to a bodyweight move (the leg-press calf raise for the standing calf
+  raise) was moved down in the coach's extra work, which offered the calf machine. The coach never
+  moves an exercise the lifter chose.
+- **LOW:** Settings listed a lifter's own machine only when its machine chip was tapped first, while
+  its workout tab took either order. It is listed either way now.
+- **A deload week, from the same pass:** the lift to push stayed clear of the wait while its push was
+  paused, so a deload day with a kept swap away from the split squat planned the loaded split squat
+  instead of the swap. The lift to push stands only on a day its push runs.
+
+SIXTH_PASS
+
 The run of the earlier rounds' reverts against this round's code found one Round K test that its
 own last change had blinded. Its revert (the check after the app's own step back lands) was caught
 in Round K's final revert run. It passed on the committed code, because jsdom delivers the step back
