@@ -5,6 +5,43 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Paused on the owner's word, 2026-10-17 (supersedes the state below)
+
+The cloud session paused here ("I am running out of credits; pause at your next checkpoint").
+Nothing is merged to `main` or deployed: `main` and the live build are still `dbd1726`.
+
+- **Round L** is on `claude/workout-conductor-round-l-26i4o9`. Review passes four to seven are
+  fixed, each finding shown first by a failing test: `1424451`, `0610421`, `3755e6b`, `b327173`
+  and `8a7a9f1`. The docs are in `df97203`.
+  - The M30 revert table catches 113 of 113 on `8a7a9f1`.
+  - The earlier rounds' tables, on `0610421`:
+    - M29: 32 of 32;
+    - M28: 83 of 83, run with `--utc`, as CI runs;
+    - M27: 193 of 193. Its three R44-19 calendar-day entries are caught only away from UTC; run
+      them with `TZ=America/New_York`.
+  - Re-run on `8a7a9f1`, the M27 and M28 entries in files changed since then: 32 of 32.
+  - CI on `8a7a9f1` (run 39055259582) was still in its browser step when the session paused.
+- **Round L, what is left:**
+  1. The eighth review pass, on `git diff 3755e6b 8a7a9f1 -- src/`, was stopped part-way. Run it
+     again, and fix and re-check until a pass finds nothing new.
+  2. Fill `EIGHTH_PASS`, `REVERTS` and `VERIFY` in `maintenance-30.md`, and `TOTALS` and
+     `RECHECK_LINE` in `PROJECT_STATUS.md`.
+  3. Then section 2, steps 7 to 10: verify, squash onto `main`, deploy, live checks, docs commit.
+  4. Leave `docs/handoff/round-m-wip/` out of the squash.
+- **Round M** (items 12 and 32, and the week model) is built in `docs/handoff/round-m-wip/round-m.diff`.
+  It is one diff against `8a7a9f1`; apply it with `git apply`. It holds:
+  - the code, the tests and `e2e/roundM.spec.ts`;
+  - its revert table, 72 entries (`tools/reverts/mutate-m31.py`), anchors checked, not yet run.
+    Run it with `--utc`.
+  - the report draft, `docs/reports/maintenance-31.md`.
+
+  Its unit tests pass. What is left: the full browser suite on its build. Specs that seed a workout
+  in the last 14 days meet the catch-up on a day the default schedule does not tick. Specs that
+  finish a workout and come back to Today meet the second workout. Then its revert table, review
+  passes, verify and ship, as for every round.
+- **Then** sections 3 to 9 as written: Round N (item 11), the readiness core, time intelligence,
+  item 48 (switch off), the schedule watch, and the presets question to the owner.
+
 **Verify it before changing anything:**
 
 ```bash
