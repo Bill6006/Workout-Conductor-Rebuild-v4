@@ -53,6 +53,8 @@ T_ORDER = "src/features/workout/customMachineOrder.test.tsx"
 T_SETUP_KEEPS = "src/core/state/setupKeepsWeights.test.ts"
 T_BACK = "src/engine/workoutGenerator/swapBackToBodyweightCoach.test.ts"
 T_SETTINGS_ORDER = "src/features/settings/customMachineSettingsOrder.test.tsx"
+T_FAV_BOTH = "src/engine/workoutGenerator/favouriteBothCoach.test.ts"
+T_SECTIONS = "src/features/settings/customMoveSections.test.tsx"
 
 # (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 MUTATIONS = [
@@ -72,7 +74,7 @@ MUTATIONS = [
      "    hasNoLoad(exercise) && exercise.load !== 'band'\n      ? { ...exercise, load: 'bodyweight' }\n      : exercise,",
      "    exercise,", [T_TAB], None),
     ("6f Settings reads the place's own equipment", PLACES,
-     "          group.every((id) => equipment.has(id)) &&\n          (exercise.id.startsWith(CUSTOM_ID_PREFIX) || loadOfGroup(group) === exercise.load),",
+     "          group.every((id) => equipment.has(id)) &&\n          (exercise.id.startsWith(CUSTOM_ID_PREFIX)\n            ? groupGivesLoad(group, exercise.load)\n            : loadOfGroup(group) === exercise.load),",
      "          group.every((id) => equipment.has(id)),", [T_TAB], None),
     ("6g Settings lists no move with no load as a machine", PLACES,
      "    (exercise) => exercise.load === 'stack' && !hasNoLoad(exercise),",
@@ -343,17 +345,32 @@ MUTATIONS = [
      "    const planned = await this.afterPlaceWrites(\n      async (): Promise<{ begun: SetupState; leftOut: Identified[] } | null> => {\n        const begun = await this.readSetupState(db);",
      "    const early = await this.readSetupState(db);\n    const planned = await this.afterPlaceWrites(\n      async (): Promise<{ begun: SetupState; leftOut: Identified[] } | null> => {\n        const begun = early;",
      [T_SETUP_KEEPS], None),
-    ("V2 the coach never moves an exercise the lifter chose", GENERATE,
-     "    (lifterChose.has(exercise.id)\n      ? 0\n      : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -",
+    ("V2 the coach never moves a kept swap's own exercise", GENERATE,
+     "    (picker.chosen?.has(exercise.id)\n      ? 0\n      : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -",
      "    loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway) -",
      [T_BACK], None),
     ("V3 Settings lists a lifter's own machine with its chips in any order", PLACES,
-     "(exercise.id.startsWith(CUSTOM_ID_PREFIX) || loadOfGroup(group) === exercise.load)",
-     "loadOfGroup(group) === exercise.load", [T_SETTINGS_ORDER], None),
+     "(exercise.id.startsWith(CUSTOM_ID_PREFIX)\n            ? groupGivesLoad(group, exercise.load)\n            : loadOfGroup(group) === exercise.load)",
+     "loadOfGroup(group) === exercise.load", [T_SETTINGS_ORDER, T_SECTIONS], None),
     ("V4 the lift to push stands only while its push runs, never in a deload week", GENERATE,
      "    chosen: chosenBy([], push),",
      "    chosen: chosenBy([], push ?? pushDay({ profile, history, now, deload: false })),",
      [T_RULE], None),
+    # The sixth pass.
+    ("VI1 a favourite moves in the coach's extra work as in a slot's pick", GENERATE,
+     "    (picker.chosen?.has(exercise.id)\n      ? 0\n",
+     "    (chosenIn(picker).has(exercise.id)\n      ? 0\n", [T_FAV_BOTH], None),
+    ("VI2 Settings lists a lifter's own move only through a chip that gives its load", PLACES,
+     "            ? groupGivesLoad(group, exercise.load)\n", "            ? true\n",
+     [T_SECTIONS], None),
+    ("VI3 ... a group with no chips gives none", CUSTOM,
+     "  return gives !== undefined && group.some((id) => gives.has(id));",
+     "  return gives !== undefined && (group.length === 0 || group.some((id) => gives.has(id)));",
+     [T_SECTIONS], None),
+    ("VI4 ... any one of its chips gives it", CUSTOM,
+     "  return gives !== undefined && group.some((id) => gives.has(id));",
+     "  return gives !== undefined && group.every((id) => gives.has(id));",
+     [T_SECTIONS, T_SETTINGS_ORDER], None),
 ]
 
 

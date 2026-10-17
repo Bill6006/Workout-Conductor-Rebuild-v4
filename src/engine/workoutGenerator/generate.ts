@@ -624,9 +624,10 @@ export function pickAccessoryFor(
     exercise.hypertrophySuitability * 10 +
     (exercise.compound ? 0 : 8) +
     (picker.preferredIds.has(exercise.id) ? 15 : 0) +
-    // Never one the lifter chose: a kept swap back to a bodyweight move keeps it (the fifth
-    // re-check).
-    (lifterChose.has(exercise.id)
+    // Never a kept swap's own exercise: a swap back to a bodyweight move keeps it (the fifth
+    // re-check). A favourite moves as in a slot's pick, so the coach names what the plan does (the
+    // sixth).
+    (picker.chosen?.has(exercise.id)
       ? 0
       : loadedVersionShift(exercise, candidateIds, outgrown, picker.swappedAway)) -
     stressPenalty(exercise) * 2 -

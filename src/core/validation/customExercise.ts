@@ -115,6 +115,27 @@ export function loadFromEquipment(
   return 'dumbbell-each';
 }
 
+const HAND_EQUIPMENT = new Set(['dumbbells', 'adjustable-dumbbells', 'kettlebells']);
+
+/** The chips that give each load a lifter's own move is saved with. */
+const LOAD_EQUIPMENT: Partial<Record<CatalogExercise['load'], ReadonlySet<string>>> = {
+  stack: STACK_EQUIPMENT,
+  barbell: BAR_EQUIPMENT,
+  'dumbbell-each': HAND_EQUIPMENT,
+  kettlebell: HAND_EQUIPMENT,
+  band: BAND_EQUIPMENT,
+};
+
+/**
+ * Whether one of a lifter's own move's equipment groups gives it the load it was saved with: one of
+ * the group's chips does, in the order they were tapped or not (Maintenance 30, the sixth re-check).
+ * A group with no such chip, or with none at all, gives a place no weights to set for the move.
+ */
+export function groupGivesLoad(group: readonly string[], load: CatalogExercise['load']): boolean {
+  const gives = LOAD_EQUIPMENT[load];
+  return gives !== undefined && group.some((id) => gives.has(id));
+}
+
 /** Presents a custom exercise to the engines exactly like a catalog exercise. */
 export function customToCatalogExercise(custom: CustomExercise): CatalogExercise {
   const compound = isCompoundPattern(custom.movementPattern);
