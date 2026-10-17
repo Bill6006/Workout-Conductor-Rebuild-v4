@@ -358,7 +358,19 @@ blinds a test of theirs:
 
 ## Verification
 
-VERIFY
+`npm run verify`'s steps, run alone on 2026-10-17 on the round's final code:
+
+- lint and type check;
+- unit tests: 2524 passed, 5 skipped by design (276 files), in UTC as the CI runner runs them, and
+  the day rules' tests again in New York and fourteen hours east of UTC, 22 each;
+- the privacy scan (818 files, nothing found) and the build check;
+- the browser suite, on this cloud machine's own Chromium: 396 passed, 14 skipped by design. The 19
+  that failed are the tests that play an exercise clip (How to, the library, the clip the app keeps
+  for offline): this Chromium cannot play the MP4 clips. The two after the last of them in its
+  serial group did not run.
+
+CI ran the whole of it on the same code (`71b0eb3`, run 39073083667), with Playwright's own
+Chromium: every step passed, the browser suite with 417 passed and 14 skipped by design.
 
 ## Review on the phone
 

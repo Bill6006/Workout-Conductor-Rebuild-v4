@@ -5,6 +5,40 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Resumed on the owner's word, 2026-10-17 (supersedes the states below)
+
+- **Round L** is reviewed, reverted, verified and squashed onto `main` as one commit; the deploy
+  and the live checks follow it. Ten review passes; the tenth found nothing new. Revert tables on
+  the final code (`71b0eb3`): M30 121 of 121, M29 32 of 32, M28 83 of 83 (`--utc`), M27 193 of 193
+  (its R44-19 entries in New York time). CI on `71b0eb3` (run 39073083667): every step passed, the
+  browser suite 417 passed and 14 skipped by design. The cloud machine's Chromium cannot play the
+  MP4 clips, so locally the 19 clip tests fail; CI is the authority for them.
+- **The live host is blocked from the cloud machine** (`403 host_not_allowed`). The deploy is
+  checked through the GitHub API; the live marker and the live suite wait until the environment's
+  network policy allows `bill6006.github.io`, or run on the owner's machine.
+- **Round M** is in progress. `docs/handoff/round-m-wip/round-m.diff` is now one diff against
+  `11ef050`, whose `src/` is the same as `main` after the squash. Apply it with `git apply` on
+  `main`. It holds the code, its tests, the report draft, its revert table (72 entries), the
+  first review's 23 failing tests in `src/review-m31/`, and part one of their fixes.
+  - The first review's findings and the calls made on them (each stated in the report):
+    - a catch-up is the next app length below the Default (product judgement);
+    - the lift to push, the probe set, the extra set and drop sets are off in a catch-up and a
+      second workout (`offPlan`), as are swap-ins that work a resting muscle;
+    - each muscle's sets are budgeted across the session's slots;
+    - a second workout's remainder is read from today's own session, and a muscle trained in the
+      48 hours before today takes nothing more;
+    - a workout begun today counts only once a working set of it is done;
+    - a second workout in a deload week still goes easy on what was done;
+    - the coach's fewer-reps narrowing stays; keeping a covered loaded version ends the swap back
+      everywhere (documented);
+    - S6: a new lifter on a day not ticked is told so in one line too.
+  - Left to fix: S1 and S1b (a profile save re-reads the day's offer), C1 (no coach drop set off
+    plan), R4 (the coach's alternative respects resting muscles), T1 (the day note when only
+    remainders are covered), S6 (the line on a day not ticked with no catch-up).
+  - Then: run `src/review-m31/` until it passes, restyle its tests into the proper test files,
+    update the M31 table (G8 and G9 re-anchored to `!offPlan`, an entry for each fix) and run it
+    with `--utc`; a second review pass until clean; the browser suite; verify; ship.
+
 ### Paused on the owner's word, 2026-10-17 (supersedes the state below)
 
 The cloud session paused here ("I am running out of credits; pause at your next checkpoint").
