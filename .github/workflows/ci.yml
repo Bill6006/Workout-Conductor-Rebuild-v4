@@ -49,6 +49,12 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate app icons
+        run: npm run icons
+
       - name: Build
         run: npm run build
 
@@ -57,9 +63,6 @@ jobs:
 
       - name: Verify build output
         run: npm run verify-build
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
 
       - name: Browser smoke test
         run: npm run test:e2e

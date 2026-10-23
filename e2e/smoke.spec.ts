@@ -63,6 +63,53 @@ test.describe('app shell', () => {
     }
   });
 
+  test('the app icon shows in the header, the tab, the home screen and the manifest', async ({
+    page,
+  }) => {
+    await ensureProfile(page);
+    // Each image decodes at its own size: a file that fails to decode, like the SVG wrapper whose
+    // embedded artwork was cut short (2026-10-22), has no natural size and shows a broken image.
+    const decoded = (src: string) =>
+      page.evaluate(async (url) => {
+        const image = new Image();
+        image.src = url;
+        try {
+          await image.decode();
+        } catch {
+          return null;
+        }
+        return [image.naturalWidth, image.naturalHeight];
+      }, src);
+    const logo = page.locator('header img').first();
+    await expect(logo).toBeVisible();
+    await expect
+      .poll(() => logo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth))
+      .toBe(192);
+    // The tab's icons and the home screen's on iOS.
+    const links = await page
+      .locator('link[rel="icon"], link[rel="apple-touch-icon"]')
+      .evaluateAll((items) =>
+        items.map((item) => [item.getAttribute('href'), item.getAttribute('sizes')] as const),
+      );
+    expect(links.length).toBeGreaterThanOrEqual(3);
+    for (const [href, sizes] of links) {
+      const size = await decoded(new URL(href ?? '', page.url()).toString());
+      expect(size, `${href} should decode`).not.toBeNull();
+      if (sizes) expect(size!.join('x'), `${href} at its size`).toBe(sizes);
+    }
+    // Android's launcher icons, from the manifest.
+    const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
+    const manifestUrl = new URL(manifestHref ?? '', page.url());
+    const manifest = (await page.evaluate(
+      (url) => fetch(url).then((response) => response.json()),
+      manifestUrl.toString(),
+    )) as { icons: { src: string; sizes: string }[] };
+    for (const icon of manifest.icons) {
+      const size = await decoded(new URL(icon.src, manifestUrl).toString());
+      expect(size?.join('x'), `${icon.src} should decode at its size`).toBe(icon.sizes);
+    }
+  });
+
   test('PWA manifest, icons, and service worker are served', async ({ page, request }) => {
     await page.goto('./');
     const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');

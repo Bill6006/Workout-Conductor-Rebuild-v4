@@ -55,7 +55,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      includeAssets: ['favicon.svg', 'icons/*.svg', 'icons/*.png'],
+      includeAssets: ['icons/*.png'],
       manifest: {
         id: base,
         name: 'Workout Conductor',

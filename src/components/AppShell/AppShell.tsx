@@ -3,7 +3,8 @@ import type { RouteId } from '../../app/navigation';
 import { BottomNav } from '../BottomNav/BottomNav';
 import styles from './AppShell.module.css';
 
-const logoSrc = `${import.meta.env.BASE_URL}icons/icon.svg`;
+// The app's icon (scripts/generate-icons.mjs renders it from assets/app-icon.png).
+const logoSrc = `${import.meta.env.BASE_URL}icons/icon-192.png`;
 
 interface AppShellProps {
   activeRoute: RouteId;

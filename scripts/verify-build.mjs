@@ -109,9 +109,42 @@ if (distHas('sw.js')) {
   check(read('sw.js').includes('precache'), 'sw.js must precache the app shell');
 }
 check(distHas('.nojekyll'), 'dist/.nojekyll is missing (copy from public/)');
-check(distHas('favicon.svg'), 'dist/favicon.svg is missing');
-check(distHas('icons/icon.svg'), 'dist/icons/icon.svg is missing (shell logo)');
-check(distHas('icons/apple-touch-icon-180.png'), 'dist/icons/apple-touch-icon-180.png is missing');
+
+// The app's icons (scripts/generate-icons.mjs renders them from assets/app-icon.png): each a PNG
+// at its own size, and every one the page links is in dist.
+const ICON_SIZES = {
+  'icons/favicon-32.png': 32,
+  'icons/apple-touch-icon-180.png': 180,
+  'icons/icon-192.png': 192,
+  'icons/icon-512.png': 512,
+  'icons/icon-maskable-512.png': 512,
+};
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+for (const [file, size] of Object.entries(ICON_SIZES)) {
+  if (!distHas(file)) {
+    check(false, `dist/${file} is missing`);
+    continue;
+  }
+  const png = readFileSync(path.join(DIST, file));
+  const isPng = png.length > 24 && png.subarray(0, 8).equals(PNG_SIGNATURE);
+  check(isPng, `dist/${file} is not a PNG`);
+  if (isPng) {
+    const [width, height] = [png.readUInt32BE(16), png.readUInt32BE(20)];
+    check(
+      width === size && height === size,
+      `dist/${file} must be ${size}x${size}, is ${width}x${height}`,
+    );
+  }
+}
+if (distHas('index.html')) {
+  const page = read('index.html');
+  const linked = [...page.matchAll(/<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"/g)];
+  check(linked.length >= 2, 'index.html must link a favicon and the apple-touch-icon');
+  for (const [, href] of linked) {
+    const file = href.startsWith(base) ? href.slice(base.length) : href;
+    check(file in ICON_SIZES, `index.html links ${href}, which is not one of the app's icons`);
+  }
+}
 
 // Build marker inside the JS bundle
 const assetsDir = path.join(DIST, 'assets');
