@@ -14,8 +14,10 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff`. Its second review pass is running; then the M31 revert
-  run (103 entries, `--utc`), the browser suite, the report's placeholders, verify, ship.
+  `docs/handoff/round-m-wip/round-m.diff`. The second review pass found twelve issues (two HIGH),
+  each with a failing test; all are fixed, their tests moved into the proper files, and the M31
+  table has an entry for each (120 entries, every anchor found). Next: the M31 revert run
+  (`--utc`), a third review pass on these fixes, the browser suite, the report, verify, ship.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 
