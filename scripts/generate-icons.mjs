@@ -31,6 +31,7 @@ try {
         `<img id="icon" src="${dataUrl}" alt="" style="display:block;width:${target.size}px;height:${target.size}px">` +
         `</body></html>`,
     );
+    await page.locator('#icon').evaluate((image) => image.decode());
     await page.locator('#icon').screenshot({
       path: path.join(ICON_DIR, target.file),
       omitBackground: true,
