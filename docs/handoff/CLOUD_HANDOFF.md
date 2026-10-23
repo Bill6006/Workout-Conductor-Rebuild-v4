@@ -5,7 +5,19 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
-### Paused again on the owner's word, 2026-10-17 (supersedes the states below)
+### Resumed on the owner's word, 2026-10-23 (supersedes the states below)
+
+- **The app icon** (the owner's request of 2026-10-23) is fixed and live: `6ff6f34`, Deploy Pages
+  run 39947121487. The owner's SVG wrappers of 2026-10-22 embedded the new artwork as base64 WebP
+  text cut short, so the header logo showed a broken image. Every icon is now rendered from
+  `assets/app-icon.png` (the artwork exactly as provided) by `npm run icons`, which checks each
+  file; CI renders them before every build. Locally, run it with
+  `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
+- **Round M** sits on `main` (`2595631`) in its worktree and in
+  `docs/handoff/round-m-wip/round-m.diff`. Its second review pass is running; then the M31 revert
+  run (103 entries, `--utc`), the browser suite, the report's placeholders, verify, ship.
+
+### Paused again on the owner's word, 2026-10-17 (superseded above)
 
 The owner asked for a pause ("running out of credits"). `main` and the live build are `03a1bef`
 (Round L, live). Round M is saved in `docs/handoff/round-m-wip/round-m.diff`, one diff against
