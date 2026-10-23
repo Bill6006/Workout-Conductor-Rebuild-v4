@@ -14,14 +14,15 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff`. Five review passes found twenty, twelve, seven, three and
-  two issues, each shown by a failing test and fixed (one LOW kept as a known limit, with the
-  reason); a sixth pass is checking the fifth's fixes. The M31 table has 149 entries, every anchor
-  found; its full run on the fourth pass's code caught all of them. The report is written up to the
-  fifth pass, with its known limits. The browser suite passed on Round M's build on a ticked day and
-  on a Saturday (the time zone set to Pacific/Kiritimati), after one spec learned to take the full
-  session. Next: the sixth pass, the full M31 run and the cross-round tables (M30, M29, M28 `--utc`,
-  M27) on the final code, verify, ship.
+  `docs/handoff/round-m-wip/round-m.diff`. Seven review passes found twenty, twelve, seven, three,
+  two, three and four issues, each shown by a failing test and fixed (one LOW kept as a known limit,
+  with the reason). After the seventh, the catch-up's layout is kept with the plan
+  (`GeneratedWorkout.catchUpSlots`, optional), in place of the fifth and sixth passes' relay; an
+  eighth pass is checking that change. The M31 table has 154 entries, every anchor found; the
+  entries changed since its last full run are caught. The full unit suite passed (2701, 5 skipped by
+  design). The report is written up to the seventh pass. Next: the eighth pass, the full M31 run and
+  the cross-round tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite again,
+  verify, ship.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 
