@@ -40,7 +40,7 @@ npm run verify         # lint, typecheck, unit tests, build, privacy scan, verif
 npm run test:unit      # Vitest
 npm run test:e2e       # Playwright (builds are served with vite preview under the Pages subpath)
 npm run privacy-scan   # fails on emails, phone numbers, secrets, telemetry, user-data files
-npm run icons          # re-render PWA icons from public/icons/icon.svg
+npm run icons          # re-render every app icon from assets/app-icon.png
 npm run screenshots -- --phase 0   # real screenshots + preview sheet into docs/screenshots/phase-0
 ```
 
