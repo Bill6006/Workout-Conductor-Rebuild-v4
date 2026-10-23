@@ -14,15 +14,15 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Nine review passes found
-  twenty, twelve, seven, three, two, three, four, three and three issues, each shown by a failing
-  test and fixed (one LOW kept as a known limit, with the reason). The ninth's: a slot added for a
-  muscle a lift misses keeps its own number (its place in the plan from `after`), a catch-up keeps
-  its own order, and a second workout leads with what was missed. A tenth pass is checking them.
-  The M31 table has 163 entries, every anchor found, the entries changed since its last full run
-  caught; the full unit suite passed (2714, 5 skipped by design). The report is written up to the
-  ninth pass. Next: the tenth pass, the full M31 run and the cross-round tables (M30, M29, M28
-  `--utc`, M27) on the final code, the browser suite again, verify, ship.
+  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Ten review passes found
+  twenty, twelve, seven, three, two, three, four, three, three and two issues, each shown by a
+  failing test and fixed (one LOW kept as a known limit, with the reason). The tenth's: the slots
+  are filled in the plan's order (an added slot right after the slot it follows), and spare names
+  start past every slot's. An eleventh pass is checking them. The M31 table has 163 entries, every
+  anchor found, the entries changed since its last full run caught; the full unit suite passed
+  (2714, 5 skipped by design). The report is written up to the tenth pass. Next: the eleventh
+  pass, the full M31 run and the cross-round tables (M30, M29, M28 `--utc`, M27) on the final
+  code, the browser suite again, verify, ship.
 - **Round N** (item 11, a top set plus back-offs) is built in its own worktree on Round M's work in
   progress, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round M's
   diff applied to `2595631`). Its M32 table has 79 entries, all caught; its report is drafted
