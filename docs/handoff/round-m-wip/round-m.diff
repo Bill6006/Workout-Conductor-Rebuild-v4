@@ -1,8 +1,8 @@
 diff --git a/docs/data-model.md b/docs/data-model.md
-index 416f674..3ffa71a 100644
+index 416f674..ec6c1c8 100644
 --- a/docs/data-model.md
 +++ b/docs/data-model.md
-@@ -111,6 +111,19 @@ That is what lets a backup written by a newer app version pass through an older
+@@ -111,6 +111,20 @@ That is what lets a backup written by a newer app version pass through an older
    - The cloud copy's `day` column of a workout is now the device's day the workout began (item 1;
      before, the UTC day it was finished). Nothing reads it back: each app works out a workout's day
      from its own times.
@@ -16,18 +16,19 @@ index 416f674..3ffa71a 100644
 +  - The stored plan's `templateId` may be `catch-up` or `second-workout` (`CATCH_UP_TEMPLATE_IDS`).
 +    It was always text, never an enum: an older copy shows such a plan with its own title.
 +  - The stored plan's `catchUpSlots`: the slots a catch-up or a second workout was laid out in
-+    (each a movement, a role and muscles, with the catch-up's sets and reserve), which a rebuild
++    (each a movement, a role and muscles, with the catch-up's sets and reserve, and for a slot added
++    for a muscle a lift misses, `after`, the slot it follows in the plan's order), which a rebuild
 +    around what the plan keeps fills again. A plan without them, or with ones it cannot read, lays
-+    its catch-up out again at its next rebuild.
++    its catch-up out again at its next rebuild; an `after` it cannot read is dropped alone.
  
  ## Save safety
  
 diff --git a/docs/reports/maintenance-31.md b/docs/reports/maintenance-31.md
 new file mode 100644
-index 0000000..b6a4c6c
+index 0000000..8813870
 --- /dev/null
 +++ b/docs/reports/maintenance-31.md
-@@ -0,0 +1,325 @@
+@@ -0,0 +1,341 @@
 +# Maintenance 31: round M, the week as it stands
 +
 +Built on 2026-10-17 on the owner's word to build the whole agreed queue, round by round, to live,
@@ -134,8 +135,9 @@ index 0000000..b6a4c6c
 +- On a day a workout was begun and a working set of it done, the next plan is a second workout (a
 +  workout begun by mistake and ended with nothing logged is no first workout). Today says so in one
 +  line: "You trained today: this one leads with what you missed and goes easy on the rest."
-+- It leads with the muscles behind this week that were not trained today and are outside the
-+  48 hours, dosed as a catch-up's.
++- It leads with the muscles behind this week that were not trained today and are outside the 48
++  hours, dosed as a catch-up's, their strength lifts first; what is left of today's work comes after
++  them.
 +- A muscle trained today takes at most what is left of the dose today's own session gave it, three
 +  or more reps short of failure, and only while the week is still short (the settled question 4).
 +  The dose is the day's first workout as it was planned, each set counted as the week counts the
@@ -183,10 +185,11 @@ index 0000000..b6a4c6c
 +  laid out in with the plan, as the usual plan keeps its template: a rebuild around what it keeps
 +  fills the same slots, so every lift kept stays in its own, at a new place too; a plan built whole
 +  lays them out again from what the place has. A muscle a slot's lift misses, still short, takes a
-+  slot of its own right after that slot (a front squat for the quads in the squat they share with
-+  the glutes, at a place with no squat for both), unless a swap the lifter made there left it so, or
-+  the slot has no lift going on (a stand-in skipped brings no sets back). The full session taken
-+  holds for its own day only.
++  slot of its own, numbered after the layout's so that every lift keeps its name, and placed in the
++  plan right after that slot (a front squat for the quads in the squat they share with the glutes,
++  at a place with no squat for both), unless a swap the lifter made there left it so, or the slot
++  has no lift going on (a stand-in skipped brings no sets back). The full session taken holds for
++  its own day only.
 +
 +## Review
 +
@@ -313,7 +316,21 @@ index 0000000..b6a4c6c
 +  lift kept after it takes its slot's new number with it; a lift still to do that comes before the
 +  main lift is the one named first, and the main lift no longer "leads".
 +
-+NINTH_PASS
++**The ninth pass** (on those fixes) found three, all LOW.
++
++- LOW, from the eighth pass's fix: a slot added for a muscle a lift misses moved the slots after it
++  on one, and their lifts took other names, so the list of changes read lifts replaced that were not
++  ("45 min": "2 exercises replaced").
++- LOW, from before the round's passes: on a catch-up built fresh, the week-aware order moved
++  accessories for muscles behind ahead of its strength lifts (the squat behind the calf raise); a
++  second workout could lead with what was left of a muscle trained today (the close-grip bench
++  press) rather than with what was missed.
++- Fixed: a slot added keeps its own number, after the layout's, and the plan's order alone puts it
++  after the slot it was added for, so every lift keeps its name through every rebuild; a catch-up or
++  a second workout keeps its own order, the week-aware order is for the split's sessions; a second
++  workout lays out what was missed first, each part with its strength lifts first.
++
++TENTH_PASS
 +
 +## Known limits
 +
@@ -813,19 +830,25 @@ index eb98a5e..a8a947e 100644
    const planned = allEntries(handle.store.getSnapshot().session!.workout.blocks);
 diff --git a/src/core/state/catchUp.store.test.ts b/src/core/state/catchUp.store.test.ts
 new file mode 100644
-index 0000000..486fcff
+index 0000000..eb34730
 --- /dev/null
 +++ b/src/core/state/catchUp.store.test.ts
-@@ -0,0 +1,1031 @@
+@@ -0,0 +1,1133 @@
 +import { describe, expect, it } from 'vitest';
 +import { requireExercise } from '../../catalog/exercises/catalog';
 +import type { MuscleId } from '../../catalog/muscles/muscles';
 +import { createDefaultLocations } from '../validation/location';
 +import { createDefaultProfile, type UserProfile } from '../validation/profile';
 +import type { WorkoutRecord } from '../validation/workoutRecord';
-+import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../../engine/workout/types';
++import {
++  allEntries,
++  isStopped,
++  type GeneratedWorkout,
++  type WorkoutEntry,
++} from '../../engine/workout/types';
 +import { templateDose } from '../../engine/workoutGenerator/generate';
 +import { describeWorkout, directFor, directSets, working } from '../../test/clockDays';
++import { restCategory } from '../../engine/progression/roles';
 +import { dayNoteOf } from '../../features/today/dayNote';
 +import { record } from '../../test/records';
 +import { TEST_NOW, createTestStore } from '../../test/testStore';
@@ -1846,6 +1869,102 @@ index 0000000..486fcff
 +    expect(unpinned.map(shape), `${lifts(after.workout)} :: whole ${lifts(whole)}`).toEqual(
 +      unpinned.map((entry) => wholeShape.get(entry.exerciseId) ?? shape(entry)),
 +    );
++  });
++});
++
++describe('the order a day off the plan leads in, the ninth review of round M', () => {
++  const HOUR = 3_600_000;
++  /** Workouts logged `hoursAgo`, each a lift's sets of the sets it planned. */
++  async function logged(
++    history: {
++      hoursAgo: number;
++      exerciseId: string;
++      sets: number;
++      planned?: number;
++      templateId: string;
++    }[],
++    changes: Partial<UserProfile> = {},
++  ) {
++    const handle = createTestStore({ now: () => TEST_NOW });
++    await handle.store.hydrate();
++    await handle.store.completeOnboarding(
++      { ...createDefaultProfile(TEST_NOW), bodyweight: 185, ...changes },
++      createDefaultLocations({ gymAccess: true }, TEST_NOW),
++    );
++    const db = await handle.store.getDatabase();
++    for (const { hoursAgo, exerciseId, sets, planned = sets, templateId } of history) {
++      const when = new Date(Date.parse(TEST_NOW) - hoursAgo * HOUR).toISOString();
++      const saved = record(
++        0,
++        exerciseId,
++        Array.from({ length: sets }, () => [10, 100, 2] as [number, number, number]),
++        [8, 12],
++        2,
++      );
++      await db.put('workouts', {
++        ...saved,
++        id: `w-${exerciseId}-${hoursAgo}`,
++        startedAt: when,
++        completedAt: when,
++        templateId,
++        endedEarly: sets < planned,
++        entries: saved.entries.map((entry) => ({ ...entry, plannedSets: planned })),
++      });
++    }
++    await handle.store.hydrate();
++    return handle;
++  }
++
++  it('a catch-up keeps its strength lifts first: the squat before the calf raise', async () => {
++    // Two sessions a week, Monday and Friday; Monday's lower day cut short at five sets of leg press.
++    const handle = await logged(
++      [
++        { hoursAgo: 48, exerciseId: 'leg-press', sets: 5, templateId: 'lower' },
++        { hoursAgo: 216, exerciseId: 'barbell-row', sets: 3, templateId: 'pull-arms' },
++      ],
++      { schedule: { ...schedule, availableDays: ['mon', 'fri'], weeklyFrequency: 2 } },
++    );
++    expect(session(handle).workout.templateId).toBe('catch-up');
++    const entries = allEntries(session(handle).workout.blocks);
++    expect(
++      entries.map((entry) => entry.exerciseId),
++      describeWorkout(session(handle).workout).join('; '),
++    ).toContain('back-squat');
++    // Before: the week-aware order put the back squat fifth, behind the calf raise.
++    const strength = entries.map((entry) => restCategory(entry.role) === 'strength');
++    const firstOther = strength.indexOf(false);
++    expect(
++      firstOther < 0 || strength.lastIndexOf(true) < firstOther,
++      describeWorkout(session(handle).workout).join('; '),
++    ).toBe(true);
++  });
++
++  it('a second workout leads with a muscle missed, not the chest’s remainder', async () => {
++    // Monday's pull day; this morning's push day ended after one of the four bench sets planned.
++    const handle = await logged([
++      { hoursAgo: 50, exerciseId: 'barbell-row', sets: 4, templateId: 'pull-arms' },
++      { hoursAgo: 50, exerciseId: 'lat-pulldown', sets: 3, templateId: 'pull-arms' },
++      { hoursAgo: 50, exerciseId: 'barbell-curl', sets: 3, templateId: 'pull-arms' },
++      {
++        hoursAgo: 3,
++        exerciseId: 'barbell-bench-press',
++        sets: 1,
++        planned: 4,
++        templateId: 'push-arms',
++      },
++    ]);
++    const spec = session(handle).constraints.catchUp!;
++    expect(spec.kind).toBe('second');
++    const missed = spec.muscles.filter((item) => item.why === 'behind').map((item) => item.muscle);
++    expect(missed.length).toBeGreaterThan(0);
++    const workout = session(handle).workout;
++    const first = allEntries(workout.blocks).find((entry) => !isStopped(entry))!;
++    // Before: "close-grip-bench-press x3 @RIR 3/3/3; ..." and "Close-Grip Bench Press first", the
++    // chest's and the triceps' remainder.
++    expect(
++      first.chosenFor.some((muscle) => missed.includes(muscle)),
++      `${describeWorkout(workout).join('; ')} :: ${workout.explanation.summary}`,
++    ).toBe(true);
 +  });
 +});
 diff --git a/src/core/state/session.catchUp.test.ts b/src/core/state/session.catchUp.test.ts
@@ -3694,7 +3813,7 @@ index 46f1e3a..3fab896 100644
    };
  }
 diff --git a/src/engine/workout/types.ts b/src/engine/workout/types.ts
-index c11914b..477271d 100644
+index c11914b..3580a6b 100644
 --- a/src/engine/workout/types.ts
 +++ b/src/engine/workout/types.ts
 @@ -1,4 +1,5 @@
@@ -3716,7 +3835,7 @@ index c11914b..477271d 100644
  /**
   * Every way the progression engine arrives at a target, as one list. The
   * stored-session reader validates against this same list, so the two can never
-@@ -247,6 +254,17 @@ export interface WorkoutExplanation {
+@@ -247,6 +254,22 @@ export interface WorkoutExplanation {
    time: TimeBreakdown;
  }
  
@@ -3729,12 +3848,17 @@ index c11914b..477271d 100644
 +  sets?: number;
 +  /** The catch-up's fewest reps in reserve for the slot. */
 +  minRir?: number;
++  /**
++   * A slot added for a muscle a slot's lift misses: the slot it comes right after in the plan's
++   * order (the ninth review of round M). It keeps its own number, after the layout's.
++   */
++  after?: number;
 +}
 +
  export interface GeneratedWorkout {
    id: string;
    templateId: string;
-@@ -273,6 +291,12 @@ export interface GeneratedWorkout {
+@@ -273,6 +296,12 @@ export interface GeneratedWorkout {
    confidence: 'high' | 'medium' | 'low';
    compromises: string[];
    recalibration: { version: number; lastTrigger: string | null };
@@ -3748,7 +3872,7 @@ index c11914b..477271d 100644
  
  export interface ResolvedEntry {
 diff --git a/src/engine/workout/workoutSchema.ts b/src/engine/workout/workoutSchema.ts
-index 9057c46..108aba7 100644
+index 9057c46..fff9fde 100644
 --- a/src/engine/workout/workoutSchema.ts
 +++ b/src/engine/workout/workoutSchema.ts
 @@ -1,5 +1,6 @@
@@ -3758,7 +3882,7 @@ index 9057c46..108aba7 100644
  import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
  import { PROGRESSION_MODES, type GeneratedWorkout } from './types';
  
-@@ -205,6 +206,20 @@ export const GeneratedWorkoutSchema = z.looseObject({
+@@ -205,6 +206,22 @@ export const GeneratedWorkoutSchema = z.looseObject({
      version: z.number().int().min(1),
      lastTrigger: z.string().nullable(),
    }),
@@ -3772,6 +3896,8 @@ index 9057c46..108aba7 100644
 +        muscles: z.array(z.enum(MUSCLE_IDS)),
 +        sets: z.number().int().min(1).optional(),
 +        minRir: z.number().min(0).max(5).optional(),
++        // The ninth review: dropped alone when unreadable, the slot then ordered by its number.
++        after: z.number().int().min(0).optional().catch(undefined),
 +      }),
 +    )
 +    .optional()
@@ -3781,10 +3907,10 @@ index 9057c46..108aba7 100644
  /** The parsed shape is structurally the engine's GeneratedWorkout. */
 diff --git a/src/engine/workoutGenerator/catchUpLayout.test.ts b/src/engine/workoutGenerator/catchUpLayout.test.ts
 new file mode 100644
-index 0000000..a275bf7
+index 0000000..61f01a2
 --- /dev/null
 +++ b/src/engine/workoutGenerator/catchUpLayout.test.ts
-@@ -0,0 +1,650 @@
+@@ -0,0 +1,771 @@
 +import { describe, expect, it } from 'vitest';
 +import { requireExercise } from '../../catalog/exercises/catalog';
 +import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
@@ -4433,6 +4559,127 @@ index 0000000..a275bf7
 +    expect(plan(spec, home).compromises).toEqual([]);
 +    // Before: ["No elbow extension option fits Home and your limits."].
 +    expect(result.workout.compromises, lifts(result.workout)).toEqual([]);
++  });
++});
++
++describe('entries keep their names through a slot added, the ninth review of round M', () => {
++  // A slot added for a muscle a lift misses keeps its own number, after the layout's, and only the
++  // plan's order puts it right after that lift: the slots after it keep theirs, and so the names
++  // of their lifts, which the change list matches.
++  const profile = profileOf({ exercisePreferences: { preferred: ['Barbell Curl'], disliked: [] } });
++  const spec = behind('quads', 'glutes', 'biceps', 'triceps');
++  const options = { location: rack, swaps: frontForBack, profile };
++  const named = (workout: GeneratedWorkout) =>
++    JSON.stringify(
++      Object.fromEntries(allEntries(workout.blocks).map((entry) => [entry.id, entry.exerciseId])),
++    );
++
++  /** Laid out at the gym, the favourite barbell curl pinned; then the rack, the glutes' slot added. */
++  function atTheRack() {
++    const atGym = generateWorkout({
++      profile,
++      location: gym,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec, swaps: frontForBack },
++    });
++    const pinned = structuredClone(atGym);
++    const curl = allEntries(pinned.blocks).find((entry) => entry.exerciseId === 'barbell-curl');
++    expect(curl, lifts(atGym)).toBeDefined();
++    curl!.pinned = true;
++    const moved = succeeded(recalibrate(request({ type: 'location' }, pinned, spec, options)));
++    expect(moved.workout.catchUpSlots?.length, lifts(moved.workout)).toBe(
++      (atGym.catchUpSlots?.length ?? 0) + 1,
++    );
++    return { atGym: pinned, moved };
++  }
++
++  it('a change of length after it replaces no lift', () => {
++    const { moved } = atTheRack();
++    const shorter = succeeded(
++      recalibrate(
++        request({ type: 'duration', choice: 45 }, moved.workout, spec, {
++          ...options,
++          constraints: moved.constraints,
++        }),
++      ),
++    );
++    const placed = (workout: GeneratedWorkout) =>
++      allEntries(workout.blocks).map((entry) => `${entry.slot}:${entry.exerciseId}`);
++    expect(placed(shorter.workout)).toEqual(placed(moved.workout));
++    // Before: "Recalibrated to 45 min: 2 exercises replaced.", the Romanian deadlift and the skull
++    // crusher trading names.
++    expect(
++      shorter.changes.filter((change) => change.kind !== 'adjusted'),
++      `${shorter.summary.headline} ${named(moved.workout)} -> ${named(shorter.workout)}`,
++    ).toEqual([]);
++  });
++
++  it('the change of place tells the triceps’ lift as replaced, not left out and added', () => {
++    const { atGym, moved } = atTheRack();
++    const triceps = allEntries(atGym.blocks).find(
++      (entry) => entry.exerciseId === 'cable-triceps-pushdown',
++    );
++    expect(triceps, lifts(atGym)).toBeDefined();
++    // Before: "Left out Cable Triceps Pushdown." and "Added Skull Crusher.".
++    expect(
++      moved.changes.find((change) => change.entryId === triceps!.id),
++      moved.changes.map((change) => change.detail).join(' | '),
++    ).toMatchObject({ kind: 'replaced', previousExerciseId: 'cable-triceps-pushdown' });
++  });
++
++  it('a curl begun at the gym and stood in for at the rack reads as its stand-in', () => {
++    // No favourite: the gym's curl is the EZ-bar curl, which the rack cannot equip. One set done.
++    const atGym = generateWorkout({
++      profile: profileOf(),
++      location: gym,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec, swaps: frontForBack },
++    });
++    const curl = allEntries(atGym.blocks).find((entry) => entry.exerciseId === 'ez-bar-curl');
++    expect(curl, lifts(atGym)).toBeDefined();
++    const set = working(curl!)[0]!;
++    const completed: CompletedWork = {
++      ...emptyCompleted(),
++      startedAt: NOW,
++      elapsedSeconds: 300,
++      sets: [
++        {
++          entryId: curl!.id,
++          exerciseId: curl!.exerciseId,
++          setIndex: set.index,
++          kind: 'working',
++          reps: 8,
++          weight: set.targetWeight,
++          rir: 2,
++          completedAt: NOW,
++        },
++      ],
++    };
++    const moved = succeeded(
++      recalibrate(
++        request({ type: 'location' }, atGym, spec, {
++          ...options,
++          profile: profileOf(),
++          completed,
++        }),
++      ),
++    );
++    const stopped = allEntries(moved.workout.blocks).find((entry) => entry.id === curl!.id);
++    expect(stopped && isStopped(stopped), lifts(moved.workout)).toBe(true);
++    const stand = allEntries(moved.workout.blocks).find(
++      (entry) => !isStopped(entry) && entry.slot === stopped!.slot,
++    );
++    expect(stand?.exerciseId, lifts(moved.workout)).toBe('barbell-curl');
++    // Before: "Replaced Cable Triceps Pushdown with Barbell Curl.", the stand-in named as the
++    // pushdown was at the gym.
++    expect(
++      moved.changes.find((change) => change.entryId === stand!.id),
++      moved.changes.map((change) => change.detail).join(' | '),
++    ).toMatchObject({ kind: 'replaced', previousExerciseId: 'ez-bar-curl' });
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/catchUpRests.test.ts b/src/engine/workoutGenerator/catchUpRests.test.ts
@@ -5125,7 +5372,7 @@ index 0000000..48f2d9b
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
-index 0460d18..4773fa7 100644
+index 0460d18..9b213dc 100644
 --- a/src/engine/workoutGenerator/generate.ts
 +++ b/src/engine/workoutGenerator/generate.ts
 @@ -38,6 +38,7 @@ import {
@@ -5181,7 +5428,7 @@ index 0460d18..4773fa7 100644
    /** Remaining budget for everything in the result, replacing the duration target. */
    targetMinutesOverride?: number;
    generalWarmupMinutesOverride?: number;
-@@ -320,6 +339,10 @@ interface Slot {
+@@ -320,6 +339,12 @@ interface Slot {
    pattern: MovementPatternId;
    role: TrainingRole;
    muscles: MuscleId[];
@@ -5189,10 +5436,12 @@ index 0460d18..4773fa7 100644
 +  sets?: number;
 +  /** A catch-up's fewest reps in reserve for the slot. */
 +  minRir?: number;
++  /** A catch-up's slot added for a muscle a lift misses: the slot it comes right after. */
++  after?: number;
  }
  
  interface Template {
-@@ -436,6 +459,285 @@ export function splitFor(profile: UserProfile): readonly Template[] {
+@@ -436,6 +461,319 @@ export function splitFor(profile: UserProfile): readonly Template[] {
        : [PUSH_ARMS, PULL_ARMS, LOWER, UPPER];
  }
  
@@ -5374,8 +5623,9 @@ index 0460d18..4773fa7 100644
 +
 +/**
 + * The session a catch-up or a second workout is built from (Maintenance 31): each muscle's own slot
-+ * with its sets and reserve, one slot for muscles that share one, the strength slots first, where
-+ * a lift gains most (Nunes et al. 2021), then in the order the muscles lead.
++ * with its sets and reserve, one slot for muscles that share one. What was missed leads, then what is
++ * left of today's work (item 32: the ninth review of round M), each with its strength slots first,
++ * where a lift gains most (Nunes et al. 2021), then in the order the muscles lead.
 + */
 +function catchUpTemplate(
 +  profile: UserProfile,
@@ -5409,12 +5659,45 @@ index 0460d18..4773fa7 100644
 +    slots.push({ ...own, muscles: [item.muscle], sets: item.sets, minRir: item.minRir });
 +  }
 +  const strength = (candidate: Slot) => restCategory(candidate.role) === 'strength';
++  const missed = (candidate: Slot) =>
++    candidate.muscles.some(
++      (muscle) => spec.muscles.find((item) => item.muscle === muscle)?.why === 'behind',
++    );
++  const group = (isMissed: boolean) => slots.filter((candidate) => missed(candidate) === isMissed);
 +  return {
 +    ...CATCH_UP_TITLES[spec.kind],
 +    muscles: spec.muscles.map((item) => item.muscle),
-+    slots: [...slots.filter(strength), ...slots.filter((candidate) => !strength(candidate))],
++    slots: [true, false].flatMap((isMissed) => [
++      ...group(isMissed).filter(strength),
++      ...group(isMissed).filter((candidate) => !strength(candidate)),
++    ]),
 +    strengthPriority: false,
 +  };
++}
++
++/**
++ * A catch-up's slots in the plan's order (the ninth review of round M): the layout's, each slot
++ * added for a muscle a lift misses right after the slot it was added for. Each keeps its number,
++ * so every rebuild names its lifts alike.
++ */
++function slotOrder(slots: readonly Pick<Slot, 'after'>[]): Map<number, number> {
++  const order: number[] = [];
++  const place = (index: number): void => {
++    order.push(index);
++    slots.forEach((candidate, child) => {
++      if (candidate.after === index && !order.includes(child)) place(child);
++    });
++  };
++  slots.forEach((candidate, index) => {
++    const parent = candidate.after;
++    const top = parent === undefined || parent >= slots.length || parent === index;
++    if (top && !order.includes(index)) place(index);
++  });
++  // An added slot whose own is not there, or a loop: after the rest, in its number's order.
++  slots.forEach((_, index) => {
++    if (!order.includes(index)) order.push(index);
++  });
++  return new Map(order.map((index, position) => [index, position]));
 +}
 +
 +/** A catch-up slot's sets and reserve over the role's own: never more sets, never less reserve. */
@@ -5478,7 +5761,7 @@ index 0460d18..4773fa7 100644
  function chooseTemplate(
    profile: UserProfile,
    priorities: MusclePriority[],
-@@ -522,8 +824,26 @@ export interface Picker {
+@@ -522,8 +860,26 @@ export interface Picker {
     * push while its push runs. The rule never holds one back (the fourth and fifth re-checks).
     */
    chosen?: ReadonlySet<string>;
@@ -5505,7 +5788,7 @@ index 0460d18..4773fa7 100644
  /**
   * What the lifter chose beyond the favourites: each kept swap's own exercise, and the lift to push
   * on a day its push runs (a deload week pauses it, the fifth re-check).
-@@ -556,6 +876,8 @@ function pickForSlot(
+@@ -556,6 +912,8 @@ function pickForSlot(
      .filter((exercise) => !chosenIds.has(exercise.id))
      .filter((exercise) => (strengthRole ? exercise.compound : true))
      .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
@@ -5514,7 +5797,7 @@ index 0460d18..4773fa7 100644
      // A loaded version waits until its bodyweight move loads (item 31).
      .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
      .filter(
-@@ -590,10 +912,15 @@ function pickForSlot(
+@@ -590,10 +948,15 @@ function pickForSlot(
    };
  
    // A preferred exercise that fits the slot wins it outright; the score only orders the rest,
@@ -5532,7 +5815,7 @@ index 0460d18..4773fa7 100644
    );
    return candidates[0];
  }
-@@ -615,6 +942,7 @@ export function pickAccessoryFor(
+@@ -615,6 +978,7 @@ export function pickAccessoryFor(
      .filter((exercise) => exercise.primaryMuscles.includes(muscle))
      .filter((exercise) => !chosenIds.has(exercise.id))
      .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
@@ -5540,7 +5823,7 @@ index 0460d18..4773fa7 100644
      .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
      .filter(
        (exercise) =>
-@@ -719,6 +1047,8 @@ export function accessoryPicker(input: {
+@@ -719,6 +1083,8 @@ export function accessoryPicker(input: {
    focus?: MuscleId | null;
    /** The lifter's lasting swaps: an exercise swapped out is never offered. */
    swaps?: readonly LastingSwap[];
@@ -5549,7 +5832,7 @@ index 0460d18..4773fa7 100644
  }): Picker {
    const context = sessionConflictContext(input.profile, input.location, input.constraints ?? {});
    const preferredIds = preferredIdsOf(input.profile);
-@@ -734,6 +1064,7 @@ export function accessoryPicker(input: {
+@@ -734,6 +1100,7 @@ export function accessoryPicker(input: {
      swappedAway: swappedOut,
      // The lift to push is never the coach's offer: it adds nothing for the pushed lift's muscles.
      chosen: chosenBy(input.swaps ?? [], null),
@@ -5557,7 +5840,7 @@ index 0460d18..4773fa7 100644
    };
  }
  
-@@ -1168,15 +1499,57 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1168,15 +1535,57 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
    const loads = muscleLoads(history, profile, now);
    const focus = constraints.focusMuscle ?? null;
@@ -5619,7 +5902,7 @@ index 0460d18..4773fa7 100644
    const pushPlace = (slots: readonly Slot[]) =>
      push !== null && slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern);
    // The extra exposure goes on a day with no place for the lift (docs/research/push-lift.md). It
-@@ -1188,14 +1561,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1188,14 +1597,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    // exercise, begun, or stopped and stood in for: the rebuild keeps it and weighs no second one
    // (the review and the re-check of item 44).
    const extraKept = (constraints.keep ?? []).some((item) => item.entry.push === 'extra');
@@ -5635,7 +5918,7 @@ index 0460d18..4773fa7 100644
      !extraKept &&
      !pushPlace(template.slots) &&
      // Weighed only where the lift can go in today (the re-check of item 44).
-@@ -1236,8 +1608,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1236,8 +1644,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      }
    }
    const defaultMinutes = profile.schedule.typicalDurationMinutes;
@@ -5650,7 +5933,7 @@ index 0460d18..4773fa7 100644
    const hardCap = constraints.hardCap ?? false;
    const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
    const completedSets = constraints.completedSets ?? [];
-@@ -1256,6 +1633,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1256,6 +1669,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      // there like any other, and the swap puts it in for the move it stands for, saying so (the
      // fourth re-check). The lift to push stands while its push runs today.
      chosen: chosenBy([], push),
@@ -5658,7 +5941,7 @@ index 0460d18..4773fa7 100644
    };
    const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
  
-@@ -1390,6 +1768,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1390,6 +1804,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     * under way. A stand-in kept only because it came next, with nothing logged, gives way.
     * True when the slot was filled this way.
     */
@@ -5681,7 +5964,7 @@ index 0460d18..4773fa7 100644
    const reopened = (kept: WorkoutEntry[]): boolean => {
      // Only a stop the place made picks up again; one the lifter or a limit made stays.
      const fitting = kept.filter(
-@@ -1403,23 +1797,42 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1403,23 +1833,42 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      if (others.some((entry) => !isStopped(entry) && frozenIds.has(entry.id))) return false;
      const owed = Math.min(...kept.filter(isStopped).map(owedBy));
      if (!(owed > 0)) return false;
@@ -5734,7 +6017,7 @@ index 0460d18..4773fa7 100644
        restSeconds: target.restSeconds,
      });
      const from = Math.max(-1, ...target.sets.map((set) => set.index)) + 1;
-@@ -1434,16 +1847,27 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1434,16 +1883,27 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      return true;
    };
  
@@ -5765,7 +6048,7 @@ index 0460d18..4773fa7 100644
        if (chosenExercises.some((chosen) => chosen.id === next.id)) continue;
        if (isBlocked(checkExerciseFit(next, context))) continue;
        if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
-@@ -1494,6 +1918,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1494,6 +1954,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      push &&
      push.extraSets !== null &&
      constraints.pushProbe !== true &&
@@ -5773,13 +6056,11 @@ index 0460d18..4773fa7 100644
      !pushKept &&
      !extraKept &&
      !template.slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern) &&
-@@ -1529,9 +1954,50 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1529,7 +1990,47 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      });
      extraId = id;
    }
 -  template.slots.forEach((slotSpec, index) => {
--    const kept = keptBySlot.get(index);
--    const owed = owedBySlot.get(index);
 +  // A lift kept through a rebuild counts against its muscles as one picked here does, the sets it
 +  // has still to do and those done (the second review of round M): begun on the bench press, a
 +  // second workout gives the triceps no more than what is left of them.
@@ -5790,22 +6071,21 @@ index 0460d18..4773fa7 100644
 +    ).length;
 +    spend(entry.exerciseId, sets);
 +  }
-+  // The slots to fill: the template's, and in a catch-up, right after a slot, one for each of the
-+  // day's muscles its lift misses. A catch-up keeps them with the plan, so a rebuild around what it
++  // The slots to fill: the template's, and in a catch-up, after them, a slot for each of the day's
++  // muscles a slot's lift misses. A catch-up keeps them with the plan, so a rebuild around what it
 +  // keeps fills the same slots and every lift kept stays in its own (the seventh review of round M).
 +  const slots: Slot[] = template.slots.map((candidate) => ({
 +    ...candidate,
 +    muscles: [...candidate.muscles],
 +  }));
-+  // Each slot's number in the layout it was filled from, which its kept entries carry: none for a
-+  // slot added now.
-+  const layoutIndex: (number | undefined)[] = slots.map((_, index) => index);
++  const laidOut = slots.length;
 +  /**
-+   * The day's muscles a slot's lift misses that are still short, each a slot of its own, unless a
-+   * later slot carries it (the sixth and seventh reviews of round M: a front squat kept in the squat
-+   * the quads and the glutes share). A slot with no lift going on takes none (a stand-in skipped:
-+   * nothing brings its sets back), nor one whose lift the lifter swapped in today: the muscles it
-+   * misses wait, as the swap chose.
++   * The day's muscles a slot's lift misses that are still short, each a slot of its own, numbered
++   * after the layout's and placed in the plan right after the slot (the sixth to ninth reviews of
++   * round M: a front squat kept in the squat the quads and the glutes share), unless a later slot
++   * carries it. A slot with no lift going on takes none (a stand-in skipped: nothing brings its sets
++   * back), nor one whose lift the lifter swapped in today: the muscles it misses wait, as the swap
++   * chose.
 +   */
 +  const missedBy = (planned: Slot, index: number): Slot[] => {
 +    const live = entries.filter((entry) => entry.slot === index && !isStopped(entry));
@@ -5815,19 +6095,17 @@ index 0460d18..4773fa7 100644
 +      const left = budget.get(muscle);
 +      if (works.has(muscle) || !left || left.sets < CATCH_UP.MIN_SETS) return [];
 +      if (slots.slice(index + 1).some((later) => later.muscles.includes(muscle))) return [];
-+      return [{ ...planned, muscles: [muscle], sets: left.sets, minRir: left.minRir }];
++      return [
++        { ...planned, muscles: [muscle], sets: left.sets, minRir: left.minRir, after: index },
++      ];
 +    });
 +  };
-+  const fill = (planned: Slot, index: number, from: number | undefined): void => {
++  const fill = (planned: Slot, index: number): void => {
 +    let slotSpec = planned;
-+    const kept = from === undefined ? undefined : keptBySlot.get(from);
-+    const owed = from === undefined ? undefined : owedBySlot.get(from);
-+    // A slot added before it moves it on: its kept entries take its number now.
-+    for (const entry of kept ?? []) entry.slot = index;
+     const kept = keptBySlot.get(index);
+     const owed = owedBySlot.get(index);
      if (kept) {
-       if (reopened(kept)) return;
-       entries.push(...kept);
-@@ -1547,18 +2013,33 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1547,18 +2048,33 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      const ownPicks = chosenExercises.map((chosen) =>
        mine.has(chosen.id) ? chosen : (ownOf.get(chosen.id) ?? chosen),
      );
@@ -5867,7 +6145,7 @@ index 0460d18..4773fa7 100644
        // With its swap-in unable to join and nothing else fitting, the plan's own pick stays:
        // a kept swap applies where it fits, and never empties a slot.
        pick =
-@@ -1570,16 +2051,67 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1570,16 +2086,67 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        // Already in, or clashing with a kept swap's exercise: the next best that fits the plan.
        pick = pickForSlot(slotSpec, chosenExercises, slotPicker);
      }
@@ -5939,7 +6217,7 @@ index 0460d18..4773fa7 100644
      // The lift to push keeps to the push's sets for the week and never goes to failure.
      const basePrescription =
        pushPick && push
-@@ -1596,9 +2128,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1596,9 +2163,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
              rirFloor(pick),
            )
          : adjustPrescription(basePrescription, slotSpec.role, adjust, rirFloor(pick));
@@ -5954,7 +6232,7 @@ index 0460d18..4773fa7 100644
      // Asked to make it harder, the time fit may take back an added set, never one the plan had.
      if ((adjust?.sets ?? 0) > 0) {
        plannedSets.set(
-@@ -1607,7 +2142,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1607,7 +2177,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        );
      }
      const built = targetedFor(pick, slotSpec.role, prescription);
@@ -5969,7 +6247,7 @@ index 0460d18..4773fa7 100644
      entries.push({
        id,
        exerciseId: pick.id,
-@@ -1624,7 +2165,17 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1624,7 +2200,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        ...(natural && pick !== natural ? { standsFor: natural.id } : {}),
        ...(pushPick ? { push: 'natural' as const } : {}),
      });
@@ -5977,18 +6255,20 @@ index 0460d18..4773fa7 100644
 +  };
 +  for (let index = 0; index < slots.length; index += 1) {
 +    const planned = slots[index] as Slot;
-+    const from = layoutIndex[index];
-+    fill(planned, index, from);
-+    // The muscles a lift misses come right after it, ahead of the slots after it: a strength slot's
-+    // before the curl's (the eighth review of round M).
-+    const added = catchUp && from !== undefined ? missedBy(planned, index) : [];
-+    slots.splice(index + 1, 0, ...added);
-+    layoutIndex.splice(index + 1, 0, ...added.map(() => undefined));
++    fill(planned, index);
++    if (catchUp && index < laidOut) slots.push(...missedBy(planned, index));
++  }
++  // The muscles a lift misses come right after it, ahead of the slots after it: a strength slot's
++  // before the curl's (the eighth review of round M).
++  if (catchUp) {
++    const order = slotOrder(slots);
++    const rank = (entry: WorkoutEntry) => order.get(entry.slot ?? -1) ?? slots.length;
++    entries.sort((a, b) => rank(a) - rank(b));
 +  }
    entries.push(...keptUnslotted);
  
    // The lift to push leads (Maintenance 27, item 44), kept from before a rebuild too. The day's
-@@ -2098,7 +2649,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2098,7 +2686,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
  
    // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
    // to failure, so a style that takes nothing to failure plans none.
@@ -5998,7 +6278,19 @@ index 0460d18..4773fa7 100644
      const deficitMuscles = new Set(
        priorities
          .filter(
-@@ -2202,13 +2754,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2168,8 +2757,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+   }
+ 
+   // 5. Week-aware order: after the anchor, accessories for muscles behind their weekly target lead.
++  // A catch-up or a second workout is laid out in its own order, what it is for in it (the ninth
++  // review of round M: the order moved a catch-up's squat behind its calf raise).
+   const behindNames: string[] = [];
+-  if (keep.length === 0 && blocks.length > 2) {
++  if (keep.length === 0 && blocks.length > 2 && !offPlan) {
+     const isBehind = (block: WorkoutBlock) =>
+       block.kind === 'straight' &&
+       (block.entries[0] as WorkoutEntry).chosenFor.some(
+@@ -2202,13 +2793,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const anchorExercise = anchor ? exerciseOf(anchor.exerciseId) : undefined;
    const topPriorities = priorities.slice(0, 3);
    const reasons: string[] = [
@@ -6024,7 +6316,7 @@ index 0460d18..4773fa7 100644
    const leader = leaderEntry ? exerciseOf(leaderEntry.exerciseId) : undefined;
    if (push && pushEntry) {
      reasons.push(
-@@ -2306,18 +2868,30 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2306,18 +2907,30 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    );
  
    const count = allEntries(blocks).length;
@@ -6057,7 +6349,7 @@ index 0460d18..4773fa7 100644
      goal: goalLabel(profile.goals.primary),
      generatedAt: now,
      locationId: location?.id ?? null,
-@@ -2347,6 +2921,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2347,6 +2960,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
            : 'low',
      compromises: [...new Set(compromises)],
      recalibration: { version: 1, lastTrigger: null },
@@ -8129,10 +8421,10 @@ index c5e03cb..d2f11e5 100644
  
 diff --git a/tools/reverts/mutate-m31.py b/tools/reverts/mutate-m31.py
 new file mode 100644
-index 0000000..a86a67d
+index 0000000..d13c662
 --- /dev/null
 +++ b/tools/reverts/mutate-m31.py
-@@ -0,0 +1,589 @@
+@@ -0,0 +1,600 @@
 +"""Maintenance 31 mutation checks: revert each round M rule alone, run its tests, expect a failure,
 +restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -8284,8 +8576,8 @@ index 0000000..a86a67d
 +    ("G4 muscles sharing a slot share one lift", GENERATE,
 +     "    if (shared) {", "    if (shared && false) {", [T_SESSION], None),
 +    ("G5 the strength lifts first", GENERATE,
-+     "    slots: [...slots.filter(strength), ...slots.filter((candidate) => !strength(candidate))],",
-+     "    slots,", [T_SESSION], None),
++     "      ...group(isMissed).filter(strength),\n      ...group(isMissed).filter((candidate) => !strength(candidate)),",
++     "      ...group(isMissed),", [T_SESSION], None),
 +    ("G6 never more sets than the catch-up gives", GENERATE,
 +     "    sets: Math.min(prescription.sets, slotSpec.sets ?? prescription.sets),",
 +     "    sets: prescription.sets,", [T_SESSION], None),
@@ -8625,8 +8917,8 @@ index 0000000..a86a67d
 +     "    (false && catchUp && constraints.catchUpSlots && constraints.catchUpSlots.length > 0",
 +     [T_LAYOUT, T_OFF], None),
 +    ("P4 a muscle a slot's lift misses takes a slot of its own", GENERATE,
-+     "    const added = catchUp && from !== undefined ? missedBy(planned, index) : [];",
-+     "    const added: Slot[] = [];", [T_LAYOUT, T_OFF], None),
++     "    if (catchUp && index < laidOut) slots.push(...missedBy(planned, index));\n", "",
++     [T_LAYOUT, T_OFF], None),
 +    ("P5 ... one, never one more at each rebuild", GENERATE,
 +     "      if (slots.slice(index + 1).some((later) => later.muscles.includes(muscle))) return [];\n",
 +     "", [T_LAYOUT], None),
@@ -8643,11 +8935,14 @@ index 0000000..a86a67d
 +     "              ...(own ? { sets: own.sets, minRir: own.minRir } : {}),\n", "",
 +     [T_STORE], None),
 +    ("K2 a slot for a muscle a lift misses comes right after that lift's", GENERATE,
-+     "    slots.splice(index + 1, 0, ...added);\n    layoutIndex.splice(index + 1, 0, ...added.map(() => undefined));",
-+     "    slots.push(...added);\n    layoutIndex.push(...added.map(() => undefined));",
++     "    entries.sort((a, b) => rank(a) - rank(b));\n", "", [T_LAYOUT], None),
++    ("K3 ... keeping its own number, after the layout's: every lift keeps its name", GENERATE,
++     "    if (catchUp && index < laidOut) slots.push(...missedBy(planned, index));",
++     "    if (catchUp && index < laidOut) slots.splice(index + 1, 0, ...missedBy(planned, index));",
 +     [T_LAYOUT], None),
-+    ("K3 ... and a lift kept after it takes its slot's number on", GENERATE,
-+     "    for (const entry of kept ?? []) entry.slot = index;\n", "", [T_LAYOUT], None),
++    ("K7 ... and the plan's order puts it after the slot it was added for", GENERATE,
++     "      if (candidate.after === index && !order.includes(child)) place(child);\n", "",
++     [T_LAYOUT], None),
 +    ("K4 a catch-up's slot with nothing left to give lists no compromise", GENERATE,
 +     "      if (!restsHere && short?.length !== 0) {", "      if (!restsHere) {",
 +     [T_LAYOUT], None),
@@ -8655,6 +8950,14 @@ index 0000000..a86a67d
 +     "(beforeMain ? firstToDo : anchor)", "anchor", [T_LAYOUT], None),
 +    ("K6 ... only one before it: a lift finished keeps its place in the summary", GENERATE,
 +     "    inOrder.indexOf(firstToDo) < inOrder.indexOf(anchor);", "    true;", [T_EASE], None),
++
++    # The ninth review of round M.
++    ("J1 a second workout leads with what was missed, then what is left of today's", GENERATE,
++     "      (muscle) => spec.muscles.find((item) => item.muscle === muscle)?.why === 'behind',",
++     "      () => true,", [T_STORE], None),
++    ("J2 no week-aware order off the plan: a catch-up keeps its strength lifts first", GENERATE,
++     "  if (keep.length === 0 && blocks.length > 2 && !offPlan) {",
++     "  if (keep.length === 0 && blocks.length > 2) {", [T_STORE], None),
 +]
 +
 +
@@ -8745,10 +9048,10 @@ index 0000000..2ae6517
 +print("written")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
 new file mode 100644
-index 0000000..0b8a53e
+index 0000000..b2038e6
 --- /dev/null
 +++ b/tools/reverts/table_m31.txt
-@@ -0,0 +1,473 @@
+@@ -0,0 +1,484 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The week model.
@@ -8850,8 +9153,8 @@ index 0000000..0b8a53e
 +    ("G4 muscles sharing a slot share one lift", GENERATE,
 +     "    if (shared) {", "    if (shared && false) {", [T_SESSION], None),
 +    ("G5 the strength lifts first", GENERATE,
-+     "    slots: [...slots.filter(strength), ...slots.filter((candidate) => !strength(candidate))],",
-+     "    slots,", [T_SESSION], None),
++     "      ...group(isMissed).filter(strength),\n      ...group(isMissed).filter((candidate) => !strength(candidate)),",
++     "      ...group(isMissed),", [T_SESSION], None),
 +    ("G6 never more sets than the catch-up gives", GENERATE,
 +     "    sets: Math.min(prescription.sets, slotSpec.sets ?? prescription.sets),",
 +     "    sets: prescription.sets,", [T_SESSION], None),
@@ -9191,8 +9494,8 @@ index 0000000..0b8a53e
 +     "    (false && catchUp && constraints.catchUpSlots && constraints.catchUpSlots.length > 0",
 +     [T_LAYOUT, T_OFF], None),
 +    ("P4 a muscle a slot's lift misses takes a slot of its own", GENERATE,
-+     "    const added = catchUp && from !== undefined ? missedBy(planned, index) : [];",
-+     "    const added: Slot[] = [];", [T_LAYOUT, T_OFF], None),
++     "    if (catchUp && index < laidOut) slots.push(...missedBy(planned, index));\n", "",
++     [T_LAYOUT, T_OFF], None),
 +    ("P5 ... one, never one more at each rebuild", GENERATE,
 +     "      if (slots.slice(index + 1).some((later) => later.muscles.includes(muscle))) return [];\n",
 +     "", [T_LAYOUT], None),
@@ -9209,11 +9512,14 @@ index 0000000..0b8a53e
 +     "              ...(own ? { sets: own.sets, minRir: own.minRir } : {}),\n", "",
 +     [T_STORE], None),
 +    ("K2 a slot for a muscle a lift misses comes right after that lift's", GENERATE,
-+     "    slots.splice(index + 1, 0, ...added);\n    layoutIndex.splice(index + 1, 0, ...added.map(() => undefined));",
-+     "    slots.push(...added);\n    layoutIndex.push(...added.map(() => undefined));",
++     "    entries.sort((a, b) => rank(a) - rank(b));\n", "", [T_LAYOUT], None),
++    ("K3 ... keeping its own number, after the layout's: every lift keeps its name", GENERATE,
++     "    if (catchUp && index < laidOut) slots.push(...missedBy(planned, index));",
++     "    if (catchUp && index < laidOut) slots.splice(index + 1, 0, ...missedBy(planned, index));",
 +     [T_LAYOUT], None),
-+    ("K3 ... and a lift kept after it takes its slot's number on", GENERATE,
-+     "    for (const entry of kept ?? []) entry.slot = index;\n", "", [T_LAYOUT], None),
++    ("K7 ... and the plan's order puts it after the slot it was added for", GENERATE,
++     "      if (candidate.after === index && !order.includes(child)) place(child);\n", "",
++     [T_LAYOUT], None),
 +    ("K4 a catch-up's slot with nothing left to give lists no compromise", GENERATE,
 +     "      if (!restsHere && short?.length !== 0) {", "      if (!restsHere) {",
 +     [T_LAYOUT], None),
@@ -9221,4 +9527,12 @@ index 0000000..0b8a53e
 +     "(beforeMain ? firstToDo : anchor)", "anchor", [T_LAYOUT], None),
 +    ("K6 ... only one before it: a lift finished keeps its place in the summary", GENERATE,
 +     "    inOrder.indexOf(firstToDo) < inOrder.indexOf(anchor);", "    true;", [T_EASE], None),
++
++    # The ninth review of round M.
++    ("J1 a second workout leads with what was missed, then what is left of today's", GENERATE,
++     "      (muscle) => spec.muscles.find((item) => item.muscle === muscle)?.why === 'behind',",
++     "      () => true,", [T_STORE], None),
++    ("J2 no week-aware order off the plan: a catch-up keeps its strength lifts first", GENERATE,
++     "  if (keep.length === 0 && blocks.length > 2 && !offPlan) {",
++     "  if (keep.length === 0 && blocks.length > 2) {", [T_STORE], None),
 +]

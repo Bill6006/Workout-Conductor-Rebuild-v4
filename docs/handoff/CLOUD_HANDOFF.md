@@ -14,17 +14,21 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Eight review passes found
-  twenty, twelve, seven, three, two, three, four and three issues, each shown by a failing test and
-  fixed (one LOW kept as a known limit, with the reason). After the seventh, the catch-up's layout
-  is kept with the plan (`GeneratedWorkout.catchUpSlots`, optional), in place of the fifth and sixth
-  passes' relay; the eighth found three LOW in it (the kept layout's dose, a compromise listed for a
-  slot not needed, the lift named as leading), now fixed. A ninth pass is checking those fixes. The
-  M31 table has 160 entries, every anchor found; the entries changed since its last full run are
-  caught. The full unit suite passed before the eighth pass's last fix, which mended its one
-  failure. The report is written up to the eighth pass. Next: the ninth pass, the full M31 run and
-  the cross-round tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite again,
-  verify, ship.
+  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Nine review passes found
+  twenty, twelve, seven, three, two, three, four, three and three issues, each shown by a failing
+  test and fixed (one LOW kept as a known limit, with the reason). The ninth's: a slot added for a
+  muscle a lift misses keeps its own number (its place in the plan from `after`), a catch-up keeps
+  its own order, and a second workout leads with what was missed. A tenth pass is checking them.
+  The M31 table has 163 entries, every anchor found, the entries changed since its last full run
+  caught; the full unit suite passed (2714, 5 skipped by design). The report is written up to the
+  ninth pass. Next: the tenth pass, the full M31 run and the cross-round tables (M30, M29, M28
+  `--utc`, M27) on the final code, the browser suite again, verify, ship.
+- **Round N** (item 11, a top set plus back-offs) is built in its own worktree on Round M's work in
+  progress, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round M's
+  diff applied to `2595631`). Its M32 table has 79 entries, all caught; its report is drafted
+  (`docs/reports/maintenance-32.md`). Its first review pass is running. Rebase it onto `main` once
+  Round M ships, then its review passes, verify, ship. The lift to push keeps item 44's straight
+  sets by default: a question for the owner's final review.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 
