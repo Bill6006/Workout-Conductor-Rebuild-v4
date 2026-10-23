@@ -26,15 +26,17 @@ first; it holds the rules. This file holds the state and the steps._
   tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite again, verify, ship.
 - **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest in its own
   worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round M's diff
-  applied to `2595631`). Two review passes found twelve and ten issues, each shown by a failing test
-  and fixed, and the revert runs' new tests two more. The second's: a straight day after a session
-  on the structure takes the back-offs' load; a top set's log taken back puts the back-offs back
-  where the plan has them; the completion's "Next time" reads the next top set. Its M32 table has
-  127 entries, all caught; the full unit suite passed (2820, 5 skipped) before the rebase, and every
-  Round N and catch-up test after it, with every anchor of both tables found. Its report is written
-  up to the second pass. A third pass is checking it. Then its review passes until clean, verify,
-  ship, once Round M is live. The lift to push keeps item 44's straight sets by default: a question
-  for the owner's final review.
+  applied to `2595631`). Three review passes found twelve, ten and eleven issues, each shown by a
+  failing test and fixed, and the revert runs' new tests two more. The third's: a lift that is the
+  main lift one day and a secondary one another, and a top set the place cannot load as asked, run
+  straight at the back-offs' load, from the session the target reads; a skip is no top set lifted; a
+  back-off's log taken back follows its top set; the back-offs are never over the top set nor under
+  the bar; the lift to push's next target; a pick-up's lines; the feedback's words; the set list's
+  tiers. Its M32 table has 142 entries, every anchor found, the third pass's entries caught; the
+  full unit suite passed (2854, 5 skipped) on the third pass's fixes. Its report is written up to
+  the third pass. A fourth pass is checking it. Then its review passes until clean, verify, ship,
+  once Round M is live. The lift to push keeps item 44's straight sets by default: a question for
+  the owner's final review.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 
