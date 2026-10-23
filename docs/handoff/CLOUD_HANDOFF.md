@@ -15,9 +15,12 @@ first; it holds the rules. This file holds the state and the steps._
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
   `docs/handoff/round-m-wip/round-m.diff`. The second review pass found twelve issues (two HIGH),
-  each with a failing test; all are fixed, their tests moved into the proper files, and the M31
-  table has an entry for each (120 entries, every anchor found). Next: the M31 revert run
-  (`--utc`), a third review pass on these fixes, the browser suite, the report, verify, ship.
+  the third seven (one HIGH), each with a failing test; all are fixed, their tests moved into the
+  proper files, and the M31 table has an entry for each (139 entries, every anchor found). Round L's
+  table (M30) catches all 121 of its entries on Round M's code before the third pass's fixes. The
+  report's review section is written up to the third pass. Next: the full M31 run (`--utc`), a
+  fourth review pass on the third pass's fixes, the cross-round tables (M30, M29, M28 `--utc`, M27)
+  on the final code, the browser suite, LIMITS, REVERTS and VERIFY in the report, verify, ship.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 

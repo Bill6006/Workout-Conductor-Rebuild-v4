@@ -1,9 +1,9 @@
 diff --git a/docs/reports/maintenance-31.md b/docs/reports/maintenance-31.md
 new file mode 100644
-index 0000000..a17b678
+index 0000000..0f4614b
 --- /dev/null
 +++ b/docs/reports/maintenance-31.md
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,235 @@
 +# Maintenance 31: round M, the week as it stands
 +
 +Built on 2026-10-17 on the owner's word to build the whole agreed queue, round by round, to live,
@@ -50,10 +50,20 @@ index 0000000..a17b678
 +  (product judgement: the owner asked for a shorter session, and the evidence sets no length). A
 +  length the lifter picks stands.
 +- The catch-up is built only from the muscles behind this week, each with its own main lift, the
-+  strength lifts first, the largest share behind first. Muscles that share a lift share it (the
-+  squat for the quads and the glutes), never two lifts for one slot, at the fewer sets either is
-+  short. Every lift that works a muscle directly counts against its sets, so no muscle gets more
-+  than it lacks, through another muscle's lift included.
++  strength lifts first, the largest share behind first. Muscles share a lift where one lift there
++  works them both (the squat for the quads and the glutes, a hammer curl for the biceps and the
++  forearms), at the fewer sets either is short; where none does, each takes a lift of its own (a
++  wrist curl and a curl). Every lift works a muscle it went in for directly: a favourite, or a
++  lasting swap, that does not waits for another day (a front squat works the glutes only at half,
++  so a glutes catch-up takes the back squat). Every lift that works a muscle directly counts against
++  its sets, so no muscle gets more than it lacks, through another muscle's lift included, a lift
++  begun before a rebuild, or one picked up again back at the gym.
++- No lift takes fewer than two working sets (at least two sets an exercise, ACSM 2026): a muscle
++  with one set left waits for the week's own sessions, and no other lift takes it either.
++- A muscle whose own lift is out takes the next one that carries it: once the squat has given the
++  glutes their sets, every hinge works the glutes, so the hamstrings take the leg curl. Where every
++  lift of the split for a muscle works one that rests, a lift that leads with it comes in: the hip
++  thrust or the bridge for the glutes.
 +- Each muscle gets 3 working sets, or 2 for a beginner (the settled question 1). Never more than
 +  the week is short, nor than the muscle's sets in one of the plan's own sessions, and never fewer
 +  than 2: a muscle short by less than 2 sets is left for the week's own sessions.
@@ -77,7 +87,8 @@ index 0000000..a17b678
 +  Today still says "Not one of your training days.", with nothing to choose.
 +- A schedule, an experience or a place saved reads the day's offer again for a plan not yet
 +  started: tick today and the catch-up gives way to the usual plan, untick it and the catch-up
-+  comes. A workout already begun keeps its offer.
++  comes, built whole, as the full session taken is: a swap or a pin made on the one plan stays with
++  it. A workout already begun keeps its offer.
 +- A catch-up leaves the split's rotation as it was: the next planned day plans as if the catch-up
 +  had held none of the split's sessions.
 +- With nothing behind, the line says so ("Not one of your training days, and nothing is behind this
@@ -99,7 +110,10 @@ index 0000000..a17b678
 +  48 hours, dosed as a catch-up's.
 +- A muscle trained today takes at most what is left of the dose today's own session gave it, three
 +  or more reps short of failure, and only while the week is still short (the settled question 4).
-+  In the usual case, a full first session, nothing is left, and it sits out. A muscle trained in the
++  The dose is the day's first workout as it was planned, each set counted as the week counts the
++  sets done, a lift that works the muscle only secondarily at half: a workout done in full leaves
++  nothing, one cut short what it did not do, and a deload day or a shorter session no more than it
++  planned. In the usual case, a full first session, nothing is left, and it sits out. A muscle trained in the
 +  48 hours before today as well takes nothing more (the 48-hour rule). A beginner's muscles trained
 +  today always sit out (the settled question 5).
 +- When nothing missed could go in, only what is left of today's, the line says so: "You trained
@@ -126,12 +140,88 @@ index 0000000..a17b678
 +  readiness check and the swaps are. Two new fields, each optional and dropped alone when an older
 +  or damaged copy cannot read it, never the session: the catch-up's muscles, and whether the full
 +  session was taken. Their kinds and reasons are the engine's own lists, not a copy.
-+- A change to the plan (a swap, a length, a rebuild) keeps the day's offer and the lifter's choice.
-+  A plan built again from scratch reads the day's offer afresh.
++- A change to the plan (a swap, a length, a rebuild) keeps the day's offer and the lifter's choice,
++  and holds every lift to it: a check-in, "Make it harder" or "easier", whatever comes in for a lift
++  ("Hurts", "Uncomfortable", a swap), the place's weights or a plate missing today, a max, a change
++  of place, busy equipment, and a lift picked up again back at the gym keep a catch-up's sets and
++  reserve. "Make it harder" takes a lift no further than a plan made harder would: a set more only
++  where its muscles have room for one beside the plan's other lifts. The catch-up's shorter
++  length holds wherever the length is read: a check-in short on time, an end time, a rebuild under
++  way. A plan built again from scratch reads the day's offer afresh, and the full session or the
++  catch-up taken again is another plan, built whole. The full session taken holds for its own day
++  only.
 +
 +## Review
 +
-+REVIEW
++The round was reviewed adversarially, each finding shown first by a failing test, fixed, and its
++revert added to the table.
++
++**The first pass** (on the build) found twenty: three HIGH, nine MEDIUM, eight LOW.
++
++- HIGH: a muscle trained today took more than what was left of it through a lift it shared with a
++  muscle behind; a second workout with nothing behind gave a muscle sitting out a lift (the lift to
++  push's extra session); the lift for what was left of a muscle could take a drop set to failure.
++- MEDIUM: a kept swap, or the swap "Hurts" makes, could bring in a lift for a muscle that rests; a
++  catch-up could take a drop set to failure; a catch-up was no shorter than the full session; a
++  catch-up moved the split's rotation on, and could take the lift to push from its planned day; a
++  saved schedule or experience kept the day's old offer; a second workout in a deload week was not
++  offered, so nothing went easy on what was done; the coach offered a set or a drop set on the lift
++  for what was left.
++- LOW: a muscle could get more sets than its week is short through lifts other muscles share; a
++  muscle worked only as a secondary one counted as trained today; the 48-hour rule did not hold for
++  a muscle trained yesterday and touched this morning; a workout begun with nothing logged counted
++  as the day's first; the full session taken was lost through a workout begun and discarded; what
++  was left of a full first session was read from the split's largest session; a new lifter on a day
++  not ticked was told nothing; Today's line said "leads with what you missed" when only what was
++  left of today's work went in.
++- Decided with them (product judgement, stated above): the catch-up's length; nothing that pushes
++  for more off the plan; a day not ticked says so to everyone.
++
++**The second pass** (on those fixes) found twelve: two HIGH, three MEDIUM-HIGH, three MEDIUM, two
++LOW-MEDIUM, two LOW.
++
++- HIGH: a check-in, "easier" or "harder" re-planned the lift in front from its role, off the
++  catch-up (a low check-in took what was left of the triceps to 2 in reserve; "harder" made it four
++  sets with none in reserve); in a lower-body catch-up the hamstrings had no lift once the squat had
++  given the glutes their sets (the first pass's budget).
++- MEDIUM-HIGH: "Uncomfortable", "Hurts" and a swap dropped the catch-up's reserve; a rebuild under
++  way counted no lift begun against its muscles; switching between the catch-up and the full
++  session after a swap put the swapped lift in the other plan's place.
++- MEDIUM: the catch-up's shorter length was lost where the Default was read (a check-in short on
++  time made it longer, an end time, a rebuild under way); after a catch-up done in full, the second
++  workout gave its muscles another dose; in a deload week, the sets the deload took off read as
++  what was left.
++- LOW-MEDIUM: the day's first workout was read without the set-done rule; a save that changed one
++  technique with the schedule kept the old offer.
++- LOW: the catch-up looked for a muscle's lift only in the split (a hip thrust fits the glutes); a
++  workout discarded the next day carried the full session into it.
++
++**The third pass** (on those fixes) found seven: one HIGH, three MEDIUM, two LOW-MEDIUM, one LOW.
++
++- HIGH: a lift planned again for the place's weights (a plate missing today), a max, a change of
++  place or busy equipment took the lift's own reserve, off the catch-up's (what was left of the
++  triceps went from 3 in reserve to 1).
++- MEDIUM: a save that changed the day's offer (today ticked or unticked, a technique with it) kept a
++  swapped or pinned lift in the slot of the same number in the other plan (a pinned row took the
++  catch-up's bench press slot); a catch-up's slot took a lift that did not work its muscle (an EZ-bar
++  curl for the forearms, a favourite front squat for the glutes); a lift stopped at home and picked
++  up again at the gym took its own reserve, and its sets counted against no muscle (five triceps
++  sets for three).
++- LOW-MEDIUM: "Make it harder" held the lift in front to its muscles' sets in the catch-up, not to
++  what the plan's other lifts left them, and the rebuild then dropped the bench press; a full first
++  session left a muscle a "remainder" when its lift worked it only secondarily (the glutes after a
++  front squat).
++- LOW: a lift could take a single working set, the one set another lift left its muscle.
++- Found in fixing them: the bench press was no longer named for what was left of the triceps once a
++  slot was the catch-up's own muscles alone ("Why this workout" lost the line); two muscles with no
++  lift for both still shared a slot when a favourite lift was avoided; and the revert table showed
++  three rules written twice (now once).
++- Not taken: the review asked that a glutes catch-up give the quads nothing, which no squat can (the
++  glutes ride with the squat, stated above). Decided with them (product judgement): "Make it
++  harder" adds a set to a catch-up's lift where its muscles have room, as a fresh plan made harder
++  does, rather than none.
++
++FOURTH_PASS
 +
 +## Known limits
 +
@@ -314,7 +404,7 @@ index 7c77cb3..32ac712 100644
  
  for (const { zone, offset } of ZONES) {
 diff --git a/src/core/state/appStore.ts b/src/core/state/appStore.ts
-index e76e5ca..60edb14 100644
+index e76e5ca..ece2242 100644
 --- a/src/core/state/appStore.ts
 +++ b/src/core/state/appStore.ts
 @@ -17,7 +17,7 @@ import { isHold } from '../../catalog/exercises/exerciseSchema';
@@ -326,7 +416,7 @@ index e76e5ca..60edb14 100644
  import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
  import { readStart, startKey, type StartReading } from '../../engine/recalibration/badStart';
  import { dropSetWeight, pendingDropSet, withDropWeight } from '../../engine/recalibration/dropSet';
-@@ -129,7 +129,19 @@ import {
+@@ -129,7 +129,20 @@ import {
    type WorkoutEntry,
  } from '../../engine/workout/types';
  import { prescribeFor } from '../../engine/progression/roles';
@@ -335,6 +425,7 @@ index e76e5ca..60edb14 100644
 +  generateWorkout,
 +  sessionDose,
 +  firstSessionDose,
++  sameOffer,
 +  withSwapLines,
 +} from '../../engine/workoutGenerator/generate';
 +import {
@@ -347,7 +438,7 @@ index e76e5ca..60edb14 100644
  import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
  import { normalizeName } from '../backup/legacyImport';
  import {
-@@ -1220,9 +1232,10 @@ export class AppStore {
+@@ -1220,9 +1233,10 @@ export class AppStore {
     * Reuses the persisted session when it was generated from today's inputs;
     * otherwise (first run, a new day, an edited profile, new history) generates
     * a fresh Default session silently. A started or completed workout is never
@@ -360,7 +451,7 @@ index e76e5ca..60edb14 100644
      const key = this.baseKey();
      const { profile } = this.state;
      if (!key || !profile) {
-@@ -1251,18 +1264,110 @@ export class AppStore {
+@@ -1251,18 +1265,121 @@ export class AppStore {
          ? { startsAt: this.state.deloadWeek.startsAt, endsAt: this.state.deloadWeek.endsAt }
          : null;
      const focus = this.state.coachFocus?.muscle ?? null;
@@ -438,7 +529,7 @@ index e76e5ca..60edb14 100644
 +      profile,
 +      kind,
 +      (muscle) => sessionDose(profile, muscle),
-+      (muscle) => firstSessionDose(profile, first, muscle, deload),
++      (muscle) => firstSessionDose(profile, first, muscle),
 +    );
 +  }
 +
@@ -463,6 +554,17 @@ index e76e5ca..60edb14 100644
 +    return next;
 +  }
 +
++  /** The day's offer read again for a save, and whether it changed (the third review of round M). */
++  private offerOverrides(
++    session: WorkoutSession,
++    profile: UserProfile,
++  ): Pick<RecalibrationRequest, 'constraints' | 'offerChanged'> {
++    const constraints = this.offerReadAgain(session, profile);
++    return sameOffer(constraints, session.constraints)
++      ? { constraints }
++      : { constraints, offerChanged: true };
++  }
++
 +  /**
 +   * The full session on a day that offers a catch-up or a second workout, or the day's own session
 +   * again (Maintenance 31).
@@ -473,20 +575,20 @@ index e76e5ca..60edb14 100644
    }
  
    /** Puts the kept-workout notice away; the kept copy itself stays on the device. */
-@@ -1415,6 +1520,12 @@ export class AppStore {
+@@ -1415,6 +1532,12 @@ export class AppStore {
      // The history read before the overlay's pause, as the session and profile are.
      const request = this.calibrationRequest(trigger, session, profile, reason ?? described.title, {
        history,
 +      // A saved schedule, experience or place can change what the day offers (the review of round
 +      // M): today's plan not yet started reads it again, as a fresh plan would, with a technique
-+      // saved in the same save too (the second review).
++      // saved in the same save too (the second review), and a new offer is built whole (the third).
 +      ...(trigger.type === 'profile' || trigger.type === 'location' || trigger.type === 'technique'
-+        ? { constraints: this.offerReadAgain(session, profile) }
++        ? this.offerOverrides(session, profile)
 +        : {}),
      });
      let result: RecalibrationResult;
      try {
-@@ -1638,7 +1749,12 @@ export class AppStore {
+@@ -1638,7 +1761,12 @@ export class AppStore {
      this.leaveEarlierDay();
      const { session, profile } = this.state;
      if (!session || !profile) return Promise.resolve(null);
@@ -500,7 +602,7 @@ index e76e5ca..60edb14 100644
      const time = on ? new Date(this.nowMs() + minutes * 60_000).toISOString() : null;
      return this.recalibrate({ type: 'end-by', time });
    }
-@@ -2481,7 +2597,8 @@ export class AppStore {
+@@ -2481,7 +2609,8 @@ export class AppStore {
      if (!session || session.status === 'preview' || session.status === 'completed') return;
      clearSession(this.storage);
      this.setState({ session: null });
@@ -510,7 +612,7 @@ index e76e5ca..60edb14 100644
    }
  
    // ---------------------------------------------------------------- custom content
-@@ -3579,7 +3696,7 @@ export class AppStore {
+@@ -3579,7 +3708,7 @@ export class AppStore {
      if (!session || session.status !== 'preview') return;
      clearSession(this.storage);
      this.setState({ session: null });
@@ -519,7 +621,7 @@ index e76e5ca..60edb14 100644
      const fresh = this.state.session;
      const { profile, readHistory: history } = this.state;
      if (!fresh || !profile || this.fromEarlierDay(session)) return;
-@@ -3589,7 +3706,13 @@ export class AppStore {
+@@ -3589,7 +3718,13 @@ export class AppStore {
        Date.parse(session.constraints.endBy) > Date.parse(this.now())
          ? session.constraints.endBy
          : null;
@@ -556,10 +658,10 @@ index eb98a5e..a8a947e 100644
    const planned = allEntries(handle.store.getSnapshot().session!.workout.blocks);
 diff --git a/src/core/state/catchUp.store.test.ts b/src/core/state/catchUp.store.test.ts
 new file mode 100644
-index 0000000..9189dab
+index 0000000..4714965
 --- /dev/null
 +++ b/src/core/state/catchUp.store.test.ts
-@@ -0,0 +1,629 @@
+@@ -0,0 +1,737 @@
 +import { describe, expect, it } from 'vitest';
 +import { requireExercise } from '../../catalog/exercises/catalog';
 +import type { MuscleId } from '../../catalog/muscles/muscles';
@@ -1049,9 +1151,14 @@ index 0000000..9189dab
 +    const profile = { ...createDefaultProfile(TEST_NOW), bodyweight: 185 } as UserProfile;
 +    // The upper session's own chest sets, in full.
 +    const dose = templateDose(profile, 'upper', 'chest');
++    // Begun and left: the push day's chest work planned, no set of it done.
++    const planned = benchAt('w-planned', '2026-09-06T07:00:00.000Z', 0).entries[0]!;
 +    const empty = {
 +      ...benchAt('w-empty', '2026-09-06T07:00:00.000Z', 0, 'push-arms'),
-+      entries: [],
++      entries: [
++        { ...planned, plannedSets: 4, sets: [] },
++        { ...planned, exerciseId: 'cable-fly', plannedSets: 3, sets: [] },
++      ],
 +    };
 +    const upper = benchAt('w-upper', '2026-09-06T09:00:00.000Z', dose, 'upper');
 +    const lastSunday = benchAt('w-last', '2026-08-30T12:00:00.000Z', 3);
@@ -1187,6 +1294,109 @@ index 0000000..9189dab
 +      describeWorkout(sunday.workout).join('; '),
 +    ).toBeUndefined();
 +    expect(sunday.workout.templateId).toBe('catch-up');
++  });
++});
++
++describe('the day’s offer, the third review of round M', () => {
++  /** Monday's bench press: a lifter in training, offered a catch-up on Wednesday. */
++  const monday = () => [benchAt('w-monday', daysBefore(2), 3)];
++  const patterns = (handle: Handle) =>
++    allEntries(session(handle).workout.blocks)
++      .map((entry) => requireExercise(entry.exerciseId).movementPattern)
++      .sort();
++
++  for (const technique of [false, true]) {
++    const save = technique ? ', with a technique in the same save,' : '';
++    it(`today ticked${save} after a swap on the catch-up gives the usual plan whole`, async () => {
++      const usual = await withRecords(monday(), wednesdayTicked);
++      const handle = await withRecords(monday());
++      expect(session(handle).workout.templateId).toBe('catch-up');
++      const raise = allEntries(session(handle).workout.blocks).find(
++        (entry) => entry.exerciseId === 'lateral-raise',
++      )!;
++      await handle.store.recalibrate({
++        type: 'replace',
++        entryId: raise.id,
++        exerciseId: 'cable-lateral-raise',
++      });
++      const profile = handle.store.getSnapshot().profile!;
++      await handle.store.saveProfile({
++        ...profile,
++        ...wednesdayTicked,
++        ...(technique
++          ? { techniques: { ...profile.techniques, circuits: !profile.techniques.circuits } }
++          : {}),
++      });
++      const today = session(handle);
++      expect(today.constraints.catchUp).toBeUndefined();
++      expect(today.workout.templateId).toBe(session(usual).workout.templateId);
++      // Before: the pull day's rear-delt fly gave its slot to the catch-up's cable lateral raise.
++      expect(patterns(handle), describeWorkout(today.workout).join('; ')).toEqual(patterns(usual));
++    });
++  }
++
++  it('today unticked after a pin on the usual plan gives the catch-up whole', async () => {
++    const plain = await withRecords(monday());
++    const spec = session(plain).constraints.catchUp!;
++    const coveredPlain = new Set(
++      allEntries(session(plain).workout.blocks).flatMap((entry) => entry.chosenFor),
++    );
++    const handle = await withRecords(monday(), wednesdayTicked);
++    const [first] = allEntries(session(handle).workout.blocks);
++    await handle.store.recalibrate({ type: 'pin', entryId: first!.id, pinned: true });
++    const profile = handle.store.getSnapshot().profile!;
++    await handle.store.saveProfile({ ...profile, schedule });
++    const today = session(handle);
++    expect(today.workout.templateId).toBe('catch-up');
++    const lifts = describeWorkout(today.workout).join('; ');
++    const covered = new Set(allEntries(today.workout.blocks).flatMap((entry) => entry.chosenFor));
++    // Before: the pinned barbell row x4 took the bench press's slot: the chest, which the catch-up
++    // leads with, had no lift, and the lats took 4 sets for their 2.
++    expect(
++      [...coveredPlain].filter((muscle) => !covered.has(muscle)),
++      lifts,
++    ).toEqual([]);
++    for (const item of spec.muscles) {
++      const sets = allEntries(today.workout.blocks)
++        .filter((entry) => requireExercise(entry.exerciseId).primaryMuscles.includes(item.muscle))
++        .reduce((sum, entry) => sum + entry.sets.filter((set) => set.kind === 'working').length, 0);
++      expect(sets, `${item.muscle}: ${lifts}`).toBeLessThanOrEqual(item.sets);
++    }
++  });
++
++  it('the lower day done in full with a favourite front squat leaves the glutes nothing', async () => {
++    const ticked: Partial<UserProfile> = {
++      schedule: { ...schedule, availableDays: [...schedule.availableDays, 'wed'] },
++    };
++    const pushMonday = benchAt('w-mon', daysBefore(2), 3, 'push-arms');
++    const pullTuesday = {
++      ...benchAt('w-tue', daysBefore(1), 3, 'pull-arms'),
++      entries: [{ ...benchAt('w-row', daysBefore(1), 3).entries[0]!, exerciseId: 'barbell-row' }],
++    };
++    // With the back squat, the glutes sit out after the lower day.
++    const plain = await withRecords([pushMonday, pullTuesday], ticked);
++    expect(session(plain).workout.templateId).toBe('lower');
++    await doTheWorkout(plain);
++    expect(session(plain).constraints.catchUp?.sitOut).toContain('glutes');
++    const handle = await withRecords([pushMonday, pullTuesday], {
++      ...ticked,
++      exercisePreferences: { preferred: ['Front Squat'], disliked: [] },
++    });
++    const first = session(handle);
++    expect(first.workout.templateId).toBe('lower');
++    expect(allEntries(first.workout.blocks).map((entry) => entry.exerciseId)).toContain(
++      'front-squat',
++    );
++    await doTheWorkout(handle);
++    const second = session(handle);
++    expect(second.constraints.catchUp?.kind).toBe('second');
++    // Before: "glutes: 2 sets, remainder", a hip thrust x2 after the whole lower day: the squat's
++    // slot named the glutes, and the front squat works them at half.
++    expect(
++      second.constraints.catchUp!.muscles.map((item) => `${item.muscle}:${item.why}`),
++      describeWorkout(second.workout).join('; '),
++    ).not.toContain('glutes:remainder');
++    expect(second.constraints.catchUp!.sitOut).toContain('glutes');
 +  });
 +});
 diff --git a/src/core/state/session.catchUp.test.ts b/src/core/state/session.catchUp.test.ts
@@ -2552,7 +2762,7 @@ index 0000000..ff9e518
 +  return { week, sessionsAhead: ahead.length, trainedToday, muscles };
 +}
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index 551281d..2666645 100644
+index 551281d..283a86d 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
 @@ -1,5 +1,5 @@
@@ -2585,18 +2795,21 @@ index 551281d..2666645 100644
    sessionConflictContext,
    sessionWork,
    targetAtPlace,
-@@ -204,6 +209,10 @@ export function scopeFor(request: RecalibrationRequest): RecalibrationScope {
+@@ -204,6 +209,13 @@ export function scopeFor(request: RecalibrationRequest): RecalibrationScope {
    const type = request.trigger.type;
    if (LOCAL_TRIGGERS.has(type)) return 'local';
    if (PARTIAL_TRIGGERS.has(type)) return 'partial';
 +  // The full session, or the catch-up again, is another plan: built whole, nothing of the one before
 +  // kept in a place of its own (the second review of round M: a swap made on the catch-up took a
-+  // slot of the full session).
-+  if (type === 'session-kind' && !hasStarted(request.completed)) return 'full';
++  // slot of the full session). So is the plan a save gives in place of the day's offer (the third
++  // review: today ticked, a swap on the catch-up took a slot of the split's session).
++  if ((type === 'session-kind' || request.offerChanged) && !hasStarted(request.completed)) {
++    return 'full';
++  }
    const anyLocked =
      request.lockedEntryIds.length > 0 ||
      allEntries(request.workout.blocks).some((entry) => entry.locked || entry.pinned);
-@@ -347,6 +356,18 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
+@@ -347,6 +359,18 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
      ...(constraints.badStart ? { badStart: true } : {}),
      deload: constraints.deload ? { ...constraints.deload } : null,
      focus: constraints.focus ?? null,
@@ -2615,7 +2828,7 @@ index 551281d..2666645 100644
    };
  }
  
-@@ -522,9 +543,10 @@ function minutesLeft(
+@@ -522,9 +546,10 @@ function minutesLeft(
      if (left !== null) return Math.max(MIN_REMAINING_MINUTES, Math.round(left));
    }
    if (!hasStarted(request.completed)) return null;
@@ -2627,7 +2840,7 @@ index 551281d..2666645 100644
    );
    return Math.max(MIN_REMAINING_MINUTES, Math.round(full - request.completed.elapsedSeconds / 60));
  }
-@@ -538,7 +560,11 @@ function rebuild(
+@@ -538,7 +563,11 @@ function rebuild(
    const context = contextFor(request, constraints);
    const classified = classify(request);
    const started = hasStarted(request.completed);
@@ -2640,7 +2853,7 @@ index 551281d..2666645 100644
    let targetMinutesOverride: number | undefined = started
      ? Math.max(
          MIN_REMAINING_MINUTES,
-@@ -569,6 +595,9 @@ function rebuild(
+@@ -569,6 +598,9 @@ function rebuild(
      readiness: constraints.readiness,
      deload: constraints.deload,
      focusMuscle: constraints.focus,
@@ -2650,7 +2863,7 @@ index 551281d..2666645 100644
      sessionLoading: request.loading,
      swaps: request.swaps,
    };
-@@ -953,6 +982,35 @@ function prescriptionToday(
+@@ -953,6 +985,67 @@ function prescriptionToday(
      : base;
  }
  
@@ -2664,6 +2877,38 @@ index 551281d..2666645 100644
 +): CatchUpSpec | null {
 +  const stored = constraints.catchUp;
 +  return stored && !constraints.fullSession ? builtCatchUp(stored, workout) : null;
++}
++
++/**
++ * The sets the day's catch-up or second workout leaves a lift (the third review of round M): the
++ * fewest any of its muscles is given, less what the plan's other lifts give that muscle directly, a
++ * stopped one's sets done, as the plan's own budget counts them. Infinity for a lift that works none
++ * of them, or a day of the plan.
++ */
++function catchUpRoom(
++  spec: CatchUpSpec | null,
++  workout: GeneratedWorkout,
++  entry: WorkoutEntry,
++  isDone: SetDonePredicate,
++): number {
++  const exercise = requireExercise(entry.exerciseId);
++  const others = allEntries(workout.blocks).filter((other) => other.id !== entry.id);
++  const given = (muscle: MuscleId) =>
++    others
++      .filter((other) => requireExercise(other.exerciseId).primaryMuscles.includes(muscle))
++      .reduce(
++        (sum, other) =>
++          sum +
++          other.sets.filter(
++            (set) => set.kind === 'working' && (!isStopped(other) || isDone(other.id, set.index)),
++          ).length,
++        0,
++      );
++  return Math.min(
++    ...(spec?.muscles ?? [])
++      .filter((item) => exercise.primaryMuscles.includes(item.muscle))
++      .map((item) => item.sets - given(item.muscle)),
++  );
 +}
 +
 +/**
@@ -2686,25 +2931,52 @@ index 551281d..2666645 100644
  /**
   * How far a lift's effort sits from its plain target (Maintenance 24): "Make it harder" or
   * "easier" and a check-in move its reps in reserve, and a refit, a max or a swap keeps that. It
-@@ -1742,9 +1800,14 @@ function settleKept(
+@@ -1499,8 +1592,14 @@ function refitEntry(
+   const exercise = requireExercise(entry.exerciseId);
+   const plain = prescriptionToday(request, exercise, entry.role);
+   const plainTarget = targetToday(request, workout, entry.id, exercise, entry.role, plain);
+-  // The effort the lift carries ("Make it harder" or "easier", a check-in) stays (Maintenance 24).
+-  const prescription = shifted(plain, effortShift(request, entry, plainTarget.rir), exercise);
++  // The effort the lift carries ("Make it harder" or "easier", a check-in) stays (Maintenance 24),
++  // and so does the reserve the day's catch-up asks of it (the third review of round M: the place's
++  // weights, a change of place or busy equipment took it to the lift's own).
++  const prescription = shifted(
++    plain,
++    heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),
++    exercise,
++  );
+   const target =
+     prescription === plain
+       ? plainTarget
+@@ -1690,6 +1789,7 @@ function settleKept(
+   );
+   const trimmable = new Set<string>();
+   if (settling.length === 0) return { workout: request.workout, trimmable };
++  const { isDone } = classify(request);
+   const workout = cloneWorkout(request.workout);
+   const next = { ...request, workout, constraints };
+   for (const kept of settling) {
+@@ -1742,9 +1842,16 @@ function settleKept(
      // review of item 44): a harder day adds no set to it and takes its reserve no lower than one.
      // By the plan's rule it has its count; without one (the push ended since), it adds none.
      const pushed = mark !== undefined;
 -    const sets =
 -      pushed && !ruled ? Math.max(Math.min(count, working), Math.min(2, working)) : count;
 -    const rir = pushed ? pushRir(after.rir) : after.rir;
-+    // A catch-up or a second workout holds it as it holds every lift (the second review of round
-+    // M): a day's setting adds it no set and takes it under no reserve the day's muscles ask.
-+    const hold = catchUpHold(catchUpToday(constraints, request.workout), exercise);
-+    const sets = Math.min(
-+      hold?.sets ?? Infinity,
-+      pushed && !ruled ? Math.max(Math.min(count, working), Math.min(2, working)) : count,
-+    );
++    const own = pushed && !ruled ? Math.max(Math.min(count, working), Math.min(2, working)) : count;
++    // A catch-up or a second workout holds it as it holds every lift (the reviews of round M): a
++    // day's setting adds it no set its muscles have no room for beside the plan's other lifts (the
++    // third review: "harder" took the pushdown past the triceps' sets, and the bench press out), and
++    // takes it under no reserve they ask.
++    const spec = catchUpToday(constraints, request.workout);
++    const hold = catchUpHold(spec, exercise);
++    const room = catchUpRoom(spec, workout, entry, isDone);
++    const sets = Math.min(own, Math.max(room, Math.min(own, working)));
 +    const rir = Math.max(hold?.minRir ?? 0, pushed ? pushRir(after.rir) : after.rir);
      const built = targetedSets(
        next,
        workout,
-@@ -1988,7 +2051,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
+@@ -1988,7 +2095,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
      }
    }
    const plan = withoutStops(restored);
@@ -2713,7 +2985,7 @@ index 551281d..2666645 100644
    const general = generalWarmupMinutes(target);
    const time = estimateWorkout(
      plan.blocks,
-@@ -2406,7 +2469,13 @@ function applySubstitution(
+@@ -2406,7 +2513,13 @@ function applySubstitution(
    // A count set by hand comes in as set, the ease taking no set from it (the fifteenth pass).
    const planWorking =
      plan && !entry.manual?.sets ? plan.filter((set) => set.kind === 'working') : shownWorking;
@@ -2728,7 +3000,7 @@ index 551281d..2666645 100644
    const taken = Math.max(0, planWorking.length - shownWorking.length);
    // The ease as the layer lays it on what comes in: its sets for the words, and its rep in reserve,
    // as the day's settings leave it (the fifteenth pass: matched to the lift's reserve, what came in
-@@ -2480,8 +2549,15 @@ function standIn(
+@@ -2480,8 +2593,15 @@ function standIn(
      (set) => set.kind === 'working' && !isDone(entry.id, set.index),
    ).length;
    const dropOwed = entry.sets.some((set) => set.kind === 'drop' && !isDone(entry.id, set.index));
@@ -2746,7 +3018,7 @@ index 551281d..2666645 100644
    closeAtLogged(entry, isDone, 'swap');
    syncRounds(block);
    relabel(block);
-@@ -2569,7 +2645,11 @@ function swapBack(
+@@ -2569,7 +2689,11 @@ function swapBack(
      stopped.role,
      owed,
      stopped.restSeconds,
@@ -2759,7 +3031,7 @@ index 551281d..2666645 100644
    );
    stopped.sets = [...stopped.sets, ...built.sets];
    withoutHandTargets(stopped);
-@@ -2645,9 +2725,19 @@ function bestAlternative(
+@@ -2645,9 +2769,19 @@ function bestAlternative(
      .map((candidate) => requireExercise(candidate.exerciseId));
    const partner =
      block.kind === 'superset' ? block.entries.find((member) => member.id !== entry.id) : undefined;
@@ -2779,7 +3051,7 @@ index 551281d..2666645 100644
      otherExercises: others,
      supersetPartner: partner ? requireExercise(partner.exerciseId) : undefined,
      dropSetPlanned: entry.dropSet,
-@@ -2910,6 +3000,20 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -2910,6 +3044,20 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          workout: rebuild(request, scope, { choice: request.duration, constraints }),
          prefix: 'Rebuilt for your updated profile',
        };
@@ -2800,7 +3072,29 @@ index 551281d..2666645 100644
  
      case 'replace': {
        const workout = cloneWorkout(request.workout);
-@@ -3532,8 +3636,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3339,8 +3487,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+             targetToday(from, workout, entry.id, exercise, entry.role, asked);
+           const plainTarget = targetFor(plain);
+           // The effort the lift carries ("Make it harder" or "easier", a check-in) stays
+-          // (Maintenance 24).
+-          const prescription = shifted(plain, effortShift(from, entry, plainTarget.rir), exercise);
++          // (Maintenance 24), and the reserve the day's catch-up asks of it (the third review of
++          // round M).
++          const prescription = shifted(
++            plain,
++            heldShift(
++              from,
++              workout,
++              exercise,
++              entry.role,
++              effortShift(from, entry, plainTarget.rir),
++            ),
++            exercise,
++          );
+           let target = prescription === plain ? plainTarget : targetFor(prescription);
+           // A load read from an estimate for a rep range, with reps set by hand: the load for those
+           // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
+@@ -3532,8 +3691,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          ? readinessAdjustment(request.constraints.readiness)
          : undefined;
        const restored = !adjust && earlier !== undefined;
@@ -2862,7 +3156,7 @@ index 247c3c3..581f317 100644
  }
  
 diff --git a/src/engine/recalibration/types.ts b/src/engine/recalibration/types.ts
-index 70e7b28..daaa0c4 100644
+index 70e7b28..fd554b3 100644
 --- a/src/engine/recalibration/types.ts
 +++ b/src/engine/recalibration/types.ts
 @@ -2,6 +2,7 @@ import type { MuscleId } from '../../catalog/muscles/muscles';
@@ -2899,6 +3193,18 @@ index 70e7b28..daaa0c4 100644
  }
  
  export interface RecalibrationRequest {
+@@ -217,6 +228,11 @@ export interface RecalibrationRequest {
+   swaps?: readonly LastingSwap[];
+   /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
+   resets?: LearnedResets | null;
++  /**
++   * A save changed what the day offers (Maintenance 31): a catch-up where the split's session was,
++   * or the other way. A plan not begun is built whole, as the full session taken is.
++   */
++  offerChanged?: boolean;
+ }
+ 
+ export type ChangeKind = 'added' | 'removed' | 'replaced' | 'adjusted';
 diff --git a/src/engine/volume/weeklyVolume.ts b/src/engine/volume/weeklyVolume.ts
 index 46f1e3a..3fab896 100644
 --- a/src/engine/volume/weeklyVolume.ts
@@ -3269,17 +3575,18 @@ index 0000000..c667455
 +});
 diff --git a/src/engine/workoutGenerator/catchUpSession.test.ts b/src/engine/workoutGenerator/catchUpSession.test.ts
 new file mode 100644
-index 0000000..0bc2a50
+index 0000000..d92ac1c
 --- /dev/null
 +++ b/src/engine/workoutGenerator/catchUpSession.test.ts
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,331 @@
 +import { describe, expect, it } from 'vitest';
 +import { requireExercise } from '../../catalog/exercises/catalog';
 +import { createDefaultLocations } from '../../core/validation/location';
 +import { createDefaultProfile, type UserProfile } from '../../core/validation/profile';
 +import type { CatchUpSpec } from '../planning/catchUp';
 +import { allEntries } from '../workout/types';
-+import { generateWorkout, sessionDose } from './generate';
++import { generateWorkout, sameOffer, sessionDose } from './generate';
++import { describeWorkout } from '../../test/clockDays';
 +import { RECORD_NOW, record } from '../../test/records';
 +
 +/**
@@ -3292,14 +3599,18 @@ index 0000000..0bc2a50
 +  bodyweight: 185,
 +  ...overrides,
 +});
-+const build = (catchUp: CatchUpSpec, overrides: Partial<UserProfile> = {}) =>
++const build = (
++  catchUp: CatchUpSpec,
++  overrides: Partial<UserProfile> = {},
++  extra: { excludeExerciseIds?: string[] } = {},
++) =>
 +  generateWorkout({
 +    profile: profile(overrides),
 +    location: gym!,
 +    history: [],
 +    now: RECORD_NOW,
 +    duration: 'default',
-+    constraints: { catchUp },
++    constraints: { catchUp, ...extra },
 +  });
 +const working = (entry: ReturnType<typeof allEntries>[number]) =>
 +  entry.sets.filter((set) => set.kind === 'working');
@@ -3460,8 +3771,147 @@ index 0000000..0bc2a50
 +    expect(sessionDose(profile({ programStyle: 'foundation' }), 'quads')).toBeLessThan(10);
 +  });
 +});
++
++describe('a catch-up’s lifts, the third review of round M', () => {
++  const behind = (muscle: 'forearms' | 'biceps' | 'glutes' | 'chest' | 'triceps', sets: number) =>
++    ({ muscle, sets, minRir: 1, why: 'behind' }) as const;
++  const works = (workout: ReturnType<typeof build>, muscle: 'forearms' | 'glutes') =>
++    allEntries(workout.blocks).some((entry) =>
++      requireExercise(entry.exerciseId).primaryMuscles.includes(muscle),
++    );
++
++  it('the forearms take a lift that works them, one curl with the biceps', () => {
++    const workout = build({
++      kind: 'catch-up',
++      muscles: [behind('forearms', 2), behind('biceps', 3)],
++      sitOut: [],
++    });
++    // Before: "ez-bar-curl x2" alone, a curl for the biceps.
++    expect(works(workout, 'forearms'), describeWorkout(workout).join('; ')).toBe(true);
++    expect(workout.explanation.reasons[0]).toContain('forearms and biceps');
++  });
++
++  const glutesCases: [string, Partial<UserProfile>][] = [
++    [
++      'a favourite front squat',
++      { exercisePreferences: { preferred: ['Front Squat'], disliked: [] } },
++    ],
++    [
++      'barbell squats avoided',
++      { limitations: { ...profile().limitations, avoidBarbellSquats: true } },
++    ],
++  ];
++  for (const [why, overrides] of glutesCases) {
++    it(`the glutes take a lift that works them, ${why}`, () => {
++      const workout = build(
++        { kind: 'catch-up', muscles: [behind('glutes', 3)], sitOut: [] },
++        overrides,
++      );
++      expect(workout.templateId).toBe('catch-up');
++      // Before: a front squat or a hack squat x3, for the quads alone.
++      expect(works(workout, 'glutes'), describeWorkout(workout).join('; ')).toBe(true);
++      expect(workout.explanation.reasons[0]).toContain('glutes');
++    });
++  }
++
++  it('each muscle takes a lift of its own where no lift works both: a wrist curl, then a curl', () => {
++    const workout = build(
++      { kind: 'catch-up', muscles: [behind('forearms', 2), behind('biceps', 3)], sitOut: [] },
++      {},
++      { excludeExerciseIds: ['hammer-curl', 'reverse-curl'] },
++    );
++    const lifts = describeWorkout(workout).join('; ');
++    // Before: the biceps shared the forearms' slot, and its curl worked the biceps alone.
++    expect(works(workout, 'forearms'), lifts).toBe(true);
++    const curls = allEntries(workout.blocks).filter((entry) =>
++      requireExercise(entry.exerciseId).primaryMuscles.includes('biceps'),
++    );
++    expect(
++      curls.reduce((sum, entry) => sum + working(entry).length, 0),
++      lifts,
++    ).toBe(3);
++  });
++
++  it('a lift goes in for the day’s muscles alone: the squat for the glutes, not the quads', () => {
++    const workout = build({ kind: 'catch-up', muscles: [behind('glutes', 3)], sitOut: [] });
++    expect(allEntries(workout.blocks).map((entry) => entry.chosenFor)).toEqual([['glutes']]);
++  });
++
++  it('one set left waits, through another muscle’s lift too: the front delts’ press spares the triceps', () => {
++    const workout = build({
++      kind: 'catch-up',
++      muscles: [
++        behind('chest', 2),
++        behind('triceps', 3),
++        { ...behind('chest', 3), muscle: 'front-delts' },
++      ],
++      sitOut: [],
++    });
++    const lifts = describeWorkout(workout).join('; ');
++    // The bench press leaves the triceps 1 set: an overhead press would take it, at 1 set.
++    expect(
++      allEntries(workout.blocks).filter((entry) => working(entry).length < 2),
++      lifts,
++    ).toEqual([]);
++    const triceps = allEntries(workout.blocks)
++      .filter((entry) => requireExercise(entry.exerciseId).primaryMuscles.includes('triceps'))
++      .reduce((sum, entry) => sum + working(entry).length, 0);
++    expect(triceps, lifts).toBeLessThanOrEqual(3);
++  });
++
++  it('gives no lift a single working set: one set left waits for the week', () => {
++    const workout = build({
++      kind: 'catch-up',
++      muscles: [behind('chest', 2), behind('triceps', 3)],
++      sitOut: [],
++    });
++    // Before: "barbell-bench-press x2; cable-triceps-pushdown x1", the triceps' last set.
++    expect(
++      allEntries(workout.blocks).filter((entry) => working(entry).length < 2),
++      describeWorkout(workout).join('; '),
++    ).toEqual([]);
++  });
++});
++
++describe('the day’s offers compared, the third review of round M', () => {
++  const chestAndTriceps: CatchUpSpec = {
++    kind: 'catch-up',
++    muscles: [
++      { muscle: 'chest', sets: 3, minRir: 1, why: 'behind' },
++      { muscle: 'triceps', sets: 2, minRir: 1, why: 'behind' },
++    ],
++    sitOut: [],
++  };
++
++  it('are the same for the same muscles in the same order, whatever their sets', () => {
++    const fewer = {
++      ...chestAndTriceps,
++      muscles: chestAndTriceps.muscles.map((item) => ({ ...item, sets: 2 })),
++    };
++    expect(sameOffer({ catchUp: chestAndTriceps }, { catchUp: fewer })).toBe(true);
++  });
++
++  it('differ for other muscles, or a second workout for a catch-up', () => {
++    const lats = {
++      ...chestAndTriceps,
++      muscles: [{ muscle: 'lats' as const, sets: 3, minRir: 1, why: 'behind' as const }],
++    };
++    expect(sameOffer({ catchUp: chestAndTriceps }, { catchUp: lats })).toBe(false);
++    expect(
++      sameOffer({ catchUp: chestAndTriceps }, { catchUp: { ...chestAndTriceps, kind: 'second' } }),
++    ).toBe(false);
++    expect(sameOffer({ catchUp: chestAndTriceps }, {})).toBe(false);
++  });
++
++  it('are the split’s own day with the full session taken, or a catch-up with nothing behind', () => {
++    expect(sameOffer({ catchUp: chestAndTriceps, fullSession: true }, {})).toBe(true);
++    expect(sameOffer({ catchUp: { ...chestAndTriceps, muscles: [] } }, { catchUp: null })).toBe(
++      true,
++    );
++  });
++});
 diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
-index 0460d18..48ab4d2 100644
+index 0460d18..8cf89df 100644
 --- a/src/engine/workoutGenerator/generate.ts
 +++ b/src/engine/workoutGenerator/generate.ts
 @@ -38,6 +38,7 @@ import {
@@ -3480,15 +3930,20 @@ index 0460d18..48ab4d2 100644
    allEntries,
    isStopped,
    pushMarkOf,
-@@ -117,6 +119,7 @@ import {
+@@ -117,6 +119,12 @@ import {
    type WorkoutEntry,
  } from '../workout/types';
  import type { LastingSwap } from '../planning/lastingSwaps';
-+import { restingMuscles, type CatchUpMuscle, type CatchUpSpec } from '../planning/catchUp';
++import {
++  CATCH_UP,
++  restingMuscles,
++  type CatchUpMuscle,
++  type CatchUpSpec,
++} from '../planning/catchUp';
  import type { LearnedResets } from '../learned/resets';
  
  /**
-@@ -276,6 +279,11 @@ export interface GenerationConstraints {
+@@ -276,6 +284,11 @@ export interface GenerationConstraints {
    unavailableEquipment?: readonly string[];
    painJoints?: readonly Joint[];
    templateId?: string;
@@ -3500,7 +3955,7 @@ index 0460d18..48ab4d2 100644
    /** Remaining budget for everything in the result, replacing the duration target. */
    targetMinutesOverride?: number;
    generalWarmupMinutesOverride?: number;
-@@ -320,6 +328,10 @@ interface Slot {
+@@ -320,6 +333,10 @@ interface Slot {
    pattern: MovementPatternId;
    role: TrainingRole;
    muscles: MuscleId[];
@@ -3511,7 +3966,7 @@ index 0460d18..48ab4d2 100644
  }
  
  interface Template {
-@@ -436,6 +448,252 @@ export function splitFor(profile: UserProfile): readonly Template[] {
+@@ -436,6 +453,285 @@ export function splitFor(profile: UserProfile): readonly Template[] {
        : [PUSH_ARMS, PULL_ARMS, LOWER, UPPER];
  }
  
@@ -3596,29 +4051,28 @@ index 0460d18..48ab4d2 100644
 +}
 +
 +/**
-+ * A muscle's working sets in the day's first workout, what a second workout reads what is left of
-+ * (the reviews of round M). A session of the split gives its template's sets, so a full one leaves
-+ * nothing and one cut short the rest; any other (a catch-up, a second workout, one of no template),
-+ * or one planned in a deload week, gives the sets it planned for the muscle, all it was to have.
++ * A muscle's sets in the day's first workout as it was planned, what a second workout reads what is
++ * left of (the reviews of round M): the sets it was to have, each counted as the week counts the
++ * sets done, a lift that works it only secondarily at half (the third review: the lower day's front
++ * squat left the glutes a "remainder" the squat's slot named). A workout done in full leaves nothing,
++ * one cut short what it did not do, and a deload day or a shorter session no more than it planned.
 + */
 +export function firstSessionDose(
 +  profile: UserProfile,
-+  record: Pick<WorkoutRecord, 'templateId' | 'entries'> | undefined,
++  record: Pick<WorkoutRecord, 'entries'> | undefined,
 +  muscle: MuscleId,
-+  deload: boolean,
 +): number {
 +  if (!record) return sessionDose(profile, muscle);
-+  const template = deload
-+    ? undefined
-+    : TEMPLATES.find((candidate) => candidate.id === record.templateId);
-+  if (template) return setsIn(profile, template, muscle);
-+  return record.entries
-+    .filter((entry) => getExercise(entry.exerciseId)?.primaryMuscles.includes(muscle) ?? false)
-+    .reduce(
-+      (sum, entry) =>
-+        sum + (entry.plannedSets ?? entry.sets.filter((set) => set.kind === 'working').length),
-+      0,
-+    );
++  return record.entries.reduce((sum, entry) => {
++    const exercise = getExercise(entry.exerciseId);
++    const weight = exercise?.primaryMuscles.includes(muscle)
++      ? 1
++      : exercise?.secondaryMuscles.includes(muscle)
++        ? INDIRECT_SET_WEIGHT
++        : 0;
++    const planned = entry.plannedSets ?? entry.sets.filter((set) => set.kind === 'working').length;
++    return sum + weight * planned;
++  }, 0);
 +}
 +
 +const CATCH_UP_TITLES: Record<CatchUpSpec['kind'], { id: string; title: string }> = {
@@ -3656,6 +4110,24 @@ index 0460d18..48ab4d2 100644
 +}
 +
 +/**
++ * Whether two of a day's offers build the same plan (the third review of round M): the split's own
++ * session, or the same catch-up or second workout for the same muscles in the same order, whose
++ * slots are the same. A save that changes it builds the plan whole: a lift kept in a slot of one
++ * would take another's slot of the same number.
++ */
++export function sameOffer(
++  a: { catchUp?: CatchUpSpec | null; fullSession?: boolean },
++  b: { catchUp?: CatchUpSpec | null; fullSession?: boolean },
++): boolean {
++  const offer = (constraints: typeof a) => {
++    const spec = constraints.fullSession ? null : (constraints.catchUp ?? null);
++    if (!spec || (spec.kind === 'catch-up' && spec.muscles.length === 0)) return '';
++    return [spec.kind, ...spec.muscles.map((item) => item.muscle)].join(' ');
++  };
++  return offer(a) === offer(b);
++}
++
++/**
 + * The muscles today's catch-up or second workout leaves alone, as the plan was built from it: none
 + * once the full session is taken. The coach offers no work for one, and a rebuild's swap brings in
 + * no lift for one, as the plan itself has none (the review of round M).
@@ -3685,17 +4157,30 @@ index 0460d18..48ab4d2 100644
 +  usable: (exercise: CatalogExercise) => boolean,
 +): Template {
 +  const slots: Slot[] = [];
++  // Whether one lift of a movement, there today, works all these muscles directly.
++  const oneLift = (pattern: Slot['pattern'], muscles: readonly MuscleId[]) =>
++    exercisesByPattern(pattern).some(
++      (exercise) =>
++        usable(exercise) && muscles.every((muscle) => exercise.primaryMuscles.includes(muscle)),
++    );
 +  for (const item of spec.muscles) {
 +    const own = slotFor(profile, item.muscle, usable);
 +    if (!own) continue;
-+    const shared = slots.find((candidate) => candidate.pattern === own.pattern);
++    const shared = slots.find(
++      (candidate) =>
++        candidate.pattern === own.pattern &&
++        oneLift(candidate.pattern, [...candidate.muscles, item.muscle]),
++    );
 +    if (shared) {
 +      // Muscles that share a lift share its slot: the lift takes the fewest sets either has left
 +      // and the most reserve either asks (the budget in generateWorkout, the review of round M).
 +      if (!shared.muscles.includes(item.muscle)) shared.muscles.push(item.muscle);
 +      continue;
 +    }
-+    slots.push({ ...own, muscles: [...own.muscles], sets: item.sets, minRir: item.minRir });
++    // A slot of its own, for the catch-up's muscle alone: the squat for the glutes is no slot for the
++    // quads. With no lift there for both, it is the movement's second: a wrist curl for the forearms
++    // and a curl for the biceps (the third review of round M).
++    slots.push({ ...own, muscles: [item.muscle], sets: item.sets, minRir: item.minRir });
 +  }
 +  const strength = (candidate: Slot) => restCategory(candidate.role) === 'strength';
 +  return {
@@ -3707,7 +4192,10 @@ index 0460d18..48ab4d2 100644
 +}
 +
 +/** A catch-up slot's sets and reserve over the role's own: never more sets, never less reserve. */
-+function withinCatchUp(prescription: Prescription, slotSpec: Slot): Prescription {
++function withinCatchUp(
++  prescription: Prescription,
++  slotSpec: Pick<Slot, 'sets' | 'minRir'>,
++): Prescription {
 +  return {
 +    ...prescription,
 +    sets: Math.min(prescription.sets, slotSpec.sets ?? prescription.sets),
@@ -3764,7 +4252,7 @@ index 0460d18..48ab4d2 100644
  function chooseTemplate(
    profile: UserProfile,
    priorities: MusclePriority[],
-@@ -522,8 +780,17 @@ export interface Picker {
+@@ -522,8 +818,26 @@ export interface Picker {
     * push while its push runs. The rule never holds one back (the fourth and fifth re-checks).
     */
    chosen?: ReadonlySet<string>;
@@ -3773,24 +4261,52 @@ index 0460d18..48ab4d2 100644
 +   * directly.
 +   */
 +  resting?: ReadonlySet<MuscleId>;
++  /**
++   * The muscles a catch-up's slot is for, still short of their sets (the third review of round M):
++   * its pick works one of them directly, one that works more of them first.
++   */
++  trains?: ReadonlySet<MuscleId>;
  }
  
 +/** Whether an exercise works a muscle that rests today directly. */
 +const worksResting = (exercise: CatalogExercise, picker: Picker): boolean =>
 +  exercise.primaryMuscles.some((muscle) => picker.resting?.has(muscle) ?? false);
 +
++/** How many of the muscles a catch-up's slot is for an exercise works directly. */
++const covers = (exercise: CatalogExercise, picker: Picker): number =>
++  exercise.primaryMuscles.filter((muscle) => picker.trains?.has(muscle) ?? false).length;
++
  /**
   * What the lifter chose beyond the favourites: each kept swap's own exercise, and the lift to push
   * on a day its push runs (a deload week pauses it, the fifth re-check).
-@@ -556,6 +823,7 @@ function pickForSlot(
+@@ -556,6 +870,8 @@ function pickForSlot(
      .filter((exercise) => !chosenIds.has(exercise.id))
      .filter((exercise) => (strengthRole ? exercise.compound : true))
      .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
 +    .filter((exercise) => !worksResting(exercise, picker))
++    .filter((exercise) => !picker.trains || covers(exercise, picker) > 0)
      // A loaded version waits until its bodyweight move loads (item 31).
      .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
      .filter(
-@@ -615,6 +883,7 @@ export function pickAccessoryFor(
+@@ -590,10 +906,15 @@ function pickForSlot(
+   };
+ 
+   // A preferred exercise that fits the slot wins it outright; the score only orders the rest,
+-  // and preferred ones among themselves.
++  // and preferred ones among themselves. In a catch-up, a lift for all the muscles sharing the slot
++  // comes before a favourite for one of them.
+   const tier = (exercise: CatalogExercise) => (picker.preferredIds.has(exercise.id) ? 1 : 0);
+   candidates.sort(
+-    (a, b) => tier(b) - tier(a) || score(b) - score(a) || a.name.localeCompare(b.name),
++    (a, b) =>
++      covers(b, picker) - covers(a, picker) ||
++      tier(b) - tier(a) ||
++      score(b) - score(a) ||
++      a.name.localeCompare(b.name),
+   );
+   return candidates[0];
+ }
+@@ -615,6 +936,7 @@ export function pickAccessoryFor(
      .filter((exercise) => exercise.primaryMuscles.includes(muscle))
      .filter((exercise) => !chosenIds.has(exercise.id))
      .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
@@ -3798,7 +4314,7 @@ index 0460d18..48ab4d2 100644
      .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
      .filter(
        (exercise) =>
-@@ -719,6 +988,8 @@ export function accessoryPicker(input: {
+@@ -719,6 +1041,8 @@ export function accessoryPicker(input: {
    focus?: MuscleId | null;
    /** The lifter's lasting swaps: an exercise swapped out is never offered. */
    swaps?: readonly LastingSwap[];
@@ -3807,7 +4323,7 @@ index 0460d18..48ab4d2 100644
  }): Picker {
    const context = sessionConflictContext(input.profile, input.location, input.constraints ?? {});
    const preferredIds = preferredIdsOf(input.profile);
-@@ -734,6 +1005,7 @@ export function accessoryPicker(input: {
+@@ -734,6 +1058,7 @@ export function accessoryPicker(input: {
      swappedAway: swappedOut,
      // The lift to push is never the coach's offer: it adds nothing for the pushed lift's muscles.
      chosen: chosenBy(input.swaps ?? [], null),
@@ -3815,7 +4331,7 @@ index 0460d18..48ab4d2 100644
    };
  }
  
-@@ -1168,10 +1440,27 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1168,10 +1493,27 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
    const loads = muscleLoads(history, profile, now);
    const focus = constraints.focusMuscle ?? null;
@@ -3844,7 +4360,7 @@ index 0460d18..48ab4d2 100644
    const deload = constraints.deload ?? null;
    const adjust = withDeload(constraints.adjust, deload);
    // A lift to push (Maintenance 27, item 44): it takes the place the plan has for it, or the week's
-@@ -1196,6 +1485,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1196,6 +1538,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      push &&
      push.extraSets !== null &&
      constraints.pushProbe === undefined &&
@@ -3852,7 +4368,7 @@ index 0460d18..48ab4d2 100644
      !extraKept &&
      !pushPlace(template.slots) &&
      // Weighed only where the lift can go in today (the re-check of item 44).
-@@ -1236,8 +1526,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1236,8 +1579,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      }
    }
    const defaultMinutes = profile.schedule.typicalDurationMinutes;
@@ -3867,7 +4383,7 @@ index 0460d18..48ab4d2 100644
    const hardCap = constraints.hardCap ?? false;
    const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
    const completedSets = constraints.completedSets ?? [];
-@@ -1256,6 +1551,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1256,6 +1604,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      // there like any other, and the swap puts it in for the move it stands for, saying so (the
      // fourth re-check). The lift to push stands while its push runs today.
      chosen: chosenBy([], push),
@@ -3875,7 +4391,83 @@ index 0460d18..48ab4d2 100644
    };
    const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
  
-@@ -1434,16 +1730,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1390,6 +1739,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+    * under way. A stand-in kept only because it came next, with nothing logged, gives way.
+    * True when the slot was filled this way.
+    */
++  // What a catch-up or second workout may still give each of its muscles today: its sets, at its
++  // reserve. Every lift that works one directly counts against it, a lift for another muscle too:
++  // a muscle trained today takes no more than what is left of it, however it comes (the review of
++  // round M). A muscle with fewer sets left than a lift takes, two (CATCH_UP.MIN_SETS), rests for
++  // the slots after (the third review: the pushdown took the 1 set the bench press left the triceps).
++  const budget = new Map(
++    (catchUp?.muscles ?? []).map((item) => [item.muscle, { sets: item.sets, minRir: item.minRir }]),
++  );
++  /** Counts a lift's working sets against the muscles it works directly; fewer than none gives back. */
++  const spend = (exerciseId: string, sets: number): void => {
++    for (const muscle of exerciseOf(exerciseId).primaryMuscles) {
++      const left = budget.get(muscle);
++      if (left) left.sets -= sets;
++    }
++  };
++
+   const reopened = (kept: WorkoutEntry[]): boolean => {
+     // Only a stop the place made picks up again; one the lifter or a limit made stays.
+     const fitting = kept.filter(
+@@ -1403,23 +1768,42 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+     if (others.some((entry) => !isStopped(entry) && frozenIds.has(entry.id))) return false;
+     const owed = Math.min(...kept.filter(isStopped).map(owedBy));
+     if (!(owed > 0)) return false;
++    const exercise = exerciseOf(target.exerciseId);
++    // In a catch-up or a second workout, a stand-in that gives way gives its muscles back the sets
++    // it took, and the lift picked up again keeps to what they have left as one picked here does:
++    // no more sets, no less reserve (the third review of round M).
++    const standIns = others.filter((entry) => !isStopped(entry));
++    const workingOf = (entry: WorkoutEntry) =>
++      entry.sets.filter((set) => set.kind === 'working').length;
++    for (const entry of standIns) spend(entry.exerciseId, -workingOf(entry));
++    const shares = exercise.primaryMuscles.flatMap((muscle) => budget.get(muscle) ?? []);
++    const adjusted = withinCatchUp(
++      adjustPrescription(
++        prescribeFor(exercise, target.role, profile, history),
++        target.role,
++        adjust,
++        rirFloor(exercise),
++      ),
++      {
++        sets: Math.min(...shares.map((left) => left.sets)),
++        minRir: Math.max(0, ...shares.map((left) => left.minRir)),
++      },
++    );
++    const sets = Math.min(adjusted.sets, owed);
++    if (sets <= 0) {
++      for (const entry of standIns) spend(entry.exerciseId, workingOf(entry));
++      return false;
++    }
++    spend(exercise.id, sets);
+     // The stopped entries stay as the history they are; a stand-in that gave way goes.
+-    for (const entry of others) {
+-      if (isStopped(entry)) continue;
++    for (const entry of standIns) {
+       const at = chosenExercises.findIndex((chosen) => chosen.id === entry.exerciseId);
+       if (at >= 0) chosenExercises.splice(at, 1);
+     }
+     entries.push(...kept.filter(isStopped));
+-    const exercise = exerciseOf(target.exerciseId);
+-    const adjusted = adjustPrescription(
+-      prescribeFor(exercise, target.role, profile, history),
+-      target.role,
+-      adjust,
+-      rirFloor(exercise),
+-    );
+     const built = targetedFor(exercise, target.role, {
+       ...adjusted,
+-      sets: Math.min(adjusted.sets, owed),
++      sets,
+       restSeconds: target.restSeconds,
+     });
+     const from = Math.max(-1, ...target.sets.map((set) => set.index)) + 1;
+@@ -1434,16 +1818,25 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      return true;
    };
  
@@ -3889,16 +4481,22 @@ index 0460d18..48ab4d2 100644
     * lift to push on a day it gives its place up (the re-check of item 44).
     */
 -  const swappedIn = (pick: CatalogExercise): CatalogExercise => {
-+  const swappedIn = (pick: CatalogExercise, rests: ReadonlySet<MuscleId>): CatalogExercise => {
++  const swappedIn = (
++    pick: CatalogExercise,
++    rests: ReadonlySet<MuscleId>,
++    trains?: ReadonlySet<MuscleId>,
++  ): CatalogExercise => {
      for (const swap of kept.filter((candidate) => candidate.from === pick.id)) {
        const next = getExercise(swap.to);
        if (!next || givesWay.includes(next.id)) continue;
-+      // Never a lift that works a muscle that rests today (the review of round M).
++      // Never a lift that works a muscle that rests today (the review of round M), and in a
++      // catch-up, one for a muscle its slot is for (the third review).
 +      if (next.primaryMuscles.some((muscle) => rests.has(muscle))) continue;
++      if (trains && !next.primaryMuscles.some((muscle) => trains.has(muscle))) continue;
        if (chosenExercises.some((chosen) => chosen.id === next.id)) continue;
        if (isBlocked(checkExerciseFit(next, context))) continue;
        if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
-@@ -1494,6 +1793,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1494,6 +1887,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      push &&
      push.extraSets !== null &&
      constraints.pushProbe !== true &&
@@ -3906,18 +4504,11 @@ index 0460d18..48ab4d2 100644
      !pushKept &&
      !extraKept &&
      !template.slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern) &&
-@@ -1529,7 +1829,28 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1529,7 +1923,18 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      });
      extraId = id;
    }
 -  template.slots.forEach((slotSpec, index) => {
-+  // What a catch-up or second workout may still give each of its muscles today: its sets, at its
-+  // reserve. Every lift that works one directly counts against it, a lift for another muscle too:
-+  // a muscle trained today takes no more than what is left of it, however it comes (the review of
-+  // round M). A muscle with nothing left rests for the slots after.
-+  const budget = new Map(
-+    (catchUp?.muscles ?? []).map((item) => [item.muscle, { sets: item.sets, minRir: item.minRir }]),
-+  );
 +  // A lift kept through a rebuild counts against its muscles as one picked here does, the sets it
 +  // has still to do and those done (the second review of round M): begun on the bench press, a
 +  // second workout gives the triceps no more than what is left of them.
@@ -3926,24 +4517,32 @@ index 0460d18..48ab4d2 100644
 +    const sets = entry.sets.filter(
 +      (set) => set.kind === 'working' && (!stopped || isDone(entry.id, set.index)),
 +    ).length;
-+    for (const muscle of exerciseOf(entry.exerciseId).primaryMuscles) {
-+      const left = budget.get(muscle);
-+      if (left) left.sets -= sets;
-+    }
++    spend(entry.exerciseId, sets);
 +  }
 +  template.slots.forEach((planned, index) => {
 +    let slotSpec = planned;
      const kept = keptBySlot.get(index);
      const owed = owedBySlot.get(index);
      if (kept) {
-@@ -1547,18 +1868,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1547,18 +1952,33 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      const ownPicks = chosenExercises.map((chosen) =>
        mine.has(chosen.id) ? chosen : (ownOf.get(chosen.id) ?? chosen),
      );
 -    // The lift to push takes its own place when it fits here (Maintenance 27, item 44).
-+    const spent = [...budget].filter(([, left]) => left.sets <= 0).map(([muscle]) => muscle);
++    const spent = [...budget]
++      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)
++      .map(([muscle]) => muscle);
 +    const rests = spent.length > 0 ? new Set([...resting, ...spent]) : resting;
-+    const slotBase: Picker = rests === resting ? picker : { ...picker, resting: rests };
++    // A catch-up's slot is for its muscles still short (the third review of round M): its lift works
++    // one of them directly, so a slot whose muscles have all been given their sets finds none.
++    const short = catchUp
++      ? planned.muscles.filter((muscle) => budget.has(muscle) && !spent.includes(muscle))
++      : undefined;
++    const slotBase: Picker = {
++      ...picker,
++      ...(rests === resting ? {} : { resting: rests }),
++      ...(short ? { trains: new Set(short) } : {}),
++    };
 +    // The lift to push takes its own place when it fits here (Maintenance 27, item 44), on a day of
 +    // the plan only.
      const pushPick =
@@ -3961,26 +4560,29 @@ index 0460d18..48ab4d2 100644
      let pick = natural;
      if (natural && swappedOut.has(natural.id)) {
 -      const next = swappedIn(natural);
-+      const next = swappedIn(natural, rests);
++      const next = swappedIn(natural, rests, slotBase.trains);
        // With its swap-in unable to join and nothing else fitting, the plan's own pick stays:
        // a kept swap applies where it fits, and never empties a slot.
        pick =
-@@ -1570,16 +1895,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1570,16 +1990,65 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        // Already in, or clashing with a kept swap's exercise: the next best that fits the plan.
        pick = pickForSlot(slotSpec, chosenExercises, slotPicker);
      }
-+    if (!pick && spent.length > 0) {
-+      // Every lift for the slot works a muscle already given its sets: a muscle it is for that still
-+      // lacks its own takes the next slot that carries it, a lift there working no muscle that rests
-+      // (the second review of round M: the squat has given the glutes theirs and every hinge works
-+      // them, so the hamstrings take the leg curl).
-+      for (const muscle of planned.muscles) {
++    if (!pick && catchUp) {
++      // No lift for the slot fits, every one working a muscle already given its sets, say: a muscle
++      // it is for that still lacks its own takes the next slot that carries it, a lift there working
++      // it and no muscle that rests (the second review of round M: the squat has given the glutes
++      // theirs and every hinge works them, so the hamstrings take the leg curl).
++      for (const muscle of short ?? []) {
 +        const left = budget.get(muscle);
-+        if (!left || left.sets <= 0) continue;
++        if (!left) continue;
 +        for (const other of slotsFor(profile, muscle)) {
 +          if (other.pattern === planned.pattern) continue;
 +          const instead = { ...other, muscles: [muscle], sets: left.sets, minRir: left.minRir };
-+          const found = pickForSlot(instead, chosenExercises, slotPicker);
++          const found = pickForSlot(instead, chosenExercises, {
++            ...slotPicker,
++            trains: new Set([muscle]),
++          });
 +          if (found) {
 +            slotSpec = instead;
 +            pick = found;
@@ -4032,7 +4634,7 @@ index 0460d18..48ab4d2 100644
      // The lift to push keeps to the push's sets for the week and never goes to failure.
      const basePrescription =
        pushPick && push
-@@ -1596,9 +1967,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1596,9 +2065,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
              rirFloor(pick),
            )
          : adjustPrescription(basePrescription, slotSpec.role, adjust, rirFloor(pick));
@@ -4047,7 +4649,22 @@ index 0460d18..48ab4d2 100644
      // Asked to make it harder, the time fit may take back an added set, never one the plan had.
      if ((adjust?.sets ?? 0) > 0) {
        plannedSets.set(
-@@ -2098,7 +2472,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1607,7 +2079,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+       );
+     }
+     const built = targetedFor(pick, slotSpec.role, prescription);
+-    const chosenFor = slotSpec.muscles.filter((muscle) => pick.primaryMuscles.includes(muscle));
++    // In a catch-up, a lift goes in for every one of the day's muscles it works directly, as the
++    // budget counts it: the bench press for what is left of the triceps (the third review of round M).
++    const serves = [
++      ...slotSpec.muscles,
++      ...[...budget.keys()].filter((muscle) => !slotSpec.muscles.includes(muscle)),
++    ];
++    const chosenFor = serves.filter((muscle) => pick.primaryMuscles.includes(muscle));
+     entries.push({
+       id,
+       exerciseId: pick.id,
+@@ -2098,7 +2576,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
  
    // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
    // to failure, so a style that takes nothing to failure plans none.
@@ -4057,7 +4674,7 @@ index 0460d18..48ab4d2 100644
      const deficitMuscles = new Set(
        priorities
          .filter(
-@@ -2202,6 +2577,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2202,6 +2681,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const anchorExercise = anchor ? exerciseOf(anchor.exerciseId) : undefined;
    const topPriorities = priorities.slice(0, 3);
    const reasons: string[] = [
@@ -4065,7 +4682,7 @@ index 0460d18..48ab4d2 100644
      `Goal ${goalLabel(profile.goals.primary)}${profile.goals.secondary !== 'none' ? ` with ${goalLabel(profile.goals.secondary)}` : ''}: ${template.title.toLowerCase()} session, ${styleLine(profile)}.`,
      `Priority muscles today: ${topPriorities.map((priority) => priority.reason).join('; ')}.`,
      `Built for ${location?.name ?? 'your place'} from the equipment saved there, every pick checked by the conflict engine.`,
-@@ -2306,18 +2682,30 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2306,18 +2786,30 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    );
  
    const count = allEntries(blocks).length;
@@ -4100,11 +4717,13 @@ index 0460d18..48ab4d2 100644
      locationId: location?.id ?? null,
 diff --git a/src/engine/workoutGenerator/offPlanDay.test.ts b/src/engine/workoutGenerator/offPlanDay.test.ts
 new file mode 100644
-index 0000000..748d8c6
+index 0000000..2e2e25f
 --- /dev/null
 +++ b/src/engine/workoutGenerator/offPlanDay.test.ts
-@@ -0,0 +1,554 @@
+@@ -0,0 +1,865 @@
 +import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import { createDefaultLocations } from '../../core/validation/location';
 +import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 +import { gatherSignals, type CoachInput } from '../coach/coachConductor';
 +import type { CatchUpSpec } from '../planning/catchUp';
@@ -4116,7 +4735,7 @@ index 0000000..748d8c6
 +} from '../recalibration/types';
 +import { interpretFatigue } from '../recovery/fatigue';
 +import { analyzeStrategy } from '../strategy/strategy';
-+import { allEntries, type GeneratedWorkout } from '../workout/types';
++import { allEntries, isStopped, type GeneratedWorkout } from '../workout/types';
 +import { generateWorkout } from './generate';
 +import {
 +  at,
@@ -4138,7 +4757,9 @@ index 0000000..748d8c6
 + * more nor a drop set; the lift to push waits for its planned day. And through a rebuild (the
 + * second review): the lift in front keeps to the catch-up through a day's setting, what comes in for
 + * a lift keeps its reserve, a lift begun counts against its muscles, and a catch-up under way keeps
-+ * its own shorter length. Synthetic data only.
++ * its own shorter length. And (the third review) a lift planned again for the place's weights, a max,
++ * a change of place or busy equipment, or picked up again at the gym, keeps the catch-up's reserve
++ * and its sets. Synthetic data only.
 + */
 +
 +const glutes = { muscle: 'glutes' as const, sets: 3, minRir: 1, why: 'behind' as const };
@@ -4329,6 +4950,59 @@ index 0000000..748d8c6
 +    // The same plan with the full session taken: the coach asks more of it (baseline).
 +    expect(harder(remainderOnly, true).length).toBeGreaterThan(0);
 +    expect(harder(remainderOnly, false), describeWorkout(workout).join('; ')).toEqual([]);
++  });
++});
++
++describe('the coach on a catch-up', () => {
++  it('offers the catch-up no set more, no drop set and no exercise', () => {
++    // Four sessions in the fortnight and no arm work: the biceps behind, and their catch-up lift
++    // the curl. With the full session taken, the coach offers all three (baseline).
++    const profile = profileOf();
++    const now = at(9, 18);
++    const days = [
++      session(at(1, 18), [['back-squat', 3]]),
++      session(at(3, 18), [['barbell-bench-press', 3]]),
++      session(at(5, 18), [['romanian-deadlift', 3]]),
++      session(at(7, 18), [['leg-press', 3]]),
++    ];
++    const spec: CatchUpSpec = {
++      kind: 'catch-up',
++      muscles: [{ muscle: 'biceps', sets: 3, minRir: 1, why: 'behind' }],
++      sitOut: [],
++    };
++    const workout = build(spec, days, now);
++    expect(workout.templateId).toBe('catch-up');
++    const offers = (full: boolean) => {
++      const fatigue = interpretFatigue(days, now, null);
++      const input: CoachInput = {
++        workout,
++        status: 'preview',
++        duration: 'default',
++        completed: emptyCompleted(),
++        constraints: {
++          ...emptyConstraints(),
++          catchUp: spec,
++          ...(full ? { fullSession: true } : {}),
++        },
++        profile,
++        history: days,
++        now,
++        fatigue,
++        strategy: analyzeStrategy({ history: days, profile, now, fatigue }),
++        lastExportAt: now,
++        workoutCount: days.length,
++        location: gym,
++        swaps: [],
++      };
++      return new Set(
++        gatherSignals(input).flatMap((signal) =>
++          signal.action?.kind === 'recalibrate' ? [signal.action.trigger.type] : [],
++        ),
++      );
++    };
++    expect([...offers(true)]).toEqual(expect.arrayContaining(['sets', 'drop-set', 'add-exercise']));
++    const off = offers(false);
++    expect(off.has('sets') || off.has('drop-set') || off.has('add-exercise')).toBe(false);
 +  });
 +});
 +
@@ -4656,6 +5330,260 @@ index 0000000..748d8c6
 +    );
 +    expect(result.ok).toBe(true);
 +    expect(result.workout.compromises.join(' ')).toMatch(/over the 10 min left/);
++  });
++});
++
++describe('a day off the plan through a rebuild, the third review of round M', () => {
++  const { now, history, spec } = remainderDay;
++  const [home, gymPlace] = createDefaultLocations({ gymAccess: true }, at(1));
++  const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++
++  it('the place’s weights, or a plate missing today, keep what is left of the triceps at 3 in reserve', () => {
++    const workout = build(spec, history, now);
++    expect(lowestRir(workout, 'triceps')).toBeGreaterThanOrEqual(3);
++    const result = recalibrate(requestFor({ type: 'loading' }, workout, spec, history, now));
++    expect(result.ok).toBe(true);
++    // Before: "skull-crusher x2 @RIR 1/1", the lift's own reserve.
++    expect(lowestRir(result.workout, 'triceps'), lifts(result.workout)).toBeGreaterThanOrEqual(3);
++  });
++
++  it('a max entered for the lift keeps it at 3 in reserve', () => {
++    const workout = build(spec, history, now);
++    const [lift] = allEntries(workout.blocks);
++    const result = recalibrate(
++      requestFor({ type: 'max', exerciseId: lift!.exerciseId }, workout, spec, history, now),
++    );
++    expect(result.ok).toBe(true);
++    expect(lowestRir(result.workout, 'triceps'), lifts(result.workout)).toBeGreaterThanOrEqual(3);
++  });
++
++  it('a change of place keeps the lift in front at 3 in reserve', () => {
++    const workout = build(spec, history, now);
++    const [lift] = allEntries(workout.blocks);
++    const result = recalibrate(
++      requestFor({ type: 'location' }, workout, spec, history, now, {
++        completed: underWay(now, 2, lift!.id),
++        currentEntryId: lift!.id,
++      }),
++    );
++    expect(result.ok).toBe(true);
++    expect(lowestRir(result.workout, 'triceps'), lifts(result.workout)).toBeGreaterThanOrEqual(3);
++  });
++
++  it('a lift moved behind another for busy equipment keeps both muscles at 3 in reserve', () => {
++    // Pushdowns and curls last Thursday and Sunday, one set of each this morning: tonight the
++    // triceps and the biceps each take what is left, 2 sets at 3 in reserve.
++    const days = [
++      session(at(3, 18), [
++        ['cable-triceps-pushdown', 3],
++        ['barbell-curl', 3],
++      ]),
++      session(at(6, 18), [
++        ['cable-triceps-pushdown', 3],
++        ['barbell-curl', 3],
++      ]),
++      session(
++        at(9, 7),
++        [
++          ['cable-triceps-pushdown', 1],
++          ['barbell-curl', 1],
++        ],
++        { endedEarly: true },
++      ),
++    ];
++    const arms: CatchUpSpec = {
++      kind: 'second',
++      muscles: [
++        { muscle: 'triceps', sets: 2, minRir: 3, why: 'remainder' },
++        { muscle: 'biceps', sets: 2, minRir: 3, why: 'remainder' },
++      ],
++      sitOut: [],
++    };
++    // Supersets off, so the two lifts are rows of their own and one can wait behind the other.
++    const base = profileOf();
++    const profile = profileOf({ techniques: { ...base.techniques, supersets: false } });
++    const workout = build(arms, days, now, {}, profile);
++    expect(Math.min(lowestRir(workout, 'triceps'), lowestRir(workout, 'biceps'))).toBe(3);
++    const [first] = allEntries(workout.blocks);
++    const result = recalibrate(
++      requestFor({ type: 'equipment-busy', entryId: first!.id }, workout, arms, days, now, {
++        profile,
++      }),
++    );
++    expect(result.ok).toBe(true);
++    expect(allEntries(result.workout.blocks)[0]!.id, lifts(result.workout)).not.toBe(first!.id);
++    // Before: both rows planned again at their role's 1 in reserve.
++    expect(lowestRir(result.workout, 'triceps'), lifts(result.workout)).toBeGreaterThanOrEqual(3);
++    expect(lowestRir(result.workout, 'biceps'), lifts(result.workout)).toBeGreaterThanOrEqual(3);
++  });
++
++  /**
++   * One set of the first lift done at the gym, then home, with no bar for it, then the gym again,
++   * the lifter on the lift standing in for it there or on none.
++   */
++  function roundTrip(day: CatchUpSpec, records: WorkoutRecord[], when: string, onStandIn = false) {
++    const workout = build(day, records, when);
++    const [lift] = allEntries(workout.blocks);
++    const first = working(lift!)[0]!;
++    const sets: CompletedWork['sets'] = [
++      {
++        entryId: lift!.id,
++        exerciseId: lift!.exerciseId,
++        setIndex: first.index,
++        kind: 'working',
++        reps: 10,
++        weight: first.targetWeight,
++        rir: 3,
++        completedAt: when,
++      },
++    ];
++    const atHome = recalibrate({
++      ...requestFor({ type: 'location' }, workout, day, records, when, {
++        completed: { ...underWay(when, 5, lift!.id, sets), currentEntryId: null },
++      }),
++      location: home,
++      timestamp: at(9, 18, 10),
++    });
++    expect(atHome.ok).toBe(true);
++    const standIn = allEntries(atHome.workout.blocks).find(
++      (entry) => !isStopped(entry) && entry.slot === lift!.slot,
++    );
++    const on = onStandIn ? (standIn?.id ?? null) : null;
++    const back = recalibrate({
++      ...requestFor({ type: 'location' }, atHome.workout, day, records, when, {
++        completed: { ...underWay(when, 10, lift!.id, sets), currentEntryId: on },
++        ...(on ? { currentEntryId: on } : {}),
++      }),
++      location: gymPlace,
++      timestamp: at(9, 18, 20),
++    });
++    expect(back.ok).toBe(true);
++    return { workout, atHome: atHome.workout, back: back.workout };
++  }
++
++  it('a lift stopped at home and picked up again at the gym keeps 3 in reserve', () => {
++    const { atHome, back } = roundTrip(spec, history, now);
++    expect(lowestRir(atHome, 'triceps')).toBeGreaterThanOrEqual(3);
++    // Before: "skull-crusher x2 @RIR 3/1", the set picked up at the lift's own reserve.
++    expect(lowestRir(back, 'triceps'), lifts(back)).toBeGreaterThanOrEqual(3);
++  });
++
++  it('the bench press picked up again at the gym counts against the triceps', () => {
++    const presses: CatchUpSpec = {
++      kind: 'catch-up',
++      muscles: [
++        { muscle: 'chest', sets: 3, minRir: 1, why: 'behind' },
++        { muscle: 'triceps', sets: 3, minRir: 1, why: 'behind' },
++      ],
++      sitOut: [],
++    };
++    const { workout, atHome, back } = roundTrip(
++      presses,
++      [session(at(3, 18), [['back-squat', 3]])],
++      at(9, 18),
++    );
++    expect(directSets(workout, 'triceps'), lifts(workout)).toBe(3);
++    expect(directSets(atHome, 'triceps'), lifts(atHome)).toBe(3);
++    // Before: "barbell-bench-press x3; cable-triceps-pushdown x2", 5 triceps sets for their 3.
++    expect(directSets(back, 'triceps'), lifts(back)).toBeLessThanOrEqual(3);
++    // The bench press picks up its sets again, the stand-in's given back.
++    const bench = allEntries(back.blocks).find(
++      (entry) => entry.exerciseId === 'barbell-bench-press' && !isStopped(entry),
++    );
++    expect(bench, lifts(back)).toBeDefined();
++    expect(working(bench!), lifts(back)).toHaveLength(3);
++  });
++
++  it('the bench press picked up again, the lifter on its stand-in, takes back the stand-in’s sets', () => {
++    const presses: CatchUpSpec = {
++      kind: 'catch-up',
++      muscles: [
++        { muscle: 'chest', sets: 3, minRir: 1, why: 'behind' },
++        { muscle: 'triceps', sets: 3, minRir: 1, why: 'behind' },
++      ],
++      sitOut: [],
++    };
++    const { back } = roundTrip(presses, [session(at(3, 18), [['back-squat', 3]])], at(9, 18), true);
++    const bench = allEntries(back.blocks).find(
++      (entry) => entry.exerciseId === 'barbell-bench-press' && !isStopped(entry),
++    );
++    // Counted against the chest and the triceps still, the stand-in left the bench press no sets.
++    expect(bench, lifts(back)).toBeDefined();
++    expect(working(bench!), lifts(back)).toHaveLength(3);
++    expect(directSets(back, 'triceps'), lifts(back)).toBeLessThanOrEqual(3);
++  });
++
++  it('a lasting swap to a lift that misses the catch-up’s muscle waits: the glutes keep theirs', () => {
++    const swap = { from: 'back-squat', to: 'front-squat', setAt: at(1), until: at(30) };
++    const workout = build(
++      { kind: 'catch-up', muscles: [glutes], sitOut: [] },
++      [session(at(3, 18), [['barbell-row', 3]])],
++      now,
++      { swaps: [swap] },
++    );
++    const exercises = allEntries(workout.blocks).map((entry) => entry.exerciseId);
++    // Before the slot's muscle counted, the swap put in the front squat, for the quads alone.
++    expect(exercises, lifts(workout)).not.toContain('front-squat');
++    expect(directSets(workout, 'glutes'), lifts(workout)).toBeGreaterThan(0);
++  });
++
++  it('"harder" gives the lift in front no set its muscles have no room for', () => {
++    // The bench press gives the chest its 2 sets and the triceps 2 of their 4; the pushdown takes the
++    // 2 left. "Harder" on the pushdown took it to the triceps' own 4, and the rebuild, counting it
++    // first, put a cable fly in the bench press's place.
++    const day: CatchUpSpec = {
++      kind: 'catch-up',
++      muscles: [
++        { muscle: 'chest', sets: 2, minRir: 1, why: 'behind' },
++        { muscle: 'triceps', sets: 4, minRir: 1, why: 'behind' },
++      ],
++      sitOut: [],
++    };
++    const records = [session(at(3, 18), [['back-squat', 3]])];
++    const workout = build(day, records, now);
++    const pushdown = allEntries(workout.blocks).find(
++      (entry) => requireExercise(entry.exerciseId).movementPattern === 'elbow-extension',
++    )!;
++    expect(working(pushdown), lifts(workout)).toHaveLength(2);
++    const result = recalibrate(
++      requestFor({ type: 'intensity', direction: 'harder' }, workout, day, records, now, {
++        completed: underWay(now, 2, pushdown.id),
++        currentEntryId: pushdown.id,
++      }),
++    );
++    expect(result.ok).toBe(true);
++    const after = allEntries(result.workout.blocks).find((entry) => entry.id === pushdown.id)!;
++    expect(working(after), lifts(result.workout)).toHaveLength(2);
++    expect(
++      allEntries(result.workout.blocks).map((entry) => entry.exerciseId),
++      lifts(result.workout),
++    ).toContain('barbell-bench-press');
++    expect(directSets(result.workout, 'triceps'), lifts(result.workout)).toBeLessThanOrEqual(4);
++  });
++
++  it('"harder" gives a lift in front the set its muscle has room for, as a plan made harder does', () => {
++    // Foundation plans an isolation lift's 2 sets: the biceps have room for 3.
++    const profile = profileOf({ programStyle: 'foundation' });
++    const day: CatchUpSpec = {
++      kind: 'catch-up',
++      muscles: [{ muscle: 'biceps', sets: 3, minRir: 1, why: 'behind' }],
++      sitOut: [],
++    };
++    const records = [session(at(3, 18), [['back-squat', 3]])];
++    const workout = build(day, records, now, {}, profile);
++    const [curl] = allEntries(workout.blocks);
++    expect(working(curl!), lifts(workout)).toHaveLength(2);
++    const result = recalibrate(
++      requestFor({ type: 'intensity', direction: 'harder' }, workout, day, records, now, {
++        completed: underWay(now, 2, curl!.id),
++        currentEntryId: curl!.id,
++        profile,
++      }),
++    );
++    expect(result.ok).toBe(true);
++    const after = allEntries(result.workout.blocks).find((entry) => entry.id === curl!.id)!;
++    expect(working(after), lifts(result.workout)).toHaveLength(3);
++    expect(lowestRir(result.workout, 'biceps')).toBeGreaterThanOrEqual(1);
 +  });
 +});
 diff --git a/src/features/today/TodayScreen.module.css b/src/features/today/TodayScreen.module.css
@@ -5341,10 +6269,10 @@ index 0000000..dca0e42
 +  });
 diff --git a/tools/reverts/mutate-m31.py b/tools/reverts/mutate-m31.py
 new file mode 100644
-index 0000000..ef00d11
+index 0000000..30242f8
 --- /dev/null
 +++ b/tools/reverts/mutate-m31.py
-@@ -0,0 +1,463 @@
+@@ -0,0 +1,516 @@
 +"""Maintenance 31 mutation checks: revert each round M rule alone, run its tests, expect a failure,
 +restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -5640,7 +6568,7 @@ index 0000000..ef00d11
 +     "  if (!offPlan && profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {",
 +     "  if (profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {", [T_DAY, T_OFF], None),
 +    ("V5 a muscle with nothing left rests for the slots after", GENERATE,
-+     "    const spent = [...budget].filter(([, left]) => left.sets <= 0).map(([muscle]) => muscle);",
++     "    const spent = [...budget]\n      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)\n      .map(([muscle]) => muscle);",
 +     "    const spent: MuscleId[] = [];", [T_DAY], None),
 +    ("V6 every lift counts against its muscles' sets", GENERATE,
 +     "    for (const left of shares) left.sets -= prescription.sets;\n", "", [T_DAY], None),
@@ -5652,13 +6580,13 @@ index 0000000..ef00d11
 +    ("V9 the 48 hours before today", WEEK,
 +     "    muscles[muscle].daysBefore = earlier.daysSinceMuscle[muscle] ?? null;\n", "", [T_DAY], None),
 +    ("V10 what is left read from the day's first session", STORE,
-+     "      (muscle) => firstSessionDose(profile, first, muscle, deload),",
++     "      (muscle) => firstSessionDose(profile, first, muscle),",
 +     "      (muscle) => sessionDose(profile, muscle),", [T_STORE], None),
 +    ("V11 the full session holds through a workout discarded", STORE,
 +     "    // The full session taken today holds through a workout begun and discarded (the review of M).\n    this.ensureSession(session);",
 +     "    this.ensureSession();", [T_STORE], None),
 +    ("V12 a profile or a place saved reads the day's offer again", STORE,
-+     "        ? { constraints: this.offerReadAgain(session, profile) }", "        ? {}", [T_STORE], None),
++     "        ? this.offerOverrides(session, profile)", "        ? {}", [T_STORE], None),
 +    ("V13 ... the full session kept while the day offers the same", STORE,
 +     "    if (catchUp && constraints.fullSession && constraints.catchUp?.kind === catchUp.kind) {",
 +     "    if (false) {", [T_STORE], None),
@@ -5697,7 +6625,8 @@ index 0000000..ef00d11
 +
 +    # The second review of round M.
 +    ("X1 the lift in front keeps the catch-up's sets through a day's setting", ENGINE,
-+     "      hold?.sets ?? Infinity,", "      Infinity,", [T_OFF], None),
++     "    const sets = Math.min(own, Math.max(room, Math.min(own, working)));",
++     "    const sets = own;", [T_OFF], None),
 +    ("X2 ... and its reserve", ENGINE,
 +     "    const rir = Math.max(hold?.minRir ?? 0, pushed ? pushRir(after.rir) : after.rir);",
 +     "    const rir = pushed ? pushRir(after.rir) : after.rir;", [T_OFF], None),
@@ -5705,11 +6634,11 @@ index 0000000..ef00d11
 +     "  return Math.max(shift, hold.minRir - prescriptionToday(request, exercise, role).rir);",
 +     "  return shift;", [T_OFF], None),
 +    ("X4 a slot the budget empties hands its muscle to the next slot", GENERATE,
-+     "    if (!pick && spent.length > 0) {", "    if (false) {", [T_SESSION, T_DAY], None),
++     "    if (!pick && catchUp) {", "    if (false) {", [T_SESSION, T_DAY], None),
 +    ("X5 a lift kept through a rebuild counts against its muscles", GENERATE,
 +     "      if (left) left.sets -= sets;\n", "", [T_OFF], None),
 +    ("X6 the session's kind switched builds the new kind whole", ENGINE,
-+     "  if (type === 'session-kind' && !hasStarted(request.completed)) return 'full';\n", "",
++     "(type === 'session-kind' || request.offerChanged)", "request.offerChanged",
 +     [T_STORE], None),
 +    ("X7 a catch-up's own length wherever the length is read", DURATION,
 +     "  return choice === 'default' && catchUp\n    ? shorterLength(defaultMinutes)\n    : resolveTargetMinutes(choice, defaultMinutes);",
@@ -5723,14 +6652,12 @@ index 0000000..ef00d11
 +     "        readiness.timePressure && request.duration === 'default'", [T_STORE], None),
 +    ("X11 ... an end time", STORE,
 +     "      session.workout.templateId,\n", "      '',\n", [T_STORE], None),
-+    ("X12 a deload day's dose is what it planned", GENERATE,
-+     "  const template = deload\n    ? undefined\n    : TEMPLATES.find((candidate) => candidate.id === record.templateId);",
-+     "  const template = TEMPLATES.find((candidate) => candidate.id === record.templateId);",
++    ("X12 the day's first workout gives the sets it planned: a deload day, a catch-up", GENERATE,
++     "  if (!record) return sessionDose(profile, muscle);\n  return record.entries.reduce(",
++     "  if (!record) return sessionDose(profile, muscle);\n  if (record) return sessionDose(profile, muscle);\n  return record.entries.reduce(",
 +     [T_STORE], None),
-+    ("X13 a first workout of no split's template gives the sets it planned", GENERATE,
-+     "  if (template) return setsIn(profile, template, muscle);\n  return record.entries",
-+     "  if (template) return setsIn(profile, template, muscle);\n  return sessionDose(profile, muscle);\n  return record.entries",
-+     [T_STORE], None),
++    ("X13 ... a lift that works the muscle secondarily at half, as the week counts it", GENERATE,
++     "        ? INDIRECT_SET_WEIGHT\n", "        ? 1\n", [T_STORE], None),
 +    ("X14 the day's first workout is one with a set done", STORE,
 +     "          record.startedAt <= now && localDayKey(record.startedAt) === today && trainedIn(record),",
 +     "          record.startedAt <= now && localDayKey(record.startedAt) === today,", [T_STORE], None),
@@ -5741,6 +6668,60 @@ index 0000000..ef00d11
 +     "", [T_RESTS], None),
 +    ("X17 the full session holds only through the day it was taken", STORE,
 +     "      localDayKey(before.createdAt) === localDayKey(now) &&\n", "", [T_STORE], None),
++
++    # The third review of round M.
++    ("Z1 a lift planned afresh keeps the catch-up's reserve: weights, place, busy equipment", ENGINE,
++     "    heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),\n",
++     "    effortShift(request, entry, plainTarget.rir),\n", [T_OFF], None),
++    ("Z2 ... a max entered", ENGINE,
++     "            heldShift(\n              from,\n              workout,\n              exercise,\n              entry.role,\n              effortShift(from, entry, plainTarget.rir),\n            ),",
++     "            effortShift(from, entry, plainTarget.rir),", [T_OFF], None),
++    ("Z3 a save that changes the day's offer says so", STORE,
++     "    return sameOffer(constraints, session.constraints)\n      ? { constraints }\n      : { constraints, offerChanged: true };",
++     "    return { constraints };", [T_STORE], None),
++    ("Z4 ... and the plan is built whole", ENGINE,
++     "(type === 'session-kind' || request.offerChanged)", "type === 'session-kind'",
++     [T_STORE], None),
++    ("Z5 an offer is its kind and its muscles", GENERATE,
++     "    return [spec.kind, ...spec.muscles.map((item) => item.muscle)].join(' ');",
++     "    return spec.kind;", [T_SESSION], None),
++    ("Z6 ... a catch-up with nothing behind is the split's day", GENERATE,
++     "    if (!spec || (spec.kind === 'catch-up' && spec.muscles.length === 0)) return '';",
++     "    if (!spec) return '';", [T_SESSION], None),
++    ("Z7 ... and so is the full session taken", GENERATE,
++     "    const spec = constraints.fullSession ? null : (constraints.catchUp ?? null);",
++     "    const spec = constraints.catchUp ?? null;", [T_SESSION, T_STORE], None),
++    ("Z8 a catch-up slot's lift works a muscle it is for", GENERATE,
++     "      ...(short ? { trains: new Set(short) } : {}),\n", "", [T_SESSION, T_OFF], None),
++    ("Z9 ... one for more of them first", GENERATE,
++     "      covers(b, picker) - covers(a, picker) ||\n", "", [T_SESSION], None),
++    ("Z11 muscles share a slot only through one lift for both", GENERATE,
++     "        candidate.pattern === own.pattern &&\n        oneLift(candidate.pattern, [...candidate.muscles, item.muscle]),",
++     "        candidate.pattern === own.pattern,", [T_SESSION], None),
++    ("Z12 a catch-up slot is for the day's muscles alone", GENERATE,
++     "muscles: [item.muscle], sets", "muscles: [...own.muscles], sets", [T_SESSION], None),
++    ("Z13 a lift goes in for every one of the day's muscles it works", GENERATE,
++     "      ...[...budget.keys()].filter((muscle) => !slotSpec.muscles.includes(muscle)),\n", "",
++     [T_DAY, T_OFF], None),
++    ("Z14 a lasting swap that misses the catch-up's muscle waits", GENERATE,
++     "      if (trains && !next.primaryMuscles.some((muscle) => trains.has(muscle))) continue;\n", "",
++     [T_OFF], None),
++    ("Z16 a lift picked up again keeps the catch-up's reserve", GENERATE,
++     "        minRir: Math.max(0, ...shares.map((left) => left.minRir)),\n", "", [T_OFF], None),
++    ("Z17 ... counts against its muscles", GENERATE,
++     "    spend(exercise.id, sets);\n", "", [T_OFF], None),
++    ("Z18 ... and takes back the sets of the stand-in that gives way", GENERATE,
++     "    for (const entry of standIns) spend(entry.exerciseId, -workingOf(entry));\n", "",
++     [T_OFF], None),
++    ("Z19 a muscle with one set left rests for the slots after, its own slot too", GENERATE,
++     "      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)",
++     "      .filter(([, left]) => left.sets <= 0)", [T_SESSION], None),
++    ("Z22 the lift in front gets no set its muscles have no room for", ENGINE,
++     "    const room = catchUpRoom(spec, workout, entry, isDone);",
++     "    const room = catchUpHold(spec, exercise)?.sets ?? Infinity;", [T_OFF], None),
++    ("Z23 ... and a set where they have room, as a plan made harder does", ENGINE,
++     "    const sets = Math.min(own, Math.max(room, Math.min(own, working)));",
++     "    const sets = Math.min(own, working, room);", [T_OFF], None),
 +]
 +
 +
@@ -5831,10 +6812,10 @@ index 0000000..2ae6517
 +print("written")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
 new file mode 100644
-index 0000000..78a488b
+index 0000000..30021d9
 --- /dev/null
 +++ b/tools/reverts/table_m31.txt
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,402 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The week model.
@@ -6082,7 +7063,7 @@ index 0000000..78a488b
 +     "  if (!offPlan && profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {",
 +     "  if (profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {", [T_DAY, T_OFF], None),
 +    ("V5 a muscle with nothing left rests for the slots after", GENERATE,
-+     "    const spent = [...budget].filter(([, left]) => left.sets <= 0).map(([muscle]) => muscle);",
++     "    const spent = [...budget]\n      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)\n      .map(([muscle]) => muscle);",
 +     "    const spent: MuscleId[] = [];", [T_DAY], None),
 +    ("V6 every lift counts against its muscles' sets", GENERATE,
 +     "    for (const left of shares) left.sets -= prescription.sets;\n", "", [T_DAY], None),
@@ -6094,13 +7075,13 @@ index 0000000..78a488b
 +    ("V9 the 48 hours before today", WEEK,
 +     "    muscles[muscle].daysBefore = earlier.daysSinceMuscle[muscle] ?? null;\n", "", [T_DAY], None),
 +    ("V10 what is left read from the day's first session", STORE,
-+     "      (muscle) => firstSessionDose(profile, first, muscle, deload),",
++     "      (muscle) => firstSessionDose(profile, first, muscle),",
 +     "      (muscle) => sessionDose(profile, muscle),", [T_STORE], None),
 +    ("V11 the full session holds through a workout discarded", STORE,
 +     "    // The full session taken today holds through a workout begun and discarded (the review of M).\n    this.ensureSession(session);",
 +     "    this.ensureSession();", [T_STORE], None),
 +    ("V12 a profile or a place saved reads the day's offer again", STORE,
-+     "        ? { constraints: this.offerReadAgain(session, profile) }", "        ? {}", [T_STORE], None),
++     "        ? this.offerOverrides(session, profile)", "        ? {}", [T_STORE], None),
 +    ("V13 ... the full session kept while the day offers the same", STORE,
 +     "    if (catchUp && constraints.fullSession && constraints.catchUp?.kind === catchUp.kind) {",
 +     "    if (false) {", [T_STORE], None),
@@ -6139,7 +7120,8 @@ index 0000000..78a488b
 +
 +    # The second review of round M.
 +    ("X1 the lift in front keeps the catch-up's sets through a day's setting", ENGINE,
-+     "      hold?.sets ?? Infinity,", "      Infinity,", [T_OFF], None),
++     "    const sets = Math.min(own, Math.max(room, Math.min(own, working)));",
++     "    const sets = own;", [T_OFF], None),
 +    ("X2 ... and its reserve", ENGINE,
 +     "    const rir = Math.max(hold?.minRir ?? 0, pushed ? pushRir(after.rir) : after.rir);",
 +     "    const rir = pushed ? pushRir(after.rir) : after.rir;", [T_OFF], None),
@@ -6147,11 +7129,11 @@ index 0000000..78a488b
 +     "  return Math.max(shift, hold.minRir - prescriptionToday(request, exercise, role).rir);",
 +     "  return shift;", [T_OFF], None),
 +    ("X4 a slot the budget empties hands its muscle to the next slot", GENERATE,
-+     "    if (!pick && spent.length > 0) {", "    if (false) {", [T_SESSION, T_DAY], None),
++     "    if (!pick && catchUp) {", "    if (false) {", [T_SESSION, T_DAY], None),
 +    ("X5 a lift kept through a rebuild counts against its muscles", GENERATE,
 +     "      if (left) left.sets -= sets;\n", "", [T_OFF], None),
 +    ("X6 the session's kind switched builds the new kind whole", ENGINE,
-+     "  if (type === 'session-kind' && !hasStarted(request.completed)) return 'full';\n", "",
++     "(type === 'session-kind' || request.offerChanged)", "request.offerChanged",
 +     [T_STORE], None),
 +    ("X7 a catch-up's own length wherever the length is read", DURATION,
 +     "  return choice === 'default' && catchUp\n    ? shorterLength(defaultMinutes)\n    : resolveTargetMinutes(choice, defaultMinutes);",
@@ -6165,14 +7147,12 @@ index 0000000..78a488b
 +     "        readiness.timePressure && request.duration === 'default'", [T_STORE], None),
 +    ("X11 ... an end time", STORE,
 +     "      session.workout.templateId,\n", "      '',\n", [T_STORE], None),
-+    ("X12 a deload day's dose is what it planned", GENERATE,
-+     "  const template = deload\n    ? undefined\n    : TEMPLATES.find((candidate) => candidate.id === record.templateId);",
-+     "  const template = TEMPLATES.find((candidate) => candidate.id === record.templateId);",
++    ("X12 the day's first workout gives the sets it planned: a deload day, a catch-up", GENERATE,
++     "  if (!record) return sessionDose(profile, muscle);\n  return record.entries.reduce(",
++     "  if (!record) return sessionDose(profile, muscle);\n  if (record) return sessionDose(profile, muscle);\n  return record.entries.reduce(",
 +     [T_STORE], None),
-+    ("X13 a first workout of no split's template gives the sets it planned", GENERATE,
-+     "  if (template) return setsIn(profile, template, muscle);\n  return record.entries",
-+     "  if (template) return setsIn(profile, template, muscle);\n  return sessionDose(profile, muscle);\n  return record.entries",
-+     [T_STORE], None),
++    ("X13 ... a lift that works the muscle secondarily at half, as the week counts it", GENERATE,
++     "        ? INDIRECT_SET_WEIGHT\n", "        ? 1\n", [T_STORE], None),
 +    ("X14 the day's first workout is one with a set done", STORE,
 +     "          record.startedAt <= now && localDayKey(record.startedAt) === today && trainedIn(record),",
 +     "          record.startedAt <= now && localDayKey(record.startedAt) === today,", [T_STORE], None),
@@ -6183,4 +7163,58 @@ index 0000000..78a488b
 +     "", [T_RESTS], None),
 +    ("X17 the full session holds only through the day it was taken", STORE,
 +     "      localDayKey(before.createdAt) === localDayKey(now) &&\n", "", [T_STORE], None),
++
++    # The third review of round M.
++    ("Z1 a lift planned afresh keeps the catch-up's reserve: weights, place, busy equipment", ENGINE,
++     "    heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),\n",
++     "    effortShift(request, entry, plainTarget.rir),\n", [T_OFF], None),
++    ("Z2 ... a max entered", ENGINE,
++     "            heldShift(\n              from,\n              workout,\n              exercise,\n              entry.role,\n              effortShift(from, entry, plainTarget.rir),\n            ),",
++     "            effortShift(from, entry, plainTarget.rir),", [T_OFF], None),
++    ("Z3 a save that changes the day's offer says so", STORE,
++     "    return sameOffer(constraints, session.constraints)\n      ? { constraints }\n      : { constraints, offerChanged: true };",
++     "    return { constraints };", [T_STORE], None),
++    ("Z4 ... and the plan is built whole", ENGINE,
++     "(type === 'session-kind' || request.offerChanged)", "type === 'session-kind'",
++     [T_STORE], None),
++    ("Z5 an offer is its kind and its muscles", GENERATE,
++     "    return [spec.kind, ...spec.muscles.map((item) => item.muscle)].join(' ');",
++     "    return spec.kind;", [T_SESSION], None),
++    ("Z6 ... a catch-up with nothing behind is the split's day", GENERATE,
++     "    if (!spec || (spec.kind === 'catch-up' && spec.muscles.length === 0)) return '';",
++     "    if (!spec) return '';", [T_SESSION], None),
++    ("Z7 ... and so is the full session taken", GENERATE,
++     "    const spec = constraints.fullSession ? null : (constraints.catchUp ?? null);",
++     "    const spec = constraints.catchUp ?? null;", [T_SESSION, T_STORE], None),
++    ("Z8 a catch-up slot's lift works a muscle it is for", GENERATE,
++     "      ...(short ? { trains: new Set(short) } : {}),\n", "", [T_SESSION, T_OFF], None),
++    ("Z9 ... one for more of them first", GENERATE,
++     "      covers(b, picker) - covers(a, picker) ||\n", "", [T_SESSION], None),
++    ("Z11 muscles share a slot only through one lift for both", GENERATE,
++     "        candidate.pattern === own.pattern &&\n        oneLift(candidate.pattern, [...candidate.muscles, item.muscle]),",
++     "        candidate.pattern === own.pattern,", [T_SESSION], None),
++    ("Z12 a catch-up slot is for the day's muscles alone", GENERATE,
++     "muscles: [item.muscle], sets", "muscles: [...own.muscles], sets", [T_SESSION], None),
++    ("Z13 a lift goes in for every one of the day's muscles it works", GENERATE,
++     "      ...[...budget.keys()].filter((muscle) => !slotSpec.muscles.includes(muscle)),\n", "",
++     [T_DAY, T_OFF], None),
++    ("Z14 a lasting swap that misses the catch-up's muscle waits", GENERATE,
++     "      if (trains && !next.primaryMuscles.some((muscle) => trains.has(muscle))) continue;\n", "",
++     [T_OFF], None),
++    ("Z16 a lift picked up again keeps the catch-up's reserve", GENERATE,
++     "        minRir: Math.max(0, ...shares.map((left) => left.minRir)),\n", "", [T_OFF], None),
++    ("Z17 ... counts against its muscles", GENERATE,
++     "    spend(exercise.id, sets);\n", "", [T_OFF], None),
++    ("Z18 ... and takes back the sets of the stand-in that gives way", GENERATE,
++     "    for (const entry of standIns) spend(entry.exerciseId, -workingOf(entry));\n", "",
++     [T_OFF], None),
++    ("Z19 a muscle with one set left rests for the slots after, its own slot too", GENERATE,
++     "      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)",
++     "      .filter(([, left]) => left.sets <= 0)", [T_SESSION], None),
++    ("Z22 the lift in front gets no set its muscles have no room for", ENGINE,
++     "    const room = catchUpRoom(spec, workout, entry, isDone);",
++     "    const room = catchUpHold(spec, exercise)?.sets ?? Infinity;", [T_OFF], None),
++    ("Z23 ... and a set where they have room, as a plan made harder does", ENGINE,
++     "    const sets = Math.min(own, Math.max(room, Math.min(own, working)));",
++     "    const sets = Math.min(own, working, room);", [T_OFF], None),
 +]
