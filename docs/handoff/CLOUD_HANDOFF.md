@@ -14,13 +14,14 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff`. The second review pass found twelve issues (two HIGH),
-  the third seven (one HIGH), each with a failing test; all are fixed, their tests moved into the
-  proper files, and the M31 table has an entry for each (139 entries, every anchor found). Round L's
-  table (M30) catches all 121 of its entries on Round M's code before the third pass's fixes. The
-  report's review section is written up to the third pass. Next: the full M31 run (`--utc`), a
-  fourth review pass on the third pass's fixes, the cross-round tables (M30, M29, M28 `--utc`, M27)
-  on the final code, the browser suite, LIMITS, REVERTS and VERIFY in the report, verify, ship.
+  `docs/handoff/round-m-wip/round-m.diff`. Five review passes found twenty, twelve, seven, three and
+  two issues, each shown by a failing test and fixed (one LOW kept as a known limit, with the
+  reason); a sixth pass is checking the fifth's fixes. The M31 table has 149 entries, every anchor
+  found; its full run on the fourth pass's code caught all of them. The report is written up to the
+  fifth pass, with its known limits. The browser suite passed on Round M's build on a ticked day and
+  on a Saturday (the time zone set to Pacific/Kiritimati), after one spec learned to take the full
+  session. Next: the sixth pass, the full M31 run and the cross-round tables (M30, M29, M28 `--utc`,
+  M27) on the final code, verify, ship.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 
