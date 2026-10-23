@@ -14,20 +14,25 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Ten review passes found
-  twenty, twelve, seven, three, two, three, four, three, three and two issues, each shown by a
-  failing test and fixed (one LOW kept as a known limit, with the reason). The tenth's: the slots
-  are filled in the plan's order (an added slot right after the slot it follows), and spare names
-  start past every slot's. An eleventh pass is checking them. The M31 table has 163 entries, every
-  anchor found, the entries changed since its last full run caught; the full unit suite passed
-  (2714, 5 skipped by design). The report is written up to the tenth pass. Next: the eleventh
-  pass, the full M31 run and the cross-round tables (M30, M29, M28 `--utc`, M27) on the final
-  code, the browser suite again, verify, ship.
-- **Round N** (item 11, a top set plus back-offs) is built in its own worktree on Round M's work in
-  progress, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round M's
-  diff applied to `2595631`). Its M32 table has 79 entries, all caught; its report is drafted
-  (`docs/reports/maintenance-32.md`). Its first review pass is running. Rebase it onto `main` once
-  Round M ships, then its review passes, verify, ship. The lift to push keeps item 44's straight
+  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Eleven review passes found
+  twenty, twelve, seven, three, two, three, four, three, three, two and four issues, each shown by a
+  failing test and fixed (one LOW kept as a known limit, with the reason). The eleventh's: a
+  rebuild keeps each lift's name (a slot's lift takes the spare name its lift had before, spare
+  names start past every name the slots and the day's extra can take and never repeat one), and
+  what comes in for a lift in a catch-up works no muscle the plan's other lifts have given its
+  sets. A twelfth pass is checking them. The M31 table has 170 entries, every anchor found, the
+  entries changed since its last full run caught; the full unit suite passed (2724, 5 skipped by
+  design). The report is written up to the eleventh pass. Next: the twelfth pass, the full M31 run
+  and the cross-round tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite
+  again, verify, ship.
+- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest in its own
+  worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round M's diff
+  applied to `2595631`). Its first review pass found twelve (five MEDIUM, seven LOW), each shown by
+  a failing test and fixed, and the revert run's new tests one more (a top set alone under "Make it
+  harder"). Its M32 table has 104 entries, all caught; the full unit suite passed (2782, 5 skipped)
+  before the rebase, and every Round N and catch-up test after it, with every anchor of both tables
+  found. Its report is written up to the first pass. A second pass is checking it. Then its review
+  passes until clean, verify, ship, once Round M is live. The lift to push keeps item 44's straight
   sets by default: a question for the owner's final review.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
