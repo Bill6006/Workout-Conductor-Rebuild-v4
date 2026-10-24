@@ -5,6 +5,18 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 15:05 UTC (supersedes the states below)
+
+- **Rounds M and N**: unchanged (`4cb40d7`, `34dc615`); their eighteenth and ninth reviews running.
+- **Maintenance 33**: local `9f2c2b9` (on `34dc615`). Full suite on the rebased code: 3139 passed
+  (the two failures since carried over). The M33 revert table is begun (`tools/reverts/table_m33.txt`,
+  49 entries, every anchor found): the first 36 ran, all caught or covered since (the big dose's cap
+  retired as equivalent; tests sharpened for the synergist's half weight, the rested baseline, the
+  hard-work rule and the untargeted pairing); a run of those and the second batch is under way in
+  `/home/user/wc4-revert-o`. The re-anchored M27, M31 and M32 entries are all caught. Next: the
+  rest of the M33 table (the illness rest day on Today, the shown cards in the store, the schedule
+  card's cache, the recovery index's signature), then its reviews.
+
 ### Checkpoint, 2026-10-24 15:00 UTC, later the same hour (supersedes the states below)
 
 - **Round M**: `4cb40d7`; its eighteenth review is running.

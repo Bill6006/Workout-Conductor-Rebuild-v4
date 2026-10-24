@@ -4716,7 +4716,7 @@ index 32f2e6c..5b94fd8 100644
      expect(fatigue.evidence.join(' ')).not.toContain('Estimated maxes fell');
      expect(fatigue.performanceDrift ?? 0).toBeGreaterThanOrEqual(0);
 diff --git a/src/engine/recovery/fatigue.test.ts b/src/engine/recovery/fatigue.test.ts
-index e4e1132..a5349d0 100644
+index e4e1132..a1821fe 100644
 --- a/src/engine/recovery/fatigue.test.ts
 +++ b/src/engine/recovery/fatigue.test.ts
 @@ -11,7 +11,7 @@ describe('fatigue interpretation', () => {
@@ -4779,7 +4779,7 @@ index e4e1132..a5349d0 100644
    });
  
    it('reads the check-in trend, long rests, and performance drift', () => {
-@@ -100,13 +90,55 @@ describe('fatigue interpretation', () => {
+@@ -100,13 +90,66 @@ describe('fatigue interpretation', () => {
      };
      const history = [slow(1, 165), slow(3, 180), slow(5, 185), slow(7, 185)];
      const signal = interpretFatigue(history, NOW);
@@ -4827,6 +4827,17 @@ index e4e1132..a5349d0 100644
 +    const signal = interpretFatigue([pressed(1, 25, 25), pressed(3, 30, 30)], NOW_AT);
 +    expect(signal.performanceDrift).toBe(0);
 +    expect(signal.evidence.join(' ')).not.toMatch(/fell/);
++  });
++
++  it('a session saved with no targets is set only against another such', () => {
++    // An older press logged before targets were saved: no pair to read, so no fall from 30 against
++    // a ratio.
++    const old = record(3, 'dumbbell-shoulder-press', [
++      [7, 30, 2],
++      [7, 30, 2],
++    ]);
++    const signal = interpretFatigue([pressed(1, 25, 25), old], NOW_AT);
++    expect(signal.performanceDrift).toBeNull();
 +  });
 +
 +  it('a session further short of its targets than the one before is', () => {
@@ -5096,10 +5107,10 @@ index 599c71b..97c5955 100644
    });
 diff --git a/src/engine/recovery/recovery.learned.test.ts b/src/engine/recovery/recovery.learned.test.ts
 new file mode 100644
-index 0000000..1a798cb
+index 0000000..dcb6c19
 --- /dev/null
 +++ b/src/engine/recovery/recovery.learned.test.ts
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,240 @@
 +import { describe, expect, it } from 'vitest';
 +import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 +import { RECORD_NOW, record, type SetSpec } from '../../test/records';
@@ -5178,6 +5189,8 @@ index 0000000..1a798cb
 +    const last = history.at(-1)!;
 +    // Before the last early session: rested sessions at 240 each; the early ones at 180 are not read.
 +    expect(restedBaseline('barbell-bench-press', history, last.startedAt)).toBe(240);
++    // After it, three of the last five sessions are early ones at 180: still 240.
++    expect(restedBaseline('barbell-bench-press', history, RECORD_NOW)).toBe(240);
 +  });
 +
 +  it('none from fewer than three rested sessions', () => {
@@ -5340,10 +5353,10 @@ index 0000000..1a798cb
 +});
 diff --git a/src/engine/recovery/recovery.test.ts b/src/engine/recovery/recovery.test.ts
 new file mode 100644
-index 0000000..2b0b88f
+index 0000000..c09318d
 --- /dev/null
 +++ b/src/engine/recovery/recovery.test.ts
-@@ -0,0 +1,155 @@
+@@ -0,0 +1,177 @@
 +import { describe, expect, it } from 'vitest';
 +import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 +import { RECORD_NOW, record, type SetSpec } from '../../test/records';
@@ -5426,6 +5439,11 @@ index 0000000..2b0b88f
 +    const curls = record(1, 'leg-curl', sets(4, 10, 2));
 +    const day: WorkoutRecord = { ...squat, entries: [...squat.entries, ...curls.entries] };
 +    expect(hoursOf([day], 'hamstrings')).toBe(36 + RECOVERY.BIG_DOSE_HOURS);
++    // Three leg curls: 3 + 4 x 0.5 = 5, short of a big dose, where the squat's four counted whole
++    // would make seven.
++    const fewer = record(1, 'leg-curl', sets(3, 10, 2));
++    const lighter: WorkoutRecord = { ...squat, entries: [...squat.entries, ...fewer.entries] };
++    expect(hoursOf([lighter], 'hamstrings')).toBe(36);
 +  });
 +
 +  it('a lift new to the lifter, in its first three weeks: a day more', () => {
@@ -5497,6 +5515,23 @@ index 0000000..2b0b88f
 +      for (const set of entry.sets) if (set.kind === 'working') set.targetRir = 3;
 +    }
 +    expect(tooSoonToday(workout, recoveryWindows(history), RECORD_NOW)).toEqual([]);
++  });
++
++  it('two sets two short of failure are not hard work: hard is a set to failure or three such', () => {
++    const history = [known, record(16 / 24, 'barbell-bench-press', sets(3, 6, 0))];
++    const workout = pushDay(history);
++    // The first lift for the chest down to two working sets at two in reserve, the rest light.
++    let first = true;
++    for (const entry of allEntries(workout.blocks)) {
++      if (!getExercise(entry.exerciseId)?.primaryMuscles.includes('chest')) continue;
++      const working = entry.sets.filter((set) => set.kind === 'working');
++      entry.sets = first
++        ? working.slice(0, 2).map((set) => ({ ...set, targetRir: 2 }))
++        : working.map((set) => ({ ...set, targetRir: 3 }));
++      first = false;
++    }
++    const found = tooSoonToday(workout, recoveryWindows(history), RECORD_NOW);
++    expect(found.map((item) => item.muscle)).not.toContain('chest');
 +  });
 +});
 diff --git a/src/engine/recovery/recovery.ts b/src/engine/recovery/recovery.ts
@@ -7287,6 +7322,271 @@ index 8dadf1e..f763133 100644
       [T_REFIT_FATIGUE], None),
      ("N209 back-offs replayed against the top set as corrected", STORE,
       "this.backOffLogOf({ ...session, completed }, entry, isDone)", "this.backOffLogOf(session, entry, isDone)",
+diff --git a/tools/reverts/mutate-m33.py b/tools/reverts/mutate-m33.py
+new file mode 100644
+index 0000000..c8bbb1d
+--- /dev/null
++++ b/tools/reverts/mutate-m33.py
+@@ -0,0 +1,259 @@
++"""Maintenance 33 mutation checks: revert each recovery and readiness rule alone, run its tests,
++expect a failure, restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
++
++  python mutate-m33.py --repo=PATH            run every M33 entry in a copy of the repository
++  python mutate-m33.py --repo=PATH R1 C3      run the entries whose names start with these
++  python mutate-m33.py --repo=PATH --check    only check that every anchor is found once
++  python mutate-m33.py --repo=PATH --utc ...  as the CI runner: the tests in UTC, then the day
++                                              rules' tests in two zones (scripts/test-zones.mjs)
++
++The table below is data: nothing in it runs.
++"""
++import os
++import pathlib
++import re
++import subprocess
++import sys
++
++# The repository this runner sits in (tools/reverts/ -> the root). Run it in a copy instead:
++# from M26 on, --repo=PATH; see tools/reverts/README.md.
++ROOT = pathlib.Path(__file__).resolve().parents[2] if "__file__" in globals() else pathlib.Path.cwd()
++for _flag in sys.argv[1:]:
++    if _flag.startswith("--repo="):
++        ROOT = pathlib.Path(_flag.split("=", 1)[1])
++
++RECOVERY = "src/engine/recovery/recovery.ts"
++FATIGUE = "src/engine/recovery/fatigue.ts"
++CHECKIN = "src/engine/readiness/checkIn.ts"
++COACH = "src/engine/coach/coachConductor.ts"
++ENGINE = "src/engine/recalibration/recalibrate.ts"
++BADSTART = "src/engine/recalibration/badStart.ts"
++PLAN = "src/engine/planning/weeklyPlan.ts"
++BUILDER = "src/core/state/workoutRecordBuilder.ts"
++LEARNED = "src/engine/learned/learned.ts"
++
++T_RECOVERY = "src/engine/recovery/recovery.test.ts"
++T_LEARNED_W = "src/engine/recovery/recovery.learned.test.ts"
++T_FATIGUE = "src/engine/recovery/fatigue.test.ts"
++T_CHECKIN = "src/engine/readiness/checkIn.test.ts"
++T_TOO_SOON = "src/engine/coach/coachConductor.tooSoon.test.ts"
++T_SHOWN = "src/core/state/coachShown.store.test.ts"
++T_LIGHTER = "src/engine/recalibration/lighter.test.ts"
++T_SCHEDULE = "src/engine/coach/coachConductor.schedule.test.ts"
++T_PLAN = "src/engine/planning/weeklyPlan.test.ts"
++T_PROGRESS = "src/core/state/appStore.progress.test.ts"
++T_BADSTART = "src/engine/recalibration/badStart.test.ts"
++T_LEARNED_PAGE = "src/engine/learned/learned.test.ts"
++T_STRATEGY = "src/engine/strategy/strategy.test.ts"
++T_RECALIBRATE = "src/engine/recalibration/recalibrate.test.ts"
++
++# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
++MUTATIONS = [
++    # The windows from the hardest sets.
++    ("R1 hard work only: three in reserve or closer", RECOVERY,
++     "rir !== null && rir <= RECOVERY.HARD_RIR;", "rir !== null;", [T_RECOVERY], None),
++    ("R2 three or more short: a day", RECOVERY,
++     "      : RECOVERY.EASY_HOURS;", "      : RECOVERY.MID_HOURS[region];", [T_RECOVERY], None),
++    ("R3 one or two short: by region", RECOVERY,
++     "    : hardest.rir <= 2\n      ? RECOVERY.MID_HOURS[region]",
++     "    : hardest.rir <= 2\n      ? RECOVERY.MID_HOURS.upper", [T_RECOVERY], None),
++    ("R4 to failure: by region", RECOVERY,
++     "  let hours: number = failure\n    ? RECOVERY.FAILURE_HOURS[region]",
++     "  let hours: number = failure\n    ? RECOVERY.FAILURE_HOURS.upper", [T_RECOVERY], None),
++    ("R5 a long set a rep short counts as to failure", RECOVERY,
++     "(hardest.rir <= 1 && hardest.reps >= RECOVERY.LONG_SET_REPS)", "false", [T_RECOVERY], None),
++    ("R6 lower body: compound lifts only", RECOVERY,
++     "    if (lowerCompound(exercise)) lower = true;", "    if (LOWER_BODY.has(exercise.movementPattern)) lower = true;",
++     [T_RECOVERY], None),
++    ("R7 the newest hard work sets the window", RECOVERY,
++     "    const newest = (index.windows.get(muscle) ?? []).at(-1);",
++     "    const newest = (index.windows.get(muscle) ?? [])[0];", [T_RECOVERY], None),
++    ("R8 a big dose lengthens it", RECOVERY,
++     "  if (dose >= RECOVERY.BIG_DOSE_SETS) {", "  if (false) {", [T_RECOVERY], None),
++    # No entry for the big dose's cap: with these numbers a set to failure and a big dose reach it
++    # exactly (72 h upper, 96 h lower), so it never binds; it guards a later change of the numbers.
++    ("R10 a synergist counts half", RECOVERY,
++     "        ? RECOVERY.SYNERGIST_WEIGHT\n        : 0;", "        ? 1\n        : 0;", [T_RECOVERY], None),
++    ("R11 ... and starts no window of its own", RECOVERY,
++     "    if (!prime) continue;\n", "", [T_RECOVERY], None),
++    ("R12 a new lift lengthens it", RECOVERY,
++     "  if (newLift !== null) {\n    hours += RECOVERY.NEW_LIFT_HOURS;",
++     "  if (false) {\n    hours += RECOVERY.NEW_LIFT_HOURS;", [T_RECOVERY], None),
++    ("R13 ... a lifter new to the app is not new to every lift", RECOVERY,
++     "  if (before === 0) return known;", "  if (before === 0) return true;", [T_RECOVERY], None),
++    ("R14 ... back after six months is new again", RECOVERY,
++     "  if (at - (times[before - 1] as number) >= RECOVERY.BACK_AFTER_DAYS * DAY_MS) return true;\n", "",
++     [T_RECOVERY], None),
++    ("R15 long-length work lengthens it", RECOVERY,
++     "  if (longLength) {\n    hours += RECOVERY.LONG_LENGTH_HOURS;",
++     "  if (false) {\n    hours += RECOVERY.LONG_LENGTH_HOURS;", [T_RECOVERY], None),
++    ("R16 a short night lengthens every window", RECOVERY,
++     "  if (readiness !== null && readiness.sleep <= RECOVERY.SHORT_NIGHT_SLEEP) return 'a short night';",
++     "  if (false) return 'a short night';", [T_RECOVERY], None),
++    ("R17 a run of hard days with energy low", RECOVERY,
++     "  return run >= RECOVERY.HARD_DAYS_RUN ? `${run} hard days running, energy low today` : null;",
++     "  return null;", [T_LEARNED_W], None),
++    # What the lifter's own sessions teach.
++    ("L1 after five of each", RECOVERY,
++     "    if (early.length >= LEARNING.LEAST && rested.length >= LEARNING.LEAST) {",
++     "    if (early.length >= 1 && rested.length >= 1) {", [T_LEARNED_W], None),
++    ("L2 early as good as rested: shorter", RECOVERY,
++     "      if (fell <= LEARNING.SAME) shift = -LEARNING.STEP_HOURS;",
++     "      if (false) shift = -LEARNING.STEP_HOURS;", [T_LEARNED_W], None),
++    ("L3 early well under rested: longer", RECOVERY,
++     "      else if (fell >= LEARNING.SLOWER) shift = LEARNING.STEP_HOURS;",
++     "      else if (false) shift = LEARNING.STEP_HOURS;", [T_LEARNED_W], None),
++    ("L4 within bounds", RECOVERY,
++     "        const hours = withinBounds(window.prior + shift, window.prior);",
++     "        const hours = window.prior + shift;", [T_LEARNED_W], None),
++    ("L5 days ill or after a short night are left out", RECOVERY,
++     "      if (last === null || Date.parse(record.startedAt) < from || offDay(record)) continue;",
++     "      if (last === null || Date.parse(record.startedAt) < from) continue;", [T_LEARNED_W], None),
++    ("L6 ... and what came before a reset", RECOVERY,
++     "      if (last === null || Date.parse(record.startedAt) < from || offDay(record)) continue;",
++     "      if (last === null || offDay(record)) continue;", [T_LEARNED_W], None),
++    ("L7 the rested baseline: three at least", RECOVERY,
++     "    sorted.length < FIRST_SET.RESTED_LEAST\n      ? null", "    sorted.length < 1\n      ? null",
++     [T_LEARNED_W], None),
++    ("L8 ... from rested sessions only", RECOVERY,
++     "    if (read.rested) maxes.push(read.max);", "    maxes.push(read.max);", [T_LEARNED_W], None),
++    ("L9 what the sessions taught is kept with the log", RECOVERY,
++     "  if (kept) return kept;\n  const learned = new Map<MuscleId, LearnedWindow>();",
++     "  const learned = new Map<MuscleId, LearnedWindow>();", [T_LEARNED_W], None),
++    # Too soon.
++    ("T1 well inside: under three quarters of the window", RECOVERY,
++     "    if (since < 0 || since >= TOO_SOON_SHARE * window.hours) continue;",
++     "    if (since < 0 || since >= window.hours) continue;", [T_RECOVERY], None),
++    ("T2 hard work only: a set to failure or three at two or closer", RECOVERY,
++     "      working.filter((set) => set.targetRir <= 2).length >= 3;",
++     "      working.filter((set) => set.targetRir <= 2).length >= 1;", [T_RECOVERY], None),
++    ("T3 the first set 8% under its rested sessions", COACH,
++     "    if (max === null || base === null || base <= 0 || 1 - max / base < need) continue;",
++     "    if (max === null || base === null || base <= 0) continue;", [T_TOO_SOON], None),
++    ("T4 Not now keeps the muscle away until the week ends", COACH,
++     "      source: `${TOO_SOON_SOURCE}|${muscle}|${week}`,", "      source: `${TOO_SOON_SOURCE}|${muscle}`,",
++     [T_TOO_SOON], None),
++    ("T5 a muscle the lighter option took is left alone", COACH,
++     "    if (lighter.has(muscle)) continue;\n", "", [T_TOO_SOON, T_LIGHTER], None),
++    # Fatigue.
++    ("F1 a lift's estimated max read against what its sets asked", FATIGUE,
++     "        const read = asked > 0 && !untargeted ? { value: best / asked, against: true } : null;",
++     "        const read = null;", [T_FATIGUE], None),
++    ("F2 ... a session saved with no targets set only against another such", FATIGUE,
++     "    if (newest && before && before.value > 0 && newest.against === before.against) {",
++     "    if (newest && before && before.value > 0) {", [T_FATIGUE], None),
++    # Where the windows are read.
++    ("P1 the Plan's balance reads each muscle's window", PLAN,
++     "    const left = window ? window.hours - hoursSince(window, now) : 0;",
++     "    const left = 0;", [T_PLAN], None),
++    ("P2 the schedule card says the days too soon", COACH,
++     "        ...(crowded ? [crowded] : []),\n", "", [T_SCHEDULE], None),
++    ("P3 the hard start reads the learned reset", BADSTART,
++     "      ? recoveryWindows(context.history, { resets: context.resets ?? null })",
++     "      ? recoveryWindows(context.history)", [T_BADSTART], None),
++    ("P4 the learned page shows the recovery windows", LEARNED,
++     "    paceSection(input),\n    recoverySection(input),", "    paceSection(input),", [T_LEARNED_PAGE], None),
++    ("P5 the completion says each muscle's window from that session", BUILDER,
++     "    if (window.at !== completedAtIso) continue;\n", "", [T_PROGRESS], None),
++    ("P6 the hard start expects a step less of a muscle inside its window", BADSTART,
++     "    return window !== undefined && hoursSince(window, first.completedAt) < window.hours;",
++     "    return false;", [T_BADSTART], None),
++    # The check-in (decision 1).
++    ("C1 the lifter's own four weeks, five check-ins or more", CHECKIN,
++     "  const own = saved.length >= RULES.baselineLeast.value;", "  const own = false;", [T_CHECKIN], None),
++    ("C2 clearly worse: never less than a point", CHECKIN,
++     "mean - Math.max(1, spread * RULES.worseSpread.value)", "mean - spread * RULES.worseSpread.value",
++     [T_CHECKIN], None),
++    ("C3 two items lower the day", CHECKIN,
++     "    lowered: worse.length >= RULES.worseItems.value || extreme !== null,",
++     "    lowered: worse.length >= 1 || extreme !== null,", [T_CHECKIN], None),
++    ("C4 two short nights running", CHECKIN,
++     "    nightBefore !== undefined &&\n    nightBefore.readiness.sleep <= RULES.extremeSleep.value", "    true",
++     [T_CHECKIN], None),
++    ("C5 soreness alone never counts", CHECKIN,
++     "export const CHECK_IN_ITEMS = ['energy', 'sleep', 'motivation'] as const;",
++     "export const CHECK_IN_ITEMS = ['energy', 'sleep', 'motivation', 'soreness'] as const;", [T_CHECKIN],
++     None),
++    ("I1 a head cold keeps every set two short of failure", ENGINE,
++     "    ? { sets: 0, rir: 0, restFactor: 1, rirFloor: RULES.headColdRir.value }",
++     "    ? { sets: 0, rir: 0, restFactor: 1 }", [T_RECALIBRATE, T_CHECKIN], None),
++    # The lighter option and the card limits (decisions 2 and 5).
++    ("G1 lighter: a set fewer", ENGINE, "const LIGHTER = { sets: 1, rir: 1 } as const;",
++     "const LIGHTER = { sets: 0, rir: 1 } as const;", [T_LIGHTER], None),
++    ("G2 ... and a rep more in reserve", ENGINE, "const LIGHTER = { sets: 1, rir: 1 } as const;",
++     "const LIGHTER = { sets: 1, rir: 0 } as const;", [T_LIGHTER], None),
++    ("K1 one new card a day", COACH,
++     "  if (times.filter((at) => localDayKey(at) === day).length >= RULES.cardsPerDay.value) return true;\n",
++     "", [T_TOO_SOON], None),
++    ("K2 three a week", COACH,
++     "  return times.filter((at) => localWeekKey(at) === week).length >= RULES.cardsPerWeek.value;",
++     "  return false;", [T_TOO_SOON], None),
++    ("K3 a card already shown stays", COACH,
++     "  if (shown[declineKey(signal)] !== undefined) return false;\n", "", [T_TOO_SOON], None),
++]
++
++
++def apply(original, old, new, nth):
++    pairs = old if isinstance(old, list) else [(old, new)]
++    mutated = original
++    for part_old, part_new in pairs:
++        count = mutated.count(part_old)
++        if (nth is None and count != 1) or (nth is not None and count <= nth):
++            return None, f"ANCHOR x{count}"
++        at = -1
++        for _ in range((nth or 0) + 1):
++            at = mutated.index(part_old, at + 1)
++        mutated = mutated[:at] + part_new + mutated[at + len(part_old):]
++    return mutated, None
++
++
++args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
++check = "--check" in sys.argv
++utc = "--utc" in sys.argv
++results = []
++for name, rel, old, new, tests, nth in MUTATIONS:
++    if args and not any(name.startswith(prefix) for prefix in args):
++        continue
++    path = ROOT / rel
++    original = path.read_bytes().decode("utf-8")
++    mutated, bad = apply(original, old, new, nth)
++    if bad:
++        results.append((name, bad, ""))
++        print(f"{bad:9} {name}", flush=True)
++        continue
++    if check:
++        continue
++    try:
++        path.write_bytes(mutated.encode("utf-8"))
++        env = dict(os.environ, TZ="UTC") if utc else None
++        run = subprocess.run(
++            "npx vitest run " + " ".join(tests),
++            shell=True, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
++            env=env,
++        )
++        out = run.stdout + run.stderr
++        summary = re.search(r"Tests\s+(.*)", out)
++        line = summary.group(1).strip() if summary else "no summary (compile error?)"
++        killed = "failed" in line or summary is None
++        if utc:
++            # As the CI runner: the tests in UTC, then the day rules' tests in two zones.
++            zones = subprocess.run(
++                "node scripts/test-zones.mjs",
++                shell=True, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
++                errors="replace", env=env,
++            )
++            line = f"UTC: {line}; zones: {'failed' if zones.returncode != 0 else 'passed'}"
++            killed = killed or run.returncode != 0 or zones.returncode != 0
++        results.append((name, "KILLED" if killed else "SURVIVED", line))
++    finally:
++        path.write_bytes(original.encode("utf-8"))
++    print(f"{results[-1][1]:9} {name}: {results[-1][2]}", flush=True)
++
++if check:
++    print(f"anchors checked: {len(MUTATIONS)} entries, {len(results)} not found")
++    sys.exit(0)
++print("\n==== summary")
++for name, verdict, line in results:
++    print(f"{verdict:9} {name}  [{line}]")
++survived = [r for r in results if r[1] != "KILLED"]
++print(f"\n{len(results) - len(survived)} killed, {len(survived)} not killed")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
 index 68bc0ad..38b7419 100644
 --- a/tools/reverts/table_m31.txt
@@ -7377,3 +7677,174 @@ index 0eebe16..fe3033c 100644
       [T_REFIT_FATIGUE], None),
      ("N209 back-offs replayed against the top set as corrected", STORE,
       "this.backOffLogOf({ ...session, completed }, entry, isDone)", "this.backOffLogOf(session, entry, isDone)",
+diff --git a/tools/reverts/table_m33.py b/tools/reverts/table_m33.py
+new file mode 100644
+index 0000000..e3a0e43
+--- /dev/null
++++ b/tools/reverts/table_m33.py
+@@ -0,0 +1,15 @@
++"""Rewrite mutate-m33.py's table from table_m33.txt (edit the .txt, then run this).
++
++Never write the table through a shell heredoc: heredocs collapse the table's backslashes.
++"""
++import pathlib
++
++p = pathlib.Path(__file__).resolve().parent / "mutate-m33.py"
++t = p.read_bytes().decode("utf-8")
++start = t.index("# (name, file, old, new, tests, nth)")
++end = t.index("def apply(original, old, new, nth):")
++head = t[:start]
++tail = t[end:]
++table = (pathlib.Path(__file__).parent / "table_m33.txt").read_bytes().decode("utf-8")
++p.write_bytes((head + table + "\n\n" + tail).encode("utf-8"))
++print("written")
+diff --git a/tools/reverts/table_m33.txt b/tools/reverts/table_m33.txt
+new file mode 100644
+index 0000000..9516947
+--- /dev/null
++++ b/tools/reverts/table_m33.txt
+@@ -0,0 +1,144 @@
++# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
++MUTATIONS = [
++    # The windows from the hardest sets.
++    ("R1 hard work only: three in reserve or closer", RECOVERY,
++     "rir !== null && rir <= RECOVERY.HARD_RIR;", "rir !== null;", [T_RECOVERY], None),
++    ("R2 three or more short: a day", RECOVERY,
++     "      : RECOVERY.EASY_HOURS;", "      : RECOVERY.MID_HOURS[region];", [T_RECOVERY], None),
++    ("R3 one or two short: by region", RECOVERY,
++     "    : hardest.rir <= 2\n      ? RECOVERY.MID_HOURS[region]",
++     "    : hardest.rir <= 2\n      ? RECOVERY.MID_HOURS.upper", [T_RECOVERY], None),
++    ("R4 to failure: by region", RECOVERY,
++     "  let hours: number = failure\n    ? RECOVERY.FAILURE_HOURS[region]",
++     "  let hours: number = failure\n    ? RECOVERY.FAILURE_HOURS.upper", [T_RECOVERY], None),
++    ("R5 a long set a rep short counts as to failure", RECOVERY,
++     "(hardest.rir <= 1 && hardest.reps >= RECOVERY.LONG_SET_REPS)", "false", [T_RECOVERY], None),
++    ("R6 lower body: compound lifts only", RECOVERY,
++     "    if (lowerCompound(exercise)) lower = true;", "    if (LOWER_BODY.has(exercise.movementPattern)) lower = true;",
++     [T_RECOVERY], None),
++    ("R7 the newest hard work sets the window", RECOVERY,
++     "    const newest = (index.windows.get(muscle) ?? []).at(-1);",
++     "    const newest = (index.windows.get(muscle) ?? [])[0];", [T_RECOVERY], None),
++    ("R8 a big dose lengthens it", RECOVERY,
++     "  if (dose >= RECOVERY.BIG_DOSE_SETS) {", "  if (false) {", [T_RECOVERY], None),
++    # No entry for the big dose's cap: with these numbers a set to failure and a big dose reach it
++    # exactly (72 h upper, 96 h lower), so it never binds; it guards a later change of the numbers.
++    ("R10 a synergist counts half", RECOVERY,
++     "        ? RECOVERY.SYNERGIST_WEIGHT\n        : 0;", "        ? 1\n        : 0;", [T_RECOVERY], None),
++    ("R11 ... and starts no window of its own", RECOVERY,
++     "    if (!prime) continue;\n", "", [T_RECOVERY], None),
++    ("R12 a new lift lengthens it", RECOVERY,
++     "  if (newLift !== null) {\n    hours += RECOVERY.NEW_LIFT_HOURS;",
++     "  if (false) {\n    hours += RECOVERY.NEW_LIFT_HOURS;", [T_RECOVERY], None),
++    ("R13 ... a lifter new to the app is not new to every lift", RECOVERY,
++     "  if (before === 0) return known;", "  if (before === 0) return true;", [T_RECOVERY], None),
++    ("R14 ... back after six months is new again", RECOVERY,
++     "  if (at - (times[before - 1] as number) >= RECOVERY.BACK_AFTER_DAYS * DAY_MS) return true;\n", "",
++     [T_RECOVERY], None),
++    ("R15 long-length work lengthens it", RECOVERY,
++     "  if (longLength) {\n    hours += RECOVERY.LONG_LENGTH_HOURS;",
++     "  if (false) {\n    hours += RECOVERY.LONG_LENGTH_HOURS;", [T_RECOVERY], None),
++    ("R16 a short night lengthens every window", RECOVERY,
++     "  if (readiness !== null && readiness.sleep <= RECOVERY.SHORT_NIGHT_SLEEP) return 'a short night';",
++     "  if (false) return 'a short night';", [T_RECOVERY], None),
++    ("R17 a run of hard days with energy low", RECOVERY,
++     "  return run >= RECOVERY.HARD_DAYS_RUN ? `${run} hard days running, energy low today` : null;",
++     "  return null;", [T_LEARNED_W], None),
++    # What the lifter's own sessions teach.
++    ("L1 after five of each", RECOVERY,
++     "    if (early.length >= LEARNING.LEAST && rested.length >= LEARNING.LEAST) {",
++     "    if (early.length >= 1 && rested.length >= 1) {", [T_LEARNED_W], None),
++    ("L2 early as good as rested: shorter", RECOVERY,
++     "      if (fell <= LEARNING.SAME) shift = -LEARNING.STEP_HOURS;",
++     "      if (false) shift = -LEARNING.STEP_HOURS;", [T_LEARNED_W], None),
++    ("L3 early well under rested: longer", RECOVERY,
++     "      else if (fell >= LEARNING.SLOWER) shift = LEARNING.STEP_HOURS;",
++     "      else if (false) shift = LEARNING.STEP_HOURS;", [T_LEARNED_W], None),
++    ("L4 within bounds", RECOVERY,
++     "        const hours = withinBounds(window.prior + shift, window.prior);",
++     "        const hours = window.prior + shift;", [T_LEARNED_W], None),
++    ("L5 days ill or after a short night are left out", RECOVERY,
++     "      if (last === null || Date.parse(record.startedAt) < from || offDay(record)) continue;",
++     "      if (last === null || Date.parse(record.startedAt) < from) continue;", [T_LEARNED_W], None),
++    ("L6 ... and what came before a reset", RECOVERY,
++     "      if (last === null || Date.parse(record.startedAt) < from || offDay(record)) continue;",
++     "      if (last === null || offDay(record)) continue;", [T_LEARNED_W], None),
++    ("L7 the rested baseline: three at least", RECOVERY,
++     "    sorted.length < FIRST_SET.RESTED_LEAST\n      ? null", "    sorted.length < 1\n      ? null",
++     [T_LEARNED_W], None),
++    ("L8 ... from rested sessions only", RECOVERY,
++     "    if (read.rested) maxes.push(read.max);", "    maxes.push(read.max);", [T_LEARNED_W], None),
++    ("L9 what the sessions taught is kept with the log", RECOVERY,
++     "  if (kept) return kept;\n  const learned = new Map<MuscleId, LearnedWindow>();",
++     "  const learned = new Map<MuscleId, LearnedWindow>();", [T_LEARNED_W], None),
++    # Too soon.
++    ("T1 well inside: under three quarters of the window", RECOVERY,
++     "    if (since < 0 || since >= TOO_SOON_SHARE * window.hours) continue;",
++     "    if (since < 0 || since >= window.hours) continue;", [T_RECOVERY], None),
++    ("T2 hard work only: a set to failure or three at two or closer", RECOVERY,
++     "      working.filter((set) => set.targetRir <= 2).length >= 3;",
++     "      working.filter((set) => set.targetRir <= 2).length >= 1;", [T_RECOVERY], None),
++    ("T3 the first set 8% under its rested sessions", COACH,
++     "    if (max === null || base === null || base <= 0 || 1 - max / base < need) continue;",
++     "    if (max === null || base === null || base <= 0) continue;", [T_TOO_SOON], None),
++    ("T4 Not now keeps the muscle away until the week ends", COACH,
++     "      source: `${TOO_SOON_SOURCE}|${muscle}|${week}`,", "      source: `${TOO_SOON_SOURCE}|${muscle}`,",
++     [T_TOO_SOON], None),
++    ("T5 a muscle the lighter option took is left alone", COACH,
++     "    if (lighter.has(muscle)) continue;\n", "", [T_TOO_SOON, T_LIGHTER], None),
++    # Fatigue.
++    ("F1 a lift's estimated max read against what its sets asked", FATIGUE,
++     "        const read = asked > 0 && !untargeted ? { value: best / asked, against: true } : null;",
++     "        const read = null;", [T_FATIGUE], None),
++    ("F2 ... a session saved with no targets set only against another such", FATIGUE,
++     "    if (newest && before && before.value > 0 && newest.against === before.against) {",
++     "    if (newest && before && before.value > 0) {", [T_FATIGUE], None),
++    # Where the windows are read.
++    ("P1 the Plan's balance reads each muscle's window", PLAN,
++     "    const left = window ? window.hours - hoursSince(window, now) : 0;",
++     "    const left = 0;", [T_PLAN], None),
++    ("P2 the schedule card says the days too soon", COACH,
++     "        ...(crowded ? [crowded] : []),\n", "", [T_SCHEDULE], None),
++    ("P3 the hard start reads the learned reset", BADSTART,
++     "      ? recoveryWindows(context.history, { resets: context.resets ?? null })",
++     "      ? recoveryWindows(context.history)", [T_BADSTART], None),
++    ("P4 the learned page shows the recovery windows", LEARNED,
++     "    paceSection(input),\n    recoverySection(input),", "    paceSection(input),", [T_LEARNED_PAGE], None),
++    ("P5 the completion says each muscle's window from that session", BUILDER,
++     "    if (window.at !== completedAtIso) continue;\n", "", [T_PROGRESS], None),
++    ("P6 the hard start expects a step less of a muscle inside its window", BADSTART,
++     "    return window !== undefined && hoursSince(window, first.completedAt) < window.hours;",
++     "    return false;", [T_BADSTART], None),
++    # The check-in (decision 1).
++    ("C1 the lifter's own four weeks, five check-ins or more", CHECKIN,
++     "  const own = saved.length >= RULES.baselineLeast.value;", "  const own = false;", [T_CHECKIN], None),
++    ("C2 clearly worse: never less than a point", CHECKIN,
++     "mean - Math.max(1, spread * RULES.worseSpread.value)", "mean - spread * RULES.worseSpread.value",
++     [T_CHECKIN], None),
++    ("C3 two items lower the day", CHECKIN,
++     "    lowered: worse.length >= RULES.worseItems.value || extreme !== null,",
++     "    lowered: worse.length >= 1 || extreme !== null,", [T_CHECKIN], None),
++    ("C4 two short nights running", CHECKIN,
++     "    nightBefore !== undefined &&\n    nightBefore.readiness.sleep <= RULES.extremeSleep.value", "    true",
++     [T_CHECKIN], None),
++    ("C5 soreness alone never counts", CHECKIN,
++     "export const CHECK_IN_ITEMS = ['energy', 'sleep', 'motivation'] as const;",
++     "export const CHECK_IN_ITEMS = ['energy', 'sleep', 'motivation', 'soreness'] as const;", [T_CHECKIN],
++     None),
++    ("I1 a head cold keeps every set two short of failure", ENGINE,
++     "    ? { sets: 0, rir: 0, restFactor: 1, rirFloor: RULES.headColdRir.value }",
++     "    ? { sets: 0, rir: 0, restFactor: 1 }", [T_RECALIBRATE, T_CHECKIN], None),
++    # The lighter option and the card limits (decisions 2 and 5).
++    ("G1 lighter: a set fewer", ENGINE, "const LIGHTER = { sets: 1, rir: 1 } as const;",
++     "const LIGHTER = { sets: 0, rir: 1 } as const;", [T_LIGHTER], None),
++    ("G2 ... and a rep more in reserve", ENGINE, "const LIGHTER = { sets: 1, rir: 1 } as const;",
++     "const LIGHTER = { sets: 1, rir: 0 } as const;", [T_LIGHTER], None),
++    ("K1 one new card a day", COACH,
++     "  if (times.filter((at) => localDayKey(at) === day).length >= RULES.cardsPerDay.value) return true;\n",
++     "", [T_TOO_SOON], None),
++    ("K2 three a week", COACH,
++     "  return times.filter((at) => localWeekKey(at) === week).length >= RULES.cardsPerWeek.value;",
++     "  return false;", [T_TOO_SOON], None),
++    ("K3 a card already shown stays", COACH,
++     "  if (shown[declineKey(signal)] !== undefined) return false;\n", "", [T_TOO_SOON], None),
++]
