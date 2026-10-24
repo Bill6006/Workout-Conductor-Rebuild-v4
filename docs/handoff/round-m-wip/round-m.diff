@@ -5518,16 +5518,17 @@ index 0000000..85a035a
 +});
 diff --git a/src/engine/recalibration/catchUpEmptiedWayBack.test.ts b/src/engine/recalibration/catchUpEmptiedWayBack.test.ts
 new file mode 100644
-index 0000000..14ae256
+index 0000000..fdd839e
 --- /dev/null
 +++ b/src/engine/recalibration/catchUpEmptiedWayBack.test.ts
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,143 @@
 +import { describe, expect, it } from 'vitest';
 +import type { WorkoutSession } from '../../core/state/session';
 +import type { CatchUpSpec } from '../planning/catchUp';
 +import { emptyCompleted, emptyConstraints, recalibrate } from './recalibrate';
 +import type { RecalibrationSuccess, RecalibrationTrigger, SessionConstraints } from './types';
-+import { allEntries, type GeneratedWorkout } from '../workout/types';
++import { allEntries, CATCH_UP_TEMPLATE_IDS, type GeneratedWorkout } from '../workout/types';
++import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
 +import { generateWorkout } from '../workoutGenerator/generate';
 +import { dayNoteOf } from '../../features/today/dayNote';
 +import { at, describeWorkout, gym, profileOf, session } from '../../test/clockDays';
@@ -5554,6 +5555,9 @@ index 0000000..14ae256
 + */
 +
 +const NOW = at(9, 18);
++const [bare] = createDefaultLocations({ gymAccess: false, homeEquipment: [] }, at(1)) as [
++  LocationProfile,
++];
 +const profile = profileOf();
 +const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
 +const sideDelts = (kind: CatchUpSpec['kind']): CatchUpSpec => ({
@@ -5562,7 +5566,11 @@ index 0000000..14ae256
 +  sitOut: kind === 'second' ? ['quads'] : [],
 +});
 +
-+function emptiedThenBack(spec: CatchUpSpec) {
++function emptiedThenBack(
++  spec: CatchUpSpec,
++  /** What changed while the full session was on: the day's offer, or the place. */
++  meanwhile: { offer?: CatchUpSpec; place?: LocationProfile } = {},
++) {
 +  const records = [
 +    session(at(3, 18), [['barbell-row', 3]]),
 +    ...(spec.kind === 'second' ? [session(at(9, 9), [['back-squat', 3]])] : []),
@@ -5577,6 +5585,8 @@ index 0000000..14ae256
 +  });
 +  let constraints: SessionConstraints = { ...emptyConstraints(), catchUp: spec };
 +  const steps: string[] = [lifts(workout)];
++  let location: LocationProfile = gym!;
++  let offerChanged = false;
 +  const run = (trigger: RecalibrationTrigger): RecalibrationSuccess => {
 +    const result = recalibrate({
 +      trigger,
@@ -5586,7 +5596,8 @@ index 0000000..14ae256
 +      currentEntryId: null,
 +      duration: trigger.type === 'duration' ? trigger.choice : 'default',
 +      profile,
-+      location: gym,
++      location,
++      ...(offerChanged ? { offerChanged } : {}),
 +      loading: { missingPlates: [] },
 +      history: records,
 +      constraints,
@@ -5611,11 +5622,35 @@ index 0000000..14ae256
 +  expect(allEntries(workout.blocks), steps.join(' | ')).toEqual([]);
 +  run({ type: 'session-kind', full: true, kind: spec.kind });
 +  expect(allEntries(workout.blocks).length).toBeGreaterThan(0);
++  if (meanwhile.offer) {
++    constraints = { ...constraints, catchUp: meanwhile.offer };
++    offerChanged = true;
++  }
++  if (meanwhile.place) location = meanwhile.place;
 +  run({ type: 'session-kind', full: false, kind: spec.kind });
 +  return { workout, steps: steps.join(' | '), note: note(), nothing };
 +}
 +
 +describe('the way back from the full session to an emptied catch-up or second workout', () => {
++  it('reads a changed offer afresh: the way back to it lays it out', () => {
++    // The side delts emptied; a save while the full session was on made the offer the chest's.
++    const chest: CatchUpSpec = {
++      kind: 'catch-up',
++      muscles: [{ muscle: 'chest', sets: 3, minRir: 1, why: 'behind' }],
++      sitOut: [],
++    };
++    const back = emptiedThenBack(sideDelts('catch-up'), { offer: chest });
++    expect(allEntries(back.workout.blocks).length, back.steps).toBeGreaterThan(0);
++    expect(back.note?.text, back.steps).toMatch(/-minute catch-up for what is behind this week\.$/);
++  });
++
++  it('back at a place with no lift for the offer, plans the split’s day there', () => {
++    // At a home with no equipment no lift trains the side delts: the day is the split's own.
++    const back = emptiedThenBack(sideDelts('catch-up'), { place: bare });
++    expect(back.workout.templateId, back.steps).not.toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
++    expect(allEntries(back.workout.blocks).length, back.steps).toBeGreaterThan(0);
++  });
++
 +  it('a catch-up for the side delts at the gym: the lateral raise skipped, Full session, Catch-up instead', () => {
 +    const back = emptiedThenBack(sideDelts('catch-up'));
 +    // On 532aba6: cable-lateral-raise x3, "a 11-minute catch-up for what is behind this week".
@@ -6022,10 +6057,10 @@ index 0000000..8c038ee
 +});
 diff --git a/src/engine/recalibration/catchUpLeftOutSlot.test.ts b/src/engine/recalibration/catchUpLeftOutSlot.test.ts
 new file mode 100644
-index 0000000..4bd495c
+index 0000000..ebfa7c4
 --- /dev/null
 +++ b/src/engine/recalibration/catchUpLeftOutSlot.test.ts
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,206 @@
 +import { describe, expect, it } from 'vitest';
 +import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
 +import type { CatchUpSpec } from '../planning/catchUp';
@@ -6195,6 +6230,17 @@ index 0000000..4bd495c
 +      allEntries(today.workout.blocks).map((entry) => entry.exerciseId),
 +      today.steps.join(' | '),
 +    ).toEqual(['hammer-curl']);
++  });
++});
++
++describe('a lift the lifter swapped away stays away on the way back from the full session', () => {
++  it('the catch-up laid out again keeps the push-up away', () => {
++    // A closed slot is the plan's: the catch-up laid out again may fill it (a known limit), but
++    // never with the lift the lifter swapped away.
++    const today = leftOut(false);
++    today.run({ type: 'session-kind', full: true, kind: 'catch-up' });
++    today.run({ type: 'session-kind', full: false, kind: 'catch-up' });
++    expect(today.find('push-up'), today.steps.join(' | ')).toBeUndefined();
 +  });
 +});
 +
@@ -18464,10 +18510,10 @@ index 37aa488..7d494ce 100644
       "  if (false) {\n    for (const entry of entries) {", [T_PUSH_RECHECK], None),
 diff --git a/tools/reverts/mutate-m31.py b/tools/reverts/mutate-m31.py
 new file mode 100644
-index 0000000..390d501
+index 0000000..9c3adc3
 --- /dev/null
 +++ b/tools/reverts/mutate-m31.py
-@@ -0,0 +1,940 @@
+@@ -0,0 +1,942 @@
 +"""Maintenance 31 mutation checks: revert each round M rule alone, run its tests, expect a failure,
 +restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -19097,8 +19143,10 @@ index 0000000..390d501
 +    ("H17 the catch-up's least reserve for a lift for none of its muscles", ENGINE,
 +     "      ? { sets: Infinity, minRir: Math.min(...spec.muscles.map((item) => item.minRir)) }",
 +     "      ? null", [T_RESERVE], None),
-+    ("H18 ... in the day's re-plan", ENGINE, "    const hold = heldIn(spec, exercise);",
-+     "    const hold = catchUpHold(spec, exercise);", [T_RESERVE], 1),
++    ("H18 ... in the day's re-plan and every rebuild", ENGINE,
++     [("    const hold = heldIn(spec, exercise);", "    const hold = catchUpHold(spec, exercise);"),
++      ("    const hold = heldIn(spec, exercise);", "    const hold = catchUpHold(spec, exercise);")],
++     None, [T_RESERVE], 0),
 +    ("H19 a fresh name past every name taken", GENERATE,
 +     "          : `e${Math.max(0, ...[...used, ...had.map((was) => was.id)].map(numbered)) + 1}`,",
 +     "          : `e${Math.max(0, ...[...keptIds].map(numbered)) + 1}`,", [T_SPARE, T_FRESH, T_NAMES],
@@ -19431,10 +19479,10 @@ index 0000000..2ae6517
 +print("written")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
 new file mode 100644
-index 0000000..f8625d9
+index 0000000..68bc0ad
 --- /dev/null
 +++ b/tools/reverts/table_m31.txt
-@@ -0,0 +1,759 @@
+@@ -0,0 +1,761 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The week model.
@@ -19949,8 +19997,10 @@ index 0000000..f8625d9
 +    ("H17 the catch-up's least reserve for a lift for none of its muscles", ENGINE,
 +     "      ? { sets: Infinity, minRir: Math.min(...spec.muscles.map((item) => item.minRir)) }",
 +     "      ? null", [T_RESERVE], None),
-+    ("H18 ... in the day's re-plan", ENGINE, "    const hold = heldIn(spec, exercise);",
-+     "    const hold = catchUpHold(spec, exercise);", [T_RESERVE], 1),
++    ("H18 ... in the day's re-plan and every rebuild", ENGINE,
++     [("    const hold = heldIn(spec, exercise);", "    const hold = catchUpHold(spec, exercise);"),
++      ("    const hold = heldIn(spec, exercise);", "    const hold = catchUpHold(spec, exercise);")],
++     None, [T_RESERVE], 0),
 +    ("H19 a fresh name past every name taken", GENERATE,
 +     "          : `e${Math.max(0, ...[...used, ...had.map((was) => was.id)].map(numbered)) + 1}`,",
 +     "          : `e${Math.max(0, ...[...keptIds].map(numbered)) + 1}`,", [T_SPARE, T_FRESH, T_NAMES],

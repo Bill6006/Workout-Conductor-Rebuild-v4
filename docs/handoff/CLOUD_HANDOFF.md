@@ -5,6 +5,27 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 14:50 UTC (supersedes the states below)
+
+- **Round M**: local `4cb40d7`, diff on `2595631`. The seventeenth pass is complete: H75, H76 and
+  H85 have tests, H18 mutates both holds, and every entry this pass touched is caught (248 entries).
+  The eighteenth review is running on `4cb40d7` (tests to come in `src/review-m31r/` of its
+  worktree). Next: its findings, then the full M31 run, cross-round tables, browser suite, verify,
+  ship.
+- **Round N**: local `db12411`, diff on `532aba6`. All six eighth-review findings fixed; the twelve
+  review tests pass (still in `src/review-m32h/`, to move into place with table entries): leaving
+  the structure (main days only, or none in three), a hand weight kept through corrections, a max
+  with reps set by hand (the plan's range reads as the plan does; another range its own straight
+  target, read past the marked days), the day's fatigue read off the whole log, back-offs replayed
+  from the logs as corrected. The five-day test is spaced from the old fatigue score's days in a row
+  (a known limit until Maintenance 33). Next: the full unit suite, the tests moved, M32 table
+  entries, the report's eighth pass, then rebase onto Round M's final and a ninth review.
+- **Maintenance 33**: local `0b84dfa`, diff on `abb5566`. The fatigue score now reads each lift's
+  estimated max against what its sets asked (a load planned lighter and lifted as asked is no fall),
+  sessions saved without targets as before. Eight older coach and strategy tests still expect the
+  pre-33 rules (the "too soon" card now leads where their histories train a muscle every two days;
+  days in a row no longer score): move them to the new rules. Then the rest of its list below.
+
 ### Checkpoint, 2026-10-24 14:20 UTC (supersedes the states below)
 
 Saved before a usage limit. Each round's work in progress is one diff in `docs/handoff/`, and in

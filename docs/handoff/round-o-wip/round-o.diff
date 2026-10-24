@@ -4312,7 +4312,7 @@ index 32f2e6c..5b94fd8 100644
      expect(fatigue.evidence.join(' ')).not.toContain('Estimated maxes fell');
      expect(fatigue.performanceDrift ?? 0).toBeGreaterThanOrEqual(0);
 diff --git a/src/engine/recovery/fatigue.test.ts b/src/engine/recovery/fatigue.test.ts
-index e4e1132..cc6cf09 100644
+index e4e1132..a5349d0 100644
 --- a/src/engine/recovery/fatigue.test.ts
 +++ b/src/engine/recovery/fatigue.test.ts
 @@ -11,7 +11,7 @@ describe('fatigue interpretation', () => {
@@ -4375,7 +4375,7 @@ index e4e1132..cc6cf09 100644
    });
  
    it('reads the check-in trend, long rests, and performance drift', () => {
-@@ -100,13 +90,16 @@ describe('fatigue interpretation', () => {
+@@ -100,13 +90,55 @@ describe('fatigue interpretation', () => {
      };
      const history = [slow(1, 165), slow(3, 180), slow(5, 185), slow(7, 185)];
      const signal = interpretFatigue(history, NOW);
@@ -4393,10 +4393,49 @@ index e4e1132..cc6cf09 100644
 +    // Long rests (1) and the fall of 8% (1): the check-ins added two before, and today's two more.
 +    expect(signal.score).toBe(2);
 +    expect(signal.level).toBe('normal');
++  });
++});
++
++describe('estimated maxes read against what the sets asked (Maintenance 33)', () => {
++  // The eighth review of round N: a shoulder press after three pressing lifts is planned lighter
++  // than on the full-body day; lifted as asked, it is no fall.
++  const NOW_AT = '2026-09-10T12:00:00.000Z';
++  const pressed = (daysAgo: number, weight: number, asked: number, reps = 7) => {
++    const base = record(daysAgo, 'dumbbell-shoulder-press', [
++      [reps, weight, 2],
++      [reps, weight, 2],
++      [reps, weight, 2],
++    ]);
++    return {
++      ...base,
++      entries: base.entries.map((entry) => ({
++        ...entry,
++        sets: entry.sets.map((set) => ({
++          ...set,
++          targetWeight: asked,
++          targetReps: [6, 10] as [number, number],
++        })),
++      })),
++    };
++  };
++
++  it('a load planned lighter and lifted as asked is no fall', () => {
++    const signal = interpretFatigue([pressed(1, 25, 25), pressed(3, 30, 30)], NOW_AT);
++    expect(signal.performanceDrift).toBe(0);
++    expect(signal.evidence.join(' ')).not.toMatch(/fell/);
++  });
++
++  it('a session further short of its targets than the one before is', () => {
++    // Asked 30 for 6 to 10 both days: 7 reps, then 3.
++    const signal = interpretFatigue([pressed(1, 30, 30, 3), pressed(3, 30, 30)], NOW_AT);
++    expect(signal.performanceDrift).toBeLessThanOrEqual(-10);
++    expect(signal.evidence.join(' ')).toMatch(
++      /Lifts fell [0-9.]+% further short of their targets over the last two sessions\./,
++    );
    });
  });
 diff --git a/src/engine/recovery/fatigue.ts b/src/engine/recovery/fatigue.ts
-index 2770056..7036861 100644
+index 2770056..4792476 100644
 --- a/src/engine/recovery/fatigue.ts
 +++ b/src/engine/recovery/fatigue.ts
 @@ -1,15 +1,18 @@
@@ -4435,13 +4474,23 @@ index 2770056..7036861 100644
    /** Average logged RIR minus target RIR over the last two sessions; negative means closer to failure. */
    rirDrift: number | null;
    hardRatings: number;
-@@ -33,14 +36,8 @@ export interface FatigueSignal {
+@@ -27,20 +30,16 @@ export interface FatigueSignal {
+   readinessTrend: number;
+   /** Consecutive working sets in the last two sessions logged well past the usual rest. */
+   longRests: number;
+-  /** Percent change of each lift's estimated max, newest against previous, averaged; null without pairs. */
++  /**
++   * Percent change of each lift's estimated max against its targets', newest against previous,
++   * averaged; null without pairs (Maintenance 33).
++   */
+   performanceDrift: number | null;
+ }
  
  const DAY_MS = 86_400_000;
  
 -/** The device's day (Maintenance 28, item 1). */
 -const dayKey = localDayKey;
- 
+-
 -export function interpretFatigue(
 -  history: readonly WorkoutRecord[],
 -  nowIso: string,
@@ -4451,7 +4500,7 @@ index 2770056..7036861 100644
    const now = Date.parse(nowIso);
    const qualifying = history
      .filter((record) =>
-@@ -55,32 +52,6 @@ export function interpretFatigue(
+@@ -55,32 +54,6 @@ export function interpretFatigue(
    const sessionsLast7Days = qualifying.filter(
      (record) => now - Date.parse(record.completedAt ?? record.startedAt) <= 7 * DAY_MS,
    ).length;
@@ -4484,7 +4533,7 @@ index 2770056..7036861 100644
  
    const drifts: number[] = [];
    for (const record of qualifying.slice(0, 2)) {
-@@ -132,29 +103,12 @@ export function interpretFatigue(
+@@ -132,29 +105,12 @@ export function interpretFatigue(
      );
    }
  
@@ -4518,10 +4567,91 @@ index 2770056..7036861 100644
  
    // Rests that ran long between logged sets suggest grinding.
    let longRests = 0;
-@@ -224,21 +178,6 @@ export function interpretFatigue(
+@@ -180,8 +136,14 @@ export function interpretFatigue(
      );
    }
  
+-  // Performance drift per lift: newest estimated max against the previous one, averaged.
+-  const maxes = new Map<string, number[]>();
++  // Performance drift per lift: how its newest session did against what its sets asked, against
++  // how the session before did, averaged (Maintenance 33). A set's estimated max is read against its
++  // target's, so a load planned lighter (later in a session, on a day at the back-offs' load, in a
++  // deload week) and lifted as asked is no fall (the eighth review of round N: a shoulder press after
++  // three pressing lifts read 17% down against the full-body day's). A session saved with no targets
++  // reads its estimated max as it is, and is set only against another such session.
++  const maxes = new Map<string, { value: number; against: boolean }[]>();
++  const estimate = (weight: number, reps: number) => weight * (1 + Math.min(reps, 12) / 30);
+   for (const record of qualifying.slice(0, 4)) {
+     for (const entry of record.entries) {
+       // A hold's seconds are not reps, so they carry no estimated max to drift; a straight day at
+@@ -189,54 +151,55 @@ export function interpretFatigue(
+       // back-offs: a session with its top set skipped reads nothing (the seventh).
+       if (holdById(entry.exerciseId) || entry.atBackOffs === true) continue;
+       let best = 0;
++      let asked = 0;
++      let untargeted = false;
+       for (const set of entry.sets) {
+         if (
+-          set.kind === 'working' &&
+-          set.completed &&
+-          set.weight !== null &&
+-          set.tier !== 'back-off'
++          set.kind !== 'working' ||
++          !set.completed ||
++          set.weight === null ||
++          set.weight <= 0 ||
++          set.tier === 'back-off'
+         ) {
+-          best = Math.max(best, set.weight * (1 + Math.min(set.reps, 12) / 30));
++          continue;
+         }
++        best = Math.max(best, estimate(set.weight, set.reps));
++        if (typeof set.targetWeight === 'number' && set.targetWeight > 0 && set.targetReps) {
++          asked = Math.max(asked, estimate(set.targetWeight, set.targetReps[0]));
++        } else untargeted = true;
++      }
++      if (best > 0) {
++        const read = asked > 0 && !untargeted ? { value: best / asked, against: true } : null;
++        maxes.set(entry.exerciseId, [
++          ...(maxes.get(entry.exerciseId) ?? []),
++          read ?? { value: best, against: false },
++        ]);
+       }
+-      if (best > 0) maxes.set(entry.exerciseId, [...(maxes.get(entry.exerciseId) ?? []), best]);
+     }
+   }
+   const changes: number[] = [];
++  let againstTargets = false;
+   for (const list of maxes.values()) {
+-    if (list.length >= 2 && (list[1] as number) > 0) {
+-      changes.push((((list[0] as number) - (list[1] as number)) / (list[1] as number)) * 100);
++    const [newest, before] = list;
++    if (newest && before && before.value > 0 && newest.against === before.against) {
++      changes.push(((newest.value - before.value) / before.value) * 100);
++      againstTargets ||= newest.against;
+     }
+   }
++  const fell = (by: number) =>
++    againstTargets
++      ? `Lifts fell ${by}% further short of their targets over the last two sessions.`
++      : `Estimated maxes fell ${by}% over the last two sessions.`;
+   const performanceDrift =
+     changes.length > 0
+       ? Math.round((changes.reduce((a, b) => a + b, 0) / changes.length) * 10) / 10
+       : null;
+   if (performanceDrift !== null && performanceDrift <= -10) {
+     score += 2;
+-    evidence.push(
+-      `Estimated maxes fell ${Math.abs(performanceDrift)}% over the last two sessions.`,
+-    );
++    evidence.push(fell(Math.abs(performanceDrift)));
+   } else if (performanceDrift !== null && performanceDrift <= -5) {
+     score += 1;
+-    evidence.push(
+-      `Estimated maxes fell ${Math.abs(performanceDrift)}% over the last two sessions.`,
+-    );
+-  }
+-
 -  if (readiness) {
 -    if (readiness.energy <= 2 || readiness.sleep <= 2) {
 -      score += 2;
@@ -4535,12 +4665,11 @@ index 2770056..7036861 100644
 -      score -= 1;
 -      evidence.push('Feeling fresh in today’s check-in.');
 -    }
--  }
--
++    evidence.push(fell(Math.abs(performanceDrift)));
+   }
+ 
    const level: FatigueLevel =
-     score >= 5 ? 'high' : score >= 3 ? 'elevated' : score >= 1 ? 'normal' : 'fresh';
-   if (evidence.length === 0) evidence.push('No fatigue signals in recent sessions.');
-@@ -247,7 +186,6 @@ export function interpretFatigue(
+@@ -247,7 +210,6 @@ export function interpretFatigue(
      score,
      evidence,
      sessionsLast7Days,
