@@ -5,6 +5,28 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 17:00 UTC (supersedes the states below)
+
+- **Round M**: `0f8d10f`; its nineteenth review is running (tests to come in
+  `/home/user/wc4-m-review/src/review-m31s/`).
+- **Round N**: local `25fd689`, rebased onto Round M's `0f8d10f` (backup of the old base:
+  `backup/round-n-34dc615`); `docs/handoff/round-n-wip/round-n.diff` is now against `0f8d10f`. The
+  ninth pass is complete: the weight set by hand recorded as the top set's or the back-offs' own
+  when it is set (`manual.backOffs`), every replay of the back-offs starting from it; a max with
+  reps set by hand at another range read as every plan reads a straight day; a saved session keeps
+  the load the drop gave its back-offs (`backOffAt`), the drop's correction reading only back-offs
+  lifted at it; in a style without the structure every straight session counts toward leaving it,
+  decided in the shared top-set reader. Tests moved into place, the M32 table at 221 entries, every
+  one run caught. Full suite: 3119 passed, 5 skipped. Its tenth review is running (tests to come in
+  `/home/user/wc4-n-review/src/review-m32j/`).
+- **Maintenance 33**: `cebcffb`, next: rebase onto Round N's `25fd689`, then its thirteen findings
+  (tests in `/home/user/wc4-o-review/src/review-m33a/`). Planned: a fever under way keeps at least
+  the head cold's hold; the coach offers no drop set and no "too soon" card on an illness day; the
+  first-set read and the fatigue drift read a set against what it asked, the plan's own load step
+  and a deload no fall; the lighter option keeps the loads, as its words say; item 43's approved
+  day rule for the reserve check restored; the Plan screen and the hard start read the resets and
+  the day's check-in; the schedule line a footnote; the learned page's Not now line.
+
 ### Checkpoint, 2026-10-24 16:30 UTC (supersedes the states below)
 
 - **Round M**: local `0f8d10f` (diff on `2595631`: `docs/handoff/round-m-wip/round-m.diff`). The
