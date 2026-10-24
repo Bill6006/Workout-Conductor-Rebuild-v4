@@ -5,6 +5,35 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 16:30 UTC (supersedes the states below)
+
+- **Round M**: local `0f8d10f` (diff on `2595631`: `docs/handoff/round-m-wip/round-m.diff`). The
+  eighteenth pass is complete: seven findings fixed at the shared level (a plan marked emptied
+  only by the lifter's hand, `emptied`, read by every rebuild, the way back and a later plan the
+  same day; closed slots in the day's settings, `closedSlots`, on any day off the plan; lifts
+  swapped away kept out of every pick and of what comes in for comfort or pain, `swappedAway`,
+  the lifter free to put one back; "Hurts" brings back no lift it replaced). Two tries reverted
+  because they broke Maintenance 25's approved behaviour (a swap back turns nothing away; a lift a
+  sore joint only moderately stresses may come back, now a known limit). The review's tests moved
+  into place, new tests for every new rule, the M31 table at 270 entries, every one run caught (Y2
+  retired: equivalent since the ninth review's slot for a muscle a lift misses; say so in the
+  report's revert section). M27 and M30 re-anchored. Full suite: 2900 passed, 5 skipped. The
+  nineteenth review is running on `0f8d10f` (tests to come in `src/review-m31s/` of
+  `/home/user/wc4-m-review`). Next: its findings; then the full M31 run, the cross-round tables,
+  browser suite, verify, ship.
+- **Round N**: `34dc615`. Ninth review done: five findings, tests in
+  `/home/user/wc4-n-review/src/review-m32i/` (13 failing): a hand weight on the top set blocks the
+  back-offs' replay (store `backOffsAsPlanned`'s early return); the top set's correction replays
+  over a weight the back-offs took by hand; a max with reps set by hand at another range ignores
+  `straightAfterTop`; the drop's self-correction reads back-offs lifted at another load; the known
+  limit understates the hold for a lift with secondary days (fix the wording). Planned fix for the
+  first two: record whose the hand weight is when it is set (top set or back-offs). Rebase onto
+  Round M's `0f8d10f` first.
+- **Maintenance 33**: `cebcffb`. First review done: thirteen findings, tests in
+  `/home/user/wc4-o-review/src/review-m33a/` (15 failing); one HIGH (a fever under way after a
+  head cold gives the full-effort plan back). Finding 13 restores item 43's approved day rule (no
+  reserve check after a low or sore check-in). Rebase onto Round N's final first.
+
 ### Checkpoint, 2026-10-24 15:25 UTC (supersedes the states below)
 
 - **Rounds M and N**: unchanged (`4cb40d7`, `34dc615`); their eighteenth and ninth reviews running.
