@@ -1,0 +1,2776 @@
+diff --git a/src/core/state/appStore.ts b/src/core/state/appStore.ts
+index ca71c72..4690195 100644
+--- a/src/core/state/appStore.ts
++++ b/src/core/state/appStore.ts
+@@ -1006,7 +1006,7 @@ export class AppStore {
+       now,
+       day: {
+         deload: session.constraints.deload !== null,
+-        lowCheckIn: lowCheckIn(session.constraints.readiness),
++        lowCheckIn: lowCheckIn(session.constraints.readiness, this.state.history, now),
+         hardStart: session.constraints.badStart === true,
+       },
+       // A check where it would pair with a recent one for the lift's own curve (item 41): its
+@@ -2203,6 +2203,7 @@ export class AppStore {
+     return readStart(session.workout.blocks, sets, {
+       profile,
+       history: this.state.history,
++      readiness: session.constraints.readiness,
+     });
+   }
+ 
+diff --git a/src/core/state/session.ts b/src/core/state/session.ts
+index 6b558a5..665ed93 100644
+--- a/src/core/state/session.ts
++++ b/src/core/state/session.ts
+@@ -7,6 +7,7 @@ import { getExercise } from '../../catalog/exercises/catalog';
+ import { JOINTS } from '../../catalog/exercises/exerciseSchema';
+ import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
+ import { CATCH_UP_KINDS, CATCH_UP_REASONS } from '../../engine/planning/catchUp';
++import { ILLNESSES } from '../../engine/readiness/checkIn';
+ import { emptyCompleted, emptyConstraints } from '../../engine/recalibration/recalibrate';
+ import type {
+   ChangeSummary,
+@@ -242,6 +243,8 @@ const ReadinessSchema = z.looseObject({
+   motivation: z.number().min(1).max(5),
+   jointDiscomfort: z.array(z.enum(JOINTS)),
+   timePressure: z.boolean(),
++  // Maintenance 33: a check-in saved before has none; one this copy cannot read is none.
++  illness: z.enum(ILLNESSES).optional().catch(undefined),
+ });
+ 
+ const ConstraintsSchema = z.looseObject({
+diff --git a/src/core/validation/workoutRecord.ts b/src/core/validation/workoutRecord.ts
+index 8fa2fc5..403e991 100644
+--- a/src/core/validation/workoutRecord.ts
++++ b/src/core/validation/workoutRecord.ts
+@@ -1,5 +1,6 @@
+ import { z } from 'zod';
+ import { JOINTS } from '../../catalog/exercises/exerciseSchema';
++import { ILLNESSES } from '../../engine/readiness/checkIn';
+ import { MAX_BACK_OFF_DROP, SET_TIERS } from '../../engine/workout/types';
+ 
+ /**
+@@ -152,6 +153,8 @@ export const WorkoutRecordSchema = z.looseObject({
+       motivation: z.number(),
+       jointDiscomfort: z.array(z.string()),
+       timePressure: z.boolean(),
++      // Maintenance 33: a record saved before has none; one this copy cannot read is none.
++      illness: z.enum(ILLNESSES).optional().catch(undefined),
+     })
+     .nullable()
+     .default(null),
+diff --git a/src/engine/coach/calfFewerReps.test.ts b/src/engine/coach/calfFewerReps.test.ts
+index 4d3b46e..d939707 100644
+--- a/src/engine/coach/calfFewerReps.test.ts
++++ b/src/engine/coach/calfFewerReps.test.ts
+@@ -76,7 +76,7 @@ function shortCalfAtGym(): CoachInput {
+         }
+       : block,
+   );
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout: { ...workout, blocks },
+     status: 'preview',
+diff --git a/src/engine/coach/coachConductor.accept.test.ts b/src/engine/coach/coachConductor.accept.test.ts
+index d244f2e..cd4ee75 100644
+--- a/src/engine/coach/coachConductor.accept.test.ts
++++ b/src/engine/coach/coachConductor.accept.test.ts
+@@ -46,7 +46,7 @@ function input(overrides: Partial<CoachInput> = {}): CoachInput {
+     profile,
+     history: [],
+     now: NOW,
+-    fatigue: interpretFatigue([], NOW, null),
++    fatigue: interpretFatigue([], NOW),
+     strategy: [tricepsGap],
+     lastExportAt: NOW,
+     workoutCount: 6,
+diff --git a/src/engine/coach/coachConductor.backOffs.test.ts b/src/engine/coach/coachConductor.backOffs.test.ts
+index 43af474..5eb3033 100644
+--- a/src/engine/coach/coachConductor.backOffs.test.ts
++++ b/src/engine/coach/coachConductor.backOffs.test.ts
+@@ -25,7 +25,7 @@ describe('the coach’s deload of a stalled main lift, the first review of round
+       profile: profileOf(),
+       history: trained(),
+       now: RECORD_NOW,
+-      fatigue: interpretFatigue([], RECORD_NOW, null),
++      fatigue: interpretFatigue([], RECORD_NOW),
+       strategy: [],
+       lastExportAt: RECORD_NOW,
+       workoutCount: 0,
+@@ -83,7 +83,7 @@ describe('the coach’s micro-deload of a main lift, the first review of round N
+       profile: profileOf(),
+       history: trained(),
+       now: RECORD_NOW,
+-      fatigue: interpretFatigue([], RECORD_NOW, null),
++      fatigue: interpretFatigue([], RECORD_NOW),
+       strategy: [
+         {
+           kind: 'load',
+diff --git a/src/engine/coach/coachConductor.backOffsStep.test.ts b/src/engine/coach/coachConductor.backOffsStep.test.ts
+index a140ff2..f0df88d 100644
+--- a/src/engine/coach/coachConductor.backOffsStep.test.ts
++++ b/src/engine/coach/coachConductor.backOffsStep.test.ts
+@@ -62,7 +62,7 @@ describe('the coach’s load step on a day the main lift runs at its back-offs
+       profile: profileOf(),
+       history,
+       now: RECORD_NOW,
+-      fatigue: interpretFatigue(history, RECORD_NOW, null),
++      fatigue: interpretFatigue(history, RECORD_NOW),
+       strategy: [],
+       lastExportAt: RECORD_NOW,
+       workoutCount: 1,
+diff --git a/src/engine/coach/coachConductor.bodyweight.test.ts b/src/engine/coach/coachConductor.bodyweight.test.ts
+index 3bf8400..d00a0c3 100644
+--- a/src/engine/coach/coachConductor.bodyweight.test.ts
++++ b/src/engine/coach/coachConductor.bodyweight.test.ts
+@@ -89,7 +89,7 @@ function input(
+         }
+       : block,
+   );
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout: { ...workout, blocks },
+     status: 'preview',
+diff --git a/src/engine/coach/coachConductor.cloud.test.ts b/src/engine/coach/coachConductor.cloud.test.ts
+index 9dc9dd7..61c19fb 100644
+--- a/src/engine/coach/coachConductor.cloud.test.ts
++++ b/src/engine/coach/coachConductor.cloud.test.ts
+@@ -19,7 +19,7 @@ function input(overrides: Partial<CoachInput> = {}): CoachInput {
+     now: NOW,
+     duration: 'default',
+   });
+-  const fatigue = interpretFatigue([], NOW, null);
++  const fatigue = interpretFatigue([], NOW);
+   return {
+     workout,
+     status: 'preview',
+diff --git a/src/engine/coach/coachConductor.loading.test.ts b/src/engine/coach/coachConductor.loading.test.ts
+index 8869db4..b9fb3d0 100644
+--- a/src/engine/coach/coachConductor.loading.test.ts
++++ b/src/engine/coach/coachConductor.loading.test.ts
+@@ -63,7 +63,7 @@ function heldAtTheHeaviest(
+   }));
+   const entry = allEntries(blocks).find((candidate) => candidate.id === first.id);
+   if (!entry) throw new Error('entry lost');
+-  const fatigue = interpretFatigue([], NOW, null);
++  const fatigue = interpretFatigue([], NOW);
+   return {
+     entry,
+     input: {
+@@ -173,7 +173,7 @@ describe('the coach’s optional drop set', () => {
+       programStyle: 'hypertrophy-focus',
+       techniques: { ...profile.techniques, dropSets: true },
+     };
+-    const fatigue = interpretFatigue([], NOW, null);
++    const fatigue = interpretFatigue([], NOW);
+     return {
+       workout: {
+         ...workout,
+diff --git a/src/engine/coach/coachConductor.painPattern.test.ts b/src/engine/coach/coachConductor.painPattern.test.ts
+index 0c0e69a..a69423c 100644
+--- a/src/engine/coach/coachConductor.painPattern.test.ts
++++ b/src/engine/coach/coachConductor.painPattern.test.ts
+@@ -86,7 +86,7 @@ function input(records: WorkoutRecord[], templateId = 'push-arms'): CoachInput {
+     profile,
+     history: records,
+     now: RECORD_NOW,
+-    fatigue: interpretFatigue(records, RECORD_NOW, null),
++    fatigue: interpretFatigue(records, RECORD_NOW),
+     strategy: [],
+     lastExportAt: RECORD_NOW,
+     workoutCount: records.length,
+diff --git a/src/engine/coach/coachConductor.placeAndDeload.test.ts b/src/engine/coach/coachConductor.placeAndDeload.test.ts
+index 60ac681..add5005 100644
+--- a/src/engine/coach/coachConductor.placeAndDeload.test.ts
++++ b/src/engine/coach/coachConductor.placeAndDeload.test.ts
+@@ -98,7 +98,7 @@ function inputFor(
+     profile,
+     history: [],
+     now: NOW,
+-    fatigue: interpretFatigue([], NOW, null),
++    fatigue: interpretFatigue([], NOW),
+     strategy: [],
+     lastExportAt: NOW,
+     workoutCount: 0,
+diff --git a/src/engine/coach/coachConductor.push.test.ts b/src/engine/coach/coachConductor.push.test.ts
+index 0e74291..7c09724 100644
+--- a/src/engine/coach/coachConductor.push.test.ts
++++ b/src/engine/coach/coachConductor.push.test.ts
+@@ -50,7 +50,7 @@ function input(profile: UserProfile, history: WorkoutRecord[] = []): CoachInput
+     profile,
+     history,
+     now: NOW,
+-    fatigue: interpretFatigue(history, NOW, null),
++    fatigue: interpretFatigue(history, NOW),
+     strategy: [],
+     lastExportAt: NOW,
+     workoutCount: history.length,
+diff --git a/src/engine/coach/coachConductor.round.test.ts b/src/engine/coach/coachConductor.round.test.ts
+index 0c6d548..f3239ca 100644
+--- a/src/engine/coach/coachConductor.round.test.ts
++++ b/src/engine/coach/coachConductor.round.test.ts
+@@ -29,7 +29,7 @@ function input(history: WorkoutRecord[], overrides: Partial<CoachInput> = {}): C
+     now: NOW,
+     duration: 'default',
+   });
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout,
+     status: 'preview',
+diff --git a/src/engine/coach/coachConductor.safety.test.ts b/src/engine/coach/coachConductor.safety.test.ts
+index ca48a6d..6fe06df 100644
+--- a/src/engine/coach/coachConductor.safety.test.ts
++++ b/src/engine/coach/coachConductor.safety.test.ts
+@@ -45,7 +45,7 @@ function input(
+     profile,
+     history,
+     now: NOW,
+-    fatigue: interpretFatigue(history, NOW, null),
++    fatigue: interpretFatigue(history, NOW),
+     strategy: [],
+     lastExportAt: NOW,
+     workoutCount: history.length,
+diff --git a/src/engine/coach/coachConductor.schedule.test.ts b/src/engine/coach/coachConductor.schedule.test.ts
+index 18bbdb6..9111b7d 100644
+--- a/src/engine/coach/coachConductor.schedule.test.ts
++++ b/src/engine/coach/coachConductor.schedule.test.ts
+@@ -66,7 +66,7 @@ function input(profile: UserProfile, extra: Partial<CoachInput> = {}): CoachInpu
+     profile,
+     history,
+     now: RECORD_NOW,
+-    fatigue: interpretFatigue(history, RECORD_NOW, null),
++    fatigue: interpretFatigue(history, RECORD_NOW),
+     strategy: [],
+     lastExportAt: RECORD_NOW,
+     workoutCount: history.length,
+diff --git a/src/engine/coach/coachConductor.style.test.ts b/src/engine/coach/coachConductor.style.test.ts
+index f363672..56fbafa 100644
+--- a/src/engine/coach/coachConductor.style.test.ts
++++ b/src/engine/coach/coachConductor.style.test.ts
+@@ -46,7 +46,7 @@ function input(
+     profile,
+     history: [],
+     now: NOW,
+-    fatigue: interpretFatigue([], NOW, null),
++    fatigue: interpretFatigue([], NOW),
+     strategy: [],
+     lastExportAt: NOW,
+     workoutCount: 0,
+diff --git a/src/engine/coach/coachConductor.test.ts b/src/engine/coach/coachConductor.test.ts
+index 9c72357..89c236a 100644
+--- a/src/engine/coach/coachConductor.test.ts
++++ b/src/engine/coach/coachConductor.test.ts
+@@ -32,7 +32,7 @@ function input(
+     duration: 'default',
+     ...(templateId ? { constraints: { templateId } } : {}),
+   });
+-  const fatigue = interpretFatigue(history, NOW, overrides.constraints?.readiness ?? null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout,
+     status: 'preview',
+@@ -198,14 +198,7 @@ describe('coach conductor', () => {
+     expect(noBackup?.signal.action?.kind).toBe('backup');
+     const backedUp = conductCoach(input(history, { workoutCount: 4 }));
+     expect(['recovery', 'plateau']).toContain(backedUp?.signal.domain);
+-    const tired = interpretFatigue(history, NOW, {
+-      energy: 1,
+-      soreness: 5,
+-      sleep: 1,
+-      motivation: 2,
+-      jointDiscomfort: [],
+-      timePressure: false,
+-    });
++    const tired = interpretFatigue(history, NOW);
+     const exhausted = conductCoach(
+       input(history, {
+         workoutCount: 4,
+diff --git a/src/engine/coach/coachConductor.unfinished.test.ts b/src/engine/coach/coachConductor.unfinished.test.ts
+index 246b25f..a9772e1 100644
+--- a/src/engine/coach/coachConductor.unfinished.test.ts
++++ b/src/engine/coach/coachConductor.unfinished.test.ts
+@@ -29,7 +29,7 @@ function input(hoursAgo: number, status: CoachInput['status'] = 'active'): Coach
+     profile,
+     history: [],
+     now: NOW,
+-    fatigue: interpretFatigue([], NOW, null),
++    fatigue: interpretFatigue([], NOW),
+     strategy: [],
+     lastExportAt: NOW,
+     workoutCount: 0,
+diff --git a/src/engine/coach/coachConductor.variety.test.ts b/src/engine/coach/coachConductor.variety.test.ts
+index 30cd662..fdf53b6 100644
+--- a/src/engine/coach/coachConductor.variety.test.ts
++++ b/src/engine/coach/coachConductor.variety.test.ts
+@@ -47,7 +47,7 @@ function input(history: WorkoutRecord[], extra: Partial<CoachInput> = {}): Coach
+     profile,
+     history,
+     now: RECORD_NOW,
+-    fatigue: interpretFatigue(history, RECORD_NOW, null),
++    fatigue: interpretFatigue(history, RECORD_NOW),
+     strategy: [],
+     lastExportAt: RECORD_NOW,
+     workoutCount: history.length,
+diff --git a/src/engine/coach/coachPolicy.test.ts b/src/engine/coach/coachPolicy.test.ts
+index 786a27d..05045b6 100644
+--- a/src/engine/coach/coachPolicy.test.ts
++++ b/src/engine/coach/coachPolicy.test.ts
+@@ -37,7 +37,7 @@ function input(
+     now: NOW,
+     duration: 'default',
+   });
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout,
+     status: 'preview',
+diff --git a/src/engine/coach/fewerRepsLoaded.test.ts b/src/engine/coach/fewerRepsLoaded.test.ts
+index 34c7fdf..4a394a2 100644
+--- a/src/engine/coach/fewerRepsLoaded.test.ts
++++ b/src/engine/coach/fewerRepsLoaded.test.ts
+@@ -73,7 +73,7 @@ function shortInput(
+         }
+       : block,
+   );
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout: { ...workout, blocks },
+     status: 'preview',
+diff --git a/src/engine/learned/resets.ts b/src/engine/learned/resets.ts
+index 91fc131..e1971a4 100644
+--- a/src/engine/learned/resets.ts
++++ b/src/engine/learned/resets.ts
+@@ -9,8 +9,10 @@ export const LEARNED_RESETS_ID = 'learned-resets';
+ 
+ /** The learned values a reset applies to: how well reps in reserve are judged (item 43), each
+  * lift's own curve (item 41), the habit of lifting above or below the suggested weight, pain
+- * patterns (item 45), and the lifter's own pace (Maintenance 28, item 4). */
+-export const LEARNED_KINDS = ['reserve', 'curves', 'habit', 'pain', 'pace'] as const;
++ * patterns (item 45), the lifter's own pace (Maintenance 28, item 4), and each muscle's own recovery
++ * window (Maintenance 33). A copy of the app from before a kind keeps its time as a field it does not
++ * know (`parseResets`). */
++export const LEARNED_KINDS = ['reserve', 'curves', 'habit', 'pain', 'pace', 'recovery'] as const;
+ export type LearnedKind = (typeof LEARNED_KINDS)[number];
+ 
+ /**
+diff --git a/src/engine/progression/progression.bodyweight.test.ts b/src/engine/progression/progression.bodyweight.test.ts
+index f2f4a58..cefb828 100644
+--- a/src/engine/progression/progression.bodyweight.test.ts
++++ b/src/engine/progression/progression.bodyweight.test.ts
+@@ -223,7 +223,7 @@ describe('a family estimate passes only between lifts measured the same way', ()
+ describe('the history notes about a lift done at bodyweight', () => {
+   it('never tell it to add 5 lb or take 10% off, and still do for a loaded lift', () => {
+     const history = chinUps([9, 6, 2], SHORT);
+-    const fatigue = interpretFatigue(history, RECORD_NOW, null);
++    const fatigue = interpretFatigue(history, RECORD_NOW);
+     const notes = analyzeStrategy({ history, profile, now: RECORD_NOW, fatigue });
+     expect(
+       notes.filter(
+@@ -242,7 +242,7 @@ describe('the history notes about a lift done at bodyweight', () => {
+       history: benchShort,
+       profile,
+       now: RECORD_NOW,
+-      fatigue: interpretFatigue(benchShort, RECORD_NOW, null),
++      fatigue: interpretFatigue(benchShort, RECORD_NOW),
+     });
+     expect(benchNotes.some((note) => note.recommendation === 'micro-deload')).toBe(true);
+   });
+diff --git a/src/engine/progression/roundE.review.test.ts b/src/engine/progression/roundE.review.test.ts
+index 7ca4a94..7616eb2 100644
+--- a/src/engine/progression/roundE.review.test.ts
++++ b/src/engine/progression/roundE.review.test.ts
+@@ -436,7 +436,7 @@ describe('back after a long break in the middle of a workout', () => {
+ });
+ 
+ describe('the history notes', () => {
+-  const fatigueOf = (history: WorkoutRecord[]) => interpretFatigue(history, NOW, null);
++  const fatigueOf = (history: WorkoutRecord[]) => interpretFatigue(history, NOW);
+ 
+   it('never compare a lift across a break', () => {
+     const history = [
+diff --git a/src/engine/progression/roundE.review4.test.ts b/src/engine/progression/roundE.review4.test.ts
+index be91c83..88e5c01 100644
+--- a/src/engine/progression/roundE.review4.test.ts
++++ b/src/engine/progression/roundE.review4.test.ts
+@@ -465,7 +465,7 @@ describe('a weight the coach sets on a lift the light dumbbells pushed', () => {
+ 
+   it('gets no offer of a weight the light dumbbells do not make (Maintenance 24)', () => {
+     const workout = plan(lightHome, history);
+-    const fatigue = interpretFatigue(history, NOW, null);
++    const fatigue = interpretFatigue(history, NOW);
+     const input: CoachInput = {
+       workout,
+       status: 'preview',
+diff --git a/src/engine/readiness/checkIn.test.ts b/src/engine/readiness/checkIn.test.ts
+new file mode 100644
+index 0000000..d101a36
+--- /dev/null
++++ b/src/engine/readiness/checkIn.test.ts
+@@ -0,0 +1,103 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { RECORD_NOW, record } from '../../test/records';
++import type { Readiness } from '../recalibration/types';
++import { illnessOf, readCheckIn, worseWords } from './checkIn';
++
++/**
++ * Maintenance 33, the owner's decision 1 (docs/research/readiness-and-soreness.md): the check-in's
++ * energy, sleep and motivation against the lifter's own baseline act only when two or more are
++ * clearly worse, or one is extreme (two short nights running), and then lower what the app expects;
++ * soreness never counts. Synthetic data only.
++ */
++
++const checkIn = (energy: number, sleep: number, motivation: number, soreness = 2): Readiness => ({
++  energy,
++  sleep,
++  motivation,
++  soreness,
++  jointDiscomfort: [],
++  timePressure: false,
++});
++
++/** A saved session `daysAgo` with a check-in on it. */
++const saved = (daysAgo: number, readiness: Readiness): WorkoutRecord => ({
++  ...record(daysAgo, 'barbell-row', [[6, 135, 2]]),
++  id: `checked-${daysAgo}`,
++  readiness: { ...readiness },
++});
++
++describe('without five saved check-ins: the scale’s middle', () => {
++  it('two items at 2 or under lower the expectation', () => {
++    const read = readCheckIn(checkIn(2, 2, 3), [], RECORD_NOW);
++    expect(read).toMatchObject({ worse: ['energy', 'sleep'], lowered: true, baseline: 'scale' });
++    expect(worseWords(read)).toBe('energy and sleep low');
++  });
++
++  it('one alone does not', () => {
++    const read = readCheckIn(checkIn(1, 3, 3), [], RECORD_NOW);
++    expect(read.worse).toEqual(['energy']);
++    expect(read.lowered).toBe(false);
++  });
++
++  it('soreness never counts, at its worst a line of its own', () => {
++    const read = readCheckIn(checkIn(3, 3, 3, 5), [], RECORD_NOW);
++    expect(read.worse).toEqual([]);
++    expect(read.lowered).toBe(false);
++    expect(read.wrecked).toBe(true);
++    expect(readCheckIn(checkIn(3, 3, 3, 4), [], RECORD_NOW).wrecked).toBe(false);
++  });
++});
++
++describe('against the lifter’s own four weeks', () => {
++  /** Five check-ins this past fortnight: energy 4 and 5, sleep always 4, motivation 4. */
++  const usual = [1, 3, 5, 8, 10].map((days, at) => saved(days, checkIn(at % 2 ? 5 : 4, 4, 4)));
++
++  it('a point under a steady item is clearly worse; two of them lower it', () => {
++    const read = readCheckIn(checkIn(4, 3, 3), usual, RECORD_NOW);
++    // Sleep and motivation never moved: a point under them is clearly worse; energy 4 is usual.
++    expect(read).toMatchObject({ worse: ['sleep', 'motivation'], lowered: true, baseline: 'own' });
++    expect(worseWords(read)).toBe('sleep and motivation under your usual');
++  });
++
++  it('the same answers from a lifter who usually reports them are nothing', () => {
++    const low = [1, 3, 5, 8, 10].map((days) => saved(days, checkIn(2, 2, 3)));
++    const read = readCheckIn(checkIn(2, 2, 3), low, RECORD_NOW);
++    expect(read.worse).toEqual([]);
++    expect(read.lowered).toBe(false);
++  });
++
++  it('check-ins over four weeks old, or from today, are no part of the baseline', () => {
++    const old = [30, 32, 35, 40, 45].map((days) => saved(days, checkIn(2, 2, 2)));
++    expect(readCheckIn(checkIn(2, 2, 3), old, RECORD_NOW).baseline).toBe('scale');
++    const today = [0, 0.1, 0.2, 0.3, 0.4].map((days) => saved(days, checkIn(5, 5, 5)));
++    expect(readCheckIn(checkIn(2, 2, 3), today, RECORD_NOW).baseline).toBe('scale');
++  });
++});
++
++describe('the extreme: two short nights running', () => {
++  it('sleep at its worst today and on the check-in the day before', () => {
++    const read = readCheckIn(checkIn(3, 1, 3), [saved(1, checkIn(3, 1, 3))], RECORD_NOW);
++    expect(read.extreme).toBe('two short nights running');
++    expect(read.lowered).toBe(true);
++    expect(worseWords(read)).toBe('two short nights running');
++  });
++
++  it('one short night is not', () => {
++    const read = readCheckIn(checkIn(3, 1, 3), [saved(1, checkIn(3, 3, 3))], RECORD_NOW);
++    expect(read.extreme).toBeNull();
++    expect(read.lowered).toBe(false);
++  });
++});
++
++describe('the illness answer', () => {
++  it('reads a known answer, and nothing else', () => {
++    expect(illnessOf({ ...checkIn(3, 3, 3), illness: 'head' })).toBe('head');
++    expect(illnessOf({ ...checkIn(3, 3, 3), illness: 'body' })).toBe('body');
++    expect(illnessOf({ illness: 'flu' })).toBeNull();
++    expect(illnessOf(checkIn(3, 3, 3))).toBeNull();
++    expect(readCheckIn({ ...checkIn(3, 3, 3), illness: 'head' }, [], RECORD_NOW).illness).toBe(
++      'head',
++    );
++  });
++});
+diff --git a/src/engine/readiness/checkIn.ts b/src/engine/readiness/checkIn.ts
+new file mode 100644
+index 0000000..15fcb0a
+--- /dev/null
++++ b/src/engine/readiness/checkIn.ts
+@@ -0,0 +1,131 @@
++import { addLocalDays, localDayKey } from '../../core/time/localDate';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import type { Readiness } from '../recalibration/types';
++import { RULES } from '../rules/ruleTable';
++
++/**
++ * Today's check-in read as the readiness model has it (Maintenance 33, the owner's decision 1 on
++ * docs/proposals/week-model-readiness-time.md; docs/research/readiness-and-soreness.md): energy,
++ * sleep and motivation against the lifter's own baseline. They act only when two or more are clearly
++ * worse, or one is extreme (two short nights running), and then they lower what the app expects of
++ * the day's first sets, never the plan (Saw 2016, 26423706; Craven 2022, 35708888). Soreness alone
++ * never counts (Nosaka 2002, 12453160). Illness is a gate of its own (`ILLNESSES`).
++ */
++
++/** The check-in's items read against the lifter's own; soreness is not one of them. */
++export const CHECK_IN_ITEMS = ['energy', 'sleep', 'motivation'] as const;
++export type CheckInItem = (typeof CHECK_IN_ITEMS)[number];
++
++/**
++ * The illness gate's answers, as stored on a check-in (the stored schemas share this list): symptoms
++ * above the neck only (trainable, every set at 2 or more in reserve), or a fever or symptoms all
++ * over (no session today). No answer is no illness.
++ */
++export const ILLNESSES = ['head', 'body'] as const;
++export type Illness = (typeof ILLNESSES)[number];
++
++/** Soreness at its worst on the check-in ("Wrecked"): a line on the day, never a change. */
++export const WRECKED = 5;
++
++const ITEM_WORDS: Record<CheckInItem, string> = {
++  energy: 'energy',
++  sleep: 'sleep',
++  motivation: 'motivation',
++};
++
++export interface CheckInRead {
++  /** The items clearly worse than the lifter's own. */
++  worse: CheckInItem[];
++  /** The extreme one alone acts on, in words, or null. */
++  extreme: string | null;
++  /** What the app expects of the day's first sets is a step lower. */
++  lowered: boolean;
++  /** Whose baseline: the lifter's own saved check-ins, or the scale's middle. */
++  baseline: 'own' | 'scale';
++  /** Soreness at its worst: the first work set decides, a swap a tap away. */
++  wrecked: boolean;
++  /** The illness answer, if any. */
++  illness: Illness | null;
++}
++
++/** A check-in's illness, read tolerantly: anything but a known answer is none. */
++export function illnessOf(readiness: { illness?: unknown } | null | undefined): Illness | null {
++  const value = readiness?.illness;
++  return typeof value === 'string' && (ILLNESSES as readonly string[]).includes(value)
++    ? (value as Illness)
++    : null;
++}
++
++const DAY_MS = 86_400_000;
++
++/** The saved check-ins of the four weeks before today, newest first. */
++function savedCheckIns(history: readonly WorkoutRecord[], nowIso: string) {
++  const today = localDayKey(nowIso);
++  const now = Date.parse(nowIso);
++  return [...history]
++    .filter(
++      (record) =>
++        record.readiness !== null &&
++        localDayKey(record.startedAt) !== today &&
++        Date.parse(record.startedAt) <= now &&
++        now - Date.parse(record.startedAt) <= RULES.baselineDays.value * DAY_MS,
++    )
++    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
++    .map((record) => ({ at: record.startedAt, readiness: record.readiness as Readiness }));
++}
++
++/** Words for the items clearly worse: "energy and sleep under your usual". */
++export function worseWords(read: Pick<CheckInRead, 'worse' | 'extreme' | 'baseline'>): string {
++  if (read.extreme) return read.extreme;
++  const names = read.worse.map((item) => ITEM_WORDS[item]);
++  const list =
++    names.length <= 1
++      ? (names[0] ?? '')
++      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1] as string}`;
++  return read.baseline === 'own' ? `${list} under your usual` : `${list} low`;
++}
++
++/**
++ * Today's check-in read against the lifter's own: the mean and spread of each item over the saved
++ * check-ins of the four weeks before today, five or more of them; with fewer, the scale's middle
++ * (3) and a spread of a point. An item is clearly worse a spread under its mean or more, never less
++ * than a point.
++ */
++export function readCheckIn(
++  readiness: Readiness | null,
++  history: readonly WorkoutRecord[],
++  nowIso: string,
++): CheckInRead {
++  const illness = illnessOf(readiness as { illness?: unknown } | null);
++  if (!readiness) {
++    return { worse: [], extreme: null, lowered: false, baseline: 'scale', wrecked: false, illness };
++  }
++  const saved = savedCheckIns(history, nowIso);
++  const own = saved.length >= RULES.baselineLeast.value;
++  const worse = CHECK_IN_ITEMS.filter((item) => {
++    const values = saved.map((entry) => entry.readiness[item]).filter(Number.isFinite);
++    const mean = own ? values.reduce((sum, value) => sum + value, 0) / values.length : 3;
++    const spread = own
++      ? Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length)
++      : 1;
++    return readiness[item] <= mean - Math.max(1, spread * RULES.worseSpread.value);
++  });
++  // Two short nights running: today's sleep and the night before's, from the check-in saved on the
++  // day before (8112265, 29422383).
++  const yesterday = localDayKey(addLocalDays(nowIso, -1));
++  const nightBefore = saved.find((entry) => localDayKey(entry.at) === yesterday);
++  const extreme =
++    readiness.sleep <= RULES.extremeSleep.value &&
++    nightBefore !== undefined &&
++    nightBefore.readiness.sleep <= RULES.extremeSleep.value
++      ? 'two short nights running'
++      : null;
++  return {
++    worse,
++    extreme,
++    lowered: worse.length >= RULES.worseItems.value || extreme !== null,
++    baseline: own ? 'own' : 'scale',
++    wrecked: readiness.soreness >= WRECKED,
++    illness,
++  };
++}
+diff --git a/src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts b/src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts
+index 65a5826..c810bb8 100644
+--- a/src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts
++++ b/src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts
+@@ -61,7 +61,7 @@ function coachInput(workout: GeneratedWorkout): CoachInput {
+     profile: profileOf(),
+     history,
+     now: RECORD_NOW,
+-    fatigue: interpretFatigue(history, RECORD_NOW, null),
++    fatigue: interpretFatigue(history, RECORD_NOW),
+     strategy: [],
+     lastExportAt: RECORD_NOW,
+     workoutCount: 1,
+diff --git a/src/engine/recalibration/badStart.ts b/src/engine/recalibration/badStart.ts
+index aeb0f73..6464cbb 100644
+--- a/src/engine/recalibration/badStart.ts
++++ b/src/engine/recalibration/badStart.ts
+@@ -1,4 +1,8 @@
+ import { getExercise } from '../../catalog/exercises/catalog';
++import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
++import { readCheckIn } from '../readiness/checkIn';
++import { hoursSince, recoveryWindows, type RecoveryWindow } from '../recovery/recovery';
++import { RULES } from '../rules/ruleTable';
+ import { isHold } from '../../catalog/exercises/exerciseSchema';
+ import type { UserProfile } from '../../core/validation/profile';
+ import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+@@ -6,7 +10,7 @@ import { prescribeFor } from '../progression/roles';
+ import { SHORT_BY_REPS, shortBy } from '../progression/shortfall';
+ import { allEntries, type WorkoutBlock, type WorkoutEntry } from '../workout/types';
+ import { ESTIMATED_MODES } from './recalibrate';
+-import type { CompletedSet } from './types';
++import type { CompletedSet, Readiness } from './types';
+ 
+ /**
+  * A bad start carries over to the rest of the workout (Maintenance 26, the owner's item 42,
+@@ -46,10 +50,40 @@ export function startKey(reading: StartReading): string {
+ export interface StartContext {
+   profile: UserProfile;
+   history: readonly WorkoutRecord[];
++  /**
++   * Today's check-in (Maintenance 33, decision 1): one that lowers what the app expects asks a rep
++   * more short of a lift before it reads as a hard start.
++   */
++  readiness?: Readiness | null;
++}
++
++/**
++ * Whether the reading expects a step less of a lift (Maintenance 33, the readiness model): the
++ * check-in lowered it, or the lift's muscles are still inside their windows from recent hard work
++ * when its first set is logged (docs/research/readiness-and-soreness.md: recent hard work on the
++ * same muscle lowers the expectation slightly). One step, never two.
++ */
++function expectsLess(
++  exercise: CatalogExercise,
++  first: CompletedSet,
++  lowered: boolean,
++  windows: ReadonlyMap<string, RecoveryWindow>,
++): boolean {
++  if (lowered) return true;
++  return exercise.primaryMuscles.some((muscle) => {
++    const window = windows.get(muscle);
++    return window !== undefined && hoursSince(window, first.completedAt) < window.hours;
++  });
+ }
+ 
+ /** Whether a lift's first working set fell well short of its target; null when it cannot say. */
+-function shortOf(entry: WorkoutEntry, first: CompletedSet, context: StartContext): boolean | null {
++function shortOf(
++  entry: WorkoutEntry,
++  first: CompletedSet,
++  context: StartContext,
++  lowered = false,
++  windows: ReadonlyMap<string, RecoveryWindow> = new Map(),
++): boolean | null {
+   const exercise = getExercise(entry.exerciseId);
+   if (!exercise || isHold(exercise)) return null;
+   // Only a target the lifter's own logged sets set says something about today: not one read from
+@@ -94,7 +128,8 @@ function shortOf(entry: WorkoutEntry, first: CompletedSet, context: StartContext
+     first.planRir ?? prescribeFor(exercise, entry.role, context.profile, context.history).rir;
+   const reserve = Math.min(set.targetRir, planRir);
+   if (set.targetReps[0] + reserve > JUDGED_REPS) return null;
+-  return shortBy(set.targetReps[0], reserve, first.reps, first.rir) >= SHORT_BY_REPS;
++  const step = expectsLess(exercise, first, lowered, windows) ? RULES.expectationReps.value : 0;
++  return shortBy(set.targetReps[0], reserve, first.reps, first.rir) >= SHORT_BY_REPS + step;
+ }
+ 
+ /**
+@@ -123,6 +158,14 @@ export function readStart(
+     if (first) firsts.push({ entry, set: first, at: Date.parse(first.completedAt), order });
+   });
+   firsts.sort((a, b) => a.at - b.at || a.order - b.order);
++  // What the day lowers the expectation by: the check-in, read when the first set was logged, and
++  // each muscle's window from the work before today (Maintenance 33).
++  const at = firsts[0]?.set.completedAt;
++  const lowered =
++    at !== undefined && context.readiness
++      ? readCheckIn(context.readiness, context.history, at).lowered
++      : false;
++  const windows = firsts.length > 0 ? recoveryWindows(context.history) : new Map();
+   const judged: { exerciseId: string; short: boolean }[] = [];
+   const places = new Set<string>();
+   const begun = new Set<string>();
+@@ -133,7 +176,7 @@ export function readStart(
+     places.add(place);
+     begun.add(entry.exerciseId);
+     if (standIn) continue;
+-    const short = shortOf(entry, set, context);
++    const short = shortOf(entry, set, context, lowered, windows);
+     if (short === null) continue;
+     judged.push({ exerciseId: entry.exerciseId, short });
+     if (judged.length === 2) break;
+diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
+index 7cf1d22..53cf676 100644
+--- a/src/engine/recalibration/recalibrate.ts
++++ b/src/engine/recalibration/recalibrate.ts
+@@ -1,4 +1,6 @@
+ import { dropSetWeight } from './dropSet';
++import { illnessOf, readCheckIn, worseWords, type CheckInRead } from '../readiness/checkIn';
++import { RULES } from '../rules/ruleTable';
+ import { allExercises, requireExercise } from '../../catalog/exercises/catalog';
+ import { holdById, targetText } from '../workout/setText';
+ import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
+@@ -100,6 +102,7 @@ import {
+   type GenerationConstraints,
+   type KeptEntry,
+   type PrescriptionAdjustment,
++  dayRirFloor,
+   withCatchUpLines,
+   withSwapLines,
+ } from '../workoutGenerator/generate';
+@@ -272,7 +275,11 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
+     };
+     const outcome = execute(plain, scope, layer);
+     const constraints = outcome.constraints;
+-    const next = layer.finish(outcome.workout, constraints);
++    const next = withoutDropSetsToCome(
++      layer.finish(outcome.workout, constraints),
++      constraints,
++      request.completed,
++    );
+     // The time and the lines say what the plan now holds, eased or given back.
+     if (next !== outcome.workout || bare !== shown) {
+       refresh(
+@@ -509,7 +516,8 @@ function sameAdjust(
+   return (
+     (a?.sets ?? 0) === (b?.sets ?? 0) &&
+     (a?.rir ?? 0) === (b?.rir ?? 0) &&
+-    (a?.restFactor ?? 1) === (b?.restFactor ?? 1)
++    (a?.restFactor ?? 1) === (b?.restFactor ?? 1) &&
++    dayRirFloor(a) === dayRirFloor(b)
+   );
+ }
+ 
+@@ -526,6 +534,7 @@ function feltAdjust(constraints: SessionConstraints): PrescriptionAdjustment | u
+     sets: Math.min(checkIn.sets, HARD_START.sets),
+     rir: Math.max(checkIn.rir, HARD_START.rir),
+     restFactor: Math.max(checkIn.restFactor, HARD_START.restFactor),
++    ...(checkIn.rirFloor !== undefined ? { rirFloor: checkIn.rirFloor } : {}),
+   };
+ }
+ 
+@@ -541,6 +550,7 @@ function withIntensity(
+     sets: harder.sets + felt.sets,
+     rir: harder.rir + felt.rir,
+     restFactor: harder.restFactor * felt.restFactor,
++    ...(felt.rirFloor !== undefined ? { rirFloor: felt.rirFloor } : {}),
+   };
+ }
+ 
+@@ -1042,9 +1052,18 @@ function prescriptionToday(
+   role: TrainingRole,
+ ): Prescription {
+   const base = prescribeFor(exercise, role, request.profile, request.history);
+-  return request.constraints.deload !== null
+-    ? { ...base, rir: Math.min(4, base.rir + DELOAD_RIR_DELTA) }
+-    : base;
++  const planned =
++    request.constraints.deload !== null
++      ? { ...base, rir: Math.min(4, base.rir + DELOAD_RIR_DELTA) }
++      : base;
++  // The day's reserve floor, a head cold's (Maintenance 33).
++  const floor = dayFloor(request.constraints);
++  return planned.rir < floor ? { ...planned, rir: floor } : planned;
++}
++
++/** The fewest reps in reserve the day's settings allow any set (a head cold: 2), or none. */
++function dayFloor(constraints: SessionConstraints): number {
++  return dayRirFloor(dayAdjust(constraints));
+ }
+ 
+ /**
+@@ -1185,6 +1204,27 @@ function offPlanToday(request: RecalibrationRequest, workout: GeneratedWorkout):
+   return (catchUpToday(request.constraints, workout)?.muscles.length ?? 0) > 0;
+ }
+ 
++/** The check-in's rest day (Maintenance 33): a fever or aches all over are no day to train. */
++export const REST_TODAY =
++  'Fever or aches all over: rest today, and train again once they have gone.';
++
++/**
++ * The check-in's lines beside what it changed (Maintenance 33): the expectation it lowered, where
++ * the words above do not say so, and soreness at its worst, which changes nothing.
++ */
++function checkInNotes(read: CheckInRead, lowered: boolean): string[] {
++  return [
++    lowered
++      ? `${capitalize(worseWords(read))}: today's first sets are judged a step easier; the plan stays.`
++      : '',
++    read.wrecked
++      ? 'Very sore: your first work set decides, and a swap is a tap away if soreness limits your range.'
++      : '',
++  ].filter(Boolean);
++}
++
++const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
++
+ /** A lift begun with one set left, as a refusal and a stop say it. */
+ function oneSetLeft(name: string): string {
+   return `${name} has one set left, too few for another lift to take over`;
+@@ -1274,7 +1314,10 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
+   const day = dayAdjust(request.constraints)?.rir ?? 0;
+   // The day's settings, the whole of them first: a reserve held at its limit (4, or the
+   // exercise's floor) shows them as much as any.
+-  const floor = rirFloor(requireExercise(entry.exerciseId));
++  const floor = Math.max(
++    rirFloor(requireExercise(entry.exerciseId)),
++    dayFloor(request.constraints),
++  );
+   for (let shift = day; shift !== 0; shift -= Math.sign(day)) {
+     if (carriesDayRir(sets, Math.min(4, Math.max(floor, plainRir + shift)))) return shift;
+   }
+@@ -1306,10 +1349,40 @@ function backOffDay(
+ 
+ /** Fatigue high today: a main lift goes straight (item 11, the research). */
+ function fatigueHigh(request: RecalibrationRequest): boolean {
+-  return (
+-    interpretFatigue(request.history, request.timestamp, request.constraints.readiness).level ===
+-    'high'
+-  );
++  return interpretFatigue(request.history, request.timestamp).level === 'high';
++}
++
++/**
++ * A day that runs a main lift straight whatever its structure: fatigue high (item 11), or a reserve
++ * floor over the top set's (a head cold, Maintenance 33).
++ */
++function straightToday(request: RecalibrationRequest): boolean {
++  return fatigueHigh(request) || dayFloor(request.constraints) > BACK_OFF.TOP_RIR;
++}
++
++/**
++ * On a day that keeps every set short of failure (a head cold, Maintenance 33), no drop set is
++ * still to come: one done stays as logged.
++ */
++function withoutDropSetsToCome(
++  workout: GeneratedWorkout,
++  constraints: SessionConstraints,
++  completed: CompletedWork,
++): GeneratedWorkout {
++  if (dayFloor(constraints) === 0) return workout;
++  const done = new Set(completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
++  const toCome = (entry: WorkoutEntry, set: SetPrescription) =>
++    set.kind === 'drop' && !done.has(`${entry.id}:${set.index}`);
++  if (!allEntries(workout.blocks).some((entry) => entry.sets.some((set) => toCome(entry, set)))) {
++    return workout;
++  }
++  const cleared = cloneWorkout(workout);
++  for (const entry of allEntries(cleared.blocks)) {
++    if (!entry.sets.some((set) => toCome(entry, set))) continue;
++    entry.sets = entry.sets.filter((set) => !toCome(entry, set));
++    entry.dropSet = entry.sets.some((set) => set.kind === 'drop');
++  }
++  return cleared;
+ }
+ 
+ /** The reserve the day asks of a lift as the plan holds it: its effort and the catch-up's kept. */
+@@ -1323,6 +1396,7 @@ function dayReserve(
+     prescriptionToday(request, exercise, entry.role),
+     heldShift(request, workout, exercise, entry.role, dayShiftOf(request, workout, entry)),
+     exercise,
++    dayFloor(request.constraints),
+   ).rir;
+ }
+ 
+@@ -1400,7 +1474,7 @@ function targetBuilt(
+       ),
+     prescription,
+     suits: backOffsSuit(exercise, role, request.profile),
+-    day: backOffs && !fatigueHigh(request),
++    day: backOffs && !straightToday(request),
+     exerciseId: exercise.id,
+     history: request.history,
+     load: { step: loading.step, floor: barWeightFor(exercise, request.profile.units), loading },
+@@ -1414,16 +1488,18 @@ function targetBuilt(
+   };
+ }
+ 
+-/** A prescription carrying an effort shift, within the reserve its exercise allows. */
++/** A prescription carrying an effort shift, within the reserve its exercise and the day allow. */
+ function shifted(
+   prescription: Prescription,
+   shift: number,
+   exercise: CatalogExercise,
++  /** The day's own floor (a head cold, Maintenance 33). */
++  floor = 0,
+ ): Prescription {
+   if (shift === 0) return prescription;
+   return {
+     ...prescription,
+-    rir: Math.min(4, Math.max(rirFloor(exercise), prescription.rir + shift)),
++    rir: Math.min(4, Math.max(rirFloor(exercise), floor, prescription.rir + shift)),
+   };
+ }
+ 
+@@ -1446,11 +1522,7 @@ function targetToday(
+     prescription,
+     history: request.history,
+     profile: request.profile,
+-    fatigueLevel: interpretFatigue(
+-      request.history,
+-      request.timestamp,
+-      request.constraints.readiness,
+-    ).level,
++    fatigueLevel: interpretFatigue(request.history, request.timestamp).level,
+     now: request.timestamp,
+     maxes: request.maxes,
+     session: { precedingSets: context.precedingSets },
+@@ -1946,6 +2018,7 @@ function refitEntry(
+     plain,
+     heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),
+     exercise,
++    dayFloor(request.constraints),
+   );
+   const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
+   const context = sessionContextFor(request, workout, entry.id, exercise);
+@@ -2088,6 +2161,7 @@ function targetedSets(
+     prescriptionToday(request, exercise, role),
+     options.shift ?? 0,
+     exercise,
++    dayFloor(request.constraints),
+   );
+   const context = sessionContextFor(request, workout, entryId, exercise, options.through);
+   const loading = loadingOf(request, exercise);
+@@ -2101,11 +2175,7 @@ function targetedSets(
+         prescription: asked,
+         history,
+         profile: request.profile,
+-        fatigueLevel: interpretFatigue(
+-          request.history,
+-          request.timestamp,
+-          request.constraints.readiness,
+-        ).level,
++        fatigueLevel: interpretFatigue(request.history, request.timestamp).level,
+         now: request.timestamp,
+         maxes: request.maxes,
+         session: { precedingSets: context.precedingSets },
+@@ -2122,7 +2192,7 @@ function targetedSets(
+     read: targetAt,
+     prescription,
+     suits: backOffsSuit(exercise, role, request.profile),
+-    day: options.backOffs === true && !fatigueHigh(request),
++    day: options.backOffs === true && !straightToday(request),
+     exerciseId: exercise.id,
+     history: request.history,
+     load: { step: loading.step, floor, loading },
+@@ -3485,18 +3555,29 @@ function formatClock(iso: string): string {
+ }
+ 
+ /**
+- * A check-in that eases the day (low energy, sleep or motivation, or soreness): a day a reserve
+- * check never takes (Maintenance 27, item 43). The same rule that eases it.
++ * A day a reserve check never takes (Maintenance 27, item 43): a check-in that lowers what the app
++ * expects of the day's first sets, or any illness (Maintenance 33, `readCheckIn`).
+  */
+-export function lowCheckIn(readiness: Readiness | null): boolean {
+-  return readiness !== null && readinessAdjustment(readiness) !== undefined;
++export function lowCheckIn(
++  readiness: Readiness | null,
++  history: readonly WorkoutRecord[],
++  nowIso: string,
++): boolean {
++  if (readiness === null) return false;
++  const read = readCheckIn(readiness, history, nowIso);
++  return read.lowered || read.illness !== null;
+ }
+ 
++/**
++ * What a check-in changes in the plan (Maintenance 33, the owner's decision 1 on the readiness
++ * model, docs/research/readiness-and-soreness.md): energy, sleep, motivation and soreness lower
++ * what the app expects, never the plan; a head cold keeps every set 2 or more short of failure. A
++ * fever or aches all over are a rest day, which no plan change makes.
++ */
+ function readinessAdjustment(readiness: Readiness): PrescriptionAdjustment | undefined {
+-  const low = readiness.energy <= 2 || readiness.sleep <= 2 || readiness.motivation <= 2;
+-  const sore = readiness.soreness >= 4;
+-  if (!low && !sore) return undefined;
+-  return { sets: -1, rir: low ? 1 : 0, restFactor: 1 };
++  return illnessOf(readiness) === 'head'
++    ? { sets: 0, rir: 0, restFactor: 1, rirFloor: RULES.headColdRir.value }
++    : undefined;
+ }
+ 
+ /** Changes that make no sense on an exercise that has stopped: its sets went to a stand-in. */
+@@ -4009,6 +4090,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+           prescriptionToday(request, exercise, role),
+           dayAdjust(constraints)?.rir ?? 0,
+           exercise,
++          dayFloor(constraints),
+         ),
+         sets: Math.max(1, Math.round(trigger.sets)),
+       };
+@@ -4141,6 +4223,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+               effortShift(from, entry, plainTarget.rir),
+             ),
+             exercise,
++            dayFloor(from.constraints),
+           );
+           let target = prescription === plain ? plainTarget : targetFor(prescription);
+           // A load read from an estimate for a rep range, with reps set by hand: the load for those
+@@ -4166,7 +4249,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+                 fitToday(from, targetFor(asked, history, trainedAt), loading, exercise, entry.role),
+               prescription,
+               suits: backOffsSuit(exercise, entry.role, from.profile),
+-              day: backOffDay(from, workout, entry) && !fatigueHigh(from),
++              day: backOffDay(from, workout, entry) && !straightToday(from),
+               exerciseId: exercise.id,
+               history: from.history,
+               load: {
+@@ -4428,6 +4511,12 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+         ? readinessAdjustment(request.constraints.readiness)
+         : undefined;
+       const restored = !adjust && earlier !== undefined;
++      // What the check-in reads (Maintenance 33, the owner's decision 1): its items against the
++      // lifter's own lower what the app expects of the day's first sets, never the plan; soreness at
++      // its worst is a line; a fever or aches all over are a rest day.
++      const read = readCheckIn(readiness, request.history, request.timestamp);
++      const noted = read.lowered || read.worse.length > 0 || read.illness !== null || read.wrecked;
++      const checked = noted ? 'Checked in' : 'Feeling good';
+       // Short on time asks for 45 minutes, never longer than a catch-up's own shorter length (the
+       // second review of round M).
+       const defaultMinutes = request.profile.schedule.typicalDurationMinutes;
+@@ -4445,12 +4534,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+       ) {
+         // A hard start still eases the rest: never "full workout kept" while it does (the review
+         // of item 42).
++        const headline =
++          read.illness === 'body'
++            ? REST_TODAY
++            : constraints.badStart
++              ? `${checked}: the rest stays eased for the hard start.`
++              : read.lowered
++                ? `Checked in: ${worseWords(read)}. The plan stays; today's first sets are judged a step easier.`
++                : `${checked}: full workout kept.`;
+         return {
+           ...base,
+           constraints,
+-          headline: constraints.badStart
+-            ? 'Feeling good: the rest stays eased for the hard start.'
+-            : 'Feeling good: full workout kept.',
++          headline,
++          notes: checkInNotes(read, read.lowered && !constraints.badStart),
+         };
+       }
+       const settled = settleKept(request, constraints);
+@@ -4476,7 +4572,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+       const more = sets > 0 && change.more;
+       const { easier, harder } = change;
+       const parts: string[] = [];
+-      const cut = [fewer ? 'fewer sets' : '', easier ? 'an extra rep in reserve' : ''];
++      // A head cold's floor says what it is, never "an extra rep" (Maintenance 33).
++      const floorNow = dayRirFloor(adjust) > dayRirFloor(earlier);
++      const cut = [
++        fewer ? 'fewer sets' : '',
++        easier
++          ? floorNow
++            ? `every set ${dayRirFloor(adjust)} or more short of failure for the head cold`
++            : 'an extra rep in reserve'
++          : '',
++      ];
+       if (fewer || easier) parts.push(cut.filter(Boolean).join(' with '));
+       if (more || harder) {
+         parts.push(
+@@ -4522,11 +4627,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+         workout,
+         constraints,
+         duration: choice,
+-        ...(stays
+-          ? {
+-              headline: `${adjust ? 'Checked in' : 'Feeling good'}: the rest stays eased for the hard start.`,
+-            }
+-          : {}),
++        ...(stays ? { headline: `${checked}: the rest stays eased for the hard start.` } : {}),
++        notes: checkInNotes(read, read.lowered),
+         prefix: only
+           ? `${only.charAt(4).toUpperCase()}${only.slice(5)}`
+           : parts.length > 0
+@@ -4936,6 +5038,12 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+       const existing = entry.sets.find((set) => set.kind === 'drop');
+       if (trigger.on) {
+         if (!exercise.dropSetSafe) throw new Error(`${exercise.name} is not safe for a drop set.`);
++        // A drop set goes to failure; a head cold keeps every set 2 or more short of it (Maintenance 33).
++        if (dayFloor(request.constraints) > 0) {
++          throw new Error(
++            `A head cold today: every set stops ${dayFloor(request.constraints)} or more short of failure, so no drop set.`,
++          );
++        }
+         if (existing)
+           return { ...base, workout, headline: `${exercise.name} already has a drop set.` };
+         // The load comes from a working set actually lifted, never from the plan. Until the
+diff --git a/src/engine/recalibration/types.ts b/src/engine/recalibration/types.ts
+index 0ae975f..ef3eb65 100644
+--- a/src/engine/recalibration/types.ts
++++ b/src/engine/recalibration/types.ts
+@@ -1,3 +1,4 @@
++import type { Illness } from '../readiness/checkIn';
+ import type { MuscleId } from '../../catalog/muscles/muscles';
+ import type { StrengthMaxes } from '../progression/maxes';
+ import type { DeloadWindow } from '../planning/deload';
+@@ -22,7 +23,10 @@ import type { DurationChoice, GeneratedWorkout, SetKind } from '../workout/types
+ 
+ export type RecalibrationScope = 'local' | 'partial' | 'full';
+ 
+-/** A fast pre-workout check-in; every value is 1 (worst) to 5 (best). */
++/**
++ * A fast pre-workout check-in: energy, sleep and motivation 1 (worst) to 5 (best), soreness 1 (none)
++ * to 5 (wrecked); and, since Maintenance 33, any illness (the gate: `ILLNESSES`).
++ */
+ export interface Readiness {
+   energy: number;
+   soreness: number;
+@@ -30,6 +34,7 @@ export interface Readiness {
+   motivation: number;
+   jointDiscomfort: Joint[];
+   timePressure: boolean;
++  illness?: Illness;
+ }
+ 
+ export type RecalibrationTrigger =
+diff --git a/src/engine/recovery/fatigue.test.ts b/src/engine/recovery/fatigue.test.ts
+index e4e1132..e7887f4 100644
+--- a/src/engine/recovery/fatigue.test.ts
++++ b/src/engine/recovery/fatigue.test.ts
+@@ -46,25 +46,11 @@ describe('fatigue interpretation', () => {
+       record(2, 'lat-pulldown', [[10, 120, 1]], [8, 12], 1),
+       record(3, 'back-squat', [[5, 225, 2]], [4, 6], 2),
+     ];
+-    const tired = interpretFatigue(history, NOW, {
+-      energy: 2,
+-      soreness: 4,
+-      sleep: 2,
+-      motivation: 3,
+-      jointDiscomfort: [],
+-      timePressure: false,
+-    });
++    const tired = interpretFatigue(history, NOW);
+     expect(tired.consecutiveDays).toBe(4);
+     expect(tired.hardRatings).toBe(2);
+     expect(tired.level).toBe('high');
+-    const fresh = interpretFatigue([history[3] as (typeof history)[number]], NOW, {
+-      energy: 5,
+-      soreness: 1,
+-      sleep: 5,
+-      motivation: 5,
+-      jointDiscomfort: [],
+-      timePressure: false,
+-    });
++    const fresh = interpretFatigue([history[3] as (typeof history)[number]], NOW);
+     expect(fresh.level).toBe('fresh');
+     expect(fresh.evidence).toContain('Feeling fresh in today’s check-in.');
+   });
+diff --git a/src/engine/recovery/fatigue.ts b/src/engine/recovery/fatigue.ts
+index 3a86799..2d3374c 100644
+--- a/src/engine/recovery/fatigue.ts
++++ b/src/engine/recovery/fatigue.ts
+@@ -1,15 +1,19 @@
+ import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+ import { addLocalDays, localDayKey } from '../../core/time/localDate';
+-import type { Readiness } from '../recalibration/types';
+ import { holdById } from '../workout/setText';
+ import { ratingPainWords } from './painReport';
+ 
+ /**
+- * Fatigue interpretation from actual records and today's readiness: sessions
+- * in the last week, consecutive training days, how far logged reps in reserve
+- * drifted below the targets, hard or painful session ratings, and the
+- * check-in. The result feeds progression (hold loads when fatigue is high),
+- * the coach, and the strategy analysis. Never a diagnosis from one poor set.
++ * Fatigue interpretation from actual records: how far logged reps in reserve drifted below the
++ * targets, hard or painful session ratings, rests that ran long, and estimated maxes falling. The
++ * result feeds progression (hold loads when fatigue is high), the coach, and the strategy analysis.
++ * Never a diagnosis from one poor set.
++ *
++ * Since Maintenance 33 (docs/proposals/week-model-readiness-time.md, part 1; the owner's decision
++ * 1) no day count scores: fatigue stays in the trained muscles (Behm 2021, 33818751), and
++ * consecutive days are no problem in themselves (27682004, 29967584), so recovery is judged per
++ * muscle (`recovery.ts`). Nor does the check-in: it lowers what the app expects of the day's first
++ * sets, never the plan (`readCheckIn`). The sessions and days are still counted, for the words.
+  */
+ 
+ export type FatigueLevel = 'fresh' | 'normal' | 'elevated' | 'high';
+@@ -36,11 +40,7 @@ const DAY_MS = 86_400_000;
+ /** The device's day (Maintenance 28, item 1). */
+ const dayKey = localDayKey;
+ 
+-export function interpretFatigue(
+-  history: readonly WorkoutRecord[],
+-  nowIso: string,
+-  readiness: Readiness | null = null,
+-): FatigueSignal {
++export function interpretFatigue(history: readonly WorkoutRecord[], nowIso: string): FatigueSignal {
+   const now = Date.parse(nowIso);
+   const qualifying = history
+     .filter((record) =>
+@@ -55,13 +55,6 @@ export function interpretFatigue(
+   const sessionsLast7Days = qualifying.filter(
+     (record) => now - Date.parse(record.completedAt ?? record.startedAt) <= 7 * DAY_MS,
+   ).length;
+-  if (sessionsLast7Days >= 5) {
+-    score += 2;
+-    evidence.push(`${sessionsLast7Days} sessions in the last 7 days.`);
+-  } else if (sessionsLast7Days === 4) {
+-    score += 1;
+-    evidence.push('4 sessions in the last 7 days.');
+-  }
+ 
+   // A workout counts on the day it began.
+   const days = [...new Set(qualifying.map((record) => dayKey(record.startedAt)))];
+@@ -74,13 +67,6 @@ export function interpretFatigue(
+     consecutiveDays += 1;
+     cursor = yesterday(cursor);
+   }
+-  if (consecutiveDays >= 4) {
+-    score += 2;
+-    evidence.push(`${consecutiveDays} training days in a row.`);
+-  } else if (consecutiveDays === 3) {
+-    score += 1;
+-    evidence.push('3 training days in a row.');
+-  }
+ 
+   const drifts: number[] = [];
+   for (const record of qualifying.slice(0, 2)) {
+@@ -132,29 +118,12 @@ export function interpretFatigue(
+     );
+   }
+ 
+-  // Saved check-ins: a trend, not just today.
+-  const checkIns = qualifying
++  // Saved check-ins with low energy or sleep, counted for the deload's words; they score nothing.
++  const readinessTrend = qualifying
+     .slice(0, 3)
+-    .map(
+-      (record) =>
+-        (record as { readiness?: { energy: number; sleep: number; soreness: number } | null })
+-          .readiness ?? null,
+-    )
+     .filter(
+-      (entry): entry is { energy: number; sleep: number; soreness: number } => entry !== null,
+-    );
+-  const readinessTrend = checkIns.filter((entry) => entry.energy <= 2 || entry.sleep <= 2).length;
+-  const soreTrend = checkIns.filter((entry) => entry.soreness >= 4).length;
+-  if (readinessTrend >= 2) {
+-    score += 1;
+-    evidence.push(
+-      `Low energy or sleep in ${readinessTrend} of the last ${checkIns.length} check-ins.`,
+-    );
+-  }
+-  if (soreTrend >= 2) {
+-    score += 1;
+-    evidence.push(`Sore in ${soreTrend} of the last ${checkIns.length} check-ins.`);
+-  }
++      (record) => record.readiness && (record.readiness.energy <= 2 || record.readiness.sleep <= 2),
++    ).length;
+ 
+   // Rests that ran long between logged sets suggest grinding.
+   let longRests = 0;
+@@ -218,21 +187,6 @@ export function interpretFatigue(
+     );
+   }
+ 
+-  if (readiness) {
+-    if (readiness.energy <= 2 || readiness.sleep <= 2) {
+-      score += 2;
+-      evidence.push('Low energy or sleep in today’s check-in.');
+-    }
+-    if (readiness.soreness >= 4) {
+-      score += 1;
+-      evidence.push('Sore today.');
+-    }
+-    if (readiness.energy >= 4 && readiness.sleep >= 4 && readiness.soreness <= 2) {
+-      score -= 1;
+-      evidence.push('Feeling fresh in today’s check-in.');
+-    }
+-  }
+-
+   const level: FatigueLevel =
+     score >= 5 ? 'high' : score >= 3 ? 'elevated' : score >= 1 ? 'normal' : 'fresh';
+   if (evidence.length === 0) evidence.push('No fatigue signals in recent sessions.');
+diff --git a/src/engine/recovery/painReport.test.ts b/src/engine/recovery/painReport.test.ts
+index 599c71b..97c5955 100644
+--- a/src/engine/recovery/painReport.test.ts
++++ b/src/engine/recovery/painReport.test.ts
+@@ -51,7 +51,7 @@ describe('the pain reported when a workout is saved', () => {
+       { joint: 'shoulder', count: 1 },
+       { joint: 'unspecified', count: 1 },
+     ]);
+-    expect(interpretFatigue(history, RECORD_NOW, null).evidence).toContain(
++    expect(interpretFatigue(history, RECORD_NOW).evidence).toContain(
+       'Shoulder pain reported in a recent session.',
+     );
+   });
+diff --git a/src/engine/recovery/recovery.learned.test.ts b/src/engine/recovery/recovery.learned.test.ts
+new file mode 100644
+index 0000000..a9b3fcf
+--- /dev/null
++++ b/src/engine/recovery/recovery.learned.test.ts
+@@ -0,0 +1,223 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { RECORD_NOW, record, type SetSpec } from '../../test/records';
++import {
++  LEARNING,
++  RECOVERY,
++  learnedWindows,
++  recoveryWindows,
++  restedBaseline,
++  setMax,
++} from './recovery';
++
++/**
++ * Maintenance 33 (docs/research/recovery-time-course.md): what the lifter's own sessions teach of a
++ * muscle's window, within bounds; the rested baseline a first set is read against; a set logged with
++ * no reserve read at its target's; and the whole-body layer of a run of hard days with energy low.
++ * Synthetic data only.
++ */
++
++const HOUR = 3_600_000;
++const sets = (count: number, reps: number, rir: number | null, weight = 200): SetSpec[] =>
++  Array.from({ length: count }, () => [reps, weight, rir] as SetSpec);
++
++/** A session `hoursAgo` before RECORD_NOW. */
++function session(
++  hoursAgo: number,
++  exerciseId: string,
++  spec: SetSpec[],
++  extra: Partial<WorkoutRecord> = {},
++): WorkoutRecord {
++  const done = record(hoursAgo / 24, exerciseId, spec, [4, 6], 1, extra);
++  return { ...done, id: `s-${exerciseId}-${hoursAgo}` };
++}
++
++/**
++ * Bench press sessions a rep short of failure (a 36 h window for the chest): four rested ones to
++ * start, then five rounds of a rested session and one a day after it, the first set of the early
++ * ones at `early` lb against 200 rested.
++ */
++function series(early: number, extra: (rested: boolean) => Partial<WorkoutRecord> = () => ({})) {
++  const plan: { at: number; rested: boolean }[] = [];
++  let t = 0;
++  for (let i = 0; i < 4; i += 1) {
++    plan.push({ at: t, rested: true });
++    t += 72;
++  }
++  for (let i = 0; i < 5; i += 1) {
++    plan.push({ at: t, rested: true });
++    plan.push({ at: t + 24, rested: false });
++    t += 24 + 72;
++  }
++  const end = t - 72;
++  return plan.map(({ at, rested }) =>
++    session(
++      end - at + 48,
++      'barbell-bench-press',
++      sets(3, 5, 1, rested ? 200 : early),
++      extra(rested),
++    ),
++  );
++}
++
++describe('a set read as a max', () => {
++  it('load × (1 + (reps + reserve) / 30), only where reps and reserve read well', () => {
++    expect(setMax({ reps: 5, weight: 200, rir: 1 })).toBe(240);
++    expect(setMax({ reps: 13, weight: 100, rir: 1 })).toBeNull();
++    expect(setMax({ reps: 5, weight: 200, rir: 4 })).toBeNull();
++    expect(setMax({ reps: 5, weight: null, rir: 1 })).toBeNull();
++    expect(setMax({ reps: 5, weight: 200, rir: null })).toBeNull();
++  });
++});
++
++describe('the rested baseline', () => {
++  it('the median of the last rested first sets, never one back inside its window', () => {
++    const history = series(150);
++    const last = history.at(-1)!;
++    // Before the last early session: rested sessions at 240 each; the early ones at 180 are not read.
++    expect(restedBaseline('barbell-bench-press', history, last.startedAt)).toBe(240);
++  });
++
++  it('none from fewer than three rested sessions', () => {
++    const history = [
++      session(200, 'barbell-bench-press', sets(3, 5, 1)),
++      session(100, 'barbell-bench-press', sets(3, 5, 1)),
++    ];
++    expect(restedBaseline('barbell-bench-press', history, RECORD_NOW)).toBeNull();
++  });
++});
++
++describe('learned windows', () => {
++  it('early sessions as strong as rested ones: half a day shorter', () => {
++    const history = series(200);
++    const learned = learnedWindows(history).get('chest')!;
++    expect(learned).toMatchObject({ shift: -LEARNING.STEP_HOURS, early: 5 });
++    expect(learned.rested).toBeGreaterThanOrEqual(LEARNING.LEAST);
++    const window = recoveryWindows(history).get('chest')!;
++    expect(window.prior).toBe(36);
++    expect(window.hours).toBe(24);
++    expect(window.reasons.join(' ')).toContain('your own sessions: 12 h less');
++  });
++
++  it('early sessions 5% or more weaker: half a day longer', () => {
++    const history = series(185);
++    expect(learnedWindows(history).get('chest')?.shift).toBe(LEARNING.STEP_HOURS);
++    expect(recoveryWindows(history).get('chest')?.hours).toBe(48);
++  });
++
++  it('between the two: as estimated', () => {
++    const history = series(195);
++    expect(learnedWindows(history).get('chest')?.shift).toBe(0);
++    expect(recoveryWindows(history).get('chest')?.hours).toBe(36);
++  });
++
++  it('fewer than five of each: as estimated', () => {
++    const history = series(200).slice(0, -2);
++    expect(learnedWindows(history).get('chest')?.shift).toBe(0);
++  });
++
++  it('days ill or after a short night are left out', () => {
++    const history = series(200, (rested) =>
++      rested
++        ? {}
++        : {
++            readiness: {
++              energy: 3,
++              soreness: 2,
++              sleep: 2,
++              motivation: 3,
++              jointDiscomfort: [],
++              timePressure: false,
++            },
++          },
++    );
++    expect(learnedWindows(history).get('chest')?.early ?? 0).toBe(0);
++    expect(recoveryWindows(history).get('chest')?.hours).toBe(36);
++  });
++
++  it('a reset of the learned windows reads only what was logged after it', () => {
++    const history = series(200);
++    expect(learnedWindows(history, { recovery: RECORD_NOW }).get('chest')?.shift ?? 0).toBe(0);
++    expect(recoveryWindows(history, { resets: { recovery: RECORD_NOW } }).get('chest')?.hours).toBe(
++      36,
++    );
++  });
++
++  it('within bounds: never past four days, never under half its estimate', () => {
++    // Squats to failure, six sets: a 96 h window, the most a learned one may be.
++    const squats = (weight: number) => sets(6, 5, 0, weight);
++    const plan: { at: number; rested: boolean }[] = [];
++    let t = 0;
++    for (let i = 0; i < 4; i += 1) {
++      plan.push({ at: t, rested: true });
++      t += 120;
++    }
++    for (let i = 0; i < 5; i += 1) {
++      plan.push({ at: t, rested: true });
++      plan.push({ at: t + 48, rested: false });
++      t += 48 + 120;
++    }
++    const end = t - 120;
++    const history = plan.map(({ at, rested }) =>
++      session(end - at + 48, 'back-squat', squats(rested ? 300 : 250)),
++    );
++    expect(learnedWindows(history).get('quads')?.shift).toBe(LEARNING.STEP_HOURS);
++    const window = recoveryWindows(history).get('quads')!;
++    expect(window.prior).toBe(96);
++    expect(window.hours).toBe(96);
++  });
++});
++
++describe('a set logged with no reserve', () => {
++  it('is read at the reserve its target asked', () => {
++    const history = [session(24, 'barbell-bench-press', sets(3, 5, null))];
++    // The target asked 1 in reserve: a day and a half for the chest.
++    expect(recoveryWindows(history).get('chest')?.hours).toBe(36);
++  });
++});
++
++describe('the whole-body layer', () => {
++  const day = (hoursAgo: number) => session(hoursAgo, 'barbell-row', sets(3, 6, 2, 135));
++
++  it('three hard days running, energy low today: half a day more on every window', () => {
++    const history = [day(72), day(48), day(24)];
++    const windows = recoveryWindows(history, { lowEnergy: true, now: RECORD_NOW });
++    expect(windows.get('lats')?.hours).toBe(36 + RECOVERY.SHORT_NIGHT_HOURS);
++    expect(windows.get('lats')?.reasons.join(' ')).toContain('3 hard days running');
++  });
++
++  it('energy not low, or two days only: none', () => {
++    const history = [day(72), day(48), day(24)];
++    expect(recoveryWindows(history, { now: RECORD_NOW }).get('lats')?.hours).toBe(36);
++    expect(
++      recoveryWindows([day(48), day(24)], { lowEnergy: true, now: RECORD_NOW }).get('lats')?.hours,
++    ).toBe(36);
++  });
++
++  it('light days are no hard days', () => {
++    const light = (hoursAgo: number) => session(hoursAgo, 'barbell-row', sets(3, 6, 4, 95));
++    const history = [light(72), light(48), day(24)];
++    expect(recoveryWindows(history, { lowEnergy: true, now: RECORD_NOW }).get('lats')?.hours).toBe(
++      36,
++    );
++  });
++
++  it('a short night and a run of hard days: half a day once', () => {
++    const history = [day(72), day(48), day(24)];
++    const hours = recoveryWindows(history, {
++      readiness: { sleep: 1 },
++      lowEnergy: true,
++      now: RECORD_NOW,
++    }).get('lats')?.hours;
++    expect(hours).toBe(36 + RECOVERY.SHORT_NIGHT_HOURS);
++  });
++
++  it('the record of hours since and a new history are read again', () => {
++    const history = [day(24)];
++    const before = recoveryWindows(history).get('lats')!;
++    history.push(session(12, 'barbell-row', sets(3, 6, 0, 155)));
++    const after = recoveryWindows(history).get('lats')!;
++    expect(Date.parse(after.at) - Date.parse(before.at)).toBe(12 * HOUR);
++    expect(after.hours).toBe(48);
++  });
++});
+diff --git a/src/engine/recovery/recovery.test.ts b/src/engine/recovery/recovery.test.ts
+new file mode 100644
+index 0000000..2b0b88f
+--- /dev/null
++++ b/src/engine/recovery/recovery.test.ts
+@@ -0,0 +1,155 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { RECORD_NOW, record, type SetSpec } from '../../test/records';
++import { getExercise } from '../../catalog/exercises/catalog';
++import { plan } from '../../test/backOffs';
++import { allEntries } from '../workout/types';
++import { RECOVERY, hoursSince, recoveryWindows, tooSoonToday } from './recovery';
++
++/**
++ * Maintenance 33 (docs/research/recovery-time-course.md): a muscle's window from its last hard work
++ * as a prime mover, keyed to how close its sets went to failure and to the body region, lengthened
++ * by a large dose, a lift new to the lifter, long-length work and a short night. Light work starts
++ * no window. Synthetic data only.
++ */
++
++const sets = (count: number, reps: number, rir: number, weight = 135): SetSpec[] =>
++  Array.from({ length: count }, () => [reps, weight, rir] as SetSpec);
++
++const windowOf = (history: WorkoutRecord[], muscle: Parameters<typeof hoursOf>[1]) =>
++  recoveryWindows(history).get(muscle);
++function hoursOf(history: WorkoutRecord[], muscle: 'chest' | 'quads' | 'hamstrings' | 'calves') {
++  return recoveryWindows(history).get(muscle)?.hours;
++}
++
++describe('the window from the hardest sets, by region', () => {
++  it('sets three or more short of failure: a day, upper or lower', () => {
++    expect(hoursOf([record(1, 'barbell-bench-press', sets(3, 8, 3))], 'chest')).toBe(24);
++    expect(hoursOf([record(1, 'back-squat', sets(3, 8, 3))], 'quads')).toBe(24);
++  });
++
++  it('one or two short: a day and a half upper, two days for lower-body compound work', () => {
++    expect(hoursOf([record(1, 'barbell-bench-press', sets(3, 6, 2))], 'chest')).toBe(36);
++    expect(hoursOf([record(1, 'back-squat', sets(3, 6, 1))], 'quads')).toBe(48);
++  });
++
++  it('to failure: two days upper, three for lower-body compound work', () => {
++    expect(hoursOf([record(1, 'barbell-bench-press', sets(3, 6, 0))], 'chest')).toBe(48);
++    expect(hoursOf([record(1, 'back-squat', sets(3, 6, 0))], 'quads')).toBe(72);
++  });
++
++  it('a long set near failure counts as to failure', () => {
++    expect(hoursOf([record(1, 'barbell-bench-press', sets(3, 12, 1))], 'chest')).toBe(48);
++  });
++
++  it('lower-body isolation and the calves take the upper-body values', () => {
++    expect(hoursOf([record(1, 'leg-curl', sets(3, 10, 1))], 'hamstrings')).toBe(36);
++    expect(hoursOf([record(1, 'standing-calf-raise', sets(3, 12, 0))], 'calves')).toBe(48);
++  });
++
++  it('light work starts no window', () => {
++    expect(windowOf([record(1, 'barbell-bench-press', sets(3, 8, 4))], 'chest')).toBeUndefined();
++  });
++
++  it('the newest hard work sets it', () => {
++    // A lift long known: no new lift's day more.
++    const history = [
++      record(60, 'barbell-bench-press', sets(3, 6, 2)),
++      record(3, 'barbell-bench-press', sets(3, 6, 0)),
++      record(1, 'barbell-bench-press', sets(3, 8, 3)),
++    ];
++    const window = windowOf(history, 'chest')!;
++    expect(window.hours).toBe(24);
++    expect(hoursSince(window, RECORD_NOW)).toBe(24);
++  });
++});
++
++describe('what lengthens it', () => {
++  it('six or more hard sets: a day more, never past the cap', () => {
++    expect(hoursOf([record(1, 'barbell-bench-press', sets(6, 6, 2))], 'chest')).toBe(60);
++    expect(hoursOf([record(1, 'barbell-bench-press', sets(6, 6, 0))], 'chest')).toBe(72);
++    expect(hoursOf([record(1, 'back-squat', sets(6, 6, 0))], 'quads')).toBe(96);
++  });
++
++  it('a synergist’s sets count at half toward the dose, and start no window of their own', () => {
++    // Four squat sets for the quads, and the hamstrings among the squat's synergists: no window
++    // for them from the squat alone.
++    const squat = record(1, 'back-squat', sets(4, 6, 2));
++    expect(hoursOf([squat], 'hamstrings')).toBeUndefined();
++    // Four leg curls the same day: 4 + 4 x 0.5 = 6 hard sets for the hamstrings.
++    const curls = record(1, 'leg-curl', sets(4, 10, 2));
++    const day: WorkoutRecord = { ...squat, entries: [...squat.entries, ...curls.entries] };
++    expect(hoursOf([day], 'hamstrings')).toBe(36 + RECOVERY.BIG_DOSE_HOURS);
++  });
++
++  it('a lift new to the lifter, in its first three weeks: a day more', () => {
++    // A month of the log before: the app knows the lifter.
++    const known = record(40, 'back-squat', sets(3, 6, 2));
++    const first = record(10, 'barbell-bench-press', sets(3, 6, 2));
++    const second = { ...record(1, 'barbell-bench-press', sets(3, 6, 2)), id: 'second' };
++    expect(hoursOf([known, first], 'chest')).toBe(36 + RECOVERY.NEW_LIFT_HOURS);
++    expect(hoursOf([known, first, second], 'chest')).toBe(36 + RECOVERY.NEW_LIFT_HOURS);
++    // Long known: no more.
++    const old = { ...record(60, 'barbell-bench-press', sets(3, 6, 2)), id: 'old' };
++    expect(hoursOf([old, first, second], 'chest')).toBe(36);
++  });
++
++  it('a lifter new to the app is not read as new to every lift', () => {
++    expect(hoursOf([record(1, 'barbell-bench-press', sets(3, 6, 2))], 'chest')).toBe(36);
++    const first = record(10, 'barbell-bench-press', sets(3, 6, 2));
++    const second = { ...record(1, 'barbell-bench-press', sets(3, 6, 2)), id: 'second' };
++    expect(hoursOf([first, second], 'chest')).toBe(36);
++  });
++
++  it('back after six months: a day more', () => {
++    const long = record(200, 'barbell-bench-press', sets(3, 6, 2));
++    const back = record(1, 'barbell-bench-press', sets(3, 6, 2));
++    expect(hoursOf([long, back], 'chest')).toBe(36 + RECOVERY.NEW_LIFT_HOURS);
++  });
++
++  it('long-length work: half a day more', () => {
++    expect(hoursOf([record(1, 'romanian-deadlift', sets(3, 8, 2))], 'hamstrings')).toBe(
++      48 + RECOVERY.LONG_LENGTH_HOURS,
++    );
++  });
++
++  it('a short night: half a day more on every window', () => {
++    const history = [record(1, 'barbell-bench-press', sets(3, 6, 2))];
++    expect(recoveryWindows(history, { readiness: { sleep: 2 } }).get('chest')?.hours).toBe(48);
++    expect(recoveryWindows(history, { readiness: { sleep: 3 } }).get('chest')?.hours).toBe(36);
++  });
++});
++
++describe('too soon: hard work for a muscle well inside its window', () => {
++  // A long-known bench press, then a session to failure the evening before.
++  const known = record(60, 'barbell-bench-press', sets(3, 6, 2));
++  const pushDay = (history: WorkoutRecord[]) =>
++    plan(history, undefined, { templateId: 'push-arms' });
++
++  it('the chest to failure 16 hours before a push day: too soon, the chest’s lifts named', () => {
++    const history = [known, record(16 / 24, 'barbell-bench-press', sets(3, 6, 0))];
++    const workout = pushDay(history);
++    const found = tooSoonToday(workout, recoveryWindows(history), RECORD_NOW);
++    const chest = found.find((item) => item.muscle === 'chest');
++    expect(chest).toMatchObject({ muscle: 'chest', hours: 16, window: 48 });
++    const named = allEntries(workout.blocks)
++      .filter((entry) => getExercise(entry.exerciseId)?.primaryMuscles.includes('chest'))
++      .map((entry) => entry.id);
++    expect(chest?.entryIds).toEqual(named);
++  });
++
++  it('past three quarters of the window: not flagged', () => {
++    const history = [known, record(40 / 24, 'barbell-bench-press', sets(3, 6, 0))];
++    const found = tooSoonToday(pushDay(history), recoveryWindows(history), RECORD_NOW);
++    expect(found.map((item) => item.muscle)).not.toContain('chest');
++  });
++
++  it('light work is never flagged', () => {
++    const history = [known, record(16 / 24, 'barbell-bench-press', sets(3, 6, 0))];
++    const workout = pushDay(history);
++    for (const entry of allEntries(workout.blocks)) {
++      for (const set of entry.sets) if (set.kind === 'working') set.targetRir = 3;
++    }
++    expect(tooSoonToday(workout, recoveryWindows(history), RECORD_NOW)).toEqual([]);
++  });
++});
+diff --git a/src/engine/recovery/recovery.ts b/src/engine/recovery/recovery.ts
+new file mode 100644
+index 0000000..7a1f6f2
+--- /dev/null
++++ b/src/engine/recovery/recovery.ts
+@@ -0,0 +1,518 @@
++import { getExercise } from '../../catalog/exercises/catalog';
++import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
++import { MUSCLE_IDS, type MuscleId } from '../../catalog/muscles/muscles';
++import { addLocalDays, localDayKey } from '../../core/time/localDate';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import type { LearnedResets } from '../learned/resets';
++import { illnessOf } from '../readiness/checkIn';
++import { LOWER_BODY } from '../progression/startingLoad';
++import type { Readiness } from '../recalibration/types';
++import { RULES } from '../rules/ruleTable';
++import { allEntries, isStopped, type GeneratedWorkout } from '../workout/types';
++
++/**
++ * Recovery judged per muscle (Maintenance 33, docs/research/recovery-time-course.md): a window from
++ * a muscle's last hard work, a starting estimate keyed to how close its sets went to failure and to
++ * the body region, lengthened by a large dose, a new lift and long-length work, moved by what the
++ * lifter's own sessions teach within bounds, and for every muscle lengthened by a short night or a
++ * run of hard days with energy low. Fatigue stays in the trained muscles (Behm 2021, 33818751), so
++ * consecutive days are no problem in themselves; the windows are estimates, never a rule that blocks
++ * a session. Every number is the sourced table's (`RULES`).
++ */
++export const RECOVERY = {
++  HARD_RIR: RULES.hardRir.value,
++  EASY_HOURS: RULES.easyHours.value,
++  MID_HOURS: { upper: RULES.midHoursUpper.value, lower: RULES.midHoursLower.value },
++  FAILURE_HOURS: { upper: RULES.failureHoursUpper.value, lower: RULES.failureHoursLower.value },
++  LONG_SET_REPS: RULES.longSetReps.value,
++  BIG_DOSE_SETS: RULES.bigDoseSets.value,
++  BIG_DOSE_HOURS: RULES.bigDoseHours.value,
++  CAP_HOURS: { upper: RULES.capHoursUpper.value, lower: RULES.capHoursLower.value },
++  NEW_LIFT_DAYS: RULES.newLiftDays.value,
++  BACK_AFTER_DAYS: RULES.backAfterDays.value,
++  NEW_LIFT_HOURS: RULES.newLiftHours.value,
++  LONG_LENGTH_HOURS: RULES.longLengthHours.value,
++  SYNERGIST_WEIGHT: RULES.synergistWeight.value,
++  SHORT_NIGHT_HOURS: RULES.shortNightHours.value,
++  SHORT_NIGHT_SLEEP: RULES.shortNightSleep.value,
++  HARD_DAYS_RUN: RULES.hardDaysRun.value,
++} as const;
++
++/** What a learned window rests on and how far it may move (`RULES`). */
++export const LEARNING = {
++  LEAST: RULES.learnLeast.value,
++  SAME: RULES.learnSame.value,
++  SLOWER: RULES.learnSlower.value,
++  STEP_HOURS: RULES.learnStep.value,
++  LEAST_HOURS: RULES.learnLeastHours.value,
++  MOST_HOURS: RULES.learnMostHours.value,
++  LEAST_SHARE: RULES.learnLeastShare.value,
++  MOST_SHARE: RULES.learnMostShare.value,
++} as const;
++
++/** What reads a set as a max: its reps and reserve read well (`RULES`). */
++export const FIRST_SET = {
++  DROP: RULES.firstSetDrop.value,
++  READ_REPS: RULES.firstSetReps.value,
++  READ_RIR: RULES.firstSetRir.value,
++  RESTED_LEAST: RULES.restedLeast.value,
++  RESTED_MOST: RULES.restedMost.value,
++} as const;
++
++/**
++ * Lifts that load a muscle at long lengths or stress the lowering (direction research: 11194107,
++ * 20852880): the Romanian deadlift, the deep fly, the overhead extension, and by the same reading
++ * the incline curl.
++ */
++export const LONG_LENGTH_LIFTS: ReadonlySet<string> = new Set([
++  'romanian-deadlift',
++  'dumbbell-fly',
++  'overhead-triceps-extension',
++  'incline-dumbbell-curl',
++]);
++
++/** A muscle's window from its last hard work. */
++export interface RecoveryWindow {
++  muscle: MuscleId;
++  /** When that work was done (the session's end, else its start). */
++  at: string;
++  /** How long the window runs, in hours. */
++  hours: number;
++  /** The starting estimate it came from, before what the lifter's sessions taught. */
++  prior: number;
++  /** What set it, in words. */
++  reasons: string[];
++}
++
++/** What a muscle's own sessions taught of its window (`learnedWindows`). */
++export interface LearnedWindow {
++  muscle: MuscleId;
++  /** Hours the window moves: half a day shorter, longer, or none yet. */
++  shift: number;
++  /** Sessions read: hard work back inside the window before, and after it. */
++  early: number;
++  rested: number;
++}
++
++/** What else the windows read. */
++export interface RecoveryContext {
++  /** Today's check-in: a short night lengthens every window. */
++  readiness?: Pick<Readiness, 'sleep'> | null;
++  /** Today's energy clearly low against the lifter's own (`readCheckIn`). */
++  lowEnergy?: boolean;
++  /** Now: a run of hard days ends today or yesterday. */
++  now?: string;
++  /** What the lifter reset: the learned windows read only what was logged after. */
++  resets?: Pick<LearnedResets, 'recovery'> | null;
++  /** What the lifter's sessions taught, read once by a caller that reads the windows often. */
++  learned?: ReadonlyMap<MuscleId, LearnedWindow>;
++}
++
++const HOUR_MS = 3_600_000;
++const DAY_MS = 86_400_000;
++
++const whenOf = (record: WorkoutRecord) => record.completedAt ?? record.startedAt;
++
++/** Whether a lift is lower-body compound work: a compound lift of a lower-body movement. */
++function lowerCompound(exercise: CatalogExercise): boolean {
++  return exercise.compound && LOWER_BODY.has(exercise.movementPattern);
++}
++
++type LoggedSet = WorkoutRecord['entries'][number]['sets'][number];
++
++/** A set's reserve as logged, or, where none was logged, as its target asked. */
++function reserveOf(set: LoggedSet): number | null {
++  if (typeof set.rir === 'number') return set.rir;
++  return typeof set.targetRir === 'number' ? set.targetRir : null;
++}
++
++/** A completed working set this close to failure or closer. */
++function isHard(set: LoggedSet): boolean {
++  const rir = reserveOf(set);
++  return set.kind === 'working' && set.completed && rir !== null && rir <= RECOVERY.HARD_RIR;
++}
++
++/**
++ * Each muscle's window from its last hard work as a prime mover, in the records given (newest
++ * counted), moved by what its own sessions taught, with today's whole-body layer on every window.
++ */
++export function recoveryWindows(
++  history: readonly WorkoutRecord[],
++  context: RecoveryContext = {},
++): Map<MuscleId, RecoveryWindow> {
++  const index = exposureIndex(history);
++  const learned = context.learned ?? learnedWindows(history, context.resets ?? null);
++  const layer = wholeBodyLayer(history, context);
++  const windows = new Map<MuscleId, RecoveryWindow>();
++  for (const muscle of MUSCLE_IDS) {
++    const newest = (index.windows.get(muscle) ?? []).at(-1);
++    if (newest) {
++      const window = { ...newest.window, reasons: [...newest.window.reasons] };
++      const shift = learned.get(muscle)?.shift ?? 0;
++      if (shift !== 0) {
++        const hours = withinBounds(window.prior + shift, window.prior);
++        if (hours !== window.hours) {
++          window.reasons.push(
++            `your own sessions: ${Math.abs(hours - window.hours)} h ${hours < window.hours ? 'less' : 'more'}`,
++          );
++          window.hours = hours;
++        }
++      }
++      if (layer) {
++        window.hours += RECOVERY.SHORT_NIGHT_HOURS;
++        window.reasons.push(`${layer}: ${RECOVERY.SHORT_NIGHT_HOURS} h more`);
++      }
++      windows.set(muscle, window);
++    }
++  }
++  return windows;
++}
++
++/** A learned window within its bounds: 12 to 96 hours, and half to half again its estimate. */
++function withinBounds(hours: number, prior: number): number {
++  const least = Math.max(LEARNING.LEAST_HOURS, prior * LEARNING.LEAST_SHARE);
++  const most = Math.min(LEARNING.MOST_HOURS, prior * LEARNING.MOST_SHARE);
++  return Math.min(Math.max(hours, Math.min(least, prior)), Math.max(most, prior));
++}
++
++/**
++ * The whole-body layer's reason today, or null (recovery-time-course.md: short sleep, or several
++ * hard days in a row with recovery felt low, slow every muscle): a short night on today's check-in,
++ * or three or more days running with hard sets, to today or yesterday, with today's energy low.
++ */
++function wholeBodyLayer(
++  history: readonly WorkoutRecord[],
++  context: RecoveryContext,
++): string | null {
++  const readiness = context.readiness ?? null;
++  if (readiness !== null && readiness.sleep <= RECOVERY.SHORT_NIGHT_SLEEP) return 'a short night';
++  if (!context.lowEnergy || !context.now) return null;
++  const hardDays = new Set(
++    history
++      .filter((record) => record.entries.some((entry) => entry.sets.some(isHard)))
++      .map((record) => localDayKey(record.startedAt)),
++  );
++  const dayBefore = (key: string) =>
++    localDayKey(addLocalDays(new Date(`${key}T12:00:00`).toISOString(), -1));
++  let cursor = localDayKey(context.now);
++  if (!hardDays.has(cursor)) cursor = dayBefore(cursor);
++  let run = 0;
++  while (hardDays.has(cursor)) {
++    run += 1;
++    cursor = dayBefore(cursor);
++  }
++  return run >= RECOVERY.HARD_DAYS_RUN ? `${run} hard days running, energy low today` : null;
++}
++
++/** The window one session's hard work sets for a muscle, or null where it had none as a prime mover. */
++function windowFrom(
++  record: WorkoutRecord,
++  muscle: MuscleId,
++  history: readonly WorkoutRecord[],
++): RecoveryWindow | null {
++  let hardest: { rir: number; reps: number } | null = null;
++  let dose = 0;
++  let lower = false;
++  let longLength = false;
++  let newLift: string | null = null;
++  for (const entry of record.entries) {
++    const exercise = getExercise(entry.exerciseId);
++    if (!exercise) continue;
++    const prime = exercise.primaryMuscles.includes(muscle);
++    const weight = prime
++      ? 1
++      : exercise.secondaryMuscles.includes(muscle)
++        ? RECOVERY.SYNERGIST_WEIGHT
++        : 0;
++    if (weight === 0) continue;
++    const hard = entry.sets.filter(isHard);
++    if (hard.length === 0) continue;
++    dose += hard.length * weight;
++    if (!prime) continue;
++    if (lowerCompound(exercise)) lower = true;
++    if (LONG_LENGTH_LIFTS.has(exercise.id)) longLength = true;
++    if (newLift === null && isNewTo(exercise.id, record, history)) newLift = exercise.name;
++    for (const set of hard) {
++      const rir = reserveOf(set) as number;
++      if (
++        hardest === null ||
++        rir < hardest.rir ||
++        (rir === hardest.rir && set.reps > hardest.reps)
++      ) {
++        hardest = { rir, reps: set.reps };
++      }
++    }
++  }
++  if (hardest === null) return null;
++  const region = lower ? 'lower' : 'upper';
++  const reasons: string[] = [];
++  const failure = hardest.rir === 0 || (hardest.rir <= 1 && hardest.reps >= RECOVERY.LONG_SET_REPS);
++  let hours: number = failure
++    ? RECOVERY.FAILURE_HOURS[region]
++    : hardest.rir <= 2
++      ? RECOVERY.MID_HOURS[region]
++      : RECOVERY.EASY_HOURS;
++  reasons.push(
++    failure
++      ? `a set to failure or near it: ${hours} h`
++      : hardest.rir <= 2
++        ? `sets ${hardest.rir === 1 ? 'one rep' : 'two reps'} short of failure: ${hours} h`
++        : `sets three or more reps short of failure: ${hours} h`,
++  );
++  if (dose >= RECOVERY.BIG_DOSE_SETS) {
++    const capped = Math.min(RECOVERY.CAP_HOURS[region], hours + RECOVERY.BIG_DOSE_HOURS);
++    if (capped > hours) reasons.push(`${Math.round(dose)} hard sets: ${capped - hours} h more`);
++    hours = Math.max(hours, capped);
++  }
++  if (newLift !== null) {
++    hours += RECOVERY.NEW_LIFT_HOURS;
++    reasons.push(`${newLift} is new to you: ${RECOVERY.NEW_LIFT_HOURS} h more`);
++  }
++  if (longLength) {
++    hours += RECOVERY.LONG_LENGTH_HOURS;
++    reasons.push(`work at long lengths: ${RECOVERY.LONG_LENGTH_HOURS} h more`);
++  }
++  return { muscle, at: whenOf(record), hours, prior: hours, reasons };
++}
++
++/**
++ * Whether a lift was new to the lifter in this session: in its first three weeks, as far as the log
++ * can tell (it reaches three weeks back before the session, so a lifter new to the app is not read as
++ * new to every lift), or back after six months away.
++ */
++function isNewTo(exerciseId: string, record: WorkoutRecord, history: readonly WorkoutRecord[]) {
++  const at = Date.parse(whenOf(record));
++  const known = history.some(
++    (other) => Date.parse(whenOf(other)) <= at - RECOVERY.NEW_LIFT_DAYS * DAY_MS,
++  );
++  const earlier = history
++    .filter(
++      (other) =>
++        Date.parse(whenOf(other)) < at &&
++        other.entries.some(
++          (entry) =>
++            entry.exerciseId === exerciseId &&
++            entry.sets.some((set) => set.kind === 'working' && set.completed),
++        ),
++    )
++    .map((other) => Date.parse(whenOf(other)));
++  if (earlier.length === 0) return known;
++  if (at - Math.max(...earlier) >= RECOVERY.BACK_AFTER_DAYS * DAY_MS) return true;
++  return known && at - Math.min(...earlier) < RECOVERY.NEW_LIFT_DAYS * DAY_MS;
++}
++
++/** Hours since a window's work, at `nowIso`. */
++export function hoursSince(window: RecoveryWindow, nowIso: string): number {
++  return (Date.parse(nowIso) - Date.parse(window.at)) / HOUR_MS;
++}
++
++/**
++ * A set read as a max: load × (1 + (reps + reserve) / 30), for a set with a load, of 12 reps or
++ * fewer, 3 or fewer in reserve (the reps and reserve read well: 34542869); null otherwise.
++ */
++export function setMax(set: {
++  reps: number;
++  weight: number | null;
++  rir: number | null;
++}): number | null {
++  if (set.weight === null || set.weight <= 0 || set.rir === null) return null;
++  if (set.reps < 1 || set.reps > FIRST_SET.READ_REPS || set.rir > FIRST_SET.READ_RIR) return null;
++  return set.weight * (1 + (set.reps + set.rir) / 30);
++}
++
++/** One session's first working set of a lift read as a max, or null. */
++function firstSetMaxIn(record: WorkoutRecord, exerciseId: string): number | null {
++  for (const entry of record.entries) {
++    if (entry.exerciseId !== exerciseId) continue;
++    const first = entry.sets.find((set) => set.kind === 'working' && set.completed);
++    return first ? setMax({ reps: first.reps, weight: first.weight, rir: first.rir }) : null;
++  }
++  return null;
++}
++
++/** A record read on a day the body was off: illness, or a short night (the learning skips it). */
++function offDay(record: WorkoutRecord): boolean {
++  const readiness = record.readiness;
++  if (!readiness) return false;
++  return illnessOf(readiness) !== null || readiness.sleep <= RECOVERY.SHORT_NIGHT_SLEEP;
++}
++
++/** A history read once: its records oldest first, and each muscle's windows from them in order. */
++interface ExposureIndex {
++  records: WorkoutRecord[];
++  windows: Map<MuscleId, { record: WorkoutRecord; window: RecoveryWindow }[]>;
++  /** What the history held when read: an array grown in place is read again. */
++  signature: string;
++}
++
++const indexes = new WeakMap<readonly WorkoutRecord[], ExposureIndex>();
++
++const signatureOf = (history: readonly WorkoutRecord[]) =>
++  `${history.length}|${history[0]?.id ?? ''}|${history.at(-1)?.id ?? ''}`;
++
++/** The history's index, read once for each history (the store keeps one array until it changes). */
++function exposureIndex(history: readonly WorkoutRecord[]): ExposureIndex {
++  const cached = indexes.get(history);
++  if (cached && cached.signature === signatureOf(history)) return cached;
++  const records = [...history].sort((a, b) => whenOf(a).localeCompare(whenOf(b)));
++  const windows = new Map<MuscleId, { record: WorkoutRecord; window: RecoveryWindow }[]>();
++  for (const muscle of MUSCLE_IDS) {
++    const list: { record: WorkoutRecord; window: RecoveryWindow }[] = [];
++    for (const record of records) {
++      const window = windowFrom(record, muscle, records);
++      if (window) list.push({ record, window });
++    }
++    windows.set(muscle, list);
++  }
++  const index = { records, windows, signature: signatureOf(history) };
++  indexes.set(history, index);
++  return index;
++}
++
++/**
++ * Whether each of a lift's prime movers was outside its window when a session began: the windows
++ * the sessions before it set, as estimated then.
++ */
++function restedAt(exercise: CatalogExercise, record: WorkoutRecord, index: ExposureIndex): boolean {
++  const start = Date.parse(record.startedAt);
++  for (const muscle of exercise.primaryMuscles) {
++    const list = index.windows.get(muscle) ?? [];
++    let last: RecoveryWindow | null = null;
++    for (const item of list) {
++      if (Date.parse(item.window.at) >= start) break;
++      last = item.window;
++    }
++    if (last && (start - Date.parse(last.at)) / HOUR_MS < last.prior) return false;
++  }
++  return true;
++}
++
++/**
++ * A lift's rested baseline before a time: the median of its first working set read as a max over
++ * its last three to five sessions with every prime mover rested, and no illness or short night. Null
++ * with fewer than three.
++ */
++export function restedBaseline(
++  exerciseId: string,
++  history: readonly WorkoutRecord[],
++  before: string,
++): number | null {
++  const exercise = getExercise(exerciseId);
++  if (!exercise) return null;
++  const index = exposureIndex(history);
++  const until = Date.parse(before);
++  const maxes: number[] = [];
++  for (let at = index.records.length - 1; at >= 0; at -= 1) {
++    if (maxes.length >= FIRST_SET.RESTED_MOST) break;
++    const record = index.records[at] as WorkoutRecord;
++    if (Date.parse(record.startedAt) >= until || offDay(record)) continue;
++    const max = firstSetMaxIn(record, exerciseId);
++    if (max === null || !restedAt(exercise, record, index)) continue;
++    maxes.push(max);
++  }
++  if (maxes.length < FIRST_SET.RESTED_LEAST) return null;
++  const sorted = [...maxes].sort((a, b) => a - b);
++  const middle = Math.floor(sorted.length / 2);
++  return sorted.length % 2 === 1
++    ? (sorted[middle] as number)
++    : ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
++}
++
++/**
++ * What each muscle's own sessions teach of its window (recovery-time-course.md, "Learning R",
++ * modelled on Bayesian individualisation, 27967274): each session with hard work for it as a prime
++ * mover is early (back inside the window the session before set) or rested, and its lifts' first
++ * sets are read against each lift's rested baseline. After five of each: early sessions within 2% of
++ * the rested ones, half a day shorter; 5% or more under them, half a day longer. Days ill or after a
++ * short night are left out, and so is what came before a reset of the learned windows.
++ */
++export function learnedWindows(
++  history: readonly WorkoutRecord[],
++  resets: Pick<LearnedResets, 'recovery'> | null = null,
++): Map<MuscleId, LearnedWindow> {
++  const from = resets?.recovery ? Date.parse(resets.recovery) : -Infinity;
++  const index = exposureIndex(history);
++  const learned = new Map<MuscleId, LearnedWindow>();
++  for (const muscle of MUSCLE_IDS) {
++    const early: number[] = [];
++    const rested: number[] = [];
++    let previous: RecoveryWindow | null = null;
++    for (const { record, window } of index.windows.get(muscle) ?? []) {
++      const last = previous;
++      previous = window;
++      if (last === null || Date.parse(record.startedAt) < from || offDay(record)) continue;
++      const ratios = record.entries.flatMap((entry) => {
++        const exercise = getExercise(entry.exerciseId);
++        if (!exercise?.primaryMuscles.includes(muscle) || !entry.sets.some(isHard)) return [];
++        const max = firstSetMaxIn(record, entry.exerciseId);
++        const base =
++          max === null ? null : restedBaseline(entry.exerciseId, history, record.startedAt);
++        return max !== null && base !== null && base > 0 ? [max / base] : [];
++      });
++      if (ratios.length === 0) continue;
++      const ratio = ratios.reduce((sum, value) => sum + value, 0) / ratios.length;
++      const gap = (Date.parse(record.startedAt) - Date.parse(last.at)) / HOUR_MS;
++      (gap < last.prior ? early : rested).push(ratio);
++    }
++    const mean = (values: number[]) =>
++      values.reduce((sum, value) => sum + value, 0) / values.length;
++    let shift = 0;
++    if (early.length >= LEARNING.LEAST && rested.length >= LEARNING.LEAST) {
++      const fell = (mean(rested) - mean(early)) / mean(rested);
++      if (fell <= LEARNING.SAME) shift = -LEARNING.STEP_HOURS;
++      else if (fell >= LEARNING.SLOWER) shift = LEARNING.STEP_HOURS;
++    }
++    if (early.length > 0 || rested.length > 0) {
++      learned.set(muscle, { muscle, shift, early: early.length, rested: rested.length });
++    }
++  }
++  return learned;
++}
++
++/** Of a window's own share still to run: "well inside" it is under three quarters (`RULES`). */
++export const TOO_SOON_SHARE = RULES.tooSoonShare.value;
++
++/** A muscle today's plan works hard well inside its window. */
++export interface TooSoon {
++  muscle: MuscleId;
++  /** Hours since its last hard work, and its window. */
++  hours: number;
++  window: number;
++  /** The plan's lifts still to do that work it directly. */
++  entryIds: string[];
++}
++
++/**
++ * The muscles today's plan works hard well inside their windows ("too soon", the owner's decision:
++ * a warning with a lighter option a tap away, never a block). Hard work for a muscle: a set planned
++ * to failure, or three or more working sets at two in reserve or closer, by lifts that work it
++ * directly. Light work is never flagged (34350481, 11834116).
++ */
++export function tooSoonToday(
++  workout: GeneratedWorkout,
++  windows: ReadonlyMap<MuscleId, RecoveryWindow>,
++  nowIso: string,
++): TooSoon[] {
++  const found: TooSoon[] = [];
++  for (const [muscle, window] of windows) {
++    const lifts = allEntries(workout.blocks).filter(
++      (entry) =>
++        !isStopped(entry) &&
++        (getExercise(entry.exerciseId)?.primaryMuscles.includes(muscle) ?? false),
++    );
++    const working = lifts.flatMap((entry) => entry.sets.filter((set) => set.kind === 'working'));
++    const hard =
++      working.some((set) => set.targetRir === 0) ||
++      working.filter((set) => set.targetRir <= 2).length >= 3;
++    if (!hard) continue;
++    const since = hoursSince(window, nowIso);
++    if (since < 0 || since >= TOO_SOON_SHARE * window.hours) continue;
++    found.push({
++      muscle,
++      hours: Math.round(since),
++      window: window.hours,
++      entryIds: lifts.map((entry) => entry.id),
++    });
++  }
++  return found;
++}
+diff --git a/src/engine/rules/ruleTable.ts b/src/engine/rules/ruleTable.ts
+new file mode 100644
+index 0000000..8d7f342
+--- /dev/null
++++ b/src/engine/rules/ruleTable.ts
+@@ -0,0 +1,276 @@
++/**
++ * Every number the recovery and readiness rules use, in one table with its source and evidence
++ * status (the approved proposal, docs/proposals/week-model-readiness-time.md, part 2: "Every number
++ * lives in one table with its source and evidence status, later tuned from your logs"). The research
++ * is docs/research/recovery-time-course.md and docs/research/readiness-and-soreness.md; each source
++ * below is a PubMed ID from them, or the judgement it rests on. The modules read their numbers from
++ * here, never a copy of their own.
++ */
++
++/** How a number is known. */
++export type RuleBasis =
++  /** The evidence gives the number itself. */
++  | 'research'
++  /** The evidence gives the direction; the size is product judgement. */
++  | 'direction research, size judgement'
++  /** Product judgement, its reason given. */
++  | 'judgement';
++
++export interface Rule {
++  value: number;
++  /** What the value counts: hours, sets, reps, days, a share of 1. */
++  unit: string;
++  basis: RuleBasis;
++  /** The studies (PubMed IDs) or the reasoning behind it. */
++  source: string;
++}
++
++function rule(value: number, unit: string, basis: RuleBasis, source: string): Rule {
++  return { value, unit, basis, source };
++}
++
++export const RULES = {
++  // Recovery windows (Maintenance 33): a muscle's starting estimate from its hardest sets.
++  hardRir: rule(
++    3,
++    'reps in reserve',
++    'judgement',
++    'A set 4 or more short of failure is light work: light work adds no damage worth a window (34350481, 11834116).',
++  ),
++  easyHours: rule(
++    24,
++    'hours',
++    'research',
++    'About a day after sets 3 or more short of failure, upper or lower (recovery-time-course.md).',
++  ),
++  midHoursUpper: rule(
++    36,
++    'hours',
++    'judgement',
++    'Between the 24 h and 48 h the research gives either side of it, for the upper body.',
++  ),
++  midHoursLower: rule(
++    48,
++    'hours',
++    'research',
++    'Lower-body compound work 1-2 short of failure (recovery-time-course.md).',
++  ),
++  failureHoursUpper: rule(
++    48,
++    'hours',
++    'research',
++    'About two days after sets to failure, upper body (recovery-time-course.md).',
++  ),
++  failureHoursLower: rule(
++    72,
++    'hours',
++    'research',
++    'Up to three days after failure or high volume, lower-body compound work (recovery-time-course.md).',
++  ),
++  longSetReps: rule(
++    12,
++    'reps',
++    'research',
++    'A long set near failure (12 or more reps, 1 or less in reserve) counts as failure (recovery-time-course.md; 30836680).',
++  ),
++  bigDoseSets: rule(
++    6,
++    'hard sets',
++    'direction research, size judgement',
++    'More hard sets for a muscle in one session lengthen its recovery (recovery-time-course.md).',
++  ),
++  bigDoseHours: rule(
++    24,
++    'hours',
++    'direction research, size judgement',
++    'A day more for a large dose, never past the cap.',
++  ),
++  capHoursUpper: rule(
++    72,
++    'hours',
++    'judgement',
++    'The longest a large dose takes an upper-body window.',
++  ),
++  capHoursLower: rule(
++    96,
++    'hours',
++    'judgement',
++    'The longest a large dose takes a lower-body compound window.',
++  ),
++  newLiftDays: rule(
++    21,
++    'days',
++    'direction research, size judgement',
++    'A lift is new in its first three weeks (18550979, 30722654, 11528337).',
++  ),
++  backAfterDays: rule(
++    183,
++    'days',
++    'direction research, size judgement',
++    'Six months away makes a lift new again (18550979, 30722654, 11528337).',
++  ),
++  newLiftHours: rule(
++    24,
++    'hours',
++    'direction research, size judgement',
++    'A day more after a new lift (18550979, 30722654, 11528337).',
++  ),
++  longLengthHours: rule(
++    12,
++    'hours',
++    'direction research, size judgement',
++    'Half a day more after long-length or lowering-heavy work (11194107, 20852880).',
++  ),
++  synergistWeight: rule(
++    0.5,
++    'of a set',
++    'judgement',
++    "A synergist's set counts at half toward a muscle's dose (41343037, 28029681, 25807025).",
++  ),
++  shortNightHours: rule(
++    12,
++    'hours',
++    'direction research, size judgement',
++    'Short sleep, high stress or several hard days in a row slow recovery everywhere (35708888, 24343323, 28716692).',
++  ),
++  shortNightSleep: rule(
++    2,
++    'check-in sleep (1-5)',
++    'judgement',
++    'Sleep "Poor" or "Short" reads as a night of 6 hours or less, where strength dips (35708888).',
++  ),
++  hardDaysRun: rule(
++    3,
++    'days in a row',
++    'judgement',
++    'Three or more days running with hard sets, with energy low today, is the whole-body layer (recovery-time-course.md).',
++  ),
++  tooSoonShare: rule(
++    0.75,
++    'of the window',
++    'judgement',
++    '"Too soon" is hard planned work well inside the window: under three quarters of it.',
++  ),
++
++  // The first working set (Maintenance 33): the main signal for the day (35038063).
++  firstSetDrop: rule(
++    0.08,
++    'of the rested median',
++    'judgement',
++    'One session is noisy, about 4% (32681399; SD 4.4%, 15705040): a single day acts only on 8% or more.',
++  ),
++  firstSetReps: rule(
++    12,
++    'reps',
++    'research',
++    'Reserve is judged well only in sets of about 12 reps or fewer, near failure (34542869).',
++  ),
++  firstSetRir: rule(
++    3,
++    'reps in reserve',
++    'research',
++    'Reserve is judged well near failure (34542869).',
++  ),
++  restedLeast: rule(
++    3,
++    'sessions',
++    'judgement',
++    'The fewest rested sessions a median is read from.',
++  ),
++  restedMost: rule(
++    5,
++    'sessions',
++    'judgement',
++    'The most recent rested sessions a median is read from.',
++  ),
++
++  // Learned windows (Maintenance 33): learned silently within bounds, listed on the learned page.
++  learnLeast: rule(
++    5,
++    'early and rested sessions each',
++    'judgement',
++    'Modelled on Bayesian individualisation (27967274): five of each before a window moves.',
++  ),
++  learnSame: rule(
++    0.02,
++    'of the rested mean',
++    'judgement',
++    'Early sessions within 2% of rested ones: the window can shorten.',
++  ),
++  learnSlower: rule(
++    0.05,
++    'of the rested mean',
++    'judgement',
++    'Early sessions 5% or more under rested ones: the window lengthens.',
++  ),
++  learnStep: rule(12, 'hours', 'judgement', 'A learned window moves by half a day.'),
++  learnLeastHours: rule(12, 'hours', 'judgement', 'No window is learned under half a day.'),
++  learnMostHours: rule(96, 'hours', 'judgement', 'No window is learned over four days.'),
++  learnLeastShare: rule(
++    0.5,
++    'of the starting estimate',
++    'judgement',
++    'No window learned under half its estimate.',
++  ),
++  learnMostShare: rule(
++    1.5,
++    'of the starting estimate',
++    'judgement',
++    'No window learned over half as long again.',
++  ),
++
++  // The check-in (Maintenance 33, decision 1): against the lifter's own baseline, it lowers what
++  // the app expects, never the plan (26423706, 10907753).
++  baselineDays: rule(
++    28,
++    'days',
++    'judgement',
++    "The lifter's own last four weeks of check-ins are the baseline (10907753: compare to the individual).",
++  ),
++  baselineLeast: rule(
++    5,
++    'check-ins',
++    'judgement',
++    "Fewer than five saved check-ins: the scale's middle is the baseline.",
++  ),
++  worseSpread: rule(
++    1,
++    'standard deviations',
++    'judgement',
++    'An item clearly worse: a spread or more under its baseline (26637525: z = -1 gave 5-9% less).',
++  ),
++  worseItems: rule(
++    2,
++    'items',
++    'judgement',
++    'Two or more items clearly worse act; one alone does not (32957081: single items are not validated).',
++  ),
++  extremeSleep: rule(
++    1,
++    'check-in sleep (1-5)',
++    'judgement',
++    'Sleep "Poor" two check-ins running is the extreme the research names: two short nights (8112265, 29422383).',
++  ),
++  expectationReps: rule(
++    1,
++    'reps',
++    'judgement',
++    'The expectation lowered by one step: a rep (sizes from 26637525, 35708888).',
++  ),
++  expectationShare: rule(
++    0.025,
++    'of the expected max',
++    'judgement',
++    'The expectation lowered by one step: 2.5% (35708888: about 3% after a short night).',
++  ),
++
++  // The illness gate (Maintenance 33): research for the gate, judgement for the cap.
++  headColdRir: rule(
++    2,
++    'reps in reserve',
++    'judgement',
++    'Symptoms above the neck are trainable (9140895, 9813869, 12831664): every set at 2 or more in reserve.',
++  ),
++} as const satisfies Record<string, Rule>;
++
++export type RuleId = keyof typeof RULES;
+diff --git a/src/engine/workoutGenerator/catchUpRests.test.ts b/src/engine/workoutGenerator/catchUpRests.test.ts
+index b2f7c00..fe924bc 100644
+--- a/src/engine/workoutGenerator/catchUpRests.test.ts
++++ b/src/engine/workoutGenerator/catchUpRests.test.ts
+@@ -249,7 +249,7 @@ describe('the coach on a second workout', () => {
+       duration: 'default',
+       constraints: { templateId: 'upper' },
+     });
+-    const fatigue = interpretFatigue(history, RECORD_NOW, null);
++    const fatigue = interpretFatigue(history, RECORD_NOW);
+     const input: CoachInput = {
+       workout: {
+         ...workout,
+diff --git a/src/engine/workoutGenerator/favouriteBothCoach.test.ts b/src/engine/workoutGenerator/favouriteBothCoach.test.ts
+index 086aa92..54f52b6 100644
+--- a/src/engine/workoutGenerator/favouriteBothCoach.test.ts
++++ b/src/engine/workoutGenerator/favouriteBothCoach.test.ts
+@@ -64,7 +64,7 @@ function upperDay(profile: UserProfile): CoachInput {
+     duration: 'default',
+     constraints: { templateId: 'upper' },
+   });
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout: {
+       ...workout,
+diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
+index 0f26b57..f5f609b 100644
+--- a/src/engine/workoutGenerator/generate.ts
++++ b/src/engine/workoutGenerator/generate.ts
+@@ -82,6 +82,7 @@ import {
+ import { styleInfo } from '../planning/styles';
+ import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
+ import {
++  BACK_OFF,
+   backOffLoadAfter,
+   backOffRir,
+   backOffsSuit,
+@@ -217,6 +218,16 @@ export interface PrescriptionAdjustment {
+   restFactor: number;
+   /** Multiplier on every target load (a deload week uses 0.9). */
+   loadScale?: number;
++  /**
++   * The fewest reps in reserve the day allows any set (Maintenance 33): a head cold on the
++   * check-in keeps every set 2 or more short of failure, no top set and no drop set.
++   */
++  rirFloor?: number;
++}
++
++/** The fewest reps in reserve the day's settings allow, or none. */
++export function dayRirFloor(adjust: PrescriptionAdjustment | undefined): number {
++  return adjust?.rirFloor ?? 0;
+ }
+ 
+ /** A logged set as the session context needs it: whose, what kind, when, and whether it was skipped. */
+@@ -1305,6 +1316,7 @@ function withDeload(
+         rir: (day?.rir ?? 0) + DELOAD_RIR_DELTA,
+         restFactor: day?.restFactor ?? 1,
+         loadScale: DELOAD_LOAD_SCALE,
++        ...(day?.rirFloor !== undefined ? { rirFloor: day.rirFloor } : {}),
+       }
+     : day;
+ }
+@@ -1330,7 +1342,7 @@ function adjustPrescription(
+   return {
+     ...prescription,
+     sets: clamp(prescription.sets + adjust.sets, floor, 5),
+-    rir: clamp(prescription.rir + adjust.rir, minRir, 4),
++    rir: clamp(prescription.rir + adjust.rir, Math.max(minRir, dayRirFloor(adjust)), 4),
+     restSeconds: Math.max(
+       MIN_REST_SECONDS[restCategory(role)],
+       round5(prescription.restSeconds * adjust.restFactor),
+@@ -1384,12 +1396,16 @@ export function pushedPrescription(
+     return {
+       ...adjusted,
+       sets: clamp(sets + Math.min(0, adjust?.sets ?? 0), 2, sets),
+-      rir: pushRir(adjusted.rir),
++      rir: Math.max(dayRirFloor(adjust), pushRir(adjusted.rir)),
+     };
+   }
+   const base = { ...own, sets: Math.min(own.sets, push.naturalSets) };
+   const day = adjustPrescription(base, role, adjust, minRir);
+-  return { ...day, sets: Math.min(day.sets, Math.max(base.sets, 2)), rir: pushRir(day.rir) };
++  return {
++    ...day,
++    sets: Math.min(day.sets, Math.max(base.sets, 2)),
++    rir: Math.max(dayRirFloor(adjust), pushRir(day.rir)),
++  };
+ }
+ 
+ /** Whether an exercise trains one of a lift's primary muscles as one of its own. */
+@@ -1680,7 +1696,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+     chosen: chosenBy([], push),
+     ...(resting.size > 0 ? { resting } : {}),
+   };
+-  const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
++  const fatigue = interpretFatigue(history, now);
+ 
+   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
+   // selections, and accepted alternatives stay in their slots.
+@@ -1792,7 +1808,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+       read: targetAt,
+       prescription,
+       suits: backOffsSuit(exercise, role, profile),
+-      day: backOffDay && fatigue.level !== 'high',
++      // A day with a reserve floor over the top set's (a head cold) runs it straight too.
++      day: backOffDay && fatigue.level !== 'high' && dayRirFloor(adjust) <= BACK_OFF.TOP_RIR,
+       exerciseId: exercise.id,
+       history,
+       load: { step: loading.step, floor, loading },
+@@ -2860,7 +2877,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+   // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
+   // to failure, so a style that takes nothing to failure plans none.
+   // None in a catch-up or a second workout: a few sets each, none to failure (the review of round M).
+-  if (!offPlan && profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {
++  // None on a day that keeps every set short of failure (a head cold, Maintenance 33).
++  if (
++    !offPlan &&
++    dayRirFloor(adjust) === 0 &&
++    profile.techniques.dropSets &&
++    allowsFailure(resolveStyle(profile))
++  ) {
+     const deficitMuscles = new Set(
+       priorities
+         .filter(
+diff --git a/src/engine/workoutGenerator/offPlanDay.test.ts b/src/engine/workoutGenerator/offPlanDay.test.ts
+index 258bbe9..692354f 100644
+--- a/src/engine/workoutGenerator/offPlanDay.test.ts
++++ b/src/engine/workoutGenerator/offPlanDay.test.ts
+@@ -198,7 +198,7 @@ describe('what is left of a muscle trained today', () => {
+     const [remainder] = allEntries(workout.blocks);
+     expect(working(remainder!).every((set) => set.targetRir >= 3)).toBe(true);
+     const harder = (catchUp: CatchUpSpec, full: boolean) => {
+-      const fatigue = interpretFatigue(days, now, null);
++      const fatigue = interpretFatigue(days, now);
+       const input: CoachInput = {
+         workout,
+         status: 'preview',
+@@ -252,7 +252,7 @@ describe('the coach on a catch-up', () => {
+     const workout = build(spec, days, now);
+     expect(workout.templateId).toBe('catch-up');
+     const offers = (full: boolean) => {
+-      const fatigue = interpretFatigue(days, now, null);
++      const fatigue = interpretFatigue(days, now);
+       const input: CoachInput = {
+         workout,
+         status: 'preview',
+diff --git a/src/engine/workoutGenerator/swapBackToBodyweightCoach.test.ts b/src/engine/workoutGenerator/swapBackToBodyweightCoach.test.ts
+index 68be861..93c2f39 100644
+--- a/src/engine/workoutGenerator/swapBackToBodyweightCoach.test.ts
++++ b/src/engine/workoutGenerator/swapBackToBodyweightCoach.test.ts
+@@ -65,7 +65,7 @@ function upperDay(swaps: LastingSwap[]): CoachInput {
+     duration: 'default',
+     constraints: { templateId: 'upper', swaps },
+   });
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout: {
+       ...workout,
+diff --git a/src/engine/workoutGenerator/swapToBodyweightCoachPlan.test.ts b/src/engine/workoutGenerator/swapToBodyweightCoachPlan.test.ts
+index 73f8e8f..5786482 100644
+--- a/src/engine/workoutGenerator/swapToBodyweightCoachPlan.test.ts
++++ b/src/engine/workoutGenerator/swapToBodyweightCoachPlan.test.ts
+@@ -112,7 +112,7 @@ function coverageLabel(place: LocationProfile, history: WorkoutRecord[], swaps:
+     duration: 'default',
+     constraints: { templateId: 'upper', swaps },
+   });
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   const input: CoachInput = {
+     workout: {
+       ...upper,
+diff --git a/src/engine/workoutGenerator/swapToLoaded.test.ts b/src/engine/workoutGenerator/swapToLoaded.test.ts
+index 619641b..fc5f456 100644
+--- a/src/engine/workoutGenerator/swapToLoaded.test.ts
++++ b/src/engine/workoutGenerator/swapToLoaded.test.ts
+@@ -42,7 +42,7 @@ function upperDay(swaps: LastingSwap[]): CoachInput {
+     duration: 'default',
+     constraints: { templateId: 'upper', swaps },
+   });
+-  const fatigue = interpretFatigue(history, NOW, null);
++  const fatigue = interpretFatigue(history, NOW);
+   return {
+     workout: {
+       ...workout,
+diff --git a/src/features/coach/useCoach.ts b/src/features/coach/useCoach.ts
+index bc1dbc4..55a4e35 100644
+--- a/src/features/coach/useCoach.ts
++++ b/src/features/coach/useCoach.ts
+@@ -44,7 +44,7 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
+   const { session, profile, history, locations, cloud } = parts;
+   if (!session || !profile) return null;
+   const now = nowEpoch ? new Date(nowEpoch).toISOString() : session.createdAt;
+-  const fatigue = interpretFatigue(history, now, session.constraints.readiness);
++  const fatigue = interpretFatigue(history, now);
+   const strategy = analyzeStrategy({ history, profile, now, fatigue });
+   const policy = coachingPolicy(profile.experience);
+   const location = locations.find((candidate) => candidate.id === profile.currentLocationId);
+diff --git a/src/features/plan/PlanScreen.tsx b/src/features/plan/PlanScreen.tsx
+index eea50c7..53bb038 100644
+--- a/src/features/plan/PlanScreen.tsx
++++ b/src/features/plan/PlanScreen.tsx
+@@ -63,11 +63,7 @@ export function PlanScreen() {
+   const deloadAdvice = useMemo(() => {
+     if (!profile) return null;
+     // Fatigue reads logged reserve as the rules do (Maintenance 27, item 43).
+-    const fatigue = interpretFatigue(
+-      state.readHistory,
+-      nowIso,
+-      state.session?.constraints.readiness ?? null,
+-    );
++    const fatigue = interpretFatigue(state.readHistory, nowIso);
+     return recommendDeload(state.readHistory, fatigue, profile, nowIso);
+   }, [profile, state.readHistory, state.session, nowIso]);
+   const [savedName, setSavedName] = useState('');

@@ -29,25 +29,33 @@ first; it holds the rules. This file holds the state and the steps._
   again, verify, ship.
 - **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`89dfb39`) in
   its own worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round
-  M's diff applied to `2595631`). Five review passes found twelve, ten, eleven, six and seven issues,
-  each shown by a failing test and fixed, and the revert runs' new tests two more. The fifth's: a
-  straight day reads the top set through two straight days at the back-offs' load at most, on a day
-  the lift is main too (the lift to push held one load for two weeks); the push's extra and a
-  stand-in are saved as such days; a break is measured from the lift's newest session; the back-offs
-  take the nearest weight, as the research rounds it; stalls, the feedback, the strategy's insights,
-  the fatigue's drift and the Progress trend read the top sets alone. Its M32 table has 180 entries,
-  every anchor found, the fifth pass's entries caught; the full unit suite passed (2971, 5 skipped).
-  Its report is written up to the fifth pass. A sixth pass is checking it. Then its review passes
-  until clean, verify, ship, once Round M is live. The lift to push keeps item 44's straight sets by
-  default: a question for the owner's final review.
-- **Maintenance 33** (the recovery and readiness core) is begun in a local worktree on Round N: a
-  per-muscle recovery model (`src/engine/recovery/recovery.ts`, windows from each muscle's last
-  hard work, by how close its sets went to failure and the body region, lengthened by a large
-  dose, a new lift, long-length work and a short night) and the "too soon" check, with tests. Its
-  design follows the approved proposal (`docs/proposals/week-model-readiness-time.md`, parts 2, 4
-  and 5, decisions 1, 2 and 5) and the research in `docs/research/recovery-time-course.md` and
-  `docs/research/readiness-and-soreness.md`. It is not yet saved here; it is rebuilt from those if
-  the worktree is lost.
+  M's diff applied to `2595631`). Six review passes found twelve, ten, eleven, six, seven and six
+  issues, each shown by a failing test and fixed, and the revert runs' new tests two more. The
+  sixth's: the top set and the lift's own straight target read past its straight days at the
+  back-offs' load wherever they fall; a break is measured from the lift's newest session; a
+  hand-set load or the coach's deload clears the day's mark; corrections keep the steps logged
+  back-offs gave; the completion reads the lift's own steps; a straight day steps from the
+  back-offs' load. Its M32 table has 189 entries, every anchor found, the sixth pass's entries
+  caught; the full unit suite passed (3003, 5 skipped). Its report is written up to the sixth pass.
+  A seventh pass is checking it. Then its review passes until clean, verify, ship, once Round M is
+  live. The lift to push keeps item 44's straight sets by default: a question for the owner's final
+  review.
+- **Maintenance 33** (the recovery and readiness core) is under way in a local worktree on Round N,
+  and saved in `docs/handoff/round-o-wip/round-o.diff` (`git apply` it on Round N's diff). Built so
+  far, with tests: the sourced rules table (`src/engine/rules/ruleTable.ts`, every number with its
+  basis and source); the per-muscle recovery model (`src/engine/recovery/recovery.ts`: windows from
+  each muscle's last hard work, by how close its sets went to failure and the body region,
+  lengthened by a large dose, a new lift, long-length work and a short night, and shifted within
+  bounds by what the lifter's own first sets show); the "too soon" check; the check-in read against
+  the lifter's own four weeks (`src/engine/readiness/checkIn.ts`: two items clearly worse, or two
+  short nights running, lower what the day's first sets are expected to do, never the plan; soreness
+  alone never counts); the illness gate (above the neck: every set 2 or more short of failure; fever
+  or aches all over: rest today); the fatigue score without day counts or check-ins. Next: the
+  existing tests the new rules change, then the screens (the too-soon card and its lighter option,
+  the illness answer, the per-muscle balance on the Plan screen, the learned page's windows), the
+  docs, the revert table and the reviews. Its design follows the approved proposal
+  (`docs/proposals/week-model-readiness-time.md`, parts 2, 4 and 5, decisions 1, 2 and 5) and the
+  research in `docs/research/recovery-time-course.md` and `docs/research/readiness-and-soreness.md`.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 

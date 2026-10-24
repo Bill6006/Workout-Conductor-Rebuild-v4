@@ -19,10 +19,10 @@ index ec6c1c8..dd43720 100644
  ## Save safety
  
 diff --git a/docs/progression-engine.md b/docs/progression-engine.md
-index aba1037..fc12439 100644
+index aba1037..cdd9c59 100644
 --- a/docs/progression-engine.md
 +++ b/docs/progression-engine.md
-@@ -34,6 +34,55 @@ value the user set by hand (`entry.manual`) untouched. Its `floor` argument is t
+@@ -34,6 +34,58 @@ value the user set by hand (`entry.manual`) untouched. Its `floor` argument is t
  bar lifts: no ramp, drop, or working load goes under it. The generator and every substitution
  call it, so every card shows a load and a "Why this target".
  
@@ -53,16 +53,19 @@ index aba1037..fc12439 100644
 +  lift swapped in after its place was begun included, and the top set reads past it, as past its
 +  back-offs, back to the lift's last session of its own (`pastBackOffDays`), through two such days
 +  running at most: past them the lift has left the structure and its straight sessions are its own.
-+  A break is measured from the lift's newest session, those days included (`topSetRead`,
-+  `trainedAt`). The completion's "Next time" reads it the same way, the lift to push on its own
++  Such days are passed over wherever they fall, so the progression's rules over sessions (a run of
++  misses, clean sessions in a row) read the top sets alone, and so does the lift's own straight
++  target. A break is measured from the lift's newest session, whatever the read passes over
++  (`topSetRead`, `trainedAt`). A load set by hand there, or the coach's deload, makes the day the
++  lifter's own, no such day. The completion's "Next time" reads it the same way, the lift to push on its own
 +  straight sets.
 +- In the workout the back-offs follow the top set as lifted, a step up after one clearly easy and
 +  down after a grind, never over it nor under the bar (`backOffLoadAfter`); a back-off clearly easy
 +  takes the ones after it up a step, never over the top set either. A lift picked up again after its
 +  top set carries them on so, with its top set's lines; a top set skipped is no top set lifted. The
-+  top set's log taken back puts them back where the plan has them (`withBackOffsAsPlanned`); a
-+  back-off's, where the top set as it stands puts them, each back-off still logged moving the ones
-+  after it as its log did (`backOffsReplayed`).
++  top set's log taken back puts them back where the plan has them, a correction of it where the
++  top set as corrected puts them; a back-off's, where the top set as it stands puts them; each way,
++  each back-off still logged moves the ones after it as its log did (`backOffsReplayed`).
 +- The progression reads a session's top set alone (`completedWorking` passes over its back-offs):
 +  the strength rule, the estimated max, stalls and every line on the last session read it. What
 +  reads a lift's sessions over weeks reads its top sets alone, past its straight days at the
@@ -80,10 +83,10 @@ index aba1037..fc12439 100644
  Sessions in the last 7 days, consecutive training days, how far logged reps in reserve drifted
 diff --git a/docs/reports/maintenance-32.md b/docs/reports/maintenance-32.md
 new file mode 100644
-index 0000000..f9e7907
+index 0000000..33be67e
 --- /dev/null
 +++ b/docs/reports/maintenance-32.md
-@@ -0,0 +1,234 @@
+@@ -0,0 +1,257 @@
 +# Maintenance 32: round N, the main lift's top set and back-offs
 +
 +Built on 2026-10-23 on the owner's word to build the whole agreed queue, round by round, to live,
@@ -278,7 +281,30 @@ index 0000000..f9e7907
 +  fatigue's drift in estimated maxes and the Progress trend, each of which read the upper day's
 +  lighter load as a fall. Tests that asked the load rounded down ask the nearest now.
 +
-+SIXTH_PASS
++**The sixth pass** (on those fixes, and the build) found six: one HIGH, one MEDIUM, four LOW.
++
++- HIGH: the progression's own rules over sessions counted a straight day at the back-offs' load
++  that fell between two top sets: the row's top set missed its floor every pull day, and each
++  upper day lifted as asked broke the run of misses at one, so the micro-deload and the reset never
++  came (165 lb asked four pull days running); for an advanced lifter, a grind and one clean top set
++  stepped the load up, the upper day counted as the second clean session.
++- MEDIUM: the coach's deload taken on a straight day at the back-offs' load kept the day's mark, so
++  the next top set read past it and stepped up as if no deload was taken; so did a weight set by
++  hand there.
++- LOW: a correction of the top set after a back-off was logged took that back-off's step off the
++  ones after it, and so did a delete of the top set's log; the completion's "Next time" put a
++  straight day's back-offs' load to the pound (162 lb where the plan asks 160); a top set skipped,
++  its back-offs done, made the next session read as back from a break; the coach's step on a
++  straight day stepped from the top set's load and offered it on every set.
++- Fixed: the top set reads past the lift's straight days at the back-offs' load wherever they fall,
++  and so does the lift's own straight target (a micro-deload the top set's misses call for runs
++  straight at the eased load), unless the newest run passes two; a break is measured from the
++  lift's newest session, whatever the read passes over; a load set by hand or the coach's deload
++  clears the day's mark; a correction or a delete of the top set's log replays each back-off still
++  logged; the completion reads on the lift's own steps; a straight day steps from the back-offs'
++  load off the last top set.
++
++SEVENTH_PASS
 +
 +## Known limits
 +
@@ -331,7 +357,7 @@ index abfd621..d949e99 100644
    const restNote = restGuidance(entry.role, rest);
    const research = evidenceLines(
 diff --git a/src/core/state/appStore.ts b/src/core/state/appStore.ts
-index 6446250..8113119 100644
+index 6446250..ca71c72 100644
 --- a/src/core/state/appStore.ts
 +++ b/src/core/state/appStore.ts
 @@ -18,7 +18,11 @@ import { holdById } from '../../engine/workout/setText';
@@ -483,7 +509,7 @@ index 6446250..8113119 100644
            const performed = await this.recalibrate({
              type: 'performance',
              entryId,
-@@ -2074,6 +2058,36 @@ export class AppStore {
+@@ -2074,6 +2058,43 @@ export class AppStore {
          }
        }
      }
@@ -506,6 +532,12 @@ index 6446250..8113119 100644
 +        earlier?.reps !== reps ||
 +        earlier?.rir !== values.rir)
 +    ) {
++      // The back-offs logged after it keep the steps their logs gave (the sixth review of round N).
++      const logOf = this.backOffLogOf(session, entry, isDone);
++      const backOffLogs = entry.sets.flatMap((each) => {
++        const log = each.tier === 'back-off' ? logOf(each) : null;
++        return log ? [{ setIndex: each.index, ...log }] : [];
++      });
 +      const performed = await this.recalibrate({
 +        type: 'performance',
 +        entryId,
@@ -513,6 +545,7 @@ index 6446250..8113119 100644
 +        actualReps: reps,
 +        actualWeight: values.weight,
 +        plan: this.planAfter(session, entry, set, reps, values, backOffsLeft),
++        ...(backOffLogs.length > 0 ? { backOffLogs } : {}),
 +      });
 +      if (performed?.ok) tapped = this.requireSession();
 +      else if (performed) failed = true;
@@ -520,7 +553,7 @@ index 6446250..8113119 100644
      if (set.kind === 'working' && !skipped) this.settleDropSet(entryId);
      if (set.kind === 'working' && !failed) await this.settleStart(tapped);
    }
-@@ -2109,12 +2123,16 @@ export class AppStore {
+@@ -2109,12 +2130,16 @@ export class AppStore {
      };
    }
  
@@ -540,7 +573,7 @@ index 6446250..8113119 100644
    }
  
    /**
-@@ -2314,9 +2332,11 @@ export class AppStore {
+@@ -2314,9 +2339,11 @@ export class AppStore {
      if (session.completed.sets.length === 0) return;
      const sets = session.completed.sets.slice(0, -1);
      const keys = new Set(sets.map((c) => `${c.entryId}:${c.setIndex}`));
@@ -553,7 +586,7 @@ index 6446250..8113119 100644
        completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
        rest: null,
        hold: null,
-@@ -2332,10 +2352,12 @@ export class AppStore {
+@@ -2332,10 +2359,12 @@ export class AppStore {
      );
      if (sets.length === session.completed.sets.length) return;
      const keys = new Set(sets.map((c) => `${c.entryId}:${c.setIndex}`));
@@ -567,7 +600,7 @@ index 6446250..8113119 100644
        completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
        // A countdown stays only while its set is still the one in front of the lifter.
        hold: hold && next?.entryId === hold.entryId && next.setIndex === hold.setIndex ? hold : null,
-@@ -2343,6 +2365,141 @@ export class AppStore {
+@@ -2343,6 +2372,177 @@ export class AppStore {
      void this.settleStart();
    }
  
@@ -647,7 +680,23 @@ index 6446250..8113119 100644
 +    const units = this.state.profile?.units ?? 'lb';
 +    const loading = loadingFor(this.currentLocation()?.loading, session.loading, exercise, units);
 +    const load = { step: loading.step, floor: barWeightFor(exercise, units), loading };
-+    if (set?.tier === 'top') return withBackOffsAsPlanned(session.workout, entry.id, isDone, load);
++    if (set?.tier === 'top') {
++      // Back where the plan has them, each back-off still logged moving the ones after it as its
++      // log did (the sixth review of round N).
++      if (top.targetWeight === null) {
++        return withBackOffsAsPlanned(session.workout, entry.id, isDone, load);
++      }
++      return this.withBackOffSets(
++        session.workout,
++        entry.id,
++        backOffsReplayed(
++          entry.sets,
++          backOffLoad(top.targetWeight, entry.backOffDrop, load),
++          this.backOffLogOf(session, entry, isDone),
++          { ...load, top: top.targetWeight },
++        ),
++      );
++    }
 +    if (set?.tier !== 'back-off') return session.workout;
 +    // A back-off taken back follows its top set as it now stands (the third review of round N).
 +    const lifted = session.completed.sets.find(
@@ -674,7 +723,40 @@ index 6446250..8113119 100644
 +    if (weight === null) return session.workout;
 +    // Every back-off not logged follows it, each still logged moving the ones after it as its log
 +    // did (the fourth review of round N: the easy back-off's step stayed on the ones after it).
-+    const logOf = (each: SetPrescription) => {
++    const sets = backOffsReplayed(entry.sets, weight, this.backOffLogOf(session, entry, isDone), {
++      ...load,
++      top: lifted?.weight ?? null,
++    });
++    return this.withBackOffSets(session.workout, entry.id, sets);
++  }
++
++  /** A workout with one lift's sets as given. */
++  private withBackOffSets(
++    workout: GeneratedWorkout,
++    entryId: string,
++    sets: SetPrescription[],
++  ): GeneratedWorkout {
++    return {
++      ...workout,
++      blocks: workout.blocks.map((block) => ({
++        ...block,
++        entries: block.entries.map((candidate) =>
++          candidate.id !== entryId ? candidate : { ...candidate, sets },
++        ),
++      })),
++    };
++  }
++
++  /**
++   * A lift's back-off still logged, as the replay reads it: the weight it was lifted at and the step
++   * its log gave the ones after it (`backOffsReplayed`); null for one not logged.
++   */
++  private backOffLogOf(
++    session: WorkoutSession,
++    entry: WorkoutEntry,
++    isDone: (entryId: string, setIndex: number) => boolean,
++  ): (each: SetPrescription) => { weight: number | null; plan: AutoregulationPlan } | null {
++    return (each) => {
 +      if (!isDone(entry.id, each.index)) return null;
 +      const log = session.completed.sets.find(
 +        (candidate) =>
@@ -691,25 +773,12 @@ index 6446250..8113119 100644
 +        plan: this.planAfter(session, entry, each, log.reps, values, Math.max(1, after)),
 +      };
 +    };
-+    const sets = backOffsReplayed(entry.sets, weight, logOf, {
-+      ...load,
-+      top: lifted?.weight ?? null,
-+    });
-+    return {
-+      ...session.workout,
-+      blocks: session.workout.blocks.map((block) => ({
-+        ...block,
-+        entries: block.entries.map((candidate) =>
-+          candidate.id !== entry.id ? candidate : { ...candidate, sets },
-+        ),
-+      })),
-+    };
 +  }
 +
    setDraft(entryId: string, draft: SetDraft): void {
      const session = this.requireSession();
      this.setSession({ ...session, drafts: { ...session.drafts, [entryId]: draft } });
-@@ -2561,7 +2718,18 @@ export class AppStore {
+@@ -2561,7 +2761,18 @@ export class AppStore {
      // Timed at the lifter's pace as it reads now, not as it read when saved (Maintenance 28, the
      // review of item 4).
      const fresh = planAtPace(
@@ -932,6 +1001,122 @@ index 0000000..c28d0f9
 +    expect(top?.targetWeight).toBeDefined();
 +    // "Next time" names the load the next plan's top set has.
 +    expect(line).toContain(`${name}: ${top!.targetWeight} lb`);
++  });
++});
+diff --git a/src/core/state/backOffs.completionStep.test.ts b/src/core/state/backOffs.completionStep.test.ts
+new file mode 100644
+index 0000000..97cbcd7
+--- /dev/null
++++ b/src/core/state/backOffs.completionStep.test.ts
+@@ -0,0 +1,110 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutSession } from './session';
++import { buildCompletion, buildWorkoutRecord } from './workoutRecordBuilder';
++import type { WorkoutRecord } from '../validation/workoutRecord';
++import { emptyCompleted, emptyConstraints } from '../../engine/recalibration/recalibrate';
++import { allEntries, type GeneratedWorkout } from '../../engine/workout/types';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { RECORD_NOW, record, type SetSpec } from '../../test/records';
++import { BENCH, gym, profileOf } from '../../test/backOffs';
++
++/**
++ * The sixth review of round N. The completion's "Next time" reads a lift's next target as the next
++ * plan does (the second and third reviews), but where the next plan runs the lift straight after a
++ * session on top set plus back-offs, at its back-offs' load, the completion takes that load to the
++ * pound (`buildCompletion` passes `mainLiftTarget` a step of 1 and no loading): 5% under a 170 lb
++ * top set is "162 lb", where the plan, on the weights the place has, asks 160. The lift to push is
++ * such a lift on every push day after its sessions on the structure. The spec: wrong words on
++ * screen; "Next time" says what the next plan asks. Synthetic data only.
++ */
++
++const DAY = 86_400_000;
++const at = (days: number) => new Date(Date.parse(RECORD_NOW) + days * DAY).toISOString();
++
++/** A push day of the bench press on top set plus back-offs, `daysAgo` before RECORD_NOW. */
++function structured(daysAgo: number, top: SetSpec, backOffs: SetSpec[]): WorkoutRecord {
++  const done = record(daysAgo, BENCH, [top, ...backOffs], [4, 6], 2);
++  const entry = done.entries[0]!;
++  entry.backOffDrop = 0.05;
++  entry.role = 'primary-strength';
++  entry.sets.forEach((set, index) => {
++    set.tier = index === 0 ? 'top' : 'back-off';
++    set.targetRir = index === 0 ? 1 : 2;
++  });
++  return done;
++}
++
++// The last top set 165 x 5 at 1 in reserve, as asked: 170 next.
++const history = [
++  structured(
++    4,
++    [5, 165, 1],
++    [
++      [5, 155, 2],
++      [5, 155, 2],
++      [5, 155, 2],
++    ],
++  ),
++];
++const profile = profileOf('hybrid', {
++  pushLift: { exerciseId: BENCH, target: 225, units: 'lb', since: at(-1) },
++});
++
++function planAt(now: string, past: WorkoutRecord[]): GeneratedWorkout {
++  return generateWorkout({
++    profile,
++    location: gym,
++    history: past,
++    now,
++    duration: 'default',
++    constraints: { templateId: 'push-arms' },
++  });
++}
++
++describe('the completion’s "Next time" for the lift to push after its sessions on the structure', () => {
++  it('names the load the next plan asks, on the weights the place has', () => {
++    const workout = planAt(RECORD_NOW, history);
++    const pushed = allEntries(workout.blocks).find((entry) => entry.exerciseId === BENCH)!;
++    expect(pushed.push).toBe('natural');
++    // Straight at the back-offs' load: 5% under the 170 lb top set, 161.5, on the plates 160.
++    expect(pushed.atBackOffs).toBe(true);
++    const working = pushed.sets.filter((set) => set.kind === 'working');
++    expect(working[0]!.targetWeight).toBe(160);
++    // Every set lifted as asked.
++    const session = {
++      workout,
++      constraints: emptyConstraints(),
++      completed: {
++        ...emptyCompleted(),
++        startedAt: RECORD_NOW,
++        sets: working.map((set) => ({
++          entryId: pushed.id,
++          exerciseId: BENCH,
++          setIndex: set.index,
++          kind: 'working',
++          reps: 5,
++          weight: set.targetWeight,
++          rir: set.targetRir,
++          completedAt: RECORD_NOW,
++        })),
++      },
++    } as unknown as WorkoutSession;
++    const saved = buildWorkoutRecord(session, {
++      now: RECORD_NOW,
++      elapsedSeconds: 1800,
++      rating: null,
++      endedEarly: false,
++    });
++    const summary = buildCompletion(session, saved, profile, history);
++    const line = summary.nextTargets.find((text) => text.startsWith('Barbell Bench Press'))!;
++    expect(line).toBeDefined();
++    // The next push day, as the push has it: straight again at the back-offs' load.
++    const next = allEntries(planAt(at(3), [...history, saved]).blocks).find(
++      (entry) => entry.exerciseId === BENCH,
++    )!;
++    expect(next.push).toBe('natural');
++    const nextLoad = next.sets.find((set) => set.kind === 'working')!.targetWeight;
++    // On 6f2d5ea: "Barbell Bench Press: 162 lb × 4-6 (load up)", the plan 160 lb.
++    expect(line, `next plan ${nextLoad} lb`).toContain(`${nextLoad} lb`);
 +  });
 +});
 diff --git a/src/core/state/backOffs.correction.store.test.ts b/src/core/state/backOffs.correction.store.test.ts
@@ -1675,6 +1860,123 @@ index 0000000..2c7b233
 +    ]);
 +  });
 +});
+diff --git a/src/core/state/backOffs.topCorrectedAfter.store.test.ts b/src/core/state/backOffs.topCorrectedAfter.store.test.ts
+new file mode 100644
+index 0000000..ac6a142
+--- /dev/null
++++ b/src/core/state/backOffs.topCorrectedAfter.store.test.ts
+@@ -0,0 +1,111 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile, type UserProfile } from '../validation/profile';
++import { allEntries, type WorkoutEntry } from '../../engine/workout/types';
++import { record } from '../../test/records';
++import { TEST_NOW, createTestStore } from '../../test/testStore';
++
++/**
++ * The sixth review of round N. A correction to a top set's numbers, made after a back-off was
++ * logged, puts the back-offs still to come where the corrected top set alone puts them
++ * (`logSet`'s correction branch sends a `performance` trigger whose top-set branch sets every
++ * back-off left to `backOffLoadAfter`): the step the logged back-off's own log gave the ones after
++ * it is dropped: after a grind on back-off 1, the ones after it go back up. The top set's log
++ * deleted does the same through `withBackOffsAsPlanned`. The spec: a correction or undo of a top
++ * set or back-off puts the later back-offs where the logs left them (the fourth review's rule for a
++ * back-off's log taken back: each back-off still logged moves the ones after it as its log did).
++ * Synthetic data only.
++ */
++
++const DAY = 86_400_000;
++const schedule = createDefaultProfile(TEST_NOW).schedule;
++const everyDay: Partial<UserProfile> = {
++  schedule: { ...schedule, availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'], weeklyFrequency: 5 },
++  programStyle: 'hybrid',
++};
++
++async function startedMain() {
++  const handle = createTestStore({ now: () => TEST_NOW });
++  const { store } = handle;
++  await store.hydrate();
++  await store.completeOnboarding(
++    { ...createDefaultProfile(TEST_NOW), bodyweight: 185, ...everyDay },
++    createDefaultLocations({ gymAccess: true }, TEST_NOW),
++  );
++  const db = await store.getDatabase();
++  for (const daysAgo of [7, 3]) {
++    for (const exerciseId of ['barbell-bench-press', 'back-squat', 'barbell-row']) {
++      const when = new Date(Date.parse(TEST_NOW) - daysAgo * DAY).toISOString();
++      await db.put('workouts', {
++        ...record(0, exerciseId, [
++          [5, 135, 2],
++          [5, 135, 2],
++          [5, 135, 2],
++        ]),
++        id: `w-${exerciseId}-${daysAgo}`,
++        startedAt: when,
++        completedAt: when,
++      });
++    }
++  }
++  await store.hydrate();
++  const workout = () => store.getSnapshot().session!.workout;
++  const main = (): WorkoutEntry =>
++    allEntries(workout().blocks).find((entry) => entry.backOffDrop !== undefined)!;
++  expect(main()).toBeDefined();
++  const top = main().sets.find((set) => set.tier === 'top')!;
++  const [first] = main().sets.filter((set) => set.tier === 'back-off');
++  const planned = main()
++    .sets.filter((set) => set.tier === 'back-off')
++    .map((set) => set.targetWeight);
++  store.startWorkout();
++  const backOffs = () =>
++    main()
++      .sets.filter((set) => set.tier === 'back-off')
++      .map((set) => set.targetWeight);
++  return { store, main, top, first: first!, planned, backOffs };
++}
++
++describe('a top set corrected after a back-off was logged', () => {
++  it('keeps the step a clearly easy back-off 1 gave the back-offs after it', async () => {
++    const { store, main, top, first, planned, backOffs } = await startedMain();
++    // The top set as asked: nothing moves.
++    await store.logSet(main().id, top.index, { weight: top.targetWeight, reps: 5, rir: 1 });
++    expect(backOffs()).toEqual(planned);
++    // Back-off 1 clearly easy (6 reps at 4 in reserve, asked 2): the ones after it go up a step.
++    await store.logSet(main().id, first.index, { weight: planned[0]!, reps: 6, rir: 4 });
++    const stepped = backOffs();
++    expect(stepped[1]!).toBeGreaterThan(planned[1]!);
++    // The lifter fixes a typo on the top set: 4 reps, not 5, the same load and reserve. Logged so,
++    // the top set leaves its back-offs at the drop, as it did; back-off 1's easy log still stands.
++    await store.logSet(main().id, top.index, { weight: top.targetWeight, reps: 4, rir: 1 });
++    // On 6f2d5ea: back-offs 2 and 3 back at the drop's load (the plan's), back-off 1's step gone.
++    expect(backOffs().slice(1)).toEqual(stepped.slice(1));
++  });
++
++  it('keeps the step down a grinding back-off 1 gave the back-offs after it', async () => {
++    const { store, main, top, first, planned, backOffs } = await startedMain();
++    await store.logSet(main().id, top.index, { weight: top.targetWeight, reps: 5, rir: 1 });
++    expect(backOffs()).toEqual(planned);
++    // Back-off 1 a grind: a rep under the floor at no reserve. The ones after it come down.
++    await store.logSet(main().id, first.index, { weight: planned[0]!, reps: 3, rir: 0 });
++    const stepped = backOffs();
++    expect(stepped[1]!).toBeLessThan(planned[1]!);
++    // The same typo fixed on the top set.
++    await store.logSet(main().id, top.index, { weight: top.targetWeight, reps: 4, rir: 1 });
++    // On 6f2d5ea: back-offs 2 and 3 back up at the plan's load, heavier than the grind left them.
++    expect(backOffs().slice(1)).toEqual(stepped.slice(1));
++  });
++
++  it('a delete of the top set’s log keeps the step a clearly easy back-off 1, still logged, gave', async () => {
++    const { store, main, top, first, planned, backOffs } = await startedMain();
++    await store.logSet(main().id, top.index, { weight: top.targetWeight, reps: 5, rir: 1 });
++    await store.logSet(main().id, first.index, { weight: planned[0]!, reps: 6, rir: 4 });
++    const stepped = backOffs();
++    expect(stepped[1]!).toBeGreaterThan(planned[1]!);
++    // The top set's log deleted (logged on the wrong lift, say): back-off 1's log still stands.
++    store.deleteLoggedSet(main().id, top.index);
++    // On 6f2d5ea: back-offs 2 and 3 back at the plan's load, back-off 1's step gone.
++    expect(backOffs().slice(1)).toEqual(stepped.slice(1));
++  });
++});
 diff --git a/src/core/state/backOffs.undo.store.test.ts b/src/core/state/backOffs.undo.store.test.ts
 new file mode 100644
 index 0000000..054e60b
@@ -1922,18 +2224,23 @@ index a8a947e..8a5fe1a 100644
  /** Logs a lift's first working set `by` reps of capacity under what the plan asked. */
  async function shortOfPlan(store: Store, entry: WorkoutEntry, by: number) {
 diff --git a/src/core/state/workoutRecordBuilder.ts b/src/core/state/workoutRecordBuilder.ts
-index 9fe8023..3888c76 100644
+index 9fe8023..5d847f5 100644
 --- a/src/core/state/workoutRecordBuilder.ts
 +++ b/src/core/state/workoutRecordBuilder.ts
-@@ -14,6 +14,7 @@ import { holdById } from '../../engine/workout/setText';
- import { hasNoLoad } from '../../engine/progression/startingLoad';
+@@ -11,9 +11,11 @@ import {
+   type WorkoutBlock,
+ } from '../../engine/workout/types';
+ import { holdById } from '../../engine/workout/setText';
+-import { hasNoLoad } from '../../engine/progression/startingLoad';
++import { barWeightFor, hasNoLoad } from '../../engine/progression/startingLoad';
++import { weightStep } from '../../engine/plateMath/plateMath';
  import type { UserProfile } from '../validation/profile';
  import type { TrainingRole } from '../../catalog/exercises/exerciseSchema';
 +import { backOffsSuit, mainLiftTarget } from '../../engine/progression/backOffs';
  import { recommendNextTarget } from '../../engine/progression/progression';
  import { prescribeFor } from '../../engine/progression/roles';
  import { sessionFeedback } from '../../engine/strategy/strategy';
-@@ -79,6 +80,8 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
+@@ -79,6 +81,8 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
          plannedSets: workingSets(entry).filter((set) => set.kind === 'working').length,
          replacedFrom: entry.replacedFrom,
          ...(pushMarkOf(entry) ? { push: pushMarkOf(entry) } : {}),
@@ -1942,7 +2249,7 @@ index 9fe8023..3888c76 100644
          sets: entry.sets
            .filter((set) => logged.has(set.index))
            .map((set) => {
-@@ -95,6 +98,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
+@@ -95,6 +99,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
                targetRir: set.targetRir,
                loggedAt: done.completedAt,
                ...(done.reserveCheck ? { reserveCheck: { ...done.reserveCheck } } : {}),
@@ -1950,7 +2257,7 @@ index 9fe8023..3888c76 100644
                ...(set.asked
                  ? {
                      asked: {
-@@ -264,8 +268,10 @@ export function buildCompletion(
+@@ -264,8 +269,10 @@ export function buildCompletion(
    let best: { name: string; weight: number; reps: number } | null = null;
    for (const entry of record.entries) {
      if (holdById(entry.exerciseId)) continue;
@@ -1962,7 +2269,7 @@ index 9fe8023..3888c76 100644
        if (!best || set.weight * set.reps > best.weight * best.reps) {
          best = { name: requireExercise(entry.exerciseId).name, weight: set.weight, reps: set.reps };
        }
-@@ -284,15 +290,30 @@ export function buildCompletion(
+@@ -284,15 +291,36 @@ export function buildCompletion(
    const nextTargets = trained.slice(0, 6).map((entry) => {
      const exercise = requireExercise(entry.exerciseId);
      const role = (entry.role as TrainingRole | undefined) ?? exercise.defaultRole;
@@ -1995,7 +2302,13 @@ index 9fe8023..3888c76 100644
 -      // A clock, so a lift's own curve (item 41) speaks here as in the next plan.
 -      now: completedAtIso,
 -      resets,
-+      load: { step: 1, floor: null, loading: null },
++      // On the lift's own steps from the bar, as the next plan's load lands (the sixth review of
++      // round N: "162 lb" where the plan asks 160).
++      load: {
++        step: weightStep(exercise, profile.units),
++        floor: barWeightFor(exercise, profile.units),
++        loading: null,
++      },
 +      units: profile.units,
      });
      if (target.hold) {
@@ -2161,6 +2474,112 @@ index 0000000..43af474
 +    expect(sets[0]?.[0]).toBeLessThan(190);
 +  });
 +});
+diff --git a/src/engine/coach/coachConductor.backOffsStep.test.ts b/src/engine/coach/coachConductor.backOffsStep.test.ts
+new file mode 100644
+index 0000000..a140ff2
+--- /dev/null
++++ b/src/engine/coach/coachConductor.backOffsStep.test.ts
+@@ -0,0 +1,100 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { gatherSignals, type CoachInput } from './coachConductor';
++import { emptyCompleted, emptyConstraints } from '../recalibration/recalibrate';
++import type { RecalibrationTrigger } from '../recalibration/types';
++import { interpretFatigue } from '../recovery/fatigue';
++import { RECORD_NOW, record, type SetSpec } from '../../test/records';
++import { BENCH, bench, gym, plan, profileOf, run, shape } from '../../test/backOffs';
++
++/**
++ * The sixth review of round N. The coach's next load step for a lift (`heavierHere`, the
++ * undershooting stall's "Take N lb today" and the "ready for more load" card) steps from the weight
++ * the lift's target moved from (`progression.from`). On a day the lift runs straight at its
++ * back-offs' load, that is the last top set's load (`straightAfterTop` keeps the top set's
++ * target's `from`), so the step offered is the top set's next load, for every straight set, at a
++ * straight set's reserve: the third review's HIGH (the top set's load asked of every set at a
++ * straight set's reserve), through the coach. On the main day the same card is taken by the plan
++ * (its top set has the step) and never shown. Synthetic data only.
++ */
++
++const DAY = 86_400_000;
++const at = (days: number) => new Date(Date.parse(RECORD_NOW) + days * DAY).toISOString();
++
++function upperDay(daysAgo: number, top: SetSpec, backOffs: SetSpec[]): WorkoutRecord {
++  const done = record(daysAgo, BENCH, [top, ...backOffs], [4, 6], 2, { templateId: 'upper' });
++  const entry = done.entries[0]!;
++  entry.backOffDrop = 0.05;
++  entry.role = 'primary-strength';
++  entry.sets.forEach((set, index) => {
++    set.tier = index === 0 ? 'top' : 'back-off';
++    set.targetRir = index === 0 ? 1 : 2;
++  });
++  return done;
++}
++
++// The lifter keeps the top set at 200, well short of failure (3 in reserve, asked 1).
++const history = [
++  upperDay(
++    3,
++    [5, 200, 3],
++    [
++      [5, 190, 3],
++      [5, 190, 3],
++      [5, 190, 3],
++    ],
++  ),
++];
++
++describe('the coach’s load step on a day the main lift runs at its back-offs’ load', () => {
++  it('never asks the top set’s next load of every straight set', () => {
++    // The full-body day: the bench press secondary, straight at the back-offs' load.
++    const workout = plan(history, profileOf(), { templateId: 'full-body' });
++    expect(bench(workout).atBackOffs).toBe(true);
++    const straight = shape(bench(workout));
++    const load = straight[0]![0] as number;
++    const input: CoachInput = {
++      workout,
++      status: 'preview',
++      duration: 'default',
++      completed: emptyCompleted(),
++      constraints: emptyConstraints(),
++      profile: profileOf(),
++      history,
++      now: RECORD_NOW,
++      fatigue: interpretFatigue(history, RECORD_NOW, null),
++      strategy: [],
++      lastExportAt: RECORD_NOW,
++      workoutCount: 1,
++      location: gym,
++      // Four top sets at 200 x 5, each 3 in reserve where 1 was asked: undershooting.
++      stalls: [
++        {
++          exerciseId: BENCH,
++          kind: 'undershooting',
++          exposures: 4,
++          totalExposures: 4,
++          baselineE1rm: 233.3,
++          latestE1rm: 233.3,
++          effortMet: 0,
++          effortUnknown: 0,
++          firstDate: at(-24),
++          lastDate: at(-3),
++          why: ['No better estimated max in 4 exposures.'],
++        },
++      ],
++    };
++    const card = gatherSignals(input).find((signal) => signal.source === 'stall: undershooting');
++    const action = card?.action;
++    // No step offered on such a day is no wrong step.
++    if (action?.kind !== 'recalibrate') return;
++    const taken = shape(
++      bench(run(action.trigger as RecalibrationTrigger, workout, { history }).workout),
++    );
++    const lines = `${action.label}: ${JSON.stringify(straight)} -> ${JSON.stringify(taken)}`;
++    // On 6f2d5ea: "Take 205 lb today", every straight set at 205 at 2 in reserve: over the last
++    // top set (200 at 1 in reserve), a step above the back-offs' load the day had (195) twice over.
++    expect(load).toBeLessThan(200);
++    expect(Math.max(...taken.map((set) => set[0] as number)), lines).toBeLessThanOrEqual(200);
++  });
++});
 diff --git a/src/engine/coach/coachConductor.ts b/src/engine/coach/coachConductor.ts
 index 4e9d948..7753f34 100644
 --- a/src/engine/coach/coachConductor.ts
@@ -2190,10 +2609,10 @@ index 4e9d948..7753f34 100644
                  route: ref,
 diff --git a/src/engine/progression/backOffs.atBackOffs.test.ts b/src/engine/progression/backOffs.atBackOffs.test.ts
 new file mode 100644
-index 0000000..d519cd3
+index 0000000..695f73a
 --- /dev/null
 +++ b/src/engine/progression/backOffs.atBackOffs.test.ts
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,167 @@
 +import { describe, expect, it } from 'vitest';
 +import type { WorkoutSession } from '../../core/state/session';
 +import { buildWorkoutRecord } from '../../core/state/workoutRecordBuilder';
@@ -2307,17 +2726,18 @@ index 0000000..d519cd3
 +    expect(planned.exerciseId).toBe(ROW);
 +  });
 +
-+  it('the top set reads past the straight days at the back-offs’ load, up to one of its own', () => {
++  it('the top set reads past the straight days at the back-offs’ load, wherever they fall', () => {
 +    const marked = straight(6, 170, true);
 +    const own = straight(4, 175, false);
 +    const latest = straight(2, 170, true);
-+    // Only the run of marked days since the last session of its own is passed over.
++    // Each marked day is passed over, one before a session of its own too (the sixth review: one
++    // between two top sets broke the progression's run of misses); the lift's own stays.
 +    const read = pastBackOffDays(ROW, [pulled(), marked, own, latest]);
 +    const rows = (id: string) =>
 +      read.find((item) => item.id === id)!.entries.filter((entry) => entry.exerciseId === ROW);
 +    expect(rows(latest.id)).toEqual([]);
 +    expect(rows(own.id)).toHaveLength(1);
-+    expect(rows(marked.id)).toHaveLength(1);
++    expect(rows(marked.id)).toEqual([]);
 +    // With nothing marked, the history as it is.
 +    const plain = [pulled(), own];
 +    expect(pastBackOffDays(ROW, plain)).toBe(plain);
@@ -2682,10 +3102,10 @@ index 0000000..8ad1ad8
 +});
 diff --git a/src/engine/progression/backOffs.ts b/src/engine/progression/backOffs.ts
 new file mode 100644
-index 0000000..08a11d2
+index 0000000..50ca62f
 --- /dev/null
 +++ b/src/engine/progression/backOffs.ts
-@@ -0,0 +1,620 @@
+@@ -0,0 +1,627 @@
 +import { getExercise } from '../../catalog/exercises/catalog';
 +import {
 +  isHold,
@@ -3128,21 +3548,23 @@ index 0000000..08a11d2
 +
 +/**
 + * The history a lift's top set reads (the fourth review of round N): its straight days at the
-+ * back-offs' load since its last session of its own (`atBackOffs`) passed over, as its back-offs
-+ * are, so a lift main one day and secondary another steps its top set from its last top set. One
-+ * read at the back-offs' load, one step up, was the top set it lifted last time, every week. Two
-+ * such days running at most (`BACK_OFF.STRAIGHT_RUN`): past them the lift's straight sessions are
-+ * its own, read as they are (the fifth review: a lift straight every session, the lift to push or
-+ * a top set the place cannot load, read the same old top set for three weeks).
++ * back-offs' load (`atBackOffs`) passed over, as its back-offs are, wherever they fall (the sixth
++ * review: one between two top sets broke a run of misses), so a lift main one day and secondary
++ * another steps its top set from its last top set, and the progression's rules over sessions read
++ * its top sets alone. One read at the back-offs' load, one step up, was the top set it lifted last
++ * time, every week. Unless the newest such days run past two (`BACK_OFF.STRAIGHT_RUN`): then the
++ * lift has left the structure, and its straight sessions are its own, read as they are (the fifth
++ * review: a lift straight every session, the lift to push or a top set the place cannot load, read
++ * the same old top set for three weeks).
 + */
 +export function pastBackOffDays(
 +  exerciseId: string,
 +  history: readonly WorkoutRecord[],
 +): readonly WorkoutRecord[] {
-+  const passed = new Set<string>();
 +  const newestFirst = [...history].sort((a, b) =>
 +    (b.completedAt ?? b.startedAt).localeCompare(a.completedAt ?? a.startedAt),
 +  );
++  let run = 0;
 +  for (const record of newestFirst) {
 +    const own = record.entries.filter(
 +      (entry) =>
@@ -3151,15 +3573,10 @@ index 0000000..08a11d2
 +    );
 +    if (own.length === 0) continue;
 +    if (!own.every((entry) => entry.atBackOffs === true)) break;
-+    if (passed.size === BACK_OFF.STRAIGHT_RUN) return history;
-+    passed.add(record.id);
++    run += 1;
++    if (run > BACK_OFF.STRAIGHT_RUN) return history;
 +  }
-+  if (passed.size === 0) return history;
-+  return history.map((record) =>
-+    passed.has(record.id)
-+      ? { ...record, entries: record.entries.filter((entry) => entry.exerciseId !== exerciseId) }
-+      : record,
-+  );
++  return withoutBackOffDays(exerciseId, history);
 +}
 +
 +/**
@@ -3182,17 +3599,16 @@ index 0000000..08a11d2
 +}
 +
 +/**
-+ * The history a lift's top set reads (`pastBackOffDays`), and when the lift was last trained where
-+ * that history passes over its newest sessions: a break is measured from them, since the lift had
-+ * none (the fifth review of round N: three weeks after its last top set, trained on a straight day
-+ * eight days before, it read as back from a break).
++ * The history a lift's top set reads (`pastBackOffDays`), and when the lift was last trained: a break
++ * is measured from its newest session, whatever the read passes over (the fifth review of round N:
++ * three weeks after its last top set, trained on a straight day eight days before, it read as back
++ * from a break; the sixth: so did one whose last top set was skipped, its back-offs done).
 + */
 +export function topSetRead(
 +  exerciseId: string,
 +  history: readonly WorkoutRecord[],
 +): { history: readonly WorkoutRecord[]; trainedAt?: string } {
 +  const read = pastBackOffDays(exerciseId, history);
-+  if (read === history) return { history };
 +  const newest = liftSessionTimes(exerciseId, history)[0];
 +  return newest === undefined ? { history: read } : { history: read, trainedAt: newest };
 +}
@@ -3253,6 +3669,10 @@ index 0000000..08a11d2
 +  return {
 +    ...rest,
 +    weight: backOffLoad(from, drop, input.load),
++    // The weight it steps from is the back-offs' load off the top set last lifted, not the top
++    // set's own (the sixth review of round N: the coach offered the top set's next load of every
++    // straight set).
++    ...(typeof top.from === 'number' ? { from: backOffLoad(top.from, drop, input.load) } : {}),
 +    reps: top.asked?.reps ?? top.reps,
 +    rir: prescription.rir,
 +    evidence: [
@@ -3303,6 +3723,13 @@ index 0000000..08a11d2
 +      const straight = straightAfterTop(top, prescription, input);
 +      if (straight) return { target: straight, asked: prescription, straight: true };
 +    }
++    // Its own straight target reads past those days too (the sixth review: a micro-deload the top
++    // set's misses called for was read off the full history, a straight day between breaking the
++    // run, and asked the top set's load of every set).
++    return {
++      target: read(prescription, past.history, past.trainedAt),
++      asked: prescription,
++    };
 +  }
 +  return { target: read(prescription, input.history), asked: prescription };
 +}
@@ -3637,6 +4064,162 @@ index 0000000..304aa1e
 +    const line = back.changes.find((change) => change.entryId === bench(back.workout).id)?.detail;
 +    expect(line).toContain('top set 190');
 +    expect(line).toContain('back-offs 180');
++  });
++});
+diff --git a/src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts b/src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts
+new file mode 100644
+index 0000000..65a5826
+--- /dev/null
++++ b/src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts
+@@ -0,0 +1,150 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { gatherSignals, type CoachInput } from '../coach/coachConductor';
++import { emptyCompleted, emptyConstraints } from './recalibrate';
++import type { RecalibrationTrigger } from './types';
++import { interpretFatigue } from '../recovery/fatigue';
++import { allEntries, type GeneratedWorkout } from '../workout/types';
++import { generateWorkout } from '../workoutGenerator/generate';
++import { RECORD_NOW, record, type SetSpec } from '../../test/records';
++import { BENCH, bench, gym, plan, profileOf, run } from '../../test/backOffs';
++import { savedAs } from '../../test/backOffsSim';
++
++/**
++ * The sixth review of round N. The coach's deload of a stalled main lift (its route's "Deload to
++ * N lb this week") taken on a day the lift runs straight at its back-offs' load (a day it is a
++ * secondary lift, the full-body day of the three-day split) keeps the day's mark (`atBackOffs`):
++ * the `target-weight` trigger moves every set to the deload's load and leaves the mark, so the day
++ * is saved as one at the back-offs' load. The lift's next top set reads past it, as past its
++ * back-offs, and steps from the stalled top set before it: the deload taken leaves no trace on the
++ * lift. The same deload taken on its main day is saved as a straight session of its own, and the
++ * next top set rebuilds from it. The spec: straight sets where the load is eased; a day saved as
++ * one at the back-offs' load is a straight day at that load. Synthetic data only.
++ */
++
++const DAY = 86_400_000;
++const at = (days: number) => new Date(Date.parse(RECORD_NOW) + days * DAY).toISOString();
++
++/** An upper day of the bench press on top set plus back-offs, `daysAgo` before RECORD_NOW. */
++function upperDay(daysAgo: number, top: SetSpec, backOffs: SetSpec[]): WorkoutRecord {
++  const done = record(daysAgo, BENCH, [top, ...backOffs], [4, 6], 2, { templateId: 'upper' });
++  const entry = done.entries[0]!;
++  entry.backOffDrop = 0.05;
++  entry.role = 'primary-strength';
++  entry.sets.forEach((set, index) => {
++    set.tier = index === 0 ? 'top' : 'back-off';
++    set.targetRir = index === 0 ? 1 : 2;
++  });
++  return done;
++}
++
++// The stalled top set: 200 x 5 at 1 in reserve, then the back-offs as asked.
++const history = [
++  upperDay(
++    3,
++    [5, 200, 1],
++    [
++      [5, 190, 2],
++      [5, 190, 2],
++      [5, 190, 2],
++    ],
++  ),
++];
++
++function coachInput(workout: GeneratedWorkout): CoachInput {
++  return {
++    workout,
++    status: 'preview',
++    duration: 'default',
++    completed: emptyCompleted(),
++    constraints: emptyConstraints(),
++    profile: profileOf(),
++    history,
++    now: RECORD_NOW,
++    fatigue: interpretFatigue(history, RECORD_NOW, null),
++    strategy: [],
++    lastExportAt: RECORD_NOW,
++    workoutCount: 1,
++    location: gym,
++    stalls: [
++      {
++        exerciseId: BENCH,
++        kind: 'stalled-at-effort',
++        exposures: 4,
++        totalExposures: 4,
++        baselineE1rm: 233,
++        latestE1rm: 233,
++        effortMet: 4,
++        effortUnknown: 0,
++        firstDate: at(-24),
++        lastDate: at(-3),
++        why: ['No better estimated max in 4 exposures.'],
++      },
++    ],
++    routes: {
++      id: 'coach-routes',
++      routes: {
++        [BENCH]: {
++          exerciseId: BENCH,
++          step: 2,
++          startedAt: at(-10),
++          baselineE1rm: 233,
++          applied: [],
++          exhausted: false,
++        },
++      },
++    },
++  };
++}
++
++/**
++ * The deload card taken on a day's plan, the day lifted as asked, then the next upper day's first
++ * working set; null where the coach offers no deload that day.
++ */
++function afterDeload(templateId: string) {
++  const workout = plan(history, profileOf(), { templateId });
++  const [route] = gatherSignals(coachInput(workout)).filter(
++    (signal) => signal.source === 'stall: route',
++  );
++  const action = route?.action;
++  if (action?.kind !== 'recalibrate') return null;
++  const taken = run(action.trigger as RecalibrationTrigger, workout, { history }).workout;
++  const saved = savedAs(taken, RECORD_NOW, `deload-${templateId}`);
++  const next = generateWorkout({
++    profile: profileOf(),
++    location: gym,
++    history: [...history, saved],
++    now: at(2),
++    duration: 'default',
++    constraints: { templateId: 'upper' },
++  });
++  const top = allEntries(next.blocks)
++    .find((entry) => entry.exerciseId === BENCH)!
++    .sets.find((set) => set.kind === 'working')!;
++  return { label: action.label, taken: bench(taken), top };
++}
++
++describe('the coach’s deload taken on a day the main lift runs at its back-offs’ load', () => {
++  it('the full-body day is that day (the bench press secondary there)', () => {
++    const workout = plan(history, profileOf(), { templateId: 'full-body' });
++    expect(bench(workout).role).toBe('secondary-strength');
++    expect(bench(workout).atBackOffs).toBe(true);
++  });
++
++  it('is read by the next top set, as the same deload taken on the main day is', () => {
++    const onMain = afterDeload('upper')!;
++    // Taken on the main day, the next upper day rebuilds from the deload's load.
++    expect(onMain.label).toMatch(/^Deload to \d+ lb this week$/);
++    expect(onMain.top.targetWeight!).toBeLessThan(200);
++    const onFullBody = afterDeload('full-body');
++    // Offered on the full-body day (on 6f2d5ea: "Deload to 180 lb this week"), taking it is a
++    // deload the lift's next top set reads.
++    if (onFullBody === null) return;
++    const deloadLoad = onFullBody.taken.sets.find((set) => set.kind === 'working')!.targetWeight!;
++    expect(deloadLoad).toBeLessThan(190);
++    const lines = `main day: ${onMain.label} -> next ${onMain.top.targetWeight}; full-body day: ${onFullBody.label} -> next ${onFullBody.top.targetWeight} (${onFullBody.top.tier}, marked ${String(onFullBody.taken.atBackOffs)})`;
++    // On 6f2d5ea: the full-body day's deload is saved as a day at the back-offs' load, and the next
++    // top set steps from the stalled 200 x 5 to 205, as if no deload was taken.
++    expect(onFullBody.top.targetWeight!, lines).toBeLessThan(200);
 +  });
 +});
 diff --git a/src/engine/recalibration/backOffs.harder.test.ts b/src/engine/recalibration/backOffs.harder.test.ts
@@ -4803,10 +5386,10 @@ index cccfc63..353e7de 100644
    return changes.length > 0 ? changes.join(', ') : null;
  }
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index d2d16aa..e1e0e56 100644
+index d2d16aa..7cf1d22 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
-@@ -25,6 +25,18 @@ import {
+@@ -25,6 +25,19 @@ import {
  } from '../duration/duration';
  import type { PersonalPace } from '../duration/trainingTime';
  import { fitWeight, loadingFor, nudge, type Loading } from '../loading/loading';
@@ -4815,6 +5398,7 @@ index d2d16aa..e1e0e56 100644
 +  backOffLoad,
 +  backOffLoadAfter,
 +  backOffRir,
++  backOffsReplayed,
 +  backOffsSuit,
 +  carriesDayRir,
 +  effortRir,
@@ -4825,7 +5409,7 @@ index d2d16aa..e1e0e56 100644
  import { weightStep } from '../plateMath/plateMath';
  import {
    applyProgression,
-@@ -1253,18 +1265,154 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
+@@ -1253,18 +1266,154 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
    const working = entry.sets.filter((set) => set.kind === 'working');
    const done = (index: number) =>
      request.completed.sets.some((set) => set.entryId === entry.id && set.setIndex === index);
@@ -4982,7 +5566,7 @@ index d2d16aa..e1e0e56 100644
  /** A prescription carrying an effort shift, within the reserve its exercise allows. */
  function shifted(
    prescription: Prescription,
-@@ -1287,6 +1435,8 @@ function targetToday(
+@@ -1287,6 +1436,8 @@ function targetToday(
    exercise: CatalogExercise,
    role: TrainingRole,
    prescription: Prescription,
@@ -4991,7 +5575,7 @@ index d2d16aa..e1e0e56 100644
  ): NextTarget {
    const context = sessionContextFor(request, workout, entryId, exercise);
    return recommendNextTarget({
-@@ -1304,6 +1454,7 @@ function targetToday(
+@@ -1304,6 +1455,7 @@ function targetToday(
      maxes: request.maxes,
      session: { precedingSets: context.precedingSets },
      resets: request.resets ?? null,
@@ -4999,7 +5583,7 @@ index d2d16aa..e1e0e56 100644
    });
  }
  
-@@ -1795,14 +1946,23 @@ function refitEntry(
+@@ -1795,14 +1947,23 @@ function refitEntry(
      heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),
      exercise,
    );
@@ -5028,7 +5612,7 @@ index d2d16aa..e1e0e56 100644
    const floor = barWeightFor(exercise, request.profile.units);
    const load = { weight: fitted.weight, step: loading.step, floor };
    // A lift moved for busy equipment keeps the ramps it has, one added by hand included
-@@ -1814,11 +1974,11 @@ function refitEntry(
+@@ -1814,11 +1975,11 @@ function refitEntry(
    );
    const weighed = Math.min(warmupSets, rampRoom(load));
    entry.warmupSets = warmupSets;
@@ -5043,7 +5627,7 @@ index d2d16aa..e1e0e56 100644
          weighed,
          exercise,
        ),
-@@ -1829,6 +1989,20 @@ function refitEntry(
+@@ -1829,6 +1990,20 @@ function refitEntry(
        loading,
      ),
    ].map((set, index) => ({ ...set, index }));
@@ -5064,7 +5648,7 @@ index d2d16aa..e1e0e56 100644
    // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).
    entry.dropSet = entry.dropSet && exercise.dropSetSafe && !entryPushedToEffort(entry);
    if (entry.dropSet) entry.sets.push(dropSetAt(entry.sets.length));
-@@ -1891,8 +2065,21 @@ function targetedSets(
+@@ -1891,8 +2066,21 @@ function targetedSets(
    role: TrainingRole,
    working: number | null,
    restSeconds: number,
@@ -5088,7 +5672,7 @@ index d2d16aa..e1e0e56 100644
    // A deload week covering the session lightens it like every exercise the plan picks: one
    // more rep in reserve and lighter loads; its set count is the one it takes over. The effort
    // the entry it replaces carried comes with it (Maintenance 24).
-@@ -1902,25 +2089,46 @@ function targetedSets(
+@@ -1902,25 +2090,46 @@ function targetedSets(
      exercise,
    );
    const context = sessionContextFor(request, workout, entryId, exercise, options.through);
@@ -5151,7 +5735,7 @@ index d2d16aa..e1e0e56 100644
    // At least the ramps the lift already has, one added by hand included; those past the room
    // under the working weight come first and keep no weight, as a ramp added by hand comes.
    const load = { weight: fitted.weight, step: loading.step, floor };
-@@ -1930,14 +2138,11 @@ function targetedSets(
+@@ -1930,14 +2139,11 @@ function targetedSets(
    );
    const weighed = Math.min(warmupSets, rampRoom(load));
    const from = options.from ?? 0;
@@ -5169,7 +5753,7 @@ index d2d16aa..e1e0e56 100644
        fitted,
        loading.step,
        {},
-@@ -1945,7 +2150,22 @@ function targetedSets(
+@@ -1945,7 +2151,22 @@ function targetedSets(
        loading,
      ),
    ].map((set, index) => ({ ...set, index: index + from }));
@@ -5193,7 +5777,7 @@ index d2d16aa..e1e0e56 100644
  }
  
  /**
-@@ -2058,9 +2278,14 @@ function settleKept(
+@@ -2058,9 +2279,14 @@ function settleKept(
        {
          shift: rir - prescriptionToday(next, exercise, entry.role).rir,
          warmups: entry.sets.filter((set) => set.kind === 'warmup').length,
@@ -5208,7 +5792,7 @@ index d2d16aa..e1e0e56 100644
      entry.warmupSets = built.warmupSets;
      entry.progression = built.progression;
      syncRounds(block);
-@@ -2737,11 +2962,15 @@ function applySubstitution(
+@@ -2737,11 +2963,15 @@ function applySubstitution(
      entry.role,
      planWorking.length > 0 ? Math.max(1, Math.min(planWorking.length, room)) : null,
      entry.restSeconds,
@@ -5225,7 +5809,7 @@ index d2d16aa..e1e0e56 100644
    withoutHandTargets(entry);
    if (entry.dropSet) {
      if (exercise.dropSetSafe && !entryPushedToEffort(entry)) {
-@@ -2841,6 +3070,9 @@ function standIn(
+@@ -2841,6 +3071,9 @@ function standIn(
    stand.sets = built.sets;
    stand.warmupSets = built.warmupSets;
    stand.progression = built.progression;
@@ -5235,7 +5819,7 @@ index d2d16aa..e1e0e56 100644
    if (dropOwed && exercise.dropSetSafe && !entryPushedToEffort(stand)) {
      stand.sets.push(dropSetAt(nextSetIndex(stand)));
      stand.dropSet = true;
-@@ -2907,16 +3139,26 @@ function swapBack(
+@@ -2907,16 +3140,26 @@ function swapBack(
        from: nextSetIndex(stopped),
        through: true,
        shift: heldShift(request, workout, exercise, stopped.role, shift),
@@ -5264,7 +5848,7 @@ index d2d16aa..e1e0e56 100644
    stopped.locked = lock || stopped.locked;
    delete stopped.stopped;
    const { block } = findEntry(workout, stopped.id);
-@@ -3621,11 +3863,59 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3621,11 +3864,70 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            set.kind === 'working' && set.index > trigger.setIndex && !isDone(entry.id, set.index),
        );
        const plan = trigger.plan;
@@ -5292,7 +5876,18 @@ index d2d16aa..e1e0e56 100644
 +            options,
 +            plan ?? { kind: 'none', reason: '' },
 +          ) ?? fromTop;
-+        for (const set of backOffs) set.targetWeight = load;
++        // Each back-off still logged moves the ones after it as its log did (the sixth review: a
++        // correction of the top set took the step a logged back-off gave them away).
++        const logs = new Map((trigger.backOffLogs ?? []).map((log) => [log.setIndex, log]));
++        entry.sets = backOffsReplayed(
++          entry.sets,
++          load,
++          (set) =>
++            isDone(entry.id, set.index)
++              ? (logs.get(set.index) ?? { weight: null, plan: { kind: 'none', reason: '' } })
++              : null,
++          { ...options, top: lifted },
++        );
 +        const units = request.profile.units;
 +        // What the follow did, in its own words (the first review of round N: the step's reason
 +        // said "come down" while the back-offs went up after a heavier top set).
@@ -5324,7 +5919,7 @@ index d2d16aa..e1e0e56 100644
          for (const set of remaining) {
            // The weight actually lifted is the ground truth; the plan moves from it, one real
            // step at a time where the place has a fixed set of weights.
-@@ -3635,7 +3925,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3635,7 +3937,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                loading.available !== null
                  ? nudge(current, plan.delta > 0 ? 1 : -1, loading.available, stepSize)
                  : Math.round((current + plan.delta) / stepSize) * stepSize;
@@ -5336,7 +5931,7 @@ index d2d16aa..e1e0e56 100644
              // Only a set that really moves changes: at the heaviest weight "up" stays where it is.
              // A pushed set moved up takes the reps its push gives there; moved down, it keeps
              // them and is easier (Maintenance 23).
-@@ -3808,8 +4101,20 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3808,8 +4113,20 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          // The lift's target today from the maxes a request holds.
          const fittedFrom = (from: RecalibrationRequest) => {
            const plain = prescriptionToday(from, exercise, entry.role);
@@ -5359,7 +5954,7 @@ index d2d16aa..e1e0e56 100644
            const plainTarget = targetFor(plain);
            // The effort the lift carries ("Make it harder" or "easier", a check-in) stays
            // (Maintenance 24), and the reserve the day's catch-up asks of it (the third review of
-@@ -3839,9 +4144,58 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3839,9 +4156,58 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
              exercise,
              entry.role,
            );
@@ -5420,7 +6015,7 @@ index d2d16aa..e1e0e56 100644
          const working =
            entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
          const warmupSets = rampSetsFor(
-@@ -3868,6 +4222,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3868,6 +4234,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            barWeightFor(exercise, request.profile.units),
            loading,
          );
@@ -5440,7 +6035,7 @@ index d2d16aa..e1e0e56 100644
          if (byHand) restoreHandReps(entry, handReps, request, target, loading, exercise);
          // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).
          entry.dropSet = entry.dropSet && exercise.dropSetSafe && !entryPushedToEffort(entry);
-@@ -3959,15 +4326,44 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3959,15 +4338,44 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const { entry } = findEntry(workout, trigger.entryId);
        const { isDone } = classify(request);
        const name = requireExercise(entry.exerciseId).name;
@@ -5490,7 +6085,18 @@ index d2d16aa..e1e0e56 100644
            if (trigger.weight === null) delete set.asked;
            else if (up) repush(set, entry.role, entry.manual?.reps === true);
          }
-@@ -4290,9 +4686,14 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3993,6 +4401,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+         });
+       }
+       entry.manual = { ...entry.manual, weight: true };
++      // A load set by hand, or the coach's deload, is the lifter's own: no day at the back-offs'
++      // load for the next top set to read past (the sixth review of round N: a deload taken there
++      // was passed over, and the top set stepped up as if none was taken).
++      delete entry.atBackOffs;
+       return {
+         ...base,
+         workout,
+@@ -4290,9 +4702,14 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                }
              : {}),
          };
@@ -5507,7 +6113,7 @@ index d2d16aa..e1e0e56 100644
        }
        if (trigger.workingDelta < 0) {
          const removable = () =>
-@@ -4410,6 +4811,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4410,6 +4827,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            targetRir: last?.targetRir ?? 2,
            targetWeight: last?.targetWeight ?? null,
            restSeconds: entry.restSeconds,
@@ -5517,21 +6123,28 @@ index d2d16aa..e1e0e56 100644
              ? {
                  asked: {
 diff --git a/src/engine/recalibration/types.ts b/src/engine/recalibration/types.ts
-index fd554b3..bbd5389 100644
+index fd554b3..0ae975f 100644
 --- a/src/engine/recalibration/types.ts
 +++ b/src/engine/recalibration/types.ts
-@@ -53,7 +53,13 @@ export type RecalibrationTrigger =
+@@ -52,8 +52,20 @@ export type RecalibrationTrigger =
+       actualWeight?: number | null;
        /** In-session autoregulation decision; without it only reps far from target move the rep targets. */
        plan?: AutoregulationPlan;
-     }
--  | { type: 'target-weight'; entryId: string; weight: number | null }
++      /**
++       * A top set corrected after back-offs were logged (Maintenance 32, the sixth review of round
++       * N): each back-off still logged, the weight it was lifted at and the step its log gave the
++       * ones after it, which the correction keeps.
++       */
++      backOffLogs?: { setIndex: number; weight: number | null; plan: AutoregulationPlan }[];
++    }
 +  | {
 +      type: 'target-weight';
 +      entryId: string;
 +      weight: number | null;
 +      /** A deload the coach offered: a main lift runs it on straight sets (Maintenance 32). */
 +      deload?: true;
-+    }
+     }
+-  | { type: 'target-weight'; entryId: string; weight: number | null }
    /** A max was entered for a lift: its unlogged sets take their first target from it. */
    | { type: 'max'; exerciseId: string }
    /** The coach's coverage action: a few sets of an accessory for a muscle with nothing today. */
@@ -6299,6 +6912,74 @@ index fff9fde..f8a93c1 100644
    progression: EntryProgressionSchema.optional().catch(undefined),
    manual: z
      .looseObject({
+diff --git a/src/engine/workoutGenerator/backOffs.breakAfterSkippedTop.test.ts b/src/engine/workoutGenerator/backOffs.breakAfterSkippedTop.test.ts
+new file mode 100644
+index 0000000..58badc5
+--- /dev/null
++++ b/src/engine/workoutGenerator/backOffs.breakAfterSkippedTop.test.ts
+@@ -0,0 +1,62 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { record, type SetSpec } from '../../test/records';
++import { bench, plan, profileOf } from '../../test/backOffs';
++
++/**
++ * The sixth review of round N. The progression reads a session's top set alone, so a session whose
++ * top set was skipped and whose back-offs were done has no point in the lift's history; a break is
++ * measured from the newest point (`recommendBaseTarget`'s `daysSince`), and `topSetRead` gives the
++ * lift's newest session (`trainedAt`) only where it passes over a straight day at the back-offs'
++ * load. So three weeks after the last top set, the lift trained nine days before on its back-offs
++ * alone reads as back from a break: "23 days since the last session", straight sets at 90% of the
++ * estimated max. The spec: a break is measured from the lift's newest session; straight sets only
++ * where the load is a guess or eased. Synthetic data only.
++ */
++
++const BENCH = 'barbell-bench-press';
++
++function structured(daysAgo: number, top: SetSpec, backOffs: SetSpec[]): WorkoutRecord {
++  const done = record(daysAgo, BENCH, [top, ...backOffs], [4, 6], 2);
++  const entry = done.entries[0]!;
++  entry.backOffDrop = 0.05;
++  entry.role = 'primary-strength';
++  entry.sets.forEach((set, index) => {
++    set.tier = index === 0 ? 'top' : 'back-off';
++    set.targetRir = index === 0 ? 1 : 2;
++  });
++  return done;
++}
++
++describe('a main day three weeks after its last top set, the lift trained on its back-offs since', () => {
++  it('is no return from a break', () => {
++    const lastTop = structured(
++      23,
++      [5, 200, 1],
++      [
++        [5, 190, 2],
++        [5, 190, 2],
++        [5, 190, 2],
++      ],
++    );
++    // Nine days ago the top set was skipped (logged as a skip, as the app saves one) and the
++    // back-offs done as asked.
++    const backOffsOnly = structured(
++      9,
++      [0, null, null],
++      [
++        [5, 195, 2],
++        [5, 195, 2],
++        [5, 195, 2],
++      ],
++    );
++    backOffsOnly.entries[0]!.sets[0]!.completed = false;
++    const entry = bench(plan([lastTop, backOffsOnly], profileOf(), { templateId: 'push-arms' }));
++    const evidence = (entry.progression?.evidence ?? []).join(' / ');
++    expect(entry.role).toBe('primary-strength');
++    // On 6f2d5ea: "23 days since the last session: back at 90% of the estimated max ...", four
++    // straight sets.
++    expect(evidence).not.toMatch(/23 days since the last session/);
++    expect(entry.progression?.mode, evidence).not.toBe('return');
++  });
++});
 diff --git a/src/engine/workoutGenerator/backOffs.cappedReps.test.ts b/src/engine/workoutGenerator/backOffs.cappedReps.test.ts
 new file mode 100644
 index 0000000..3bf4eed
@@ -7728,6 +8409,110 @@ index 0000000..c508fa2
 +    // 200 less 5%: 190.
 +    expect(shape(bench(result.workout)).map((set) => set[0])).toEqual([190, 190, 190, 190]);
 +    expect(result.summary.headline).toContain('back-offs at 190 lb');
++  });
++});
+diff --git a/src/engine/workoutGenerator/backOffs.progressionRuns.test.ts b/src/engine/workoutGenerator/backOffs.progressionRuns.test.ts
+new file mode 100644
+index 0000000..2f4a931
+--- /dev/null
++++ b/src/engine/workoutGenerator/backOffs.progressionRuns.test.ts
+@@ -0,0 +1,98 @@
++import { describe, expect, it } from 'vitest';
++import { record } from '../../test/records';
++import { profileOf } from '../../test/backOffs';
++import { asAsked, simulate, type Logged } from '../../test/backOffsSim';
++
++/**
++ * The sixth review of round N. The progression's own runs over a lift's sessions read the straight
++ * days at the back-offs' load in the middle of the history as the lift's own sessions. The top set
++ * reads past such days only where they are the newest (`pastBackOffDays`); the runs that move its
++ * load (`consecutiveUnder` for the micro-deload and the reset, `consecutiveClean` for the advanced
++ * policy) count the day before it too. On the default four-day split the row is the main lift on
++ * the pull day and a secondary one on the upper day, so every run of top sets has such a day inside
++ * it. The spec: what reads a lift's sessions over weeks reads its top sets alone, past its straight
++ * days at the back-offs' load; a top set that misses keeps the existing maintain and deload rules
++ * (the research). Synthetic data only.
++ */
++
++const ROW = 'barbell-row';
++const START = '2026-09-07T12:00:00.000Z';
++const seed = {
++  ...record(0, ROW, [
++    [5, 155, 2],
++    [5, 155, 2],
++    [5, 155, 2],
++  ]),
++  id: 'seed',
++  startedAt: '2026-09-04T12:00:00.000Z',
++  completedAt: '2026-09-04T12:00:00.000Z',
++};
++// The default four-day split (push, pull, lower, upper), Monday, Tuesday, Thursday and Friday.
++const DAYS = [0, 1, 3, 4, 7, 8, 10, 11, 14, 15, 17, 18, 21, 22, 24, 25];
++const lines = (seen: ReturnType<typeof simulate>['seen']) =>
++  seen
++    .map(
++      (one) =>
++        `day ${one.day} ${one.template}${one.atBackOffs ? ' (marked)' : ''}: ${one.sets[0]} / ${one.evidence.join(' / ')}`,
++    )
++    .join('\n');
++
++describe('the row’s top set missing its floor every pull day, the upper day lifted as asked', () => {
++  it('takes the micro-deload after two top sets under the floor', () => {
++    // The top set one rep under its floor at no reserve; every other set as asked.
++    const topMissed: Logged = (entry, set) =>
++      entry.exerciseId === ROW && set.tier === 'top'
++        ? { reps: set.targetReps[0] - 1, rir: 0, weight: set.targetWeight }
++        : asAsked(entry, set);
++    const { seen } = simulate({
++      profile: profileOf('hybrid'),
++      history: [seed],
++      start: START,
++      days: DAYS,
++      exerciseId: ROW,
++      how: topMissed,
++    });
++    const tops = seen.filter((one) => one.sets[0]?.startsWith('top'));
++    expect(tops.length).toBeGreaterThanOrEqual(4);
++    // The second top set missed, the deload rule's two in a row are in; whatever comes after them
++    // reads them. On 6f2d5ea: "Missed the floor last time; one session is not a trend, so repeat
++    // the load" on every day after, the row's top set at 165 x 4-6 four pull days running, each
++    // missed: the upper day's straight sets between them, cleared, end each run of misses at one.
++    const after = seen.filter((one) => one.day > tops[1]!.day);
++    expect(
++      after.some((one) => one.evidence.join(' ').includes('Missed the floor twice in a row')),
++      lines(seen),
++    ).toBe(true);
++  });
++
++  it('an advanced lifter: one clean top set after a grind holds the load once more', () => {
++    // The first top set at the floor's reps with no reserve: not clean for the advanced policy
++    // (no tolerance). Everything else as asked.
++    let first = true;
++    const grindOnce: Logged = (entry, set) => {
++      if (entry.exerciseId === ROW && set.tier === 'top' && first) {
++        first = false;
++        return { reps: set.targetReps[0] + 1, rir: 0, weight: set.targetWeight };
++      }
++      return asAsked(entry, set);
++    };
++    const { seen } = simulate({
++      profile: profileOf('hybrid', { experience: 'advanced' }),
++      history: [seed],
++      start: START,
++      days: DAYS,
++      exerciseId: ROW,
++      how: grindOnce,
++    });
++    const tops = seen.filter((one) => one.sets[0]?.startsWith('top'));
++    expect(tops.length).toBeGreaterThanOrEqual(3);
++    const load = (one: (typeof seen)[number]) => Number(one.sets[0]!.split(' ')[1]!.split('x')[0]);
++    // The grind holds the load: the second top set at the first's.
++    expect(load(tops[1]!), lines(seen)).toBe(load(tops[0]!));
++    // The second top set lifted clean is one clean session: "Advanced policy: load moves after 2
++    // clean sessions in a row; 1 banked, hold the load once more." On 6f2d5ea: "2 clean sessions
++    // in a row ... add 5 lb", the upper day's straight sets at the back-offs' load between the two
++    // top sets counted as a clean session of the top set's.
++    expect(load(tops[2]!), lines(seen)).toBe(load(tops[1]!));
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/backOffs.returnPastMarked.test.ts b/src/engine/workoutGenerator/backOffs.returnPastMarked.test.ts
@@ -10270,10 +11055,10 @@ index d2f11e5..efcd4b0 100644
  is written from its `table_mNN.txt`: edit the `.txt`, then run `python3 table_mNN.py`. Never write a
 diff --git a/tools/reverts/mutate-m32.py b/tools/reverts/mutate-m32.py
 new file mode 100644
-index 0000000..8ab0902
+index 0000000..21f1221
 --- /dev/null
 +++ b/tools/reverts/mutate-m32.py
-@@ -0,0 +1,682 @@
+@@ -0,0 +1,720 @@
 +"""Maintenance 32 mutation checks: revert each round N rule alone, run its tests, expect a failure,
 +restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -10383,6 +11168,13 @@ index 0000000..8ab0902
 +T_UNDULATING = "src/engine/workoutGenerator/backOffs.undulatingAfterTop.test.ts"
 +T_ROUNDING = "src/engine/workoutGenerator/backOffs.rounding.test.ts"
 +T_TRENDS = "src/engine/strategy/backOffs.trends.test.ts"
++# The sixth review's.
++T_PROGRESSION_RUNS = "src/engine/workoutGenerator/backOffs.progressionRuns.test.ts"
++T_DELOAD_STRAIGHT = "src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts"
++T_TOP_CORRECTED = "src/core/state/backOffs.topCorrectedAfter.store.test.ts"
++T_COMPLETION_STEP = "src/core/state/backOffs.completionStep.test.ts"
++T_BREAK_SKIPPED = "src/engine/workoutGenerator/backOffs.breakAfterSkippedTop.test.ts"
++T_COACH_STEP = "src/engine/coach/coachConductor.backOffsStep.test.ts"
 +
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
@@ -10786,7 +11578,7 @@ index 0000000..8ab0902
 +     "    if (!own.every((entry) => entry.atBackOffs === true)) break;",
 +     "    if (!own.every((entry) => entry.atBackOffs === true)) continue;", [T_AT_BACKOFFS], None),
 +    ("N148 ... through two such days running at most, on a day the lift is main too", BACKOFFS,
-+     "    if (passed.size === BACK_OFF.STRAIGHT_RUN) return history;\n", "",
++     "    if (run > BACK_OFF.STRAIGHT_RUN) return history;\n", "",
 +     [T_AT_BACKOFFS, T_HELD], None),
 +    ("N149 ... a straight day after such a day reads the top set too", BACKOFFS,
 +     "  return liftSessions(exerciseId, history).some((entry) =>",
@@ -10822,8 +11614,8 @@ index 0000000..8ab0902
 +     "      ...top.evidence.filter((line) => !placeLine(line)),", "      ...top.evidence,",
 +     [T_CAPPED_REPS], None),
 +    ("N161 a back-off's log taken back: every back-off still to come follows", STORE,
-+     "    const sets = backOffsReplayed(entry.sets, weight, logOf, {",
-+     "    const sets = backOffsReplayed(entry.sets.filter((each) => each.index === set.index), weight, logOf, {",
++     "    const sets = backOffsReplayed(entry.sets, weight, this.backOffLogOf(session, entry, isDone), {",
++     "    const sets = backOffsReplayed(entry.sets.filter((each) => each.index === set.index), weight, this.backOffLogOf(session, entry, isDone), {",
 +     [T_UNDO_FOLLOWERS], None),
 +    ("N162 ... each still logged moving the ones after it", BACKOFFS,
 +     "    if (plan.kind === 'weight') {\n      const from = log.weight ?? current;",
@@ -10889,6 +11681,37 @@ index 0000000..8ab0902
 +     " || (drop > 0 && nearest >= top - EPSILON)", "", [T_ROUNDING], None),
 +    ("N183 ... never over the top set as lifted", BACKOFFS, "nearest > top + EPSILON || ", "",
 +     [T_ROUNDING], None),
++
++    # The sixth review's.
++    ("N184 the top set reads past such days wherever they fall", BACKOFFS,
++     "  return withoutBackOffDays(exerciseId, history);\n}",
++     "  return run === 0 ? history : withoutBackOffDays(exerciseId, history);\n}",
++     [T_PROGRESSION_RUNS], None),
++    ("N185 ... and so does the lift's own straight target", BACKOFFS,
++     "      target: read(prescription, past.history, past.trainedAt),",
++     "      target: read(prescription, input.history),", [T_PROGRESSION_RUNS], None),
++    ("N186 a break from the lift's newest session, its top set skipped too", BACKOFFS,
++     "  const read = pastBackOffDays(exerciseId, history);\n",
++     "  const read = pastBackOffDays(exerciseId, history);\n  if (read === history) return { history };\n",
++     [T_BREAK_SKIPPED], None),
++    ("N187 a load set by hand, or the coach's deload, clears the day's mark", ENGINE,
++     "      delete entry.atBackOffs;\n      return {\n        ...base,\n        workout,\n        headline:\n          trigger.weight === null",
++     "      return {\n        ...base,\n        workout,\n        headline:\n          trigger.weight === null",
++     [T_DELOAD_STRAIGHT], None),
++    ("N188 a top set corrected keeps the steps logged back-offs gave", ENGINE,
++     "        const logs = new Map((trigger.backOffLogs ?? []).map((log) => [log.setIndex, log]));",
++     "        const logs = new Map();", [T_TOP_CORRECTED], None),
++    ("N189 ... the store passing them", STORE,
++     "        ...(backOffLogs.length > 0 ? { backOffLogs } : {}),\n", "", [T_TOP_CORRECTED], None),
++    ("N190 ... and a delete of the top set's log keeps them too", STORE,
++     "          this.backOffLogOf(session, entry, isDone),\n          { ...load, top: top.targetWeight },",
++     "          () => null,\n          { ...load, top: top.targetWeight },", [T_TOP_CORRECTED], None),
++    ("N191 the completion's Next time on the lift's own steps", BUILDER,
++     "        step: weightStep(exercise, profile.units),", "        step: 1,", [T_COMPLETION_STEP],
++     None),
++    ("N192 a straight day steps from the back-offs' load", BACKOFFS,
++     "    ...(typeof top.from === 'number' ? { from: backOffLoad(top.from, drop, input.load) } : {}),\n",
++     "", [T_COACH_STEP], None),
 +]
 +
 +
@@ -10979,10 +11802,10 @@ index 0000000..1b7cbc9
 +print("written")
 diff --git a/tools/reverts/table_m32.txt b/tools/reverts/table_m32.txt
 new file mode 100644
-index 0000000..8c6a7d1
+index 0000000..0600ea3
 --- /dev/null
 +++ b/tools/reverts/table_m32.txt
-@@ -0,0 +1,506 @@
+@@ -0,0 +1,537 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # Where it runs.
@@ -11385,7 +12208,7 @@ index 0000000..8c6a7d1
 +     "    if (!own.every((entry) => entry.atBackOffs === true)) break;",
 +     "    if (!own.every((entry) => entry.atBackOffs === true)) continue;", [T_AT_BACKOFFS], None),
 +    ("N148 ... through two such days running at most, on a day the lift is main too", BACKOFFS,
-+     "    if (passed.size === BACK_OFF.STRAIGHT_RUN) return history;\n", "",
++     "    if (run > BACK_OFF.STRAIGHT_RUN) return history;\n", "",
 +     [T_AT_BACKOFFS, T_HELD], None),
 +    ("N149 ... a straight day after such a day reads the top set too", BACKOFFS,
 +     "  return liftSessions(exerciseId, history).some((entry) =>",
@@ -11421,8 +12244,8 @@ index 0000000..8c6a7d1
 +     "      ...top.evidence.filter((line) => !placeLine(line)),", "      ...top.evidence,",
 +     [T_CAPPED_REPS], None),
 +    ("N161 a back-off's log taken back: every back-off still to come follows", STORE,
-+     "    const sets = backOffsReplayed(entry.sets, weight, logOf, {",
-+     "    const sets = backOffsReplayed(entry.sets.filter((each) => each.index === set.index), weight, logOf, {",
++     "    const sets = backOffsReplayed(entry.sets, weight, this.backOffLogOf(session, entry, isDone), {",
++     "    const sets = backOffsReplayed(entry.sets.filter((each) => each.index === set.index), weight, this.backOffLogOf(session, entry, isDone), {",
 +     [T_UNDO_FOLLOWERS], None),
 +    ("N162 ... each still logged moving the ones after it", BACKOFFS,
 +     "    if (plan.kind === 'weight') {\n      const from = log.weight ?? current;",
@@ -11488,4 +12311,35 @@ index 0000000..8c6a7d1
 +     " || (drop > 0 && nearest >= top - EPSILON)", "", [T_ROUNDING], None),
 +    ("N183 ... never over the top set as lifted", BACKOFFS, "nearest > top + EPSILON || ", "",
 +     [T_ROUNDING], None),
++
++    # The sixth review's.
++    ("N184 the top set reads past such days wherever they fall", BACKOFFS,
++     "  return withoutBackOffDays(exerciseId, history);\n}",
++     "  return run === 0 ? history : withoutBackOffDays(exerciseId, history);\n}",
++     [T_PROGRESSION_RUNS], None),
++    ("N185 ... and so does the lift's own straight target", BACKOFFS,
++     "      target: read(prescription, past.history, past.trainedAt),",
++     "      target: read(prescription, input.history),", [T_PROGRESSION_RUNS], None),
++    ("N186 a break from the lift's newest session, its top set skipped too", BACKOFFS,
++     "  const read = pastBackOffDays(exerciseId, history);\n",
++     "  const read = pastBackOffDays(exerciseId, history);\n  if (read === history) return { history };\n",
++     [T_BREAK_SKIPPED], None),
++    ("N187 a load set by hand, or the coach's deload, clears the day's mark", ENGINE,
++     "      delete entry.atBackOffs;\n      return {\n        ...base,\n        workout,\n        headline:\n          trigger.weight === null",
++     "      return {\n        ...base,\n        workout,\n        headline:\n          trigger.weight === null",
++     [T_DELOAD_STRAIGHT], None),
++    ("N188 a top set corrected keeps the steps logged back-offs gave", ENGINE,
++     "        const logs = new Map((trigger.backOffLogs ?? []).map((log) => [log.setIndex, log]));",
++     "        const logs = new Map();", [T_TOP_CORRECTED], None),
++    ("N189 ... the store passing them", STORE,
++     "        ...(backOffLogs.length > 0 ? { backOffLogs } : {}),\n", "", [T_TOP_CORRECTED], None),
++    ("N190 ... and a delete of the top set's log keeps them too", STORE,
++     "          this.backOffLogOf(session, entry, isDone),\n          { ...load, top: top.targetWeight },",
++     "          () => null,\n          { ...load, top: top.targetWeight },", [T_TOP_CORRECTED], None),
++    ("N191 the completion's Next time on the lift's own steps", BUILDER,
++     "        step: weightStep(exercise, profile.units),", "        step: 1,", [T_COMPLETION_STEP],
++     None),
++    ("N192 a straight day steps from the back-offs' load", BACKOFFS,
++     "    ...(typeof top.from === 'number' ? { from: backOffLoad(top.from, drop, input.load) } : {}),\n",
++     "", [T_COACH_STEP], None),
 +]
