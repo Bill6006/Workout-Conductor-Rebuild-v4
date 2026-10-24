@@ -5,7 +5,7 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
-### Checkpoint, 2026-10-24 21:30 UTC (supersedes the states below)
+### Checkpoint, 2026-10-24 20:15 UTC (supersedes the states below)
 
 - **Round M**: local `0fe4cb9` (unchanged; diff: `docs/handoff/round-m-wip/round-m.diff`). Its
   twentieth review is running on `0fe4cb9` (tests to come in
