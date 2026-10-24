@@ -5,6 +5,49 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 14:20 UTC (supersedes the states below)
+
+Saved before a usage limit. Each round's work in progress is one diff in `docs/handoff/`, and in
+its local worktree when the container survives (`/home/user/wc4-m`, `wc4-n`, `wc4-o`).
+
+- **Round M** (`docs/handoff/round-m-wip/round-m.diff`, `git apply` on `2595631`; local
+  `485f7dd`). The seventeenth review found seven (one MEDIUM, six LOW), all fixed with tests: the
+  way back from the full session finds an emptied catch-up so (`constraints.emptied`, the offer's
+  key); a place stop picks up past a stand-in stopped with nothing in; the one-set rule on any day
+  off the plan in the generator (`offPlan`); a lift leaving by the lifter's hand takes the lift it
+  stood in for with it (`keepSwappedAway`); a left-out slot closes off the plan (`CatchUpSlot.closed`,
+  and `scopeFor` keeps the slots while one is closed); every rebuild holds kept lifts to the offer's
+  dose (`holdToOffer`); the sheet's one-set reason with nothing ranked; a stand-in named past the
+  plan's names before the change. Full unit suite passed (2866, 5 skipped) before the last tests.
+  The M31 table has 248 entries, every anchor found; its run caught all but four. **Next:** H75 needs
+  a test of the way back after the offer changed (laid out afresh, not emptied); H76 one of the way
+  back at a place with no lift for the offer (a bare home plans the split's day, which stays); H85
+  one of a comfort left-out on a day of the plan (home with dumbbells: the lift swapped away does not
+  come back at the next rebuild); H18 is now covered twice (`holdToOffer` and `settleKept`): make it
+  mutate both `heldIn` lines (a list of pairs). Re-run those entries, then the eighteenth review,
+  then the full M31 run, the cross-round tables (M30, M29, M28 `--utc`, M27), the browser suite,
+  verify, ship. The report has the seventeenth pass and a placeholder `EIGHTEENTH_PASS`.
+- **Round N** (`docs/handoff/round-n-wip/round-n.diff`, on Round M's previous `532aba6`; local
+  `3a96226`). The eighth review found six (1 HIGH, 3 MEDIUM, 2 LOW); their failing tests are in
+  `src/review-m32h/`. Begun: `pastBackOffDays` leaves the structure only past two main days run
+  straight, or three sessions with no main day (`MAIN_ROLE`). The HIGH test still fails because the
+  old fatigue score's estimated-max drift reads a lift planned lighter later in a session (the
+  shoulder press after three pressing lifts) as a fall, so Fridays read high. The owner's word
+  (2026-10-24): fix that in Maintenance 33's shared fatigue model, not with a legacy patch. **Next:**
+  finish the eight findings (3: a corrected back-off keeps a weight set by hand, and an undo too; 4:
+  a max with reps set by hand reads past the marked days; 5: a refit reads fatigue from the full
+  log; 6: back-off replays read the log as corrected), rebase onto Round M's final, review again.
+- **Maintenance 33** (`docs/handoff/round-o-wip/round-o.diff`, on Round N's `abb5566`; local
+  `371d61e`). Done since the last checkpoint: the schedule card reads the moved week with the same
+  "too soon" check and says the days (`tooSoonAhead`, cached per hour); the recovery index read once
+  per log (learned windows and rested baselines kept with it: about 1.3 s to 40 ms on 400 sessions);
+  the hard-start reading honours the learned reset. The approved proposal's "reorder the split across
+  those days" is held for the owner's final review: it changes the split rotation the same proposal
+  keeps unchanged, and no reordering avoids an overlap on the default four-day split. **Next:** the
+  fatigue drift fix above (a set's estimated max read against what its target asked, so a load
+  planned lighter is no fall), the learned page's windows, the e2e coach test, the cross-round
+  tables, docs, the M33 table, reviews.
+
 ### Resumed on the owner's word, 2026-10-23 (supersedes the states below)
 
 - **The app icon** (the owner's request of 2026-10-23) is fixed and live: `6ff6f34`, Deploy Pages
