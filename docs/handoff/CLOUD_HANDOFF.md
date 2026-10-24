@@ -14,29 +14,29 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Twelve review passes found
-  twenty, twelve, seven, three, two, three, four, three, three, two, four and seven issues, each
-  shown by a failing test and fixed (one LOW kept as a known limit, with the reason). The twelfth's:
-  a lift begun with nothing to come in stops at its sets; what comes in for a lift works a muscle
-  it went in for, within what the day's muscles have left, at the catch-up's reserve; names are
-  settled once every lift is picked, so a lift planned again keeps its name. A thirteenth pass is
-  checking them. The M31 table has 174 entries, every anchor found, the entries changed since its
-  last full run caught; the full unit suite passed (2740, 5 skipped by design). The report is
-  written up to the twelfth pass. Next: the thirteenth pass, the full M31 run and the cross-round
-  tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite again, verify, ship.
-- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest in its own
-  worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round M's diff
-  applied to `2595631`). Three review passes found twelve, ten and eleven issues, each shown by a
-  failing test and fixed, and the revert runs' new tests two more. The third's: a lift that is the
-  main lift one day and a secondary one another, and a top set the place cannot load as asked, run
-  straight at the back-offs' load, from the session the target reads; a skip is no top set lifted; a
-  back-off's log taken back follows its top set; the back-offs are never over the top set nor under
-  the bar; the lift to push's next target; a pick-up's lines; the feedback's words; the set list's
-  tiers. Its M32 table has 142 entries, every anchor found, the third pass's entries caught; the
-  full unit suite passed (2854, 5 skipped) on the third pass's fixes. Its report is written up to
-  the third pass. A fourth pass is checking it. Then its review passes until clean, verify, ship,
-  once Round M is live. The lift to push keeps item 44's straight sets by default: a question for
-  the owner's final review.
+  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Thirteen review passes
+  found twenty, twelve, seven, three, two, three, four, three, three, two, four, seven and eight
+  issues, each shown by a failing test and fixed (one LOW kept as a known limit, with the reason).
+  The thirteenth's: what comes in for a lift stays through a rebuild; the lifter's swap keeps to the
+  day's muscles, and the swap sheet offers none it would refuse; no stand-in for one set owed; an
+  end time keeps every lift at two sets; a catch-up a change empties has nothing more for today. A
+  fourteenth pass is checking them. The M31 table has 191 entries, every anchor found, the entries
+  changed since its last full run caught; M27's six anchors moved by Round M are re-anchored and
+  caught; the full unit suite passed (2759, 5 skipped). The report is written up to the thirteenth
+  pass. Next: the fourteenth pass, the full M31 run and the cross-round tables (M30, M29, M28
+  `--utc`, M27) on the final code, the browser suite again, verify, ship.
+- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`d361edf`) in
+  its own worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round
+  M's diff applied to `2595631`). Four review passes found twelve, ten, eleven and six issues, each
+  shown by a failing test and fixed, and the revert runs' new tests two more. The fourth's: a lift
+  main one day and secondary another never progressed, fixed by saving a straight day at the
+  back-offs' load as one (a new optional stored mark, `atBackOffs`) so the top set reads past it; a
+  max entered reads the target as every plan does; straight sets after a capped top set take its
+  asked reps; a back-off's log taken back replays the ones still logged. Its M32 table has 162
+  entries, every anchor found, the fourth pass's entries caught; the full unit suite passed (2895, 5
+  skipped) on the rebased code. Its report is written up to the fourth pass. A fifth pass is
+  checking it. Then its review passes until clean, verify, ship, once Round M is live. The lift to
+  push keeps item 44's straight sets by default: a question for the owner's final review.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 
