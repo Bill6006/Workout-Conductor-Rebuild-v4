@@ -14,32 +14,34 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Fifteen review passes
-  found twenty, twelve, seven, three, two, three, four, three, three, two, four, seven, eight, eight
-  and nine issues, each shown by a failing test and fixed (one LOW kept as a known limit, with the
-  reason). The fifteenth's: a swap back keeps to what its muscles lack; the way back to an emptied
-  catch-up is the catch-up again; a catch-up emptied by a pain report stays so; a plan built whole
-  for a changed offer reads it afresh; the stop reasons say one set left only where it is; in a
-  catch-up, what comes in for comfort or pain is the lifter's pick ("Your pick") and stays where the
-  lift it followed fits again; a stand-in never takes the name of a lift left out. A sixteenth pass
-  is checking them. The M31 table has 213 entries, every anchor found, the entries changed since
-  its last full run caught; the full unit suite passed (2825, 5 skipped) before the last test
-  additions. The report is written up to the fifteenth pass. Next: the sixteenth pass, the full M31
-  run and the cross-round tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite
-  again, verify, ship.
-- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`89dfb39`) in
+  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Sixteen review passes
+  found twenty, twelve, seven, three, two, three, four, three, three, two, four, seven, eight, eight,
+  nine and seven issues, each shown by a failing test and fixed (one LOW kept as a known limit, with
+  the reason). The sixteenth's: a catch-up the lifter emptied stays so through every rebuild but one
+  built whole for a changed offer, the store's preview built again too; a joint ticked in the
+  check-in empties a catch-up as a lift set aside does; one rule says when the day is off the plan,
+  a second workout with nothing behind included (its swap checks, its empty plan, its comfort pick,
+  its one-set rule); the swap sheet says a finished lift is done though nothing ranks, and gives the
+  lift's own one-set reason; off the plan, a lift stopped with nothing to come in owes nothing more;
+  a new lift takes no name a lift left out still had. A seventeenth pass is checking them. The M31
+  table has 226 entries, every anchor found, every entry changed since its last full run caught; the
+  full unit suite passed (2847, 5 skipped). The report is written up to the sixteenth pass. Next: the
+  seventeenth pass, the full M31 run and the cross-round tables (M30, M29, M28 `--utc`, M27) on the
+  final code, the browser suite again, verify, ship.
+- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`532aba6`) in
   its own worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round
-  M's diff applied to `2595631`). Six review passes found twelve, ten, eleven, six, seven and six
-  issues, each shown by a failing test and fixed, and the revert runs' new tests two more. The
-  sixth's: the top set and the lift's own straight target read past its straight days at the
-  back-offs' load wherever they fall; a break is measured from the lift's newest session; a
-  hand-set load or the coach's deload clears the day's mark; corrections keep the steps logged
-  back-offs gave; the completion reads the lift's own steps; a straight day steps from the
-  back-offs' load. Its M32 table has 189 entries, every anchor found, the sixth pass's entries
-  caught; the full unit suite passed (3003, 5 skipped). Its report is written up to the sixth pass.
-  A seventh pass is checking it. Then its review passes until clean, verify, ship, once Round M is
-  live. The lift to push keeps item 44's straight sets by default: a question for the owner's final
-  review.
+  M's diff applied to `2595631`). Seven review passes found twelve, ten, eleven, six, seven, six and
+  six issues, each shown by a failing test and fixed, and the revert runs' new tests two more. The
+  seventh's: a lift has left the structure once its sessions since its last top set pass two, its
+  own sessions at another range among them (on Undulating every heavy day read the same old top
+  set); a max entered reads the lift's own straight target as every plan does; a back-off corrected
+  replays the ones after it; a lift picked up again keeps each logged back-off's step; a break is
+  measured from every session of the lift; the fatigue's drift and the Progress trend read the top
+  sets alone. Its M32 table has 200 entries, every anchor found, the seventh pass's entries caught;
+  the full unit suite passed on Round M's latest (3037, 5 skipped). Its report is written up to the
+  seventh pass. An eighth pass is checking it. Then its review passes until clean, verify, ship, once
+  Round M is live. The lift to push keeps item 44's straight sets by default: a question for the
+  owner's final review.
 - **Maintenance 33** (the recovery and readiness core) is under way in a local worktree on Round N,
   and saved in `docs/handoff/round-o-wip/round-o.diff` (`git apply` it on Round N's diff). Built so
   far, with tests: the sourced rules table (`src/engine/rules/ruleTable.ts`, every number with its
@@ -50,12 +52,15 @@ first; it holds the rules. This file holds the state and the steps._
   the lifter's own four weeks (`src/engine/readiness/checkIn.ts`: two items clearly worse, or two
   short nights running, lower what the day's first sets are expected to do, never the plan; soreness
   alone never counts); the illness gate (above the neck: every set 2 or more short of failure; fever
-  or aches all over: rest today); the fatigue score without day counts or check-ins. Next: the
-  existing tests the new rules change, then the screens (the too-soon card and its lighter option,
-  the illness answer, the per-muscle balance on the Plan screen, the learned page's windows), the
-  docs, the revert table and the reviews. Its design follows the approved proposal
-  (`docs/proposals/week-model-readiness-time.md`, parts 2, 4 and 5, decisions 1, 2 and 5) and the
-  research in `docs/research/recovery-time-course.md` and `docs/research/readiness-and-soreness.md`.
+  or aches all over: a rest day, Today's Start hidden, "Finish here" under way) and its answer on the
+  check-in sheet; the fatigue score without day counts or check-ins ("Recovery is behind" on hard
+  ratings alone); every existing test moved to the new rules. Next: the "too soon" card and its
+  one-tap lighter option with the card limits (1 a day, 3 a week, Not now for the week), the
+  first-set check, the per-muscle balance on the Plan screen, the completion's window line, the
+  schedule card on the same check, the learned page's windows, the docs, the revert table and the
+  reviews. Its design follows the approved proposal (`docs/proposals/week-model-readiness-time.md`,
+  parts 2, 4 and 5, decisions 1, 2 and 5) and the research in `docs/research/recovery-time-course.md`
+  and `docs/research/readiness-and-soreness.md`.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 
