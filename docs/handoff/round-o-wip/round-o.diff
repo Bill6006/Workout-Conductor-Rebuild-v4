@@ -1583,7 +1583,7 @@ index 30cd662..fdf53b6 100644
      lastExportAt: RECORD_NOW,
      workoutCount: history.length,
 diff --git a/src/engine/coach/coachPolicy.test.ts b/src/engine/coach/coachPolicy.test.ts
-index 786a27d..05045b6 100644
+index 786a27d..7326b5c 100644
 --- a/src/engine/coach/coachPolicy.test.ts
 +++ b/src/engine/coach/coachPolicy.test.ts
 @@ -37,7 +37,7 @@ function input(
@@ -1595,11 +1595,54 @@ index 786a27d..05045b6 100644
    return {
      workout,
      status: 'preview',
+@@ -85,8 +85,12 @@ function readyForLoad(): WorkoutRecord[] {
+   );
+ }
+ 
++/**
++ * The bench press stalled over four weeks. Its last session is three days back: one the day before
++ * leaves the chest inside its window, and since Maintenance 33 the "too soon" card leads.
++ */
+ function stalled(): WorkoutRecord[] {
+-  return [21, 14, 7, 1].map((daysAgo) =>
++  return [23, 16, 9, 3].map((daysAgo) =>
+     record(daysAgo, BENCH, [
+       [5, 185, 2],
+       [5, 185, 2],
+@@ -193,7 +197,7 @@ describe('coaching by experience', () => {
+   });
+ 
+   it('diagnoses undershooting separately and offers the next load step', () => {
+-    const easy = [21, 14, 7, 1].map((daysAgo) =>
++    const easy = [23, 16, 9, 3].map((daysAgo) =>
+       record(daysAgo, BENCH, [
+         [5, 185, 4],
+         [5, 185, 4],
+@@ -275,7 +279,7 @@ describe('a finished workout takes no tap that would change it', () => {
+     const route = gatherSignals(finished(stalled())).find((s) => s.source === 'stall: route');
+     expect(route).toBeDefined();
+     expect(route?.action).toBeNull();
+-    const easy = [21, 14, 7, 1].map((daysAgo) =>
++    const easy = [23, 16, 9, 3].map((daysAgo) =>
+       record(daysAgo, BENCH, [
+         [5, 185, 4],
+         [5, 185, 4],
 diff --git a/src/engine/coach/fewerRepsLoaded.test.ts b/src/engine/coach/fewerRepsLoaded.test.ts
-index 34c7fdf..4a394a2 100644
+index 34c7fdf..e8db835 100644
 --- a/src/engine/coach/fewerRepsLoaded.test.ts
 +++ b/src/engine/coach/fewerRepsLoaded.test.ts
-@@ -73,7 +73,7 @@ function shortInput(
+@@ -29,7 +29,9 @@ function shortInput(
+   place = gym,
+ ): CoachInput {
+   const exercise = requireExercise(exerciseId);
+-  const history: WorkoutRecord[] = [6, 2].map((daysAgo) =>
++  // Three days apart and three days back: a long set a rep short of failure two days before leaves
++  // the glutes inside their window, and since Maintenance 33 the "too soon" card leads.
++  const history: WorkoutRecord[] = [6, 3].map((daysAgo) =>
+     record(daysAgo, exerciseId, short, range, 1),
+   );
+   const workout = generateWorkout({
+@@ -73,7 +75,7 @@ function shortInput(
          }
        : block,
    );
@@ -1608,6 +1651,138 @@ index 34c7fdf..4a394a2 100644
    return {
      workout: { ...workout, blocks },
      status: 'preview',
+diff --git a/src/engine/learned/learned.test.ts b/src/engine/learned/learned.test.ts
+index 9d1ce6b..94dd08a 100644
+--- a/src/engine/learned/learned.test.ts
++++ b/src/engine/learned/learned.test.ts
+@@ -185,6 +185,7 @@ describe('the page', () => {
+     const list = sections([]);
+     expect(list.map((one) => one.key)).toEqual([
+       'pace',
++      'recovery',
+       'habit',
+       'curves',
+       'reserve',
+@@ -201,6 +202,60 @@ describe('the page', () => {
+     }
+   });
+ 
++  it('names a muscle whose own sessions moved its recovery window, and none after its reset', () => {
++    // Maintenance 33: bench sessions a rep short of failure, four rested 72 h apart, then five
++    // rounds of a rested one and one a day after it at the same first set: the chest's window
++    // learned half a day shorter.
++    const hours: number[] = [0, 72, 144, 216];
++    for (let round = 0; round < 5; round += 1) hours.push(288 + round * 96, 312 + round * 96);
++    const last = hours[hours.length - 1] as number;
++    const history = hours.map((hour, index): WorkoutRecord => {
++      const when = new Date(Date.parse(RECORD_NOW) - (last - hour + 48) * 3_600_000).toISOString();
++      return {
++        id: `r-${index}`,
++        startedAt: when,
++        completedAt: when,
++        locationId: 'gym',
++        templateId: 'push-arms',
++        endedEarly: false,
++        rating: null,
++        skippedExerciseIds: [],
++        painJoints: [],
++        readiness: null,
++        prs: [],
++        entries: [
++          {
++            exerciseId: BENCH,
++            sets: [0, 1, 2].map(() => ({
++              kind: 'working' as const,
++              reps: 5,
++              weight: 200,
++              rir: 1,
++              completed: true,
++            })),
++          },
++        ],
++      };
++    });
++    const recovery = section(sections(history), 'recovery');
++    // The bench press works the triceps directly too: both windows learned.
++    expect(recovery.status).toBe("Your own sessions moved 2 muscles' windows.");
++    expect(recovery.items).toEqual([
++      'Chest: 12 h shorter, from 5 sessions back early and 6 sessions rested.',
++      'Triceps: 12 h shorter, from 5 sessions back early and 6 sessions rested.',
++    ]);
++    expect(recovery.reset).toBe('Forget your recovery windows');
++    const reset = section(
++      sections(history, withReset(emptyResets(), 'recovery', RECORD_NOW)),
++      'recovery',
++    );
++    expect(reset.items).toEqual([]);
++    expect(reset.status).toBe(`Nothing learned since you reset it on ${shortDay(RECORD_NOW)}.`);
++    expect(section(sections([]), 'recovery').status).toBe(
++      'Nothing learned yet: it reads each session with hard work from this version on.',
++    );
++  });
++
+   it('names a lift with a habit, and none after its reset', () => {
+     const habit = section(sections(above), 'habit');
+     expect(habit.status).toBe('Learned on 1 lift.');
+diff --git a/src/engine/learned/learned.ts b/src/engine/learned/learned.ts
+index 43c4110..99a79ee 100644
+--- a/src/engine/learned/learned.ts
++++ b/src/engine/learned/learned.ts
+@@ -10,6 +10,8 @@ import { overrideBias, OVERRIDE_MAJORITY, OVERRIDE_WINDOW } from '../progression
+ import { RESERVE_CHECK, reserveCheckStatus, reserveReadings } from '../progression/reserveCheck';
+ import { resolveStyle } from '../planning/styleAdvice';
+ import { painPatterns } from '../recovery/painPattern';
++import { LEARNING, learnedWindows } from '../recovery/recovery';
++import { muscleName } from '../../catalog/muscles/muscles';
+ import { PACE, TRAINING_TIME, paceReadings, personalPace } from '../duration/trainingTime';
+ import type { LearnedKind, LearnedResets } from './resets';
+ 
+@@ -358,9 +360,45 @@ function paceSection(input: LearnedInput): LearnedSection {
+   };
+ }
+ 
++/**
++ * Each muscle's own recovery window (Maintenance 33, docs/research/recovery-time-course.md): what its
++ * own sessions moved it by, within bounds, and how many sessions it read.
++ */
++function recoverySection(input: LearnedInput): LearnedSection {
++  const resetAt = input.resets.recovery ?? null;
++  const learned = [
++    ...learnedWindows(input.history, resetAt ? { recovery: resetAt } : null).values(),
++  ];
++  const sessions = (count: number) => `${count} ${count === 1 ? 'session' : 'sessions'}`;
++  const moved = learned.filter((item) => item.shift !== 0);
++  const items = moved.map(
++    (item) =>
++      `${muscleName(item.muscle)}: ${Math.abs(item.shift)} h ${item.shift < 0 ? 'shorter' : 'longer'}, from ${sessions(item.early)} back early and ${sessions(item.rested)} rested.`,
++  );
++  const reading = learned.filter((item) => item.shift === 0);
++  const status =
++    moved.length > 0
++      ? `Your own sessions moved ${moved.length === 1 ? "one muscle's window" : `${moved.length} muscles' windows`}.`
++      : reading.length > 0
++        ? `Still learning: no muscle yet has ${LEARNING.LEAST} sessions back early and ${LEARNING.LEAST} rested that say it recovers faster or slower than the estimate.`
++        : resetAt
++          ? `Nothing learned since you reset it on ${shortDay(resetAt)}.`
++          : 'Nothing learned yet: it reads each session with hard work from this version on.';
++  return {
++    key: 'recovery',
++    title: 'Your recovery',
++    status,
++    items,
++    evidence: `From each session with hard sets for a muscle: its lifts' first working sets, back inside the window the session before set, against the same lifts rested (the middle of their last three to five rested first sets); days ill or after a short night are left out. After ${LEARNING.LEAST} of each, back early within ${Math.round(LEARNING.SAME * 100)}% of rested shortens the window by ${LEARNING.STEP_HOURS} h, and ${Math.round(LEARNING.SLOWER * 100)}% or more under it lengthens it by as much, never under ${LEARNING.LEAST_HOURS} h nor past ${LEARNING.MOST_HOURS} h, nor under half or over half again the estimate. The window says when a muscle worked hard is likely ready again; it never blocks a session.`,
++    resetAt,
++    reset: 'Forget your recovery windows',
++  };
++}
++
+ export function learnedSections(input: LearnedInput): LearnedSection[] {
+   return [
+     paceSection(input),
++    recoverySection(input),
+     habitSection(input),
+     curveSection(input),
+     reserveSection(input),
 diff --git a/src/engine/learned/resets.ts b/src/engine/learned/resets.ts
 index 91fc131..e1971a4 100644
 --- a/src/engine/learned/resets.ts
@@ -5991,6 +6166,37 @@ index 0000000..8f0b036
 +} as const satisfies Record<string, Rule>;
 +
 +export type RuleId = keyof typeof RULES;
+diff --git a/src/engine/strategy/strategy.test.ts b/src/engine/strategy/strategy.test.ts
+index bc956ae..c943e62 100644
+--- a/src/engine/strategy/strategy.test.ts
++++ b/src/engine/strategy/strategy.test.ts
+@@ -198,13 +198,23 @@ describe('multi-session strategy', () => {
+     expect(coverage[0]?.why[0]).toMatch(/of \d+ sets this week/);
+   });
+ 
+-  it('flags recovery after three days in a row', () => {
+-    const history = [
++  it('flags recovery on what the sessions show, never on days in a row (Maintenance 33)', () => {
++    // Three days running, every set as planned: no day count scores (Behm 2021; the owner's
++    // decision 1), so nothing is behind.
++    const steady = [
+       record(0, 'barbell-bench-press', [[5, 185, 2]]),
+       record(1, 'cable-fly', [[12, 40, 1]], [10, 15], 1),
+       record(2, 'lat-pulldown', [[10, 120, 1]], [8, 12], 1),
+     ];
+-    expect(analyze(history).find((item) => item.kind === 'recovery')).toMatchObject({
++    expect(analyze(steady).find((item) => item.kind === 'recovery')).toBeUndefined();
++    // The same days rated too hard, the sets well closer to failure than planned: recovery is behind.
++    const hard = { effort: 'too-hard' as const, pain: false, energyAfter: 2, note: '' };
++    const behind = [
++      record(0, 'barbell-bench-press', [[5, 185, 0]], [4, 6], 2, { rating: hard }),
++      record(1, 'cable-fly', [[12, 40, 0]], [10, 15], 2, { rating: hard }),
++      record(2, 'lat-pulldown', [[10, 120, 0]], [8, 12], 2, { rating: hard }),
++    ];
++    expect(analyze(behind).find((item) => item.kind === 'recovery')).toMatchObject({
+       recommendation: 'hold',
+       headline: 'Recovery is behind',
+     });
 diff --git a/src/engine/strategy/strategy.ts b/src/engine/strategy/strategy.ts
 index ab56be0..ba92087 100644
 --- a/src/engine/strategy/strategy.ts

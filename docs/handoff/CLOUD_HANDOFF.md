@@ -5,6 +5,21 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 15:35 UTC (supersedes the states below)
+
+- **Round M**: unchanged since 14:50 (`4cb40d7`); the eighteenth review is running.
+- **Round N**: local `34dc615`, now rebased onto Round M's `4cb40d7` (backup of the old base:
+  `backup/round-n-23f37ce`); `docs/handoff/round-n-wip/round-n.diff` is now against `4cb40d7`. The
+  eighth pass is complete: the review's tests moved into place, the M32 table at 207 entries with
+  every entry caught (one equivalent entry for the undo's replay left out, with the reason), the
+  report's eighth pass and known limits. Full suite before the rebase: 3049 passed, 5 skipped; after
+  it, running. Next: a ninth review on the rebased code.
+- **Maintenance 33**: local `c8927be`, diff on Round N's old `abb5566` (rebase it onto Round N's
+  latest before shipping). Since 14:50: the older coach and strategy tests moved to the new rules,
+  and the learned page's recovery section (each muscle's window its own sessions moved, and its
+  reset). Full suite running. Next: the e2e coach test and an illness e2e, the cross-round revert
+  tables, the report and docs, the M33 table, reviews.
+
 ### Checkpoint, 2026-10-24 14:50 UTC (supersedes the states below)
 
 - **Round M**: local `4cb40d7`, diff on `2595631`. The seventeenth pass is complete: H75, H76 and
