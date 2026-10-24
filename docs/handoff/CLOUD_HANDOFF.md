@@ -14,18 +14,20 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Fourteen review passes
-  found twenty, twelve, seven, three, two, three, four, three, three, two, four, seven, eight and
-  eight issues, each shown by a failing test and fixed (one LOW kept as a known limit, with the
-  reason). The fourteenth's: one rule for what stays through a rebuild as the lifter's pick, read by
-  the plan's scope and the day's settings; the swap keeps off muscles that rest today; a catch-up or
-  second workout a change empties stays empty through any rebuild, and Today says so; a lift brought
-  back under an end time comes at two sets; each refusal gives its own reason. A fifteenth pass is
-  checking them. The M31 table has 201 entries, every anchor found, the entries changed since its
-  last full run caught; M27's six anchors moved by Round M are re-anchored and caught. The report is
-  written up to the fourteenth pass. Next: the fifteenth pass, the full M31 run and the cross-round
-  tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite again, verify, ship.
-- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`3290cd8`) in
+  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Fifteen review passes
+  found twenty, twelve, seven, three, two, three, four, three, three, two, four, seven, eight, eight
+  and nine issues, each shown by a failing test and fixed (one LOW kept as a known limit, with the
+  reason). The fifteenth's: a swap back keeps to what its muscles lack; the way back to an emptied
+  catch-up is the catch-up again; a catch-up emptied by a pain report stays so; a plan built whole
+  for a changed offer reads it afresh; the stop reasons say one set left only where it is; in a
+  catch-up, what comes in for comfort or pain is the lifter's pick ("Your pick") and stays where the
+  lift it followed fits again; a stand-in never takes the name of a lift left out. A sixteenth pass
+  is checking them. The M31 table has 213 entries, every anchor found, the entries changed since
+  its last full run caught; the full unit suite passed (2825, 5 skipped) before the last test
+  additions. The report is written up to the fifteenth pass. Next: the sixteenth pass, the full M31
+  run and the cross-round tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite
+  again, verify, ship.
+- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`89dfb39`) in
   its own worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round
   M's diff applied to `2595631`). Five review passes found twelve, ten, eleven, six and seven issues,
   each shown by a failing test and fixed, and the revert runs' new tests two more. The fifth's: a
