@@ -23,6 +23,7 @@ import { AlertsCard } from './AlertsCard';
 import { BackupCard } from './BackupCard';
 import { CloudCopyCard } from './CloudCopyCard';
 import { DiagnosticsCard } from './DiagnosticsCard';
+import { InstallCard } from './InstallCard';
 import { LegacyImportCard } from './LegacyImportCard';
 import { LearnedValues } from './LearnedValues';
 import { MediaCreditsCard } from './MediaCreditsCard';
@@ -72,6 +73,9 @@ export function SettingsScreen() {
   return (
     <>
       <ScreenHeader title="Settings" intro="Your training, your data, and this app." />
+
+      {/* Install from the app's own page, while the browser offers it (2026-10-24). */}
+      <InstallCard />
 
       <>
         {draft ? (

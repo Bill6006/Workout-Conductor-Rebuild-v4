@@ -73,3 +73,14 @@ python3 tools/reverts/mutate-m30.py --repo="$COPY" | tee m30-reverts.log
 - **On a machine in UTC** (the cloud): run M28 with `--utc`, so its local-date entries meet the two
   zones, and M27's three R44-19 calendar-day entries with `TZ=America/New_York`. In UTC they read
   as SURVIVED, which is no fault of the tests.
+
+## Outside the rounds: `mutate-install-icon.py` (2026-10-24)
+
+Install the app, and the launcher icon (`docs/reports/install-and-launcher-icon.md`): 42 entries.
+Besides Vitest files it runs commands: the icon generator's own checks, the build with
+`verify-build`, and browser tests on a fresh build. Each command entry names the text its failure
+must print, its own assertion's; a command that fails without it (a build error, a busy port)
+reads WRONG FAILURE, and so does a Vitest entry whose only failure is a time-out. Neither is a
+catch. Stop any server on ports 4173 and 4175 first: the browser entries start their own. On
+Windows the shell is `cmd.exe`, which reads `;` as part of an argument: a step that must run
+whatever its exit code is the entry's own `step`.

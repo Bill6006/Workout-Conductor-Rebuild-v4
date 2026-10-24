@@ -8,15 +8,16 @@
  *
  * - icon-192.png and icon-512.png: the artwork, full bleed: the manifest's icons. The 192 is also
  *   the logo in the app's header and the notifications' icon.
- * - icon-maskable-512.png: the artwork at 90%, its own edge carried out to the border, so all of
- *   it sits inside the maskable safe zone (a circle 80% of the width) whatever shape a launcher
- *   cuts, with no seam where the artwork ends.
+ * - icon-maskable-512.png: Android's launcher icon. The artwork at 58%, its own dark edge carried
+ *   out to the border, so the background stays full bleed with no seam where the artwork ends,
+ *   and the dumbbell keeps clear space on every side even where a launcher shows only the centre
+ *   two thirds of the icon (below), whatever shape it cuts.
  * - apple-touch-icon-180.png: full bleed; iOS rounds the corners itself.
  * - favicon-32.png: the browser tab.
  *
  * The icons were once SVG files wrapping the artwork as base64 text, and a truncated copy of that
  * text broke the app's own logo: here nothing is copied by hand, and a file that does not decode,
- * or does not show the artwork, stops the run.
+ * does not show the artwork, is not dark to its edge or has the dumbbell out of place stops the run.
  */
 // The functions given to page.evaluate run in the page, where these are defined.
 /* global document, Image */
@@ -27,13 +28,23 @@ import path from 'node:path';
 const SOURCE = path.join('assets', 'app-icon.png');
 const ICON_DIR = path.join('public', 'icons');
 
-/** scale is the artwork's share of the icon's width, centred, its edge carried out to the border. */
+/**
+ * scale is the artwork's share of the icon's width, centred, its edge carried out to the border.
+ * reach is where the dumbbell's farthest point must fall, measured on the written file, as a share
+ * of the narrowest launcher circle seen: a third of the icon's width. Chrome's home-screen shortcut
+ * on a Pixel launcher (Android 16, Chrome 133, 2026-10-24) showed only the centre 72 of Android's
+ * 108 dp, the maskable icon unpadded; a launcher that pads it as the maskable standard intends shows
+ * the centre 87%, and the dumbbell only sits farther in. Full bleed, the artwork reaches 1.25.
+ */
 const TARGETS = [
-  { file: 'icon-192.png', size: 192, scale: 1 },
-  { file: 'icon-512.png', size: 512, scale: 1 },
-  { file: 'icon-maskable-512.png', size: 512, scale: 0.9 },
-  { file: 'apple-touch-icon-180.png', size: 180, scale: 1 },
-  { file: 'favicon-32.png', size: 32, scale: 1 },
+  { file: 'icon-192.png', size: 192, scale: 1, reach: [1.2, 1.3] },
+  { file: 'icon-512.png', size: 512, scale: 1, reach: [1.2, 1.3] },
+  // At 90% (2026-10-23) that launcher cut off both ends of the dumbbell. At 58% it reaches 0.73:
+  // about 71% of a rounded-square tile's width with a seventh clear on each side, and as clear
+  // inside a circle; 55% of the tile where the icon is padded.
+  { file: 'icon-maskable-512.png', size: 512, scale: 0.58, reach: [0.65, 0.8] },
+  { file: 'apple-touch-icon-180.png', size: 180, scale: 1, reach: [1.2, 1.3] },
+  { file: 'favicon-32.png', size: 32, scale: 1, reach: [1.15, 1.3] },
 ];
 
 const dataUrlOf = (bytes) => `data:image/png;base64,${bytes.toString('base64')}`;
@@ -98,10 +109,11 @@ try {
     );
     writeFileSync(path.join(ICON_DIR, target.file), Buffer.from(png, 'base64'));
 
-    // Read back from disk: it decodes, it is its size, and its artwork area matches the artwork
-    // (both drawn down to 16 x 16, the channels a little off at most on average).
-    const problem = await page.evaluate(
-      async ({ src, written, size, scale }) => {
+    // Read back from disk: it decodes, it is its size, its artwork area matches the artwork (both
+    // drawn down to 16 x 16, the channels a little off at most on average), its dark background
+    // reaches every edge, and the dumbbell reaches as far as its target allows, no farther.
+    const { problem, reach } = await page.evaluate(
+      async ({ src, written, size, scale, band }) => {
         const load = async (url) => {
           const image = new Image();
           image.src = url;
@@ -121,7 +133,10 @@ try {
         };
         const icon = await load(written);
         if (icon.naturalWidth !== size || icon.naturalHeight !== size) {
-          return `is ${icon.naturalWidth}x${icon.naturalHeight}, not ${size}x${size}`;
+          return {
+            problem: `is ${icon.naturalWidth}x${icon.naturalHeight}, not ${size}x${size}`,
+            reach: null,
+          };
         }
         const expected = thumb(await load(src), 0);
         const actual = thumb(icon, (1 - scale) / 2);
@@ -132,17 +147,68 @@ try {
           }
         }
         const mean = total / ((expected.length / 4) * 3);
-        return mean <= 12 ? null : `does not show the artwork (mean difference ${mean.toFixed(1)})`;
+        if (mean > 12) {
+          return {
+            problem: `does not show the artwork (mean difference ${mean.toFixed(1)})`,
+            reach: null,
+          };
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext('2d');
+        context.drawImage(icon, 0, 0);
+        const data = context.getImageData(0, 0, size, size).data;
+        const luminance = (x, y) => {
+          const index = (y * size + x) * 4;
+          return 0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2];
+        };
+        // Full bleed: every edge pixel opaque and as dark as the artwork's own background.
+        for (let along = 0; along < size; along += 1) {
+          for (const [x, y] of [
+            [along, 0],
+            [along, size - 1],
+            [0, along],
+            [size - 1, along],
+          ]) {
+            if (data[(y * size + x) * 4 + 3] !== 255 || luminance(x, y) > 40) {
+              return { problem: `is not dark and opaque to its edge at ${x},${y}`, reach: null };
+            }
+          }
+        }
+        // The dumbbell is every pixel well above the background; its farthest from the centre,
+        // as a share of the narrowest launcher circle's radius, a third of the width.
+        const centre = (size - 1) / 2;
+        let farthest = 0;
+        for (let y = 0; y < size; y += 1) {
+          for (let x = 0; x < size; x += 1) {
+            if (luminance(x, y) > 60) {
+              farthest = Math.max(farthest, Math.hypot(x - centre, y - centre));
+            }
+          }
+        }
+        const reach = farthest / (size / 3);
+        if (reach < band[0] || reach > band[1]) {
+          return {
+            problem: `has the dumbbell reaching ${reach.toFixed(3)} of the launcher circle, outside ${band[0]} to ${band[1]}`,
+            reach,
+          };
+        }
+        return { problem: null, reach };
       },
       {
         src: source,
         written: dataUrlOf(readFileSync(path.join(ICON_DIR, target.file))),
         size: target.size,
         scale: target.scale,
+        band: target.reach,
       },
     );
     if (problem !== null) throw new Error(`generate-icons: ${target.file} ${problem}`);
-    console.log(`generate-icons: wrote ${target.file} (${target.size}px), checked`);
+    console.log(
+      `generate-icons: wrote ${target.file} (${target.size}px), checked: the dumbbell reaches ${reach.toFixed(3)} of the launcher circle`,
+    );
   }
 } finally {
   await browser.close();

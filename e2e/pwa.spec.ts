@@ -198,4 +198,50 @@ test.describe('PWA shell', () => {
     expect(manifest.icons.some((icon) => icon.sizes === '512x512')).toBe(true);
     expect(manifest.theme_color).toBe('#0e1012');
   });
+
+  test('under the service worker, the manifest and a launcher icon open as themselves, not as the app', async ({
+    page,
+  }) => {
+    // 2026-10-24: neither is precached now, so the worker's page fallback must leave them alone.
+    await ensureProfile(page);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('service worker never activated')),
+            20_000,
+          );
+          void navigator.serviceWorker.ready.then((registration) => {
+            const worker = registration.active;
+            if (!worker) return;
+            const settle = () => {
+              if (worker.state === 'activated') {
+                clearTimeout(timer);
+                resolve();
+              }
+            };
+            worker.addEventListener('statechange', settle);
+            settle();
+          });
+        }),
+    );
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+    expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    const manifestUrl = new URL(
+      (await page.locator('link[rel="manifest"]').getAttribute('href')) ?? '',
+      page.url(),
+    );
+    const manifest = (await (await page.request.get(manifestUrl.toString())).json()) as {
+      icons: { src: string; purpose?: string }[];
+    };
+    const launcher = manifest.icons.find((icon) => icon.purpose === 'maskable');
+    expect(launcher).toBeDefined();
+
+    const opened = await page.goto(manifestUrl.toString());
+    expect(opened?.headers()['content-type'] ?? '').not.toContain('text/html');
+    await expect(page.locator('body')).toContainText('"name":"Workout Conductor"');
+    const icon = await page.goto(new URL(launcher!.src, manifestUrl).toString());
+    expect(icon?.headers()['content-type']).toBe('image/png');
+  });
 });

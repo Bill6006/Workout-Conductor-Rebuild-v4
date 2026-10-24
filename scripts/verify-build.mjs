@@ -5,6 +5,7 @@
  * and phase constants that agree. Also reports bundle size. Run: npm run verify-build
  */
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -87,6 +88,8 @@ if (distHas('manifest.webmanifest')) {
   const manifest = JSON.parse(read('manifest.webmanifest'));
   check(manifest.name === 'Workout Conductor', 'manifest name must be "Workout Conductor"');
   check(manifest.display === 'standalone', 'manifest display must be standalone');
+  // The installed app's identity: a changed id, start_url or scope is another app to Chrome.
+  check(manifest.id === base, `manifest id must be ${base}`);
   check(manifest.start_url === base, `manifest start_url must be ${base}`);
   check(manifest.scope === base, `manifest scope must be ${base}`);
   check(
@@ -98,15 +101,39 @@ if (distHas('manifest.webmanifest')) {
     'manifest must include a maskable icon for Android',
   );
   for (const icon of manifest.icons ?? []) {
-    const iconPath = icon.src.replace(/^\.?\//, '');
+    const [iconPath, query = ''] = icon.src.replace(/^\.?\//, '').split('?');
     check(distHas(iconPath), `manifest icon ${icon.src} is missing from dist`);
+    // Its address ends with its content's hash, so a changed icon has a new address.
+    if (distHas(iconPath)) {
+      const version = createHash('sha256')
+        .update(readFileSync(path.join(DIST, iconPath)))
+        .digest('hex')
+        .slice(0, 8);
+      check(
+        query === `v=${version}`,
+        `manifest icon ${icon.src} must end ?v=${version}, its content's hash`,
+      );
+    }
   }
 }
 
 // Service worker and static shell assets
 check(distHas('sw.js'), 'dist/sw.js is missing (vite-plugin-pwa did not run)');
 if (distHas('sw.js')) {
-  check(read('sw.js').includes('precache'), 'sw.js must precache the app shell');
+  const sw = read('sw.js');
+  check(sw.includes('precache'), 'sw.js must precache the app shell');
+  // The manifest comes from the server first, asked past the browser's copy, never from the
+  // precache: an installed app's update check then sees a new icon or name as soon as it is live.
+  check(
+    !/url:\s*"[^"]*manifest\.webmanifest"/.test(sw),
+    'sw.js must not precache manifest.webmanifest',
+  );
+  check(
+    /registerRoute\(\/\\\/manifest\\\.webmanifest\$\/,\s*new \w+\.NetworkFirst\(\{[^}]*fetchOptions:\{cache:"no-cache"\}/.test(
+      sw,
+    ),
+    'sw.js must serve manifest.webmanifest network first, past the browser cache',
+  );
 }
 check(distHas('.nojekyll'), 'dist/.nojekyll is missing (copy from public/)');
 

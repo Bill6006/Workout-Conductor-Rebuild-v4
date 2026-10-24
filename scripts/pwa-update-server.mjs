@@ -9,7 +9,8 @@
  *   GET /__fail-install                   the next worker's first file fails, as a server can
  *
  * Builds go under test-results/pwa-update/ with made-up commits (aaaaaaa…, bbbbbbb…), so the app's
- * About row names the build it runs. Every file carries Pages' own header, max-age=600.
+ * About row names the build it runs. Every file carries Pages' own header, max-age=600, and
+ * X-Variant, the build it came from: a copy a service worker kept shows the build it kept it from.
  */
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -54,8 +55,8 @@ function build(variant) {
   return dir;
 }
 
-function send(response, status, body, type = 'text/plain; charset=utf-8') {
-  response.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'max-age=600' });
+function send(response, status, body, type = 'text/plain; charset=utf-8', headers = {}) {
+  response.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'max-age=600', ...headers });
   response.end(body);
 }
 
@@ -131,6 +132,7 @@ const server = createServer((request, response) => {
     200,
     readFileSync(target),
     TYPES[path.extname(target)] ?? 'application/octet-stream',
+    { 'X-Variant': live },
   );
 });
 

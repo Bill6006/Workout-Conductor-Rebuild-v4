@@ -341,6 +341,51 @@ test.describe('an installed app and a new release', () => {
     await live(page, 'a');
   });
 
+  test('a new release waiting under the old one: the manifest and launcher icon an update check reads are the new release’s, from the server', async ({
+    page,
+  }) => {
+    // 2026-10-24: an installed app kept its old launcher icon after a new one was deployed. Chrome's
+    // update check reads the manifest and its icons through the app's service worker, which served
+    // its own copies of the release the phone ran until Reload took the new one.
+    test.setTimeout(300_000);
+    await prepared(page);
+    await ensureProfile(page);
+    await controlled(page);
+    /** The build a file came from, fetched as the page fetches: through the service worker. */
+    const servedFrom = (url: string) =>
+      page.evaluate(async (address) => {
+        const response = await fetch(address);
+        return { variant: response.headers.get('x-variant'), text: await response.text() };
+      }, url);
+    const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
+    const manifestUrl = new URL(manifestHref ?? '', page.url()).toString();
+    // Read once under A, as a check would: the browser keeps that copy for ten minutes.
+    expect((await servedFrom(manifestUrl)).variant).toBe('a');
+
+    await deployedWhileAway(page);
+    await awayAndBack(page);
+    await expect(page.getByTestId('update-prompt')).toContainText('New version available', {
+      timeout: 60_000,
+    });
+    // B waits for Reload; the page and its worker are still A's.
+    expect(await waitingNow(page)).toBe(true);
+    expect(await buildShown(page)).toMatch(/^Build aaaaaaa · /);
+
+    const manifest = await servedFrom(manifestUrl);
+    expect(manifest.variant, 'the manifest comes from the server, not a kept copy').toBe('b');
+    const icons = (JSON.parse(manifest.text) as { icons: { src: string; purpose?: string }[] })
+      .icons;
+    const launcher = icons.find((icon) => icon.purpose === 'maskable');
+    expect(launcher, 'the manifest names a maskable icon').toBeDefined();
+    expect(
+      (await servedFrom(new URL(launcher!.src, manifestUrl).toString())).variant,
+      'the launcher icon comes from the server, not a kept copy',
+    ).toBe('b');
+    // Named by its content: Chrome sees a changed icon only by a changed address (Chrome 144 on).
+    expect(launcher!.src).toMatch(/\?v=[0-9a-f]{8}$/);
+    await live(page, 'a');
+  });
+
   test('on a first visit, before any worker runs the page, a release that takes over at once is offered, again after Later, and Reload lands on it', async ({
     page,
   }) => {
