@@ -5,6 +5,20 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 15:00 UTC, later the same hour (supersedes the states below)
+
+- **Round M**: `4cb40d7`; its eighteenth review is running.
+- **Round N**: `34dc615` (on Round M's `4cb40d7`): full suite 3072 passed, 5 skipped; its ninth
+  review is running.
+- **Maintenance 33**: local `d0200b2`, now rebased onto Round N's `34dc615`
+  (`docs/handoff/round-o-wip/round-o.diff` is against `34dc615`; backup of the old base:
+  `backup/round-o-301141b`). Since the last checkpoint: the trigger registry counts the lighter
+  option; the e2e check-in test on the new rules and a fever-or-aches rest-day e2e; the report's
+  draft (`docs/reports/maintenance-33.md`); the M27, M28, M31 and M32 tables re-anchored to its
+  code (M28's two day-count entries retired); Round N's five-day and refit tests carried on its
+  signals. Next: the full suite on the rebased code, run the re-anchored entries (R44-1e, R19, V4,
+  N35, N42, N43, N46, N158, N202, N208), the M33 table, its reviews.
+
 ### Checkpoint, 2026-10-24 15:35 UTC (supersedes the states below)
 
 - **Round M**: unchanged since 14:50 (`4cb40d7`); the eighteenth review is running.
