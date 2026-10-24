@@ -27,16 +27,17 @@ first; it holds the rules. This file holds the state and the steps._
   tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite again, verify, ship.
 - **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`3290cd8`) in
   its own worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round
-  M's diff applied to `2595631`). Four review passes found twelve, ten, eleven and six issues, each
-  shown by a failing test and fixed, and the revert runs' new tests two more. The fourth's: a lift
-  main one day and secondary another never progressed, fixed by saving a straight day at the
-  back-offs' load as one (a new optional stored mark, `atBackOffs`) so the top set reads past it; a
-  max entered reads the target as every plan does; straight sets after a capped top set take its
-  asked reps; a back-off's log taken back replays the ones still logged. Its M32 table has 162
-  entries, every anchor found, the fourth pass's entries caught. Its report is written up to the
-  fourth pass. A fifth pass is checking it. Then its review passes until clean, verify, ship, once
-  Round M is live. The lift to push keeps item 44's straight sets by default: a question for the
-  owner's final review.
+  M's diff applied to `2595631`). Five review passes found twelve, ten, eleven, six and seven issues,
+  each shown by a failing test and fixed, and the revert runs' new tests two more. The fifth's: a
+  straight day reads the top set through two straight days at the back-offs' load at most, on a day
+  the lift is main too (the lift to push held one load for two weeks); the push's extra and a
+  stand-in are saved as such days; a break is measured from the lift's newest session; the back-offs
+  take the nearest weight, as the research rounds it; stalls, the feedback, the strategy's insights,
+  the fatigue's drift and the Progress trend read the top sets alone. Its M32 table has 180 entries,
+  every anchor found, the fifth pass's entries caught; the full unit suite passed (2971, 5 skipped).
+  Its report is written up to the fifth pass. A sixth pass is checking it. Then its review passes
+  until clean, verify, ship, once Round M is live. The lift to push keeps item 44's straight sets by
+  default: a question for the owner's final review.
 - **Maintenance 33** (the recovery and readiness core) is begun in a local worktree on Round N: a
   per-muscle recovery model (`src/engine/recovery/recovery.ts`, windows from each muscle's last
   hard work, by how close its sets went to failure and the body region, lengthened by a large
