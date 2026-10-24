@@ -25,10 +25,10 @@ index 416f674..ec6c1c8 100644
  
 diff --git a/docs/reports/maintenance-31.md b/docs/reports/maintenance-31.md
 new file mode 100644
-index 0000000..8af97c6
+index 0000000..5f12633
 --- /dev/null
 +++ b/docs/reports/maintenance-31.md
-@@ -0,0 +1,424 @@
+@@ -0,0 +1,445 @@
 +# Maintenance 31: round M, the week as it stands
 +
 +Built on 2026-10-17 on the owner's word to build the whole agreed queue, round by round, to live,
@@ -413,7 +413,28 @@ index 0000000..8af97c6
 +  change leaves it; one exercise is said in the singular. Two older tests, set on a day that offers
 +  a catch-up, swapped in a lift it now refuses; they take the full session.
 +
-+FOURTEENTH_PASS
++**The fourteenth pass** (on those fixes, and older code beside them) found eight: three MEDIUM,
++five LOW. About 11,000 random runs of changes found nothing outside them.
++
++- MEDIUM: what came in for comfort or pain was lost when the lifter picked a length on a plan not
++  begun, the plan built whole (a catch-up for the traps alone then planned the push day, a set to
++  failure among it); the lifter's swap and the swap sheet brought in a lift for a muscle that rests
++  today or sits out (a trap-bar deadlift gave the quads trained yesterday three sets); a catch-up
++  the lifter emptied became the split's day when a length was picked.
++- LOW: an end time brought a lift left out back on its own at one set; "Make it easier" and a
++  check-in passed over what came in for comfort; a catch-up emptied by a skip took a lift back at
++  the next rebuild; a lift with one set left was said to have no alternative that fits, by the sheet
++  and by "Uncomfortable"; a second workout emptied kept its old line on Today, with no full session
++  to take.
++- Fixed: one rule says what stays through a rebuild as the lifter's pick does, and the plan's scope,
++  the day's settings and every rebuild read it; the swap keeps off a muscle that rests or sits out;
++  a catch-up or a second workout emptied stays so through every rebuild, and one planned afresh with
++  every lift set aside stays the catch-up; a lift brought back under an end time comes back at two
++  sets; a refusal gives its own reason, the sheet's too; Today says nothing more for today of an
++  emptied second workout, the full session a tap away. A twelfth-pass test that took the comfort
++  pick's rebuild to be whole now finds it kept, and a skip lays the plan out whole in its place.
++
++FIFTEENTH_PASS
 +
 +## Known limits
 +
@@ -3738,6 +3759,157 @@ index 0000000..df702f3
 +    }
 +  });
 +});
+diff --git a/src/engine/recalibration/catchUpComfortEasier.test.ts b/src/engine/recalibration/catchUpComfortEasier.test.ts
+new file mode 100644
+index 0000000..83cbf56
+--- /dev/null
++++ b/src/engine/recalibration/catchUpComfortEasier.test.ts
+@@ -0,0 +1,145 @@
++import { describe, expect, it } from 'vitest';
++import type { CatchUpSpec } from '../../engine/planning/catchUp';
++import { emptyCompleted, emptyConstraints, recalibrate } from './recalibrate';
++import type {
++  RecalibrationRequest,
++  RecalibrationResult,
++  RecalibrationSuccess,
++  RecalibrationTrigger,
++} from './types';
++import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../../engine/workout/types';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { at, describeWorkout, gym, profileOf, session, working } from '../../test/clockDays';
++
++/**
++ * Maintenance 31 (the fourteenth review of round M): the day's settings ("Make it easier", a
++ * check-in) reach what came in for comfort in a catch-up, as they reach the lifter's own pick.
++ * Synthetic data only.
++ */
++
++const records = [session(at(3, 18), [['barbell-row', 3]])];
++const NOW = at(9, 18);
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++const succeeded = (result: RecalibrationResult): RecalibrationSuccess => {
++  if (!result.ok) throw new Error(result.error);
++  return result;
++};
++const spec: CatchUpSpec = {
++  kind: 'catch-up',
++  muscles: (['chest', 'biceps', 'quads'] as const).map((muscle) => ({
++    muscle,
++    sets: 3,
++    minRir: 1,
++    why: 'behind' as const,
++  })),
++  sitOut: [],
++};
++const request = (
++  trigger: RecalibrationTrigger,
++  workout: GeneratedWorkout,
++  options: Partial<RecalibrationRequest> = {},
++): RecalibrationRequest => ({
++  trigger,
++  workout,
++  completed: emptyCompleted(),
++  lockedEntryIds: [],
++  currentEntryId: null,
++  duration: 'default',
++  profile: profileOf(),
++  location: gym,
++  loading: { missingPlates: [] },
++  history: records,
++  constraints: { ...emptyConstraints(), catchUp: spec },
++  reason: 'test',
++  timestamp: NOW,
++  ...options,
++});
++const byId = (workout: GeneratedWorkout, id: string) =>
++  allEntries(workout.blocks).find((entry) => entry.id === id) as WorkoutEntry;
++const dose = (entry: WorkoutEntry) =>
++  `${entry.exerciseId} x${working(entry).length} @RIR ${Math.min(...working(entry).map((set) => set.targetRir))}`;
++/** Eased: a set fewer, or a rep more in reserve, as every other lift not begun takes it. */
++const eased = (before: WorkoutEntry, after: WorkoutEntry) =>
++  working(after).length < working(before).length ||
++  Math.min(...working(after).map((set) => set.targetRir)) >
++    Math.min(...working(before).map((set) => set.targetRir));
++const plan = () =>
++  generateWorkout({
++    profile: profileOf(),
++    location: gym,
++    history: records,
++    now: NOW,
++    duration: 'default',
++    constraints: { catchUp: spec },
++  });
++const comfortable = () => {
++  const workout = plan();
++  const curl = allEntries(workout.blocks).find((entry) => entry.exerciseId === 'ez-bar-curl');
++  expect(curl, lifts(workout)).toBeDefined();
++  const comfort = succeeded(
++    recalibrate(request({ type: 'uncomfortable', entryId: curl!.id }, workout)),
++  );
++  const standIn = byId(comfort.workout, curl!.id);
++  expect(standIn.exerciseId, lifts(comfort.workout)).not.toBe('ez-bar-curl');
++  return { comfort, id: curl!.id };
++};
++/**
++ * The same lift asked of the plan as a swap the lifter makes: the swap sheet's own swap to it,
++ * which is locked on the entry and so settled to the new setting.
++ */
++const swapped = (exerciseId: string, id: string) =>
++  succeeded(recalibrate(request({ type: 'replace', entryId: id, exerciseId }, plan())));
++
++describe('"Make it easier" eases what came in for comfort, the fourteenth review of round M', () => {
++  it('the curl in for the EZ-bar curl, nothing begun', () => {
++    const { comfort, id } = comfortable();
++    const easier = succeeded(
++      recalibrate(
++        request({ type: 'intensity', direction: 'easier' }, comfort.workout, {
++          constraints: comfort.constraints,
++        }),
++      ),
++    );
++    // The same curl swapped in by the lifter, then "Make it easier": as a fresh plan holds it.
++    const own = swapped(byId(comfort.workout, id).exerciseId, id);
++    const ownEasier = succeeded(
++      recalibrate(
++        request({ type: 'intensity', direction: 'easier' }, own.workout, {
++          constraints: own.constraints,
++        }),
++      ),
++    );
++    const details = `${lifts(comfort.workout)} -> ${easier.summary.headline} ${lifts(easier.workout)} | the lifter's swap: ${lifts(own.workout)} -> ${lifts(ownEasier.workout)}`;
++    // On d361edf the curl that came in for comfort keeps the dose it had ("barbell-curl x3 @RIR 1"),
++    // while the lifts beside it are eased, and the same curl swapped in by the lifter goes to
++    // "barbell-curl x2 @RIR 2".
++    expect(eased(byId(own.workout, id), byId(ownEasier.workout, id)), details).toBe(true);
++    expect(eased(byId(comfort.workout, id), byId(easier.workout, id)), details).toBe(true);
++  });
++
++  it('the curl in for the EZ-bar curl, then a low check-in', () => {
++    const { comfort, id } = comfortable();
++    const low = succeeded(
++      recalibrate(
++        request(
++          {
++            type: 'readiness',
++            readiness: {
++              energy: 2,
++              soreness: 2,
++              sleep: 3,
++              motivation: 3,
++              jointDiscomfort: [],
++              timePressure: false,
++            },
++          },
++          comfort.workout,
++          { constraints: comfort.constraints },
++        ),
++      ),
++    );
++    const details = `${lifts(comfort.workout)} -> ${low.summary.headline} ${lifts(low.workout)} | ${dose(byId(low.workout, id))}`;
++    // On d361edf: "barbell-curl x3 @RIR 1" before and after, the bench press and the squat eased.
++    expect(eased(byId(comfort.workout, id), byId(low.workout, id)), details).toBe(true);
++  });
++});
 diff --git a/src/engine/recalibration/catchUpComfortKept.test.ts b/src/engine/recalibration/catchUpComfortKept.test.ts
 new file mode 100644
 index 0000000..a8f0466
@@ -3891,6 +4063,182 @@ index 0000000..a8f0466
 +    ).toBeGreaterThanOrEqual(CATCH_UP.MIN_RIR);
 +  });
 +});
+diff --git a/src/engine/recalibration/catchUpComfortLength.test.ts b/src/engine/recalibration/catchUpComfortLength.test.ts
+new file mode 100644
+index 0000000..f8d71d3
+--- /dev/null
++++ b/src/engine/recalibration/catchUpComfortLength.test.ts
+@@ -0,0 +1,170 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
++import { CATCH_UP, type CatchUpSpec } from '../../engine/planning/catchUp';
++import { emptyCompleted, emptyConstraints, recalibrate } from './recalibrate';
++import type {
++  RecalibrationRequest,
++  RecalibrationResult,
++  RecalibrationSuccess,
++  RecalibrationTrigger,
++} from './types';
++import {
++  CATCH_UP_TEMPLATE_IDS,
++  allEntries,
++  type GeneratedWorkout,
++} from '../../engine/workout/types';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { at, describeWorkout, directSets, profileOf, session, working } from '../../test/clockDays';
++
++/**
++ * Maintenance 31 (the fourteenth review of round M): what comes in for a lift in a catch-up, for
++ * comfort or pain, stays through every rebuild, a length picked on a plan not begun too: the plan's
++ * scope keeps it as it keeps the lifter's pick, and nothing goes to failure off the plan. Synthetic
++ * data only.
++ */
++
++const records = [session(at(3, 18), [['barbell-row', 3]])];
++const NOW = at(9, 18);
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++const succeeded = (result: RecalibrationResult): RecalibrationSuccess => {
++  if (!result.ok) throw new Error(result.error);
++  return result;
++};
++const [home] = createDefaultLocations(
++  { gymAccess: false, homeEquipment: ['dumbbells'] },
++  at(1),
++) as [LocationProfile];
++const behind = (...muscles: ('traps' | 'chest')[]): CatchUpSpec => ({
++  kind: 'catch-up',
++  muscles: muscles.map((muscle) => ({ muscle, sets: 3, minRir: 1, why: 'behind' as const })),
++  sitOut: [],
++});
++const request = (
++  trigger: RecalibrationTrigger,
++  workout: GeneratedWorkout,
++  spec: CatchUpSpec,
++  options: Partial<RecalibrationRequest> = {},
++): RecalibrationRequest => ({
++  trigger,
++  workout,
++  completed: emptyCompleted(),
++  lockedEntryIds: [],
++  currentEntryId: null,
++  duration: 'default',
++  profile: profileOf(),
++  location: home,
++  loading: { missingPlates: [] },
++  history: records,
++  constraints: { ...emptyConstraints(), catchUp: spec },
++  reason: 'test',
++  timestamp: NOW,
++  ...options,
++});
++const comfortable = (spec: CatchUpSpec): RecalibrationSuccess => {
++  const plan = generateWorkout({
++    profile: profileOf(),
++    location: home,
++    history: records,
++    now: NOW,
++    duration: 'default',
++    constraints: { catchUp: spec },
++  });
++  const shrug = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'dumbbell-shrug');
++  expect(shrug, lifts(plan)).toBeDefined();
++  const comfort = succeeded(
++    recalibrate(request({ type: 'uncomfortable', entryId: shrug!.id }, plan, spec)),
++  );
++  expect(
++    allEntries(comfort.workout.blocks).some((entry) => entry.exerciseId === 'farmer-carry'),
++    lifts(comfort.workout),
++  ).toBe(true);
++  return comfort;
++};
++
++describe('what comes in for comfort stays through a length picked, the fourteenth review of round M', () => {
++  it('the traps and the chest: "45 min", the catch-up’s own length, leaves the farmer carry in', () => {
++    const spec = behind('traps', 'chest');
++    const comfort = comfortable(spec);
++    const shorter = succeeded(
++      recalibrate(
++        request({ type: 'duration', choice: 45 }, comfort.workout, spec, {
++          constraints: comfort.constraints,
++        }),
++      ),
++    );
++    const details = `${shorter.summary.headline} ${shorter.summary.details.join(' ')} ${lifts(shorter.workout)}`;
++    // The farmer carry stays, and the traps keep their lift.
++    expect(
++      allEntries(shorter.workout.blocks).some((entry) => entry.exerciseId === 'farmer-carry'),
++      details,
++    ).toBe(true);
++    expect(directSets(shorter.workout, 'traps'), details).toBeGreaterThan(0);
++  });
++
++  it('the traps alone: "30 min" keeps the catch-up, nothing to failure', () => {
++    const spec = behind('traps');
++    const comfort = comfortable(spec);
++    const length = succeeded(
++      recalibrate(
++        request({ type: 'duration', choice: 30 }, comfort.workout, spec, {
++          constraints: comfort.constraints,
++        }),
++      ),
++    );
++    const details = `${length.summary.headline} ${lifts(length.workout)}`;
++    expect(length.workout.templateId, details).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
++    const sets = allEntries(length.workout.blocks).flatMap((entry) => entry.sets);
++    expect(
++      sets.some((set) => set.kind === 'drop'),
++      details,
++    ).toBe(false);
++    expect(
++      Math.min(
++        Infinity,
++        ...allEntries(length.workout.blocks)
++          .flatMap(working)
++          .map((set) => set.targetRir),
++      ),
++      details,
++    ).toBeGreaterThanOrEqual(CATCH_UP.MIN_RIR);
++    // The farmer carry stays.
++    expect(
++      allEntries(length.workout.blocks).some((entry) => entry.exerciseId === 'farmer-carry'),
++      details,
++    ).toBe(true);
++  });
++
++  it('the traps alone: "Hurts" (shoulder) on the shrug, then "15 min": the catch-up keeps the carry', () => {
++    const spec = behind('traps');
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: home,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec },
++    });
++    const shrug = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'dumbbell-shrug')!;
++    const hurt = succeeded(
++      recalibrate(request({ type: 'pain', entryId: shrug.id, joint: 'shoulder' }, plan, spec)),
++    );
++    expect(
++      allEntries(hurt.workout.blocks).map((entry) => entry.exerciseId),
++      lifts(hurt.workout),
++    ).toEqual(['farmer-carry']);
++    const shorter = succeeded(
++      recalibrate(
++        request({ type: 'duration', choice: 15 }, hurt.workout, spec, {
++          constraints: hurt.constraints,
++        }),
++      ),
++    );
++    const details = `${shorter.summary.headline} ${lifts(shorter.workout)}`;
++    // On d361edf: "Recalibrated to 15 min: 1 exercise added, 1 exercise replaced." — the push day.
++    expect(shorter.workout.templateId, details).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
++    expect(
++      allEntries(shorter.workout.blocks).some((entry) => entry.exerciseId === 'farmer-carry'),
++      details,
++    ).toBe(true);
++  });
++});
 diff --git a/src/engine/recalibration/catchUpComfortSwap.test.ts b/src/engine/recalibration/catchUpComfortSwap.test.ts
 new file mode 100644
 index 0000000..b51132e
@@ -3973,6 +4321,267 @@ index 0000000..b51132e
 +    // Before: 6. "back-squat x3; dumbbell-romanian-deadlift x3" for the glutes; "leg-press x3;
 +    // dumbbell-bulgarian-split-squat x3; ..." for the quads.
 +    expect(directSets(result.workout, muscle), lifts(result.workout)).toBeLessThanOrEqual(3);
++  });
++});
+diff --git a/src/engine/recalibration/catchUpEmptiedLength.test.ts b/src/engine/recalibration/catchUpEmptiedLength.test.ts
+new file mode 100644
+index 0000000..de50630
+--- /dev/null
++++ b/src/engine/recalibration/catchUpEmptiedLength.test.ts
+@@ -0,0 +1,171 @@
++import { describe, expect, it } from 'vitest';
++import { createSession } from '../../core/state/session';
++import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
++import type { CatchUpSpec } from '../../engine/planning/catchUp';
++import { emptyCompleted, emptyConstraints, recalibrate } from './recalibrate';
++import type {
++  RecalibrationRequest,
++  RecalibrationSuccess,
++  RecalibrationTrigger,
++  SessionConstraints,
++} from './types';
++import {
++  CATCH_UP_TEMPLATE_IDS,
++  allEntries,
++  type GeneratedWorkout,
++} from '../../engine/workout/types';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { dayNoteOf } from '../../features/today/dayNote';
++import { at, describeWorkout, profileOf, session } from '../../test/clockDays';
++
++/**
++ * Maintenance 31 (the fourteenth review of round M): a catch-up the lifter emptied stays so through
++ * a length picked, never the split's own day, and Today says nothing more for today. Synthetic data
++ * only.
++ */
++
++const records = [session(at(3, 18), [['barbell-row', 3]])];
++const NOW = at(9, 18);
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++/** A home with nothing: the standing calf raise is the only calf lift. */
++const [bare] = createDefaultLocations({ gymAccess: false, homeEquipment: [] }, at(1)) as [
++  LocationProfile,
++];
++const spec: CatchUpSpec = {
++  kind: 'catch-up',
++  muscles: [{ muscle: 'calves', sets: 3, minRir: 1, why: 'behind' }],
++  sitOut: [],
++};
++const request = (
++  trigger: RecalibrationTrigger,
++  workout: GeneratedWorkout,
++  constraints: SessionConstraints = { ...emptyConstraints(), catchUp: spec },
++): RecalibrationRequest => ({
++  trigger,
++  workout,
++  completed: emptyCompleted(),
++  lockedEntryIds: [],
++  currentEntryId: null,
++  duration: 'default',
++  profile: profileOf(),
++  location: bare,
++  loading: { missingPlates: [] },
++  history: records,
++  constraints,
++  reason: 'test',
++  timestamp: NOW,
++});
++const succeeded = (result: ReturnType<typeof recalibrate>): RecalibrationSuccess => {
++  if (!result.ok) throw new Error(result.error);
++  return result;
++};
++
++describe('a catch-up emptied stays empty through a length picked, the fourteenth review of round M', () => {
++  it('"Uncomfortable" on its only lift, then "30 min": nothing more for today, never the split’s day', () => {
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: bare,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec },
++    });
++    const calf = allEntries(plan.blocks)[0]!;
++    expect(calf.exerciseId).toBe('standing-calf-raise');
++    const emptied = succeeded(
++      recalibrate(request({ type: 'uncomfortable', entryId: calf.id }, plan)),
++    );
++    expect(allEntries(emptied.workout.blocks)).toEqual([]);
++    const shorter = succeeded(
++      recalibrate(request({ type: 'duration', choice: 30 }, emptied.workout, emptied.constraints)),
++    );
++    const today = createSession('key', shorter.workout, NOW);
++    const note = dayNoteOf(
++      { ...today, constraints: { ...today.constraints, catchUp: spec } },
++      false,
++    );
++    const details = `${shorter.summary.headline} ${lifts(shorter.workout)} | Today: ${note?.text}`;
++    // On d361edf: "Recalibrated to 30 min: 1 exercise added. push-up x4 @RIR 2/2/2/2", the split's
++    // push day, a muscle not behind given four sets, and Today: "Not one of your training days, and
++    // nothing behind this week can be caught up today."
++    expect(shorter.workout.templateId, details).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
++    expect(allEntries(shorter.workout.blocks).length, details).toBe(0);
++    expect(note?.text, details).toBe('Not one of your training days: nothing more for today.');
++  });
++});
++
++describe('a catch-up the lifter set aside every lift of, planned afresh, the fourteenth review of round M', () => {
++  it('stays the catch-up, nothing more for today, never the split’s own day', () => {
++    // As a plan made again from today's choices makes it: the calf raise set aside for comfort.
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: bare,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec, excludeExerciseIds: ['standing-calf-raise'] },
++    });
++    expect(plan.templateId, describeWorkout(plan).join('; ')).toBe(
++      CATCH_UP_TEMPLATE_IDS['catch-up'],
++    );
++    expect(allEntries(plan.blocks)).toEqual([]);
++    expect(plan.explanation.summary).toBe('Nothing more for today.');
++  });
++});
++
++describe('a catch-up whose kept pick fits no lift at the next place, the fourteenth review of round M', () => {
++  it('the farmer carry swapped in for the shrug, then a bare home: nothing more for today', () => {
++    const traps: CatchUpSpec = {
++      kind: 'catch-up',
++      muscles: [{ muscle: 'traps', sets: 3, minRir: 1, why: 'behind' }],
++      sitOut: [],
++    };
++    const [dumbbells] = createDefaultLocations(
++      { gymAccess: false, homeEquipment: ['dumbbells'] },
++      at(1),
++    ) as [LocationProfile];
++    const constraints = { ...emptyConstraints(), catchUp: traps };
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: dumbbells,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: traps },
++    });
++    const shrug = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'dumbbell-shrug')!;
++    expect(shrug, describeWorkout(plan).join('; ')).toBeDefined();
++    const base = {
++      completed: emptyCompleted(),
++      lockedEntryIds: [],
++      currentEntryId: null,
++      duration: 'default' as const,
++      profile: profileOf(),
++      loading: { missingPlates: [] },
++      history: records,
++      reason: 'test',
++      timestamp: NOW,
++    };
++    const swapped = recalibrate({
++      ...base,
++      trigger: { type: 'replace', entryId: shrug.id, exerciseId: 'farmer-carry' },
++      workout: plan,
++      location: dumbbells,
++      constraints,
++    });
++    if (!swapped.ok) throw new Error(swapped.error);
++    // The lifter's pick goes with them; at a home with nothing, no lift for the traps fits.
++    const moved = recalibrate({
++      ...base,
++      trigger: { type: 'location' },
++      workout: swapped.workout,
++      location: bare,
++      constraints: swapped.constraints,
++    });
++    if (!moved.ok) throw new Error(moved.error);
++    expect(moved.workout.templateId, describeWorkout(moved.workout).join('; ')).toBe(
++      CATCH_UP_TEMPLATE_IDS['catch-up'],
++    );
++    expect(allEntries(moved.workout.blocks)).toEqual([]);
++  });
++});
+diff --git a/src/engine/recalibration/catchUpEmptiedSkip.test.ts b/src/engine/recalibration/catchUpEmptiedSkip.test.ts
+new file mode 100644
+index 0000000..85a035a
+--- /dev/null
++++ b/src/engine/recalibration/catchUpEmptiedSkip.test.ts
+@@ -0,0 +1,78 @@
++import { describe, expect, it } from 'vitest';
++import type { CatchUpSpec } from '../../engine/planning/catchUp';
++import { emptyCompleted, emptyConstraints, recalibrate } from './recalibrate';
++import type {
++  RecalibrationRequest,
++  RecalibrationSuccess,
++  RecalibrationTrigger,
++  SessionConstraints,
++} from './types';
++import { allEntries, type GeneratedWorkout } from '../../engine/workout/types';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { at, describeWorkout, gym, profileOf, session } from '../../test/clockDays';
++
++/**
++ * Maintenance 31 (the fourteenth review of round M): a catch-up its only lift skipped has nothing
++ * more for today through every rebuild: no slot takes a lift again. Synthetic data only.
++ */
++
++const records = [session(at(3, 18), [['barbell-row', 3]])];
++const NOW = at(9, 18);
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++const spec: CatchUpSpec = {
++  kind: 'catch-up',
++  muscles: [{ muscle: 'side-delts', sets: 3, minRir: 1, why: 'behind' }],
++  sitOut: [],
++};
++const request = (
++  trigger: RecalibrationTrigger,
++  workout: GeneratedWorkout,
++  constraints: SessionConstraints = { ...emptyConstraints(), catchUp: spec },
++): RecalibrationRequest => ({
++  trigger,
++  workout,
++  completed: emptyCompleted(),
++  lockedEntryIds: [],
++  currentEntryId: null,
++  duration: 'default',
++  profile: profileOf(),
++  location: gym,
++  loading: { missingPlates: [] },
++  history: records,
++  constraints,
++  reason: 'test',
++  timestamp: NOW,
++});
++const succeeded = (result: ReturnType<typeof recalibrate>): RecalibrationSuccess => {
++  if (!result.ok) throw new Error(result.error);
++  return result;
++};
++
++describe('a catch-up its only lift skipped has nothing more through a rebuild, the fourteenth review of round M', () => {
++  it.each([
++    ['"Make it harder"', { type: 'intensity', direction: 'harder' } as RecalibrationTrigger],
++    ['"Make it easier"', { type: 'intensity', direction: 'easier' } as RecalibrationTrigger],
++    ['an end time', { type: 'end-by', time: at(9, 19) } as RecalibrationTrigger],
++  ])('the lateral raise skipped, then %s', (_, trigger) => {
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: gym,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec },
++    });
++    const only = allEntries(plan.blocks);
++    expect(only.length, lifts(plan)).toBe(1);
++    const skipped = succeeded(recalibrate(request({ type: 'skip', entryId: only[0]!.id }, plan)));
++    expect(allEntries(skipped.workout.blocks)).toEqual([]);
++    expect(skipped.workout.explanation.summary).toBe('Nothing more for today.');
++    const after = succeeded(recalibrate(request(trigger, skipped.workout, skipped.constraints)));
++    // On d361edf the rebuild fills the slot again: "1 exercise added", a side-delt lift.
++    expect(
++      allEntries(after.workout.blocks).map((entry) => entry.exerciseId),
++      `${after.summary.headline} ${lifts(after.workout)}`,
++    ).toEqual([]);
++    expect(after.workout.explanation.summary).toBe('Nothing more for today.');
 +  });
 +});
 diff --git a/src/engine/recalibration/catchUpLinesAfterChange.test.ts b/src/engine/recalibration/catchUpLinesAfterChange.test.ts
@@ -4739,6 +5348,151 @@ index 0000000..95ce7f7
 +    ).toEqual([]);
 +  });
 +});
+diff --git a/src/engine/recalibration/catchUpSheetReason.test.ts b/src/engine/recalibration/catchUpSheetReason.test.ts
+new file mode 100644
+index 0000000..55df97a
+--- /dev/null
++++ b/src/engine/recalibration/catchUpSheetReason.test.ts
+@@ -0,0 +1,139 @@
++import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
++import type { CatchUpSpec } from '../../engine/planning/catchUp';
++import {
++  contextFor,
++  emptyCompleted,
++  emptyConstraints,
++  recalibrate,
++  swapsOffered,
++} from './recalibrate';
++import type { CompletedWork } from './types';
++import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../../engine/workout/types';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { at, describeWorkout, gym, profileOf, session, working } from '../../test/clockDays';
++
++/**
++ * Maintenance 31 (the fourteenth review of round M): a lift with one set left in a catch-up has
++ * nothing come in for it, and the swap sheet and "Uncomfortable" say so, not that nothing fits.
++ * Synthetic data only.
++ */
++
++const records = [session(at(3, 18), [['barbell-row', 3]])];
++const NOW = at(9, 18);
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++const lower: CatchUpSpec = {
++  kind: 'catch-up',
++  muscles: (['quads', 'glutes', 'hamstrings'] as const).map((muscle) => ({
++    muscle,
++    sets: 3,
++    minRir: 1,
++    why: 'behind' as const,
++  })),
++  sitOut: [],
++};
++const constraints = { ...emptyConstraints(), catchUp: lower };
++const setsDone = (entry: WorkoutEntry, count: number): CompletedWork => ({
++  ...emptyCompleted(),
++  startedAt: NOW,
++  elapsedSeconds: 300 * count,
++  sets: working(entry)
++    .slice(0, count)
++    .map((set, index) => ({
++      entryId: entry.id,
++      exerciseId: entry.exerciseId,
++      setIndex: set.index,
++      kind: 'working' as const,
++      reps: 8,
++      weight: set.targetWeight,
++      rir: 2,
++      completedAt: at(9, 18, index * 4),
++    })),
++});
++
++describe('the swap sheet gives the refusal’s own reason, the fourteenth review of round M', () => {
++  it('the back squat, two of its three sets done: the sheet names its one set left', () => {
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: gym,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: lower },
++    });
++    const squat = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'back-squat')!;
++    expect(squat, lifts(plan)).toBeDefined();
++    expect(working(squat).length).toBe(3);
++    const completed = setsDone(squat, 2);
++    const sheet = swapsOffered(
++      rankAlternatives({
++        current: requireExercise(squat.exerciseId),
++        context: contextFor({ profile: profileOf(), location: gym }, constraints),
++        otherExercises: allEntries(plan.blocks)
++          .filter((other) => other.id !== squat.id)
++          .map((other) => requireExercise(other.exerciseId)),
++        plannedSets: { sets: squat.sets.length, restSeconds: squat.restSeconds },
++        limit: 6,
++      }),
++      { constraints, completed, history: records, timestamp: NOW },
++      plan,
++      squat,
++    );
++    // What the engine says when one of them is tried: the lift's one set left.
++    const tried = recalibrate({
++      trigger: { type: 'replace', entryId: squat.id, exerciseId: 'leg-press' },
++      workout: plan,
++      completed,
++      lockedEntryIds: [],
++      currentEntryId: squat.id,
++      duration: 'default',
++      profile: profileOf(),
++      location: gym,
++      loading: { missingPlates: [] },
++      history: records,
++      constraints,
++      reason: 'test',
++      timestamp: NOW,
++    });
++    expect(tried.ok).toBe(false);
++    expect(tried.ok ? '' : tried.error).toMatch(/one set left/);
++    expect(sheet.candidates).toEqual([]);
++    // On d361edf: "Every alternative would give the catch-up’s muscles more than they lack today."
++    expect(sheet.emptyReason).not.toMatch(/more than they lack/);
++    expect(sheet.emptyReason).toMatch(/one set/i);
++  });
++
++  it('the back squat, two of its three sets done, "Uncomfortable": the headline names its one set left', () => {
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: gym,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: lower },
++    });
++    const squat = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'back-squat')!;
++    const completed = setsDone(squat, 2);
++    const result = recalibrate({
++      trigger: { type: 'uncomfortable', entryId: squat.id },
++      workout: plan,
++      completed,
++      lockedEntryIds: [],
++      currentEntryId: squat.id,
++      duration: 'default',
++      profile: profileOf(),
++      location: gym,
++      loading: { missingPlates: [] },
++      history: records,
++      constraints,
++      reason: 'test',
++      timestamp: NOW,
++    });
++    if (!result.ok) throw new Error(result.error);
++    // On d361edf: "Back Squat stops at the sets done: no comfortable alternative fits Gym." — the
++    // gym has comfortable squats aplenty (the leg press, the hack squat); what stops it is the one
++    // set it owes.
++    expect(result.summary.headline).not.toMatch(/no comfortable alternative fits/);
++  });
++});
 diff --git a/src/engine/recalibration/catchUpStandInNames.test.ts b/src/engine/recalibration/catchUpStandInNames.test.ts
 new file mode 100644
 index 0000000..4f535cd
@@ -5085,12 +5839,195 @@ index 0000000..a057485
 +    ).toBeGreaterThanOrEqual(minRir);
 +  });
 +});
+diff --git a/src/engine/recalibration/catchUpSwapResting.test.ts b/src/engine/recalibration/catchUpSwapResting.test.ts
+new file mode 100644
+index 0000000..c7b60b2
+--- /dev/null
++++ b/src/engine/recalibration/catchUpSwapResting.test.ts
+@@ -0,0 +1,177 @@
++import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
++import type { CatchUpSpec } from '../../engine/planning/catchUp';
++import {
++  contextFor,
++  emptyCompleted,
++  emptyConstraints,
++  recalibrate,
++  swapsOffered,
++} from './recalibrate';
++import type { RecalibrationRequest } from './types';
++import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../../engine/workout/types';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { at, describeWorkout, directSets, gym, profileOf, session } from '../../test/clockDays';
++
++/**
++ * Maintenance 31 (the fourteenth review of round M): the lifter's swap in a catch-up or a second
++ * workout, and the swap sheet, bring in no lift for a muscle that rests today or sits out, as what
++ * comes in for comfort or pain does. Synthetic data only.
++ */
++
++// Leg extensions yesterday evening (the quads rest today) and a row last Thursday; Wednesday the
++// 9th, 6 pm, a day the default profile does not tick.
++const records = [
++  session(at(3, 18), [['barbell-row', 3]]),
++  session(at(8, 18), [['leg-extension', 3]]),
++];
++const NOW = at(9, 18);
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++const spec: CatchUpSpec = {
++  kind: 'catch-up',
++  muscles: [{ muscle: 'glutes', sets: 3, minRir: 1, why: 'behind' }],
++  sitOut: [],
++};
++const constraints = { ...emptyConstraints(), catchUp: spec };
++
++describe('the lifter’s swap in a catch-up brings in no lift for a muscle that rests, the fourteenth review of round M', () => {
++  it('the dumbbell Romanian deadlift for the glutes, the quads trained yesterday', () => {
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: gym,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec },
++    });
++    // The plan itself gives the quads nothing.
++    expect(directSets(plan, 'quads'), lifts(plan)).toBe(0);
++    const entry = allEntries(plan.blocks).find(
++      (candidate) => candidate.exerciseId === 'dumbbell-romanian-deadlift',
++    ) as WorkoutEntry;
++    expect(entry, lifts(plan)).toBeDefined();
++    // The swap sheet, as Today ranks it and filters it.
++    const sheet = swapsOffered(
++      rankAlternatives({
++        current: requireExercise(entry.exerciseId),
++        context: contextFor({ profile: profileOf(), location: gym }, constraints),
++        otherExercises: allEntries(plan.blocks)
++          .filter((other) => other.id !== entry.id)
++          .map((other) => requireExercise(other.exerciseId)),
++        plannedSets: { sets: entry.sets.length, restSeconds: entry.restSeconds },
++        limit: 6,
++      }),
++      { constraints, completed: emptyCompleted(), history: records, timestamp: NOW },
++      plan,
++      entry,
++    );
++    const offered = sheet.candidates.map((candidate) => candidate.exercise);
++    const forQuads = offered.filter((exercise) => exercise.primaryMuscles.includes('quads'));
++    // The sheet offers no lift that works the quads directly. On d361edf: the trap-bar deadlift.
++    expect(
++      forQuads.map((exercise) => exercise.id),
++      offered.map((exercise) => exercise.id).join(', '),
++    ).toEqual([]);
++  });
++
++  it('swapped in from the sheet anyway, the quads take sets the day leaves them none of', () => {
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: gym,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec },
++    });
++    const entry = allEntries(plan.blocks).find(
++      (candidate) => candidate.exerciseId === 'dumbbell-romanian-deadlift',
++    ) as WorkoutEntry;
++    const request: RecalibrationRequest = {
++      trigger: { type: 'replace', entryId: entry.id, exerciseId: 'trap-bar-deadlift' },
++      workout: plan,
++      completed: emptyCompleted(),
++      lockedEntryIds: [],
++      currentEntryId: null,
++      duration: 'default',
++      profile: profileOf(),
++      location: gym,
++      loading: { missingPlates: [] },
++      history: records,
++      constraints,
++      reason: 'test',
++      timestamp: NOW,
++    };
++    const result = recalibrate(request);
++    // Refused with the reason, or the quads given nothing. On d361edf: "Swapped Dumbbell Romanian
++    // Deadlift for Trap Bar Deadlift.", the quads three direct sets the day after they were trained.
++    if (result.ok) {
++      expect(
++        directSets(result.workout, 'quads'),
++        `${result.summary.headline} ${lifts(result.workout)}`,
++      ).toBe(0);
++    }
++  });
++
++  it('a second workout: the triceps sit out, the sheet offers the overhead press for the Arnold press', () => {
++    // An overhead press this morning: the triceps sit out tonight, the front delts take what is left.
++    const today = [...records, session(at(9, 9), [['overhead-press', 3]])];
++    const second: CatchUpSpec = {
++      kind: 'second',
++      muscles: [{ muscle: 'front-delts', sets: 2, minRir: 3, why: 'remainder' }],
++      sitOut: ['triceps'],
++    };
++    const day = { ...emptyConstraints(), catchUp: second };
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: gym,
++      history: today,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: second },
++    });
++    expect(directSets(plan, 'triceps'), lifts(plan)).toBe(0);
++    const entry = allEntries(plan.blocks).find(
++      (candidate) => candidate.exerciseId === 'arnold-press',
++    ) as WorkoutEntry;
++    expect(entry, lifts(plan)).toBeDefined();
++    const sheet = swapsOffered(
++      rankAlternatives({
++        current: requireExercise(entry.exerciseId),
++        context: contextFor({ profile: profileOf(), location: gym }, day),
++        otherExercises: allEntries(plan.blocks)
++          .filter((other) => other.id !== entry.id)
++          .map((other) => requireExercise(other.exerciseId)),
++        plannedSets: { sets: entry.sets.length, restSeconds: entry.restSeconds },
++        limit: 6,
++      }),
++      { constraints: day, completed: emptyCompleted(), history: today, timestamp: NOW },
++      plan,
++      entry,
++    );
++    const offered = sheet.candidates.map((candidate) => candidate.exercise);
++    const result = recalibrate({
++      trigger: { type: 'replace', entryId: entry.id, exerciseId: 'overhead-press' },
++      workout: plan,
++      completed: emptyCompleted(),
++      lockedEntryIds: [],
++      currentEntryId: null,
++      duration: 'default',
++      profile: profileOf(),
++      location: gym,
++      loading: { missingPlates: [] },
++      history: today,
++      constraints: day,
++      reason: 'test',
++      timestamp: NOW,
++    });
++    const details = `sheet: ${offered.map((exercise) => exercise.id).join(', ')} | ${result.ok ? `${result.summary.headline} ${lifts(result.workout)}` : result.error}`;
++    // On d361edf the sheet offers it, and "Swapped Arnold Press for Overhead Press." gives the
++    // triceps, trained this morning, two more direct sets.
++    expect(
++      offered.filter((exercise) => exercise.primaryMuscles.includes('triceps')).map((e) => e.id),
++      details,
++    ).toEqual([]);
++    if (result.ok) expect(directSets(result.workout, 'triceps'), details).toBe(0);
++  });
++});
 diff --git a/src/engine/recalibration/catchUpSwapRules.test.ts b/src/engine/recalibration/catchUpSwapRules.test.ts
 new file mode 100644
-index 0000000..55df8c0
+index 0000000..b19543e
 --- /dev/null
 +++ b/src/engine/recalibration/catchUpSwapRules.test.ts
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,234 @@
 +import { describe, expect, it } from 'vitest';
 +import { requireExercise } from '../../catalog/exercises/catalog';
 +import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
@@ -5285,11 +6222,13 @@ index 0000000..55df8c0
 +    const day = {
 +      constraints: { ...emptyConstraints(), catchUp: lower },
 +      completed: emptyCompleted(),
++      history: records,
++      timestamp: NOW,
 +    };
 +    const offered = swapsOffered(ranked, day, workout, curl);
 +    // Every lift the sheet ranks works the glutes: none is offered, and the sheet says why.
 +    expect(offered.candidates).toEqual([]);
-+    expect(offered.emptyReason).toMatch(/more than they lack today/);
++    expect(offered.emptyReason).toMatch(/more than they lack/);
 +    // On a day of the plan the sheet offers them all.
 +    expect(swapsOffered(ranked, { ...day, constraints: emptyConstraints() }, workout, curl)).toBe(
 +      ranked,
@@ -5324,10 +6263,10 @@ index 0000000..55df8c0
 +  });
 +});
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index 551281d..bd97690 100644
+index 551281d..1c20cd0 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
-@@ -1,9 +1,9 @@
+@@ -1,9 +1,10 @@
  import { dropSetWeight } from './dropSet';
 -import { requireExercise } from '../../catalog/exercises/catalog';
 +import { allExercises, requireExercise } from '../../catalog/exercises/catalog';
@@ -5335,12 +6274,13 @@ index 551281d..bd97690 100644
  import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 -import { muscleName, type MuscleId } from '../../catalog/muscles/muscles';
 -import { rankAlternatives } from '../alternatives/rankAlternatives';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 +import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 +import { rankAlternatives, type AlternativeResult } from '../alternatives/rankAlternatives';
  import {
    PAIN_FLAGS,
    blocksCandidate,
-@@ -13,10 +13,12 @@ import {
+@@ -13,10 +14,12 @@ import {
    type ConflictContext,
  } from '../conflicts/conflictEngine';
  import { preferredIdsOf } from '../conflicts/context';
@@ -5353,7 +6293,7 @@ index 551281d..bd97690 100644
    resolveTargetMinutes,
    type SetDonePredicate,
  } from '../duration/duration';
-@@ -72,6 +74,11 @@ import {
+@@ -72,6 +75,11 @@ import {
    mainLiftName,
    prescriptionForDay,
    rampContextFor,
@@ -5365,7 +6305,7 @@ index 551281d..bd97690 100644
    sessionConflictContext,
    sessionWork,
    targetAtPlace,
-@@ -79,6 +86,7 @@ import {
+@@ -79,6 +87,7 @@ import {
    type GenerationConstraints,
    type KeptEntry,
    type PrescriptionAdjustment,
@@ -5373,7 +6313,27 @@ index 551281d..bd97690 100644
    withSwapLines,
  } from '../workoutGenerator/generate';
  import {
-@@ -204,6 +212,13 @@ export function scopeFor(request: RecalibrationRequest): RecalibrationScope {
+@@ -200,13 +209,36 @@ export function hasStarted(completed: CompletedWork): boolean {
+   return completed.startedAt !== null || completed.elapsedSeconds > 0 || completed.sets.length > 0;
+ }
+ 
++/**
++ * Whether a lift stays through a rebuild as the lifter's pick does: locked or pinned, or in a
++ * catch-up or a second workout, one that came in for another (for comfort or pain, at a place): the
++ * day's slots are laid out with the plan, and a slot may have no lift of its own movement to take it
++ * again (the thirteenth review of round M). Every rebuild reads it, the plan's scope and the day's
++ * settings too (the fourteenth: a length picked left it out, "Make it easier" passed it over).
++ */
++function keptAsPicked(
++  entry: WorkoutEntry,
++  request: Pick<RecalibrationRequest, 'constraints' | 'workout'>,
++): boolean {
++  if (entry.locked || entry.pinned) return true;
++  if (entry.replacedFrom === undefined || isStopped(entry)) return false;
++  return (catchUpToday(request.constraints, request.workout)?.muscles.length ?? 0) > 0;
++}
++
+ export function scopeFor(request: RecalibrationRequest): RecalibrationScope {
    const type = request.trigger.type;
    if (LOCAL_TRIGGERS.has(type)) return 'local';
    if (PARTIAL_TRIGGERS.has(type)) return 'partial';
@@ -5386,8 +6346,12 @@ index 551281d..bd97690 100644
 +  }
    const anyLocked =
      request.lockedEntryIds.length > 0 ||
-     allEntries(request.workout.blocks).some((entry) => entry.locked || entry.pinned);
-@@ -347,6 +362,18 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
+-    allEntries(request.workout.blocks).some((entry) => entry.locked || entry.pinned);
++    allEntries(request.workout.blocks).some((entry) => keptAsPicked(entry, request));
+   return hasStarted(request.completed) || anyLocked ? 'partial' : 'full';
+ }
+ 
+@@ -347,6 +379,18 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
      ...(constraints.badStart ? { badStart: true } : {}),
      deload: constraints.deload ? { ...constraints.deload } : null,
      focus: constraints.focus ?? null,
@@ -5406,24 +6370,16 @@ index 551281d..bd97690 100644
    };
  }
  
-@@ -389,8 +416,16 @@ function classify(request: RecalibrationRequest): Classified {
-   const doneKeys = new Set(request.completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
+@@ -390,7 +434,7 @@ function classify(request: RecalibrationRequest): Classified {
    const frozenIds = new Set(request.completed.sets.map((set) => set.entryId));
    const lockedIds = new Set<string>(request.lockedEntryIds);
-+  // In a catch-up or a second workout, a lift that came in for another (for comfort or pain, at a
-+  // place) stays through a rebuild as a swap does: the day's slots are laid out with the plan, and a
-+  // slot may have no lift of its own movement to take it again (the thirteenth review of round M:
-+  // the farmer carry in for the shrug was left out by "Make it harder").
-+  const offPlan = (catchUpToday(request.constraints, request.workout)?.muscles.length ?? 0) > 0;
    for (const entry of allEntries(request.workout.blocks)) {
-     if (entry.locked || entry.pinned) lockedIds.add(entry.id);
-+    else if (offPlan && entry.replacedFrom !== undefined && !isStopped(entry)) {
-+      lockedIds.add(entry.id);
-+    }
+-    if (entry.locked || entry.pinned) lockedIds.add(entry.id);
++    if (keptAsPicked(entry, request)) lockedIds.add(entry.id);
    }
    if (request.currentEntryId) lockedIds.add(request.currentEntryId);
    return {
-@@ -522,9 +557,10 @@ function minutesLeft(
+@@ -522,9 +566,10 @@ function minutesLeft(
      if (left !== null) return Math.max(MIN_REMAINING_MINUTES, Math.round(left));
    }
    if (!hasStarted(request.completed)) return null;
@@ -5435,7 +6391,7 @@ index 551281d..bd97690 100644
    );
    return Math.max(MIN_REMAINING_MINUTES, Math.round(full - request.completed.elapsedSeconds / 60));
  }
-@@ -538,7 +574,11 @@ function rebuild(
+@@ -538,7 +583,22 @@ function rebuild(
    const context = contextFor(request, constraints);
    const classified = classify(request);
    const started = hasStarted(request.completed);
@@ -5445,10 +6401,21 @@ index 551281d..bd97690 100644
 +    request.profile.schedule.typicalDurationMinutes,
 +    request.workout.templateId,
 +  );
++  // A catch-up or a second workout the lifter's changes emptied stays so through every rebuild,
++  // the full session a tap away (the fourteenth review of round M: a skipped lift's slot took a lift
++  // back, a length picked planned the split's day).
++  if (
++    allEntries(request.workout.blocks).length === 0 &&
++    (catchUpToday(constraints, request.workout)?.muscles.length ?? 0) > 0
++  ) {
++    const workout = cloneWorkout(request.workout);
++    workout.duration = { ...workout.duration, choice, targetMinutes: fullTarget };
++    return workout;
++  }
    let targetMinutesOverride: number | undefined = started
      ? Math.max(
          MIN_REMAINING_MINUTES,
-@@ -569,6 +609,21 @@ function rebuild(
+@@ -569,6 +629,21 @@ function rebuild(
      readiness: constraints.readiness,
      deload: constraints.deload,
      focusMuscle: constraints.focus,
@@ -5470,7 +6437,7 @@ index 551281d..bd97690 100644
      sessionLoading: request.loading,
      swaps: request.swaps,
    };
-@@ -953,6 +1008,162 @@ function prescriptionToday(
+@@ -953,6 +1028,199 @@ function prescriptionToday(
      : base;
  }
  
@@ -5534,12 +6501,18 @@ index 551281d..bd97690 100644
 +/**
 + * Why a lift the lifter swaps in cannot come in on the day's catch-up or second workout, where it
 + * cannot (the thirteenth review of round M): what comes in keeps to the day's muscles as what comes
-+ * in for comfort or pain does, no muscle given more than it lacks, and never a lift of fewer than
-+ * two sets. Null where it can, for a lift stopped earlier swapped back to, and on a day of the plan.
-+ * The swap sheet reads it too, and offers no lift it refuses.
++ * in for comfort or pain does, no muscle given more than it lacks, none that rests today (the
++ * fourteenth: a trap-bar deadlift gave the quads trained yesterday three sets), and never a lift of
++ * fewer than two sets. Null where it can, for a lift stopped earlier swapped back to, and on a day
++ * of the plan. The swap sheet reads it too, and offers no lift it refuses.
 + */
 +export function catchUpRefusal(
-+  day: { constraints: SessionConstraints; completed: Pick<CompletedWork, 'sets'> },
++  day: {
++    constraints: SessionConstraints;
++    completed: Pick<CompletedWork, 'sets'>;
++    history: readonly WorkoutRecord[];
++    timestamp: string;
++  },
 +  workout: GeneratedWorkout,
 +  entry: WorkoutEntry,
 +  next: CatalogExercise,
@@ -5554,8 +6527,12 @@ index 551281d..bd97690 100644
 +  const current = requireExercise(entry.exerciseId);
 +  const working = entry.sets.filter((set) => set.kind === 'working');
 +  const done = working.filter((set) => isDone(entry.id, set.index)).length;
-+  if (done > 0 && working.length - done < CATCH_UP.MIN_SETS) {
-+    return `${current.name} has one set left, too few for another lift to take over, so nothing was changed.`;
++  if (done > 0 && working.length - done < CATCH_UP.MIN_SETS) return oneSetLeft(current.name);
++  const resting = restingInPlan(day.constraints, workout, day.history, day.timestamp);
++  const rests = next.primaryMuscles.filter((muscle) => resting.has(muscle));
++  if (rests.length > 0) {
++    const verb = rests.length === 1 ? muscleVerb(rests[0]!, 'rests', 'rest') : 'rest';
++    return `${next.name} works the ${musclesInWords(rests)}, which ${verb} today`;
 +  }
 +  const short = spec.muscles
 +    .filter(
@@ -5569,7 +6546,28 @@ index 551281d..bd97690 100644
 +    .map((item) => item.muscle);
 +  if (short.length === 0) return null;
 +  const lack = short.length === 1 ? muscleVerb(short[0]!, 'it lacks', 'they lack') : 'they lack';
-+  return `${next.name} would give the ${musclesInWords(short)} more than ${lack} today, so nothing was changed.`;
++  return `${next.name} would give the ${musclesInWords(short)} more than ${lack} today`;
++}
++
++/**
++ * Whether a lift begun in a catch-up or a second workout has fewer sets owed than a lift takes:
++ * nothing comes in for it, whatever fits (the thirteenth review of round M).
++ */
++function oneSetOwed(
++  request: RecalibrationRequest,
++  workout: GeneratedWorkout,
++  entry: WorkoutEntry,
++): boolean {
++  if ((catchUpToday(request.constraints, workout)?.muscles.length ?? 0) === 0) return false;
++  const { isDone } = classify(request);
++  const working = entry.sets.filter((set) => set.kind === 'working');
++  const done = working.filter((set) => isDone(entry.id, set.index)).length;
++  return done > 0 && working.length - done < CATCH_UP.MIN_SETS;
++}
++
++/** A lift begun with one set left, as a refusal and a stop say it. */
++function oneSetLeft(name: string): string {
++  return `${name} has one set left, too few for another lift to take over`;
 +}
 +
 +/**
@@ -5578,20 +6576,26 @@ index 551281d..bd97690 100644
 + */
 +export function swapsOffered(
 +  result: AlternativeResult,
-+  day: { constraints: SessionConstraints; completed: Pick<CompletedWork, 'sets'> },
++  day: Parameters<typeof catchUpRefusal>[0],
 +  workout: GeneratedWorkout,
 +  entry: WorkoutEntry,
 +): AlternativeResult {
-+  const candidates = result.candidates.filter(
-+    (candidate) => catchUpRefusal(day, workout, entry, candidate.exercise) === null,
++  const refusals = result.candidates.map((candidate) =>
++    catchUpRefusal(day, workout, entry, candidate.exercise),
 +  );
++  const candidates = result.candidates.filter((_, at) => refusals[at] === null);
 +  if (candidates.length === result.candidates.length) return result;
++  // The reason every one was refused, where they share it (the fourteenth review: the sheet blamed
++  // the muscles for a lift with one set left).
++  const reasons = [...new Set(refusals)];
 +  return {
 +    candidates,
 +    emptyReason:
 +      candidates.length > 0
 +        ? null
-+        : 'Every alternative would give the catch-up’s muscles more than they lack today.',
++        : reasons.length === 1 && reasons[0]
++          ? `${reasons[0]}.`
++          : 'Every alternative would give the day’s muscles more than they lack, or work one that rests today.',
 +  };
 +}
 +
@@ -5633,7 +6637,7 @@ index 551281d..bd97690 100644
  /**
   * How far a lift's effort sits from its plain target (Maintenance 24): "Make it harder" or
   * "easier" and a check-in move its reps in reserve, and a refit, a max or a swap keeps that. It
-@@ -1499,8 +1710,14 @@ function refitEntry(
+@@ -1499,8 +1767,14 @@ function refitEntry(
    const exercise = requireExercise(entry.exerciseId);
    const plain = prescriptionToday(request, exercise, entry.role);
    const plainTarget = targetToday(request, workout, entry.id, exercise, entry.role, plain);
@@ -5650,7 +6654,16 @@ index 551281d..bd97690 100644
    const target =
      prescription === plain
        ? plainTarget
-@@ -1690,6 +1907,7 @@ function settleKept(
+@@ -1675,7 +1949,7 @@ function settleKept(
+     entries.some((other) => other !== entry && other.slot === entry.slot && isStopped(other));
+   const settling = entries.filter(
+     (entry) =>
+-      (entry.id === request.currentEntryId || entry.pinned || entry.locked) &&
++      (entry.id === request.currentEntryId || keptAsPicked(entry, request)) &&
+       // One the coach added sits outside the plan's places, with the sets it offered.
+       !(entry.locked && entry.slot === undefined) &&
+       !logged.has(entry.id) &&
+@@ -1690,6 +1964,7 @@ function settleKept(
    );
    const trimmable = new Set<string>();
    if (settling.length === 0) return { workout: request.workout, trimmable };
@@ -5658,7 +6671,7 @@ index 551281d..bd97690 100644
    const workout = cloneWorkout(request.workout);
    const next = { ...request, workout, constraints };
    for (const kept of settling) {
-@@ -1742,9 +1960,16 @@ function settleKept(
+@@ -1742,9 +2017,16 @@ function settleKept(
      // review of item 44): a harder day adds no set to it and takes its reserve no lower than one.
      // By the plan's rule it has its count; without one (the push ended since), it adds none.
      const pushed = mark !== undefined;
@@ -5678,7 +6691,7 @@ index 551281d..bd97690 100644
      const built = targetedSets(
        next,
        workout,
-@@ -1988,7 +2213,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
+@@ -1988,7 +2270,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
      }
    }
    const plan = withoutStops(restored);
@@ -5687,7 +6700,7 @@ index 551281d..bd97690 100644
    const general = generalWarmupMinutes(target);
    const time = estimateWorkout(
      plan.blocks,
-@@ -2406,20 +2631,34 @@ function applySubstitution(
+@@ -2406,20 +2688,34 @@ function applySubstitution(
    // A count set by hand comes in as set, the ease taking no set from it (the fifteenth pass).
    const planWorking =
      plan && !entry.manual?.sets ? plan.filter((set) => set.kind === 'working') : shownWorking;
@@ -5724,7 +6737,7 @@ index 551281d..bd97690 100644
      entry.restSeconds,
      { shift },
    );
-@@ -2480,8 +2719,15 @@ function standIn(
+@@ -2480,8 +2776,15 @@ function standIn(
      (set) => set.kind === 'working' && !isDone(entry.id, set.index),
    ).length;
    const dropOwed = entry.sets.some((set) => set.kind === 'drop' && !isDone(entry.id, set.index));
@@ -5742,7 +6755,7 @@ index 551281d..bd97690 100644
    closeAtLogged(entry, isDone, 'swap');
    syncRounds(block);
    relabel(block);
-@@ -2503,13 +2749,15 @@ function standIn(
+@@ -2503,13 +2806,15 @@ function standIn(
      ...(entry.push === 'extra' ? { push: 'extra' as const } : {}),
    };
    placeStandIn(workout, entry, block, stand, isDone);
@@ -5759,7 +6772,7 @@ index 551281d..bd97690 100644
      entry.restSeconds,
      { shift },
    );
-@@ -2569,7 +2817,11 @@ function swapBack(
+@@ -2569,7 +2874,11 @@ function swapBack(
      stopped.role,
      owed,
      stopped.restSeconds,
@@ -5772,7 +6785,7 @@ index 551281d..bd97690 100644
    );
    stopped.sets = [...stopped.sets, ...built.sets];
    withoutHandTargets(stopped);
-@@ -2589,6 +2841,27 @@ function swapBack(
+@@ -2589,6 +2898,27 @@ function swapBack(
    }
  }
  
@@ -5800,7 +6813,7 @@ index 551281d..bd97690 100644
  function removeEntry(workout: GeneratedWorkout, entryId: string): WorkoutEntry {
    const { entry, block } = findEntry(workout, entryId);
    block.entries = block.entries.filter((candidate) => candidate.id !== entryId);
-@@ -2645,9 +2918,57 @@ function bestAlternative(
+@@ -2645,9 +2975,57 @@ function bestAlternative(
      .map((candidate) => requireExercise(candidate.exerciseId));
    const partner =
      block.kind === 'superset' ? block.entries.find((member) => member.id !== entry.id) : undefined;
@@ -5858,7 +6871,7 @@ index 551281d..bd97690 100644
      otherExercises: others,
      supersetPartner: partner ? requireExercise(partner.exerciseId) : undefined,
      dropSetPlanned: entry.dropSet,
-@@ -2720,12 +3041,25 @@ function refresh(
+@@ -2720,12 +3098,25 @@ function refresh(
        )
      : workout.explanation.reasons;
    // The summary says the exercises the plan has and the minutes its timers add up to
@@ -5890,7 +6903,7 @@ index 551281d..bd97690 100644
    keepOrderLines(workout);
    workout.duration = {
      ...workout.duration,
-@@ -2786,9 +3120,14 @@ function substituteUnfit(
+@@ -2786,9 +3177,14 @@ function substituteUnfit(
        renamePostponed(constraints, exercise.id, alternative.id, workout);
        replaced += 1;
      } else if (blocked || forced) {
@@ -5907,7 +6920,7 @@ index 551281d..bd97690 100644
      }
    }
    return { replaced, removed, notes };
-@@ -2910,6 +3249,20 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -2910,6 +3306,20 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          workout: rebuild(request, scope, { choice: request.duration, constraints }),
          prefix: 'Rebuilt for your updated profile',
        };
@@ -5928,16 +6941,16 @@ index 551281d..bd97690 100644
  
      case 'replace': {
        const workout = cloneWorkout(request.workout);
-@@ -2927,6 +3280,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -2927,6 +3337,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        ) {
          throw new Error(`${previous.name} is done: nothing is left to swap.`);
        }
 +      const refused = catchUpRefusal(request, workout, entry, next);
-+      if (refused) throw new Error(refused);
++      if (refused) throw new Error(`${refused}, so nothing was changed.`);
        applySubstitution(workout, entry, block, next, request, true);
        renamePostponed(constraints, previous.id, next.id, workout);
        // A lift a swap brings back (a lift stopped earlier, swapped back) comes to its old row: the
-@@ -3070,14 +3425,18 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3070,14 +3482,20 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            headline: `${previous.name} replaced by ${alternative.name} for comfort.`,
          };
        }
@@ -5953,12 +6966,14 @@ index 551281d..bd97690 100644
          constraints,
 -        headline: `Left out ${previous.name}: no comfortable alternative fits ${place}.`,
 +        headline: stopped
-+          ? `${previous.name} stops at the sets done: no comfortable alternative fits ${place}.`
++          ? oneSetOwed(request, workout, entry)
++            ? `${previous.name} stops at the sets done: one set left is too few for another lift to take over.`
++            : `${previous.name} stops at the sets done: no comfortable alternative fits ${place}.`
 +          : `Left out ${previous.name}: no comfortable alternative fits ${place}.`,
        };
      }
  
-@@ -3339,8 +3698,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3339,8 +3757,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
              targetToday(from, workout, entry.id, exercise, entry.role, asked);
            const plainTarget = targetFor(plain);
            // The effort the lift carries ("Make it harder" or "easier", a check-in) stays
@@ -5980,7 +6995,7 @@ index 551281d..bd97690 100644
            let target = prescription === plain ? plainTarget : targetFor(prescription);
            // A load read from an estimate for a rep range, with reps set by hand: the load for those
            // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
-@@ -3532,8 +3902,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3532,8 +3961,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          ? readinessAdjustment(request.constraints.readiness)
          : undefined;
        const restored = !adjust && earlier !== undefined;
@@ -5997,7 +7012,7 @@ index 551281d..bd97690 100644
        if (
          !adjust &&
          !restored &&
-@@ -4128,7 +4505,10 @@ function validateWorkout(
+@@ -4128,7 +4564,10 @@ function validateWorkout(
    context: ConflictContext,
  ): void {
    const entries = allEntries(workout.blocks);
@@ -6223,6 +7238,79 @@ index 9057c46..fff9fde 100644
  });
  
  /** The parsed shape is structurally the engine's GeneratedWorkout. */
+diff --git a/src/engine/workoutGenerator/catchUpEndTimeBack.test.ts b/src/engine/workoutGenerator/catchUpEndTimeBack.test.ts
+new file mode 100644
+index 0000000..6aebf5b
+--- /dev/null
++++ b/src/engine/workoutGenerator/catchUpEndTimeBack.test.ts
+@@ -0,0 +1,67 @@
++import { describe, expect, it } from 'vitest';
++import { CATCH_UP, type CatchUpSpec } from '../../engine/planning/catchUp';
++import {
++  emptyCompleted,
++  emptyConstraints,
++  recalibrate,
++} from '../../engine/recalibration/recalibrate';
++import { allEntries, isStopped, type GeneratedWorkout } from '../../engine/workout/types';
++import { generateWorkout } from './generate';
++import { at, describeWorkout, gym, profileOf, session, working } from '../../test/clockDays';
++
++/**
++ * Maintenance 31 (the fourteenth review of round M): an end time keeps every lift of a catch-up at
++ * two working sets, a lift brought back on its own after one is left out too. Synthetic data only.
++ */
++
++const records = [session(at(3, 18), [['barbell-row', 3]])];
++const NOW = at(9, 18);
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++const spec: CatchUpSpec = {
++  kind: 'catch-up',
++  muscles: (['chest', 'biceps', 'quads'] as const).map((muscle) => ({
++    muscle,
++    sets: 3,
++    minRir: 1,
++    why: 'behind' as const,
++  })),
++  sitOut: [],
++};
++
++describe('an end time brings back no lift at one set in a catch-up, the fourteenth review of round M', () => {
++  const plan = generateWorkout({
++    profile: profileOf(),
++    location: gym,
++    history: records,
++    now: NOW,
++    duration: 'default',
++    constraints: { catchUp: spec },
++  });
++  it.each(Array.from({ length: 33 }, (_, index) => index + 8))(
++    'to end in %i minutes',
++    (minutes) => {
++      const result = recalibrate({
++        trigger: { type: 'end-by', time: at(9, 18, minutes) },
++        workout: plan,
++        completed: emptyCompleted(),
++        lockedEntryIds: [],
++        currentEntryId: null,
++        duration: 'default',
++        profile: profileOf(),
++        location: gym,
++        loading: { missingPlates: [] },
++        history: records,
++        constraints: { ...emptyConstraints(), catchUp: spec },
++        reason: 'test',
++        timestamp: NOW,
++      });
++      if (!result.ok) throw new Error(result.error);
++      expect(
++        allEntries(result.workout.blocks)
++          .filter((entry) => !isStopped(entry) && working(entry).length < CATCH_UP.MIN_SETS)
++          .map((entry) => `${entry.exerciseId} x${working(entry).length}`),
++        `${result.summary.headline} ${result.workout.explanation.fittingSteps.join(' ')} ${lifts(result.workout)}`,
++      ).toEqual([]);
++    },
++  );
++});
 diff --git a/src/engine/workoutGenerator/catchUpEndTimeSets.test.ts b/src/engine/workoutGenerator/catchUpEndTimeSets.test.ts
 new file mode 100644
 index 0000000..a8bb891
@@ -7390,10 +8478,10 @@ index 0000000..5322586
 +});
 diff --git a/src/engine/workoutGenerator/catchUpLayoutNames.test.ts b/src/engine/workoutGenerator/catchUpLayoutNames.test.ts
 new file mode 100644
-index 0000000..eceb004
+index 0000000..a586646
 --- /dev/null
 +++ b/src/engine/workoutGenerator/catchUpLayoutNames.test.ts
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,181 @@
 +import { describe, expect, it } from 'vitest';
 +import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
 +import type { CatchUpSpec } from '../../engine/planning/catchUp';
@@ -7481,14 +8569,15 @@ index 0000000..eceb004
 +    expect([squat, curl].every(Boolean), lifts(plan)).toBe(true);
 +    const comfort = recalibrate(request({ type: 'uncomfortable', entryId: squat!.id }, plan));
 +    if (!comfort.ok) throw new Error(comfort.error);
-+    // Not begun and nothing pinned: the length rebuilds the plan whole.
++    // What came in for comfort stays through the length (the fourteenth review of round M): the
++    // plan is rebuilt around it.
 +    const shorter = recalibrate(
 +      request({ type: 'duration', choice: 45 }, comfort.workout, {
 +        constraints: comfort.constraints,
 +      }),
 +    );
 +    if (!shorter.ok) throw new Error(shorter.error);
-+    expect(shorter.scope).toBe('full');
++    expect(shorter.scope).toBe('partial');
 +    const details = `${shorter.summary.headline} ${shorter.changes.map((change) => change.detail).join(' | ')} (${named(comfort.workout)} -> ${named(shorter.workout)})`;
 +    const after = allEntries(shorter.workout.blocks).find(
 +      (entry) => entry.exerciseId === 'dumbbell-curl',
@@ -7543,6 +8632,35 @@ index 0000000..eceb004
 +        .map((change) => change.detail),
 +      laterDetails,
 +    ).toEqual([]);
++  });
++});
++
++describe('a catch-up laid out whole again keeps the names of the lifts it plans again, the fourteenth review of round M', () => {
++  it('the goblet squat skipped, then "45 min": laid out again, the dumbbell curl keeps its name', () => {
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: home,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec },
++    });
++    const squat = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'goblet-squat')!;
++    const curl = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'dumbbell-curl')!;
++    const skipped = recalibrate(request({ type: 'skip', entryId: squat.id }, plan));
++    if (!skipped.ok) throw new Error(skipped.error);
++    // Not begun, nothing pinned and nothing come in: the length lays the plan out whole.
++    const shorter = recalibrate(
++      request({ type: 'duration', choice: 45 }, skipped.workout, {
++        constraints: skipped.constraints,
++      }),
++    );
++    if (!shorter.ok) throw new Error(shorter.error);
++    expect(shorter.scope).toBe('full');
++    const after = allEntries(shorter.workout.blocks).find(
++      (entry) => entry.exerciseId === 'dumbbell-curl',
++    );
++    expect(after?.id, named(shorter.workout)).toBe(curl.id);
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/catchUpOneExercise.test.ts b/src/engine/workoutGenerator/catchUpOneExercise.test.ts
@@ -8715,7 +9833,7 @@ index 0000000..d5988f6
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
-index 0460d18..8fd4af4 100644
+index 0460d18..85e6175 100644
 --- a/src/engine/workoutGenerator/generate.ts
 +++ b/src/engine/workoutGenerator/generate.ts
 @@ -38,6 +38,7 @@ import {
@@ -9736,7 +10854,18 @@ index 0460d18..8fd4af4 100644
      const planned = hardCap ? 0 : (plannedSets.get(entry.id) ?? 0);
      return remainingWorking(entry).length > Math.max(floor, planned);
    };
-@@ -2098,7 +2743,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2007,7 +2652,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+     for (const set of move.sets) if (set.kind === 'working') set.restSeconds = move.restSeconds;
+     const block = straightBlock(move, exerciseOf);
+     blocks.push(block);
+-    const least = hardCap ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);
++    // A catch-up's or a second workout's lift comes back at two at least, an end time's too (the
++    // fourteenth review of round M: the EZ-bar curl came back on its own at one set).
++    const least = hardCap && !offPlan ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);
+     for (;;) {
+       if (estimate().totalMinutes <= limit) return move;
+       const working = move.sets.filter((set) => set.kind === 'working');
+@@ -2098,7 +2745,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
  
    // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
    // to failure, so a style that takes nothing to failure plans none.
@@ -9746,7 +10875,7 @@ index 0460d18..8fd4af4 100644
      const deficitMuscles = new Set(
        priorities
          .filter(
-@@ -2168,8 +2814,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2168,8 +2816,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    }
  
    // 5. Week-aware order: after the anchor, accessories for muscles behind their weekly target lead.
@@ -9758,7 +10887,7 @@ index 0460d18..8fd4af4 100644
      const isBehind = (block: WorkoutBlock) =>
        block.kind === 'straight' &&
        (block.entries[0] as WorkoutEntry).chosenFor.some(
-@@ -2202,13 +2850,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2202,13 +2852,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const anchorExercise = anchor ? exerciseOf(anchor.exerciseId) : undefined;
    const topPriorities = priorities.slice(0, 3);
    const reasons: string[] = [
@@ -9784,7 +10913,7 @@ index 0460d18..8fd4af4 100644
    const leader = leaderEntry ? exerciseOf(leaderEntry.exerciseId) : undefined;
    if (push && pushEntry) {
      reasons.push(
-@@ -2306,18 +2964,34 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2306,18 +2966,45 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    );
  
    const count = allEntries(blocks).length;
@@ -9793,7 +10922,18 @@ index 0460d18..8fd4af4 100644
 +  // slots kept with the plan, stays the catch-up it was, with nothing more for today (the thirteenth
 +  // review of round M: "Make it harder" after its only lift was left out planned the push day).
 +  const rebuilt = (constraints.catchUpSlots?.length ?? 0) > 0;
-+  if (catchUp !== null && count === 0 && !rebuilt) {
++  // Nor one the lifter's own changes emptied: with nothing set aside today it has lifts (the
++  // fourteenth review of round M: a length picked after its only lift was left out planned the push
++  // day, a set to failure among it).
++  const emptiedByLifter = (): boolean => {
++    if ((constraints.excludeExerciseIds?.length ?? 0) === 0) return false;
++    const whole = generateWorkout({
++      ...input,
++      constraints: { ...constraints, excludeExerciseIds: [] },
++    });
++    return whole.templateId === template.id && allEntries(whole.blocks).length > 0;
++  };
++  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {
 +    return generateWorkout({
 +      ...input,
 +      constraints: { ...constraints, catchUp: { ...catchUp, muscles: [] } },
@@ -9821,7 +10961,7 @@ index 0460d18..8fd4af4 100644
      goal: goalLabel(profile.goals.primary),
      generatedAt: now,
      locationId: location?.id ?? null,
-@@ -2347,6 +3021,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2347,6 +3034,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
            : 'low',
      compromises: [...new Set(compromises)],
      recalibration: { version: 1, lastTrigger: null },
@@ -11451,7 +12591,7 @@ index 100782b..af947a4 100644
    font-size: 0.82rem;
    color: var(--color-text-muted);
 diff --git a/src/features/today/TodayScreen.tsx b/src/features/today/TodayScreen.tsx
-index 05e9f47..7760081 100644
+index 05e9f47..fc6eb31 100644
 --- a/src/features/today/TodayScreen.tsx
 +++ b/src/features/today/TodayScreen.tsx
 @@ -10,7 +10,9 @@ import { ScreenHeader } from '../../components/Screen/Screen';
@@ -11545,7 +12685,7 @@ index 05e9f47..7760081 100644
            }),
 -          limit: 6,
 -        })
-+          session,
++          { ...session, history, timestamp: new Date().toISOString() },
 +          workout,
 +          selected.entry,
 +        )
@@ -12127,10 +13267,10 @@ index 0000000..8b3f84f
 +});
 diff --git a/src/features/today/dayNote.ts b/src/features/today/dayNote.ts
 new file mode 100644
-index 0000000..e3bed70
+index 0000000..c1df9a6
 --- /dev/null
 +++ b/src/features/today/dayNote.ts
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,86 @@
 +import type { WorkoutSession } from '../../core/state/session';
 +import { builtCatchUp } from '../../engine/workoutGenerator/generate';
 +import { allEntries } from '../../engine/workout/types';
@@ -12196,6 +13336,14 @@ index 0000000..e3bed70
 +  }
 +  if (full)
 +    return { text: 'You trained today.', action: { label: 'Go easy instead', full: false } };
++  // A second workout the lifter's changes emptied has nothing more either (the fourteenth review of
++  // round M).
++  if (built && allEntries(session.workout.blocks).length === 0) {
++    return {
++      text: `You trained today${nothingBehind}: nothing more for today.`,
++      action: { label: 'Full session', full: true },
++    };
++  }
 +  if (built)
 +    return {
 +      text: ledWith
@@ -12209,8 +13357,86 @@ index 0000000..e3bed70
 +    action: { label: 'Full session', full: true },
 +  };
 +}
+diff --git a/src/features/today/secondEmptiedNote.test.ts b/src/features/today/secondEmptiedNote.test.ts
+new file mode 100644
+index 0000000..a4f2454
+--- /dev/null
++++ b/src/features/today/secondEmptiedNote.test.ts
+@@ -0,0 +1,72 @@
++import { describe, expect, it } from 'vitest';
++import { createSession } from '../../core/state/session';
++import type { CatchUpSpec } from '../../engine/planning/catchUp';
++import {
++  emptyCompleted,
++  emptyConstraints,
++  recalibrate,
++} from '../../engine/recalibration/recalibrate';
++import type { RecalibrationSuccess } from '../../engine/recalibration/types';
++import { CATCH_UP_TEMPLATE_IDS, allEntries } from '../../engine/workout/types';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { dayNoteOf } from './dayNote';
++import { at, describeWorkout, gym, profileOf, session } from '../../test/clockDays';
++
++/**
++ * Maintenance 31 (the fourteenth review of round M): a second workout its only lift skipped has
++ * nothing more for today, and Today says so with the full session a tap away. Synthetic data only.
++ */
++
++// An overhead press this morning (the triceps sit out, the front delts take what is left), a row
++// last Thursday; Wednesday the 9th, 6 pm.
++const records = [
++  session(at(3, 18), [['barbell-row', 3]]),
++  session(at(9, 9), [['overhead-press', 3]]),
++];
++const NOW = at(9, 18);
++const spec: CatchUpSpec = {
++  kind: 'second',
++  muscles: [{ muscle: 'front-delts', sets: 2, minRir: 3, why: 'remainder' }],
++  sitOut: ['triceps'],
++};
++
++describe('a second workout its only lift skipped: Today says nothing more, the fourteenth review of round M', () => {
++  it('the Arnold press skipped', () => {
++    const plan = generateWorkout({
++      profile: profileOf(),
++      location: gym,
++      history: records,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: spec },
++    });
++    expect(plan.templateId).toBe(CATCH_UP_TEMPLATE_IDS.second);
++    const only = allEntries(plan.blocks);
++    expect(only.length, describeWorkout(plan).join('; ')).toBe(1);
++    const result = recalibrate({
++      trigger: { type: 'skip', entryId: only[0]!.id },
++      workout: plan,
++      completed: emptyCompleted(),
++      lockedEntryIds: [],
++      currentEntryId: null,
++      duration: 'default',
++      profile: profileOf(),
++      location: gym,
++      loading: { missingPlates: [] },
++      history: records,
++      constraints: { ...emptyConstraints(), catchUp: spec },
++      reason: 'test',
++      timestamp: NOW,
++    });
++    if (!result.ok) throw new Error(result.error);
++    const skipped: RecalibrationSuccess = result;
++    expect(allEntries(skipped.workout.blocks)).toEqual([]);
++    expect(skipped.workout.explanation.summary).toBe('Nothing more for today.');
++    const today = createSession('key', skipped.workout, NOW);
++    // On d361edf: { text: 'You trained today: this one goes easy, with only what is left of today’s
++    // work.' } and no button.
++    const note = dayNoteOf({ ...today, constraints: { ...today.constraints, catchUp: spec } });
++    expect(note?.text, JSON.stringify(note)).toMatch(/nothing more for today/);
++    expect(note?.action, JSON.stringify(note)).toEqual({ label: 'Full session', full: true });
++  });
++});
 diff --git a/src/features/workout/ActiveWorkoutScreen.tsx b/src/features/workout/ActiveWorkoutScreen.tsx
-index 6752366..1889c85 100644
+index 6752366..93eedde 100644
 --- a/src/features/workout/ActiveWorkoutScreen.tsx
 +++ b/src/features/workout/ActiveWorkoutScreen.tsx
 @@ -59,7 +59,7 @@ import { enteredE1rm, enteredMaxFor } from '../../engine/progression/maxes';
@@ -12302,7 +13528,7 @@ index 6752366..1889c85 100644
 +            },
 +            limit: 6,
 +          }),
-+          session,
++          { ...session, history, timestamp: new Date().toISOString() },
 +          workout,
 +          selected.entry,
 +        )
@@ -12528,10 +13754,10 @@ index 37aa488..7d494ce 100644
       "  if (false) {\n    for (const entry of entries) {", [T_PUSH_RECHECK], None),
 diff --git a/tools/reverts/mutate-m31.py b/tools/reverts/mutate-m31.py
 new file mode 100644
-index 0000000..5cc86ea
+index 0000000..c338ecb
 --- /dev/null
 +++ b/tools/reverts/mutate-m31.py
-@@ -0,0 +1,712 @@
+@@ -0,0 +1,755 @@
 +"""Maintenance 31 mutation checks: revert each round M rule alone, run its tests, expect a failure,
 +restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -12604,6 +13830,15 @@ index 0000000..5cc86ea
 +T_LINES_AFTER = "src/engine/recalibration/catchUpLinesAfterChange.test.ts"
 +T_ONE_EXERCISE = "src/engine/workoutGenerator/catchUpOneExercise.test.ts"
 +T_EMPTIED = "src/features/today/catchUpEmptied.test.ts"
++# The fourteenth review of round M.
++T_COMFORT_LENGTH = "src/engine/recalibration/catchUpComfortLength.test.ts"
++T_SWAP_RESTING = "src/engine/recalibration/catchUpSwapResting.test.ts"
++T_EMPTIED_LENGTH = "src/engine/recalibration/catchUpEmptiedLength.test.ts"
++T_END_TIME_BACK = "src/engine/workoutGenerator/catchUpEndTimeBack.test.ts"
++T_COMFORT_EASIER = "src/engine/recalibration/catchUpComfortEasier.test.ts"
++T_EMPTIED_SKIP = "src/engine/recalibration/catchUpEmptiedSkip.test.ts"
++T_SHEET_REASON = "src/engine/recalibration/catchUpSheetReason.test.ts"
++T_SECOND_NOTE = "src/features/today/secondEmptiedNote.test.ts"
 +
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
@@ -12803,8 +14038,8 @@ index 0000000..5cc86ea
 +     "      .filter((item) => item.why === why && covered.has(item.muscle))",
 +     "      .filter((item) => item.why === why)", [T_RESTS], None),
 +    ("R9 a catch-up with no lift left plans as with nothing behind", GENERATE,
-+     "  if (catchUp !== null && count === 0 && !rebuilt) {", "  if (false) {", [T_RESTS, T_NOTE],
-+     None),
++     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {", "  if (false) {",
++     [T_RESTS, T_NOTE], None),
 +    ("R10 nothing more for today", GENERATE,
 +     "  const nothing = (spec?.kind === 'second' || catchUp !== null) && count === 0;",
 +     "  const nothing = false;",
@@ -13128,8 +14363,8 @@ index 0000000..5cc86ea
 +
 +    # The thirteenth review of round M.
 +    ("H20 what comes in for comfort stays through a rebuild", ENGINE,
-+     "    else if (offPlan && entry.replacedFrom !== undefined && !isStopped(entry)) {",
-+     "    else if (false) {", [T_COMFORT_KEPT], None),
++     "    if (keptAsPicked(entry, request)) lockedIds.add(entry.id);",
++     "    if (entry.locked || entry.pinned) lockedIds.add(entry.id);", [T_COMFORT_KEPT], None),
 +    ("H21 a lift begun with one set owed: nothing comes in for it", ENGINE,
 +     "  if ((spec?.muscles.length ?? 0) > 0 && doneHere > 0 && owed < CATCH_UP.MIN_SETS) return undefined;\n",
 +     "", [T_ONE_OWED], None),
@@ -13137,14 +14372,15 @@ index 0000000..5cc86ea
 +     "      const refused = catchUpRefusal(request, workout, entry, next);",
 +     "      const refused = null as string | null;", [T_SWAP_RULES], None),
 +    ("H23 ... never a one-set stand-in", ENGINE,
-+     "  if (done > 0 && working.length - done < CATCH_UP.MIN_SETS) {", "  if (false) {",
++     "  if (done > 0 && working.length - done < CATCH_UP.MIN_SETS) return oneSetLeft(current.name);",
++     "  if (false) return oneSetLeft(current.name);",
 +     [T_SWAP_RULES, T_ONE_OWED], None),
 +    ("H24 ... a lift stopped earlier swapped back to", ENGINE,
 +     "  if (stoppedBefore(workout.blocks, entry).some((earlier) => earlier.exerciseId === next.id)) {",
 +     "  if (false) {", [T_SWAP_RULES, T_NAMES, T_COMFORT, T_NOTHING], None),
 +    ("H25 the swap sheet offers no swap the catch-up turns down", ENGINE,
-+     "    (candidate) => catchUpRefusal(day, workout, entry, candidate.exercise) === null,",
-+     "    () => true,", [T_SWAP_RULES], None),
++     "  const candidates = result.candidates.filter((_, at) => refusals[at] === null);",
++     "  const candidates = result.candidates;", [T_SWAP_RULES], None),
 +    ("H26 a catch-up may come to nothing more for today", ENGINE,
 +     "  if (entries.length === 0 && request.trigger.type !== 'finish-early' && !offPlan) {",
 +     "  if (entries.length === 0 && request.trigger.type !== 'finish-early') {",
@@ -13157,8 +14393,9 @@ index 0000000..5cc86ea
 +     "  return `${count} ${count === 1 ? 'exercise' : 'exercises'}`;",
 +     "  return `${count} exercises`;", [T_ONE_EXERCISE], None),
 +    ("H30 an emptied catch-up rebuilt stays the catch-up", GENERATE,
-+     "  if (catchUp !== null && count === 0 && !rebuilt) {",
-+     "  if (catchUp !== null && count === 0) {", [T_EMPTIED, T_COMFORT_KEPT], None),
++     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {",
++     "  if (catchUp !== null && count === 0 && !emptiedByLifter()) {",
++     [T_EMPTIED, T_COMFORT_KEPT, T_EMPTIED_LENGTH], None),
 +    ("H31 ... with nothing more for today", GENERATE,
 +     "  const nothing = (spec?.kind === 'second' || catchUp !== null) && count === 0;",
 +     "  const nothing = spec?.kind === 'second' && count === 0;", [T_EMPTIED], None),
@@ -13178,6 +14415,38 @@ index 0000000..5cc86ea
 +    ("H37 Today says an emptied catch-up has nothing more", NOTE,
 +     "    if (built && allEntries(session.workout.blocks).length === 0) {", "    if (false) {",
 +     [T_EMPTIED], None),
++
++    # The fourteenth review of round M.
++    ("H38 what came in for comfort stays through a length picked", ENGINE,
++     "    allEntries(request.workout.blocks).some((entry) => keptAsPicked(entry, request));",
++     "    allEntries(request.workout.blocks).some((entry) => entry.locked || entry.pinned);",
++     [T_COMFORT_LENGTH], None),
++    ("H39 the day's settings reach what came in for comfort", ENGINE,
++     "      (entry.id === request.currentEntryId || keptAsPicked(entry, request)) &&",
++     "      (entry.id === request.currentEntryId || entry.pinned || entry.locked) &&",
++     [T_COMFORT_EASIER], None),
++    ("H40 ... in a catch-up only what came in for another", ENGINE,
++     "  return (catchUpToday(request.constraints, request.workout)?.muscles.length ?? 0) > 0;\n}",
++     "  return false;\n}", [T_COMFORT_KEPT, T_COMFORT_LENGTH, T_COMFORT_EASIER], None),
++    ("H41 a catch-up emptied stays so through every rebuild", ENGINE,
++     "    allEntries(request.workout.blocks).length === 0 &&\n    (catchUpToday(constraints, request.workout)?.muscles.length ?? 0) > 0\n  ) {",
++     "    false\n  ) {", [T_EMPTIED_SKIP, T_EMPTIED_LENGTH], None),
++    ("H42 ... never planned as the split's day for what the lifter set aside", GENERATE,
++     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {",
++     "  if (catchUp !== null && count === 0 && !rebuilt) {", [T_EMPTIED_LENGTH], None),
++    ("H43 an end time brings back no lift of a catch-up at one set", GENERATE,
++     "    const least = hardCap && !offPlan ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);",
++     "    const least = hardCap ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);",
++     [T_END_TIME_BACK], None),
++    ("H44 the lifter's swap brings in no lift for a muscle that rests", ENGINE,
++     "  if (rests.length > 0) {", "  if (false) {", [T_SWAP_RESTING], None),
++    ("H45 the sheet gives the refusal's own reason", ENGINE,
++     "        : reasons.length === 1 && reasons[0]", "        : false", [T_SHEET_REASON], None),
++    ("H46 ... and so does \"Uncomfortable\" on a lift with one set left", ENGINE,
++     "          ? oneSetOwed(request, workout, entry)", "          ? false", [T_SHEET_REASON], None),
++    ("H47 Today says a second workout emptied has nothing more", NOTE,
++     "  if (built && allEntries(session.workout.blocks).length === 0) {", "  if (false) {",
++     [T_SECOND_NOTE], 1),
 +]
 +
 +def apply(original, old, new, nth):
@@ -13267,10 +14536,10 @@ index 0000000..2ae6517
 +print("written")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
 new file mode 100644
-index 0000000..a086eaa
+index 0000000..6465242
 --- /dev/null
 +++ b/tools/reverts/table_m31.txt
-@@ -0,0 +1,574 @@
+@@ -0,0 +1,608 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The week model.
@@ -13469,8 +14738,8 @@ index 0000000..a086eaa
 +     "      .filter((item) => item.why === why && covered.has(item.muscle))",
 +     "      .filter((item) => item.why === why)", [T_RESTS], None),
 +    ("R9 a catch-up with no lift left plans as with nothing behind", GENERATE,
-+     "  if (catchUp !== null && count === 0 && !rebuilt) {", "  if (false) {", [T_RESTS, T_NOTE],
-+     None),
++     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {", "  if (false) {",
++     [T_RESTS, T_NOTE], None),
 +    ("R10 nothing more for today", GENERATE,
 +     "  const nothing = (spec?.kind === 'second' || catchUp !== null) && count === 0;",
 +     "  const nothing = false;",
@@ -13794,8 +15063,8 @@ index 0000000..a086eaa
 +
 +    # The thirteenth review of round M.
 +    ("H20 what comes in for comfort stays through a rebuild", ENGINE,
-+     "    else if (offPlan && entry.replacedFrom !== undefined && !isStopped(entry)) {",
-+     "    else if (false) {", [T_COMFORT_KEPT], None),
++     "    if (keptAsPicked(entry, request)) lockedIds.add(entry.id);",
++     "    if (entry.locked || entry.pinned) lockedIds.add(entry.id);", [T_COMFORT_KEPT], None),
 +    ("H21 a lift begun with one set owed: nothing comes in for it", ENGINE,
 +     "  if ((spec?.muscles.length ?? 0) > 0 && doneHere > 0 && owed < CATCH_UP.MIN_SETS) return undefined;\n",
 +     "", [T_ONE_OWED], None),
@@ -13803,14 +15072,15 @@ index 0000000..a086eaa
 +     "      const refused = catchUpRefusal(request, workout, entry, next);",
 +     "      const refused = null as string | null;", [T_SWAP_RULES], None),
 +    ("H23 ... never a one-set stand-in", ENGINE,
-+     "  if (done > 0 && working.length - done < CATCH_UP.MIN_SETS) {", "  if (false) {",
++     "  if (done > 0 && working.length - done < CATCH_UP.MIN_SETS) return oneSetLeft(current.name);",
++     "  if (false) return oneSetLeft(current.name);",
 +     [T_SWAP_RULES, T_ONE_OWED], None),
 +    ("H24 ... a lift stopped earlier swapped back to", ENGINE,
 +     "  if (stoppedBefore(workout.blocks, entry).some((earlier) => earlier.exerciseId === next.id)) {",
 +     "  if (false) {", [T_SWAP_RULES, T_NAMES, T_COMFORT, T_NOTHING], None),
 +    ("H25 the swap sheet offers no swap the catch-up turns down", ENGINE,
-+     "    (candidate) => catchUpRefusal(day, workout, entry, candidate.exercise) === null,",
-+     "    () => true,", [T_SWAP_RULES], None),
++     "  const candidates = result.candidates.filter((_, at) => refusals[at] === null);",
++     "  const candidates = result.candidates;", [T_SWAP_RULES], None),
 +    ("H26 a catch-up may come to nothing more for today", ENGINE,
 +     "  if (entries.length === 0 && request.trigger.type !== 'finish-early' && !offPlan) {",
 +     "  if (entries.length === 0 && request.trigger.type !== 'finish-early') {",
@@ -13823,8 +15093,9 @@ index 0000000..a086eaa
 +     "  return `${count} ${count === 1 ? 'exercise' : 'exercises'}`;",
 +     "  return `${count} exercises`;", [T_ONE_EXERCISE], None),
 +    ("H30 an emptied catch-up rebuilt stays the catch-up", GENERATE,
-+     "  if (catchUp !== null && count === 0 && !rebuilt) {",
-+     "  if (catchUp !== null && count === 0) {", [T_EMPTIED, T_COMFORT_KEPT], None),
++     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {",
++     "  if (catchUp !== null && count === 0 && !emptiedByLifter()) {",
++     [T_EMPTIED, T_COMFORT_KEPT, T_EMPTIED_LENGTH], None),
 +    ("H31 ... with nothing more for today", GENERATE,
 +     "  const nothing = (spec?.kind === 'second' || catchUp !== null) && count === 0;",
 +     "  const nothing = spec?.kind === 'second' && count === 0;", [T_EMPTIED], None),
@@ -13844,5 +15115,37 @@ index 0000000..a086eaa
 +    ("H37 Today says an emptied catch-up has nothing more", NOTE,
 +     "    if (built && allEntries(session.workout.blocks).length === 0) {", "    if (false) {",
 +     [T_EMPTIED], None),
++
++    # The fourteenth review of round M.
++    ("H38 what came in for comfort stays through a length picked", ENGINE,
++     "    allEntries(request.workout.blocks).some((entry) => keptAsPicked(entry, request));",
++     "    allEntries(request.workout.blocks).some((entry) => entry.locked || entry.pinned);",
++     [T_COMFORT_LENGTH], None),
++    ("H39 the day's settings reach what came in for comfort", ENGINE,
++     "      (entry.id === request.currentEntryId || keptAsPicked(entry, request)) &&",
++     "      (entry.id === request.currentEntryId || entry.pinned || entry.locked) &&",
++     [T_COMFORT_EASIER], None),
++    ("H40 ... in a catch-up only what came in for another", ENGINE,
++     "  return (catchUpToday(request.constraints, request.workout)?.muscles.length ?? 0) > 0;\n}",
++     "  return false;\n}", [T_COMFORT_KEPT, T_COMFORT_LENGTH, T_COMFORT_EASIER], None),
++    ("H41 a catch-up emptied stays so through every rebuild", ENGINE,
++     "    allEntries(request.workout.blocks).length === 0 &&\n    (catchUpToday(constraints, request.workout)?.muscles.length ?? 0) > 0\n  ) {",
++     "    false\n  ) {", [T_EMPTIED_SKIP, T_EMPTIED_LENGTH], None),
++    ("H42 ... never planned as the split's day for what the lifter set aside", GENERATE,
++     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {",
++     "  if (catchUp !== null && count === 0 && !rebuilt) {", [T_EMPTIED_LENGTH], None),
++    ("H43 an end time brings back no lift of a catch-up at one set", GENERATE,
++     "    const least = hardCap && !offPlan ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);",
++     "    const least = hardCap ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);",
++     [T_END_TIME_BACK], None),
++    ("H44 the lifter's swap brings in no lift for a muscle that rests", ENGINE,
++     "  if (rests.length > 0) {", "  if (false) {", [T_SWAP_RESTING], None),
++    ("H45 the sheet gives the refusal's own reason", ENGINE,
++     "        : reasons.length === 1 && reasons[0]", "        : false", [T_SHEET_REASON], None),
++    ("H46 ... and so does \"Uncomfortable\" on a lift with one set left", ENGINE,
++     "          ? oneSetOwed(request, workout, entry)", "          ? false", [T_SHEET_REASON], None),
++    ("H47 Today says a second workout emptied has nothing more", NOTE,
++     "  if (built && allEntries(session.workout.blocks).length === 0) {", "  if (false) {",
++     [T_SECOND_NOTE], 1),
 +]
 \ No newline at end of file

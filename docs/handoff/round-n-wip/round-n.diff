@@ -4481,18 +4481,10 @@ index cccfc63..353e7de 100644
    return changes.length > 0 ? changes.join(', ') : null;
  }
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index bd97690..c74aa4b 100644
+index 1c20cd0..0974fef 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
-@@ -2,6 +2,7 @@ import { dropSetWeight } from './dropSet';
- import { allExercises, requireExercise } from '../../catalog/exercises/catalog';
- import { holdById, targetText } from '../workout/setText';
- import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
-+import type { WorkoutRecord } from '../../core/validation/workoutRecord';
- import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
- import { rankAlternatives, type AlternativeResult } from '../alternatives/rankAlternatives';
- import {
-@@ -24,6 +25,18 @@ import {
+@@ -25,6 +25,18 @@ import {
  } from '../duration/duration';
  import type { PersonalPace } from '../duration/trainingTime';
  import { fitWeight, loadingFor, nudge, type Loading } from '../loading/loading';
@@ -4511,7 +4503,7 @@ index bd97690..c74aa4b 100644
  import { weightStep } from '../plateMath/plateMath';
  import {
    applyProgression,
-@@ -1176,18 +1189,154 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
+@@ -1233,18 +1245,154 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
    const working = entry.sets.filter((set) => set.kind === 'working');
    const done = (index: number) =>
      request.completed.sets.some((set) => set.entryId === entry.id && set.setIndex === index);
@@ -4668,7 +4660,7 @@ index bd97690..c74aa4b 100644
  /** A prescription carrying an effort shift, within the reserve its exercise allows. */
  function shifted(
    prescription: Prescription,
-@@ -1718,14 +1867,23 @@ function refitEntry(
+@@ -1775,14 +1923,23 @@ function refitEntry(
      heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),
      exercise,
    );
@@ -4697,7 +4689,7 @@ index bd97690..c74aa4b 100644
    const floor = barWeightFor(exercise, request.profile.units);
    const load = { weight: fitted.weight, step: loading.step, floor };
    // A lift moved for busy equipment keeps the ramps it has, one added by hand included
-@@ -1737,11 +1895,11 @@ function refitEntry(
+@@ -1794,11 +1951,11 @@ function refitEntry(
    );
    const weighed = Math.min(warmupSets, rampRoom(load));
    entry.warmupSets = warmupSets;
@@ -4712,7 +4704,7 @@ index bd97690..c74aa4b 100644
          weighed,
          exercise,
        ),
-@@ -1752,6 +1910,20 @@ function refitEntry(
+@@ -1809,6 +1966,20 @@ function refitEntry(
        loading,
      ),
    ].map((set, index) => ({ ...set, index }));
@@ -4733,7 +4725,7 @@ index bd97690..c74aa4b 100644
    // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).
    entry.dropSet = entry.dropSet && exercise.dropSetSafe && !entryPushedToEffort(entry);
    if (entry.dropSet) entry.sets.push(dropSetAt(entry.sets.length));
-@@ -1814,8 +1986,21 @@ function targetedSets(
+@@ -1871,8 +2042,21 @@ function targetedSets(
    role: TrainingRole,
    working: number | null,
    restSeconds: number,
@@ -4757,7 +4749,7 @@ index bd97690..c74aa4b 100644
    // A deload week covering the session lightens it like every exercise the plan picks: one
    // more rep in reserve and lighter loads; its set count is the one it takes over. The effort
    // the entry it replaces carried comes with it (Maintenance 24).
-@@ -1825,25 +2010,45 @@ function targetedSets(
+@@ -1882,25 +2066,45 @@ function targetedSets(
      exercise,
    );
    const context = sessionContextFor(request, workout, entryId, exercise, options.through);
@@ -4819,7 +4811,7 @@ index bd97690..c74aa4b 100644
    // At least the ramps the lift already has, one added by hand included; those past the room
    // under the working weight come first and keep no weight, as a ramp added by hand comes.
    const load = { weight: fitted.weight, step: loading.step, floor };
-@@ -1853,14 +2058,11 @@ function targetedSets(
+@@ -1910,14 +2114,11 @@ function targetedSets(
    );
    const weighed = Math.min(warmupSets, rampRoom(load));
    const from = options.from ?? 0;
@@ -4837,7 +4829,7 @@ index bd97690..c74aa4b 100644
        fitted,
        loading.step,
        {},
-@@ -1868,7 +2070,22 @@ function targetedSets(
+@@ -1925,7 +2126,22 @@ function targetedSets(
        loading,
      ),
    ].map((set, index) => ({ ...set, index: index + from }));
@@ -4861,7 +4853,7 @@ index bd97690..c74aa4b 100644
  }
  
  /**
-@@ -1981,9 +2198,14 @@ function settleKept(
+@@ -2038,9 +2254,14 @@ function settleKept(
        {
          shift: rir - prescriptionToday(next, exercise, entry.role).rir,
          warmups: entry.sets.filter((set) => set.kind === 'warmup').length,
@@ -4876,7 +4868,7 @@ index bd97690..c74aa4b 100644
      entry.warmupSets = built.warmupSets;
      entry.progression = built.progression;
      syncRounds(block);
-@@ -2660,11 +2882,15 @@ function applySubstitution(
+@@ -2717,11 +2938,15 @@ function applySubstitution(
      entry.role,
      planWorking.length > 0 ? Math.max(1, Math.min(planWorking.length, room)) : null,
      entry.restSeconds,
@@ -4893,7 +4885,7 @@ index bd97690..c74aa4b 100644
    withoutHandTargets(entry);
    if (entry.dropSet) {
      if (exercise.dropSetSafe && !entryPushedToEffort(entry)) {
-@@ -2821,16 +3047,26 @@ function swapBack(
+@@ -2878,16 +3103,26 @@ function swapBack(
        from: nextSetIndex(stopped),
        through: true,
        shift: heldShift(request, workout, exercise, stopped.role, shift),
@@ -4922,7 +4914,7 @@ index bd97690..c74aa4b 100644
    stopped.locked = lock || stopped.locked;
    delete stopped.stopped;
    const { block } = findEntry(workout, stopped.id);
-@@ -3507,11 +3743,59 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3566,11 +3801,59 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            set.kind === 'working' && set.index > trigger.setIndex && !isDone(entry.id, set.index),
        );
        const plan = trigger.plan;
@@ -4982,7 +4974,7 @@ index bd97690..c74aa4b 100644
          for (const set of remaining) {
            // The weight actually lifted is the ground truth; the plan moves from it, one real
            // step at a time where the place has a fixed set of weights.
-@@ -3521,7 +3805,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3580,7 +3863,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                loading.available !== null
                  ? nudge(current, plan.delta > 0 ? 1 : -1, loading.available, stepSize)
                  : Math.round((current + plan.delta) / stepSize) * stepSize;
@@ -4994,7 +4986,7 @@ index bd97690..c74aa4b 100644
              // Only a set that really moves changes: at the heaviest weight "up" stays where it is.
              // A pushed set moved up takes the reps its push gives there; moved down, it keeps
              // them and is easier (Maintenance 23).
-@@ -3694,8 +3981,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3753,8 +4039,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          // The lift's target today from the maxes a request holds.
          const fittedFrom = (from: RecalibrationRequest) => {
            const plain = prescriptionToday(from, exercise, entry.role);
@@ -5005,7 +4997,7 @@ index bd97690..c74aa4b 100644
            const plainTarget = targetFor(plain);
            // The effort the lift carries ("Make it harder" or "easier", a check-in) stays
            // (Maintenance 24), and the reserve the day's catch-up asks of it (the third review of
-@@ -3725,9 +4012,57 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3784,9 +4070,57 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
              exercise,
              entry.role,
            );
@@ -5065,7 +5057,7 @@ index bd97690..c74aa4b 100644
          const working =
            entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
          const warmupSets = rampSetsFor(
-@@ -3754,6 +4089,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3813,6 +4147,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            barWeightFor(exercise, request.profile.units),
            loading,
          );
@@ -5085,7 +5077,7 @@ index bd97690..c74aa4b 100644
          if (byHand) restoreHandReps(entry, handReps, request, target, loading, exercise);
          // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).
          entry.dropSet = entry.dropSet && exercise.dropSetSafe && !entryPushedToEffort(entry);
-@@ -3845,15 +4193,44 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3904,15 +4251,44 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const { entry } = findEntry(workout, trigger.entryId);
        const { isDone } = classify(request);
        const name = requireExercise(entry.exerciseId).name;
@@ -5135,7 +5127,7 @@ index bd97690..c74aa4b 100644
            if (trigger.weight === null) delete set.asked;
            else if (up) repush(set, entry.role, entry.manual?.reps === true);
          }
-@@ -4176,9 +4553,14 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4235,9 +4611,14 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                }
              : {}),
          };
@@ -5152,7 +5144,7 @@ index bd97690..c74aa4b 100644
        }
        if (trigger.workingDelta < 0) {
          const removable = () =>
-@@ -4296,6 +4678,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4355,6 +4736,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            targetRir: last?.targetRir ?? 2,
            targetWeight: last?.targetWeight ?? null,
            restSeconds: entry.restSeconds,
@@ -7175,7 +7167,7 @@ index 0000000..29790b6
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
-index 8fd4af4..67704c1 100644
+index 85e6175..4aa5ccc 100644
 --- a/src/engine/workoutGenerator/generate.ts
 +++ b/src/engine/workoutGenerator/generate.ts
 @@ -81,6 +81,13 @@ import {
@@ -7582,7 +7574,7 @@ index c6eb1d3..ddf73f9 100644
  }
  
 diff --git a/src/features/workout/ActiveWorkoutScreen.tsx b/src/features/workout/ActiveWorkoutScreen.tsx
-index 1889c85..8f1e8f7 100644
+index 93eedde..9ba2ee0 100644
 --- a/src/features/workout/ActiveWorkoutScreen.tsx
 +++ b/src/features/workout/ActiveWorkoutScreen.tsx
 @@ -19,7 +19,7 @@ import {

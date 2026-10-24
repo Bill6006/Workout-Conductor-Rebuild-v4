@@ -14,18 +14,18 @@ first; it holds the rules. This file holds the state and the steps._
   file; CI renders them before every build. Locally, run it with
   `ICONS_CHROMIUM=/opt/pw-browsers/chromium npm run icons`.
 - **Round M** sits on `main` (`2595631`) in its worktree and in
-  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Thirteen review passes
-  found twenty, twelve, seven, three, two, three, four, three, three, two, four, seven and eight
-  issues, each shown by a failing test and fixed (one LOW kept as a known limit, with the reason).
-  The thirteenth's: what comes in for a lift stays through a rebuild; the lifter's swap keeps to the
-  day's muscles, and the swap sheet offers none it would refuse; no stand-in for one set owed; an
-  end time keeps every lift at two sets; a catch-up a change empties has nothing more for today. A
-  fourteenth pass is checking them. The M31 table has 191 entries, every anchor found, the entries
-  changed since its last full run caught; M27's six anchors moved by Round M are re-anchored and
-  caught; the full unit suite passed (2759, 5 skipped). The report is written up to the thirteenth
-  pass. Next: the fourteenth pass, the full M31 run and the cross-round tables (M30, M29, M28
-  `--utc`, M27) on the final code, the browser suite again, verify, ship.
-- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`d361edf`) in
+  `docs/handoff/round-m-wip/round-m.diff` (`git apply` it on `2595631`). Fourteen review passes
+  found twenty, twelve, seven, three, two, three, four, three, three, two, four, seven, eight and
+  eight issues, each shown by a failing test and fixed (one LOW kept as a known limit, with the
+  reason). The fourteenth's: one rule for what stays through a rebuild as the lifter's pick, read by
+  the plan's scope and the day's settings; the swap keeps off muscles that rest today; a catch-up or
+  second workout a change empties stays empty through any rebuild, and Today says so; a lift brought
+  back under an end time comes at two sets; each refusal gives its own reason. A fifteenth pass is
+  checking them. The M31 table has 201 entries, every anchor found, the entries changed since its
+  last full run caught; M27's six anchors moved by Round M are re-anchored and caught. The report is
+  written up to the fourteenth pass. Next: the fifteenth pass, the full M31 run and the cross-round
+  tables (M30, M29, M28 `--utc`, M27) on the final code, the browser suite again, verify, ship.
+- **Round N** (item 11, a top set plus back-offs) is rebased onto Round M's latest (`3290cd8`) in
   its own worktree, and saved in `docs/handoff/round-n-wip/round-n.diff` (`git apply` it on Round
   M's diff applied to `2595631`). Four review passes found twelve, ten, eleven and six issues, each
   shown by a failing test and fixed, and the revert runs' new tests two more. The fourth's: a lift
@@ -33,10 +33,18 @@ first; it holds the rules. This file holds the state and the steps._
   back-offs' load as one (a new optional stored mark, `atBackOffs`) so the top set reads past it; a
   max entered reads the target as every plan does; straight sets after a capped top set take its
   asked reps; a back-off's log taken back replays the ones still logged. Its M32 table has 162
-  entries, every anchor found, the fourth pass's entries caught; the full unit suite passed (2895, 5
-  skipped) on the rebased code. Its report is written up to the fourth pass. A fifth pass is
-  checking it. Then its review passes until clean, verify, ship, once Round M is live. The lift to
-  push keeps item 44's straight sets by default: a question for the owner's final review.
+  entries, every anchor found, the fourth pass's entries caught. Its report is written up to the
+  fourth pass. A fifth pass is checking it. Then its review passes until clean, verify, ship, once
+  Round M is live. The lift to push keeps item 44's straight sets by default: a question for the
+  owner's final review.
+- **Maintenance 33** (the recovery and readiness core) is begun in a local worktree on Round N: a
+  per-muscle recovery model (`src/engine/recovery/recovery.ts`, windows from each muscle's last
+  hard work, by how close its sets went to failure and the body region, lengthened by a large
+  dose, a new lift, long-length work and a short night) and the "too soon" check, with tests. Its
+  design follows the approved proposal (`docs/proposals/week-model-readiness-time.md`, parts 2, 4
+  and 5, decisions 1, 2 and 5) and the research in `docs/research/recovery-time-course.md` and
+  `docs/research/readiness-and-soreness.md`. It is not yet saved here; it is rebuilt from those if
+  the worktree is lost.
 
 ### Paused again on the owner's word, 2026-10-17 (superseded above)
 
