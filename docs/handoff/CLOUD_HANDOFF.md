@@ -5,6 +5,29 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 21:30 UTC (supersedes the states below)
+
+- **Round M**: local `0fe4cb9` (unchanged; diff: `docs/handoff/round-m-wip/round-m.diff`). Its
+  twentieth review is running on `0fe4cb9` (tests to come in
+  `/home/user/wc4-m-review/src/review-m31s/`; the brief is saved in the session scratchpad,
+  `m31s/brief20.txt`).
+- **Round N**: local `905ce7f`, rebased onto Round M's `0fe4cb9` (backup of the old head:
+  `backup/round-n-25fd689`; `docs/handoff/round-n-wip/round-n.diff` is now against `0fe4cb9`). The
+  tenth pass is complete: a max with reps set by hand at another range keeps the day's mark at the
+  back-offs' load (the next top set steps from the top set); every replay of the back-offs is capped
+  at the top set as lifted, or as planned once its log is taken back; the session's feedback reads
+  only back-offs lifted at the drop's load (`backOffMiss` with `backOffAt`), as the drop's correction
+  does; reps set by hand keep their reserve only in the same place on the lift (`HandReps.tier`); a
+  lift picked up again drops the back-offs' weight set by hand. The M32 table at 228 entries, every
+  one run caught. Its eleventh review is running on `905ce7f` (tests to come in
+  `/home/user/wc4-n-review/src/review-m32k/`).
+- **Maintenance 33**: local `53c2796`, rebased onto Round N's `905ce7f` (backup of the old head:
+  `backup/round-o-065e13c`; `docs/handoff/round-o-wip/round-o.diff` is now against `905ce7f`). One
+  adaptation on the rebase: Round M's new coach test reads the fatigue with two arguments, as
+  Maintenance 33's score takes no check-in. Next: its full suite, then its second review on
+  `53c2796` (brief saved in the session scratchpad, `m33b/brief.txt`; tests to come in
+  `/home/user/wc4-o-review/src/review-m33b/`).
+
 ### Checkpoint, 2026-10-24 20:05 UTC (supersedes the states below)
 
 - **Round M**: local `0fe4cb9` (diff on `2595631`: `docs/handoff/round-m-wip/round-m.diff`). The

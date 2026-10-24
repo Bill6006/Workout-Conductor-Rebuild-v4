@@ -402,10 +402,10 @@ index bf150bb..6304bac 100644
      // session may rotate to another template.
      const saved = await handle.store.saveCurrentWorkout('Repeat');
 diff --git a/src/core/state/appStore.ts b/src/core/state/appStore.ts
-index 762c62e..9bedf75 100644
+index d43e8ab..54590e5 100644
 --- a/src/core/state/appStore.ts
 +++ b/src/core/state/appStore.ts
-@@ -163,8 +163,13 @@ import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
+@@ -165,8 +165,13 @@ import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
  import { normalizeName } from '../backup/legacyImport';
  import {
    COACH_DECLINES_ID,
@@ -419,7 +419,7 @@ index 762c62e..9bedf75 100644
    restLengthened,
    restOfferStands,
    restRunning,
-@@ -175,6 +180,7 @@ import {
+@@ -177,6 +182,7 @@ import {
    setAsideKey,
    type CoachAction,
    type CoachDeclines,
@@ -427,7 +427,7 @@ index 762c62e..9bedf75 100644
    type CoachSignal,
  } from '../../engine/coach/coachConductor';
  import { coachingPolicy } from '../../engine/coach/experience';
-@@ -402,6 +408,8 @@ export interface AppState {
+@@ -404,6 +410,8 @@ export interface AppState {
    coachRoutes: CoachRoutes;
    /** Declined coach offers, kept in the meta store and backed up. */
    coachDeclines: CoachDeclines;
@@ -436,7 +436,7 @@ index 762c62e..9bedf75 100644
    /** A planned deload week, kept in the meta store and backed up; null when none. */
    deloadWeek: DeloadWeek | null;
    /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
-@@ -493,6 +501,27 @@ function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
+@@ -495,6 +503,27 @@ function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
    return windowIsPast(week, now) ? null : week;
  }
  
@@ -464,7 +464,7 @@ index 762c62e..9bedf75 100644
  /**
   * The declined offers as stored: an entry that does not read (no count, no time) is dropped, never
   * the rest (the re-check of item 47: one such entry broke the page that lists them).
-@@ -833,8 +862,10 @@ export class AppStore {
+@@ -835,8 +864,10 @@ export class AppStore {
     */
    private resetsVersion = 0;
    private declinesVersion = 0;
@@ -475,7 +475,7 @@ index 762c62e..9bedf75 100644
    /**
     * Bumped by every write of the lifter's own demonstrations: a read of the data begun before one
     * keeps the count it made (Maintenance 26, the re-check of item 50: a hydrate across a pick put
-@@ -930,6 +961,7 @@ export class AppStore {
+@@ -932,6 +963,7 @@ export class AppStore {
        customMediaGone: {},
        coachRoutes: emptyRoutes(),
        coachDeclines: emptyDeclines(),
@@ -483,7 +483,7 @@ index 762c62e..9bedf75 100644
        deloadWeek: null,
        strengthMaxes: emptyMaxes(),
        coachFocus: null,
-@@ -1008,7 +1040,7 @@ export class AppStore {
+@@ -1010,7 +1042,7 @@ export class AppStore {
        now,
        day: {
          deload: session.constraints.deload !== null,
@@ -492,7 +492,7 @@ index 762c62e..9bedf75 100644
          hardStart: session.constraints.badStart === true,
        },
        // A check where it would pair with a recent one for the lift's own curve (item 41): its
-@@ -1047,6 +1079,7 @@ export class AppStore {
+@@ -1049,6 +1081,7 @@ export class AppStore {
      const swapsSeen = this.swapsVersion;
      const resetsSeen = this.resetsVersion;
      const declinesSeen = this.declinesVersion;
@@ -500,7 +500,7 @@ index 762c62e..9bedf75 100644
      const mediaSeen = this.mediaVersion;
      const barcodesSeen = this.barcodesVersion;
      try {
-@@ -1070,6 +1103,7 @@ export class AppStore {
+@@ -1072,6 +1105,7 @@ export class AppStore {
          swapsRaw,
          resetsRaw,
          deviceRaw,
@@ -508,7 +508,7 @@ index 762c62e..9bedf75 100644
        ] = await Promise.all([
          db.getAll<Identified>('profile'),
          db.getAll<Identified>('locations'),
-@@ -1086,6 +1120,7 @@ export class AppStore {
+@@ -1088,6 +1122,7 @@ export class AppStore {
          db.get<Identified>('meta', LASTING_SWAPS_ID),
          db.get<Identified>('meta', LEARNED_RESETS_ID),
          db.getAll<Identified>('device'),
@@ -516,7 +516,7 @@ index 762c62e..9bedf75 100644
        ]);
        const deviceId = ensureDeviceId(this.storage);
        // Finds the token in either of its copies and heals the other. A copy that
-@@ -1104,9 +1139,16 @@ export class AppStore {
+@@ -1106,9 +1141,16 @@ export class AppStore {
            customInstructions.length +
            savedRaw.length ===
            0 &&
@@ -536,7 +536,7 @@ index 762c62e..9bedf75 100644
        await noteDatabaseBirth(db, this.now(), empty).catch(() => null);
        // A barcode the database lost comes back from the phone's second copy.
        const barcodes = await this.reconcileBarcodes(db, parsePlaceBarcodes(deviceRaw));
-@@ -1160,6 +1202,8 @@ export class AppStore {
+@@ -1162,6 +1204,8 @@ export class AppStore {
            this.declinesVersion === declinesSeen
              ? parseCoachDeclines(declinesRaw)
              : this.state.coachDeclines,
@@ -545,7 +545,7 @@ index 762c62e..9bedf75 100644
          learnedResets:
            this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
          deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
-@@ -2227,9 +2271,13 @@ export class AppStore {
+@@ -2248,9 +2292,13 @@ export class AppStore {
            : done.rir);
        return rir === done.rir ? done : { ...done, rir };
      });
@@ -560,7 +560,7 @@ index 762c62e..9bedf75 100644
      });
    }
  
-@@ -4581,6 +4629,27 @@ export class AppStore {
+@@ -4608,6 +4656,27 @@ export class AppStore {
      await this.regeneratePreview();
    }
  
@@ -1009,7 +1009,7 @@ index 0000000..375f618
 +  });
 +});
 diff --git a/src/core/state/session.ts b/src/core/state/session.ts
-index cf118a7..88b6a86 100644
+index 0084cb5..960da96 100644
 --- a/src/core/state/session.ts
 +++ b/src/core/state/session.ts
 @@ -7,6 +7,7 @@ import { getExercise } from '../../catalog/exercises/catalog';
@@ -1790,7 +1790,7 @@ index 0000000..a40a76c
 +  });
 +});
 diff --git a/src/engine/coach/coachConductor.ts b/src/engine/coach/coachConductor.ts
-index 7753f34..0900b51 100644
+index 8d7d2df..03fb74b 100644
 --- a/src/engine/coach/coachConductor.ts
 +++ b/src/engine/coach/coachConductor.ts
 @@ -1,9 +1,15 @@
@@ -1864,7 +1864,7 @@ index 7753f34..0900b51 100644
    /** Offers already taken this session (see `acceptKey`): they are not made twice. */
    accepted?: readonly string[];
    /** The rest now: when it ends, or what is left of it while paused (Maintenance 25). */
-@@ -609,6 +629,20 @@ function safetySignals(input: CoachInput): CoachSignal[] {
+@@ -618,6 +638,20 @@ function safetySignals(input: CoachInput): CoachSignal[] {
    // A finished workout has nothing left to swap: its warnings were for the sets still to come.
    if (input.status === 'completed') return [];
    const signals: CoachSignal[] = [];
@@ -1885,7 +1885,7 @@ index 7753f34..0900b51 100644
    const remaining = remainingEntries(input);
    for (const joint of input.constraints.painJoints) {
      const loaded = remaining.find((entry) => {
-@@ -774,9 +808,176 @@ function saveSignals(input: CoachInput): CoachSignal[] {
+@@ -783,9 +817,176 @@ function saveSignals(input: CoachInput): CoachSignal[] {
    ];
  }
  
@@ -2063,7 +2063,7 @@ index 7753f34..0900b51 100644
    const checkedIn = input.constraints.readiness !== null;
    // A check-in adjusts today's workout, so a finished one is not offered it.
    const finished = input.status === 'completed';
-@@ -805,7 +1006,8 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
+@@ -814,7 +1015,8 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
        headline: 'Fatigue is building',
        why: [
          ...fatigue.evidence.slice(0, 2),
@@ -2073,7 +2073,7 @@ index 7753f34..0900b51 100644
        ],
        action: checkedIn || finished ? null : { kind: 'readiness', label: 'Quick check-in' },
        confidence: 'medium',
-@@ -1544,7 +1746,10 @@ function tipSignals(input: CoachInput): CoachSignal[] {
+@@ -1553,7 +1755,10 @@ function tipSignals(input: CoachInput): CoachSignal[] {
    if (
      input.profile.techniques.dropSets &&
      input.status !== 'completed' &&
@@ -2085,7 +2085,7 @@ index 7753f34..0900b51 100644
    ) {
      const volume = computeWeeklyVolume(input.history, input.now);
      const exposure = computeExposure(input.history, input.now);
-@@ -2086,6 +2291,45 @@ export const SCHEDULE_SOURCE = 'schedule move';
+@@ -2095,6 +2300,45 @@ export const SCHEDULE_SOURCE = 'schedule move';
   * complete weeks of training on one side of the schedule, or on other days, bring one card to move
   * it. It shows the weeks, the schedule and the move; the split follows the new number on the tap.
   */
@@ -2131,7 +2131,7 @@ index 7753f34..0900b51 100644
  function scheduleSignals(input: CoachInput): CoachSignal[] {
    if (input.status === 'completed') return [];
    const fit = scheduleFit(input.history, input.profile, input.now);
-@@ -2107,6 +2351,18 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
+@@ -2116,6 +2360,18 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
        : fit.measured !== null && fit.measured > proposal.weeklyFrequency
          ? ` (the most the plan sets)`
          : '';
@@ -2150,7 +2150,7 @@ index 7753f34..0900b51 100644
    return [
      {
        domain: 'coverage',
-@@ -2118,6 +2374,7 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
+@@ -2127,6 +2383,7 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
          `Your last ${fit.weeks.length} weeks of training: ${fit.weeks.map((week) => dayList(week.days)).join('; ')}.`,
          `Your schedule: ${plural(schedule.weeklyFrequency)} a week, on ${dayList(schedule.availableDays)}. Moved: ${plural(proposal.weeklyFrequency)}${fewest}, on ${dayList(proposal.availableDays)}${follows}; Settings, Schedule, changes it any time.`,
        ],
@@ -2158,7 +2158,7 @@ index 7753f34..0900b51 100644
        action: {
          kind: 'schedule',
          weeklyFrequency: proposal.weeklyFrequency,
-@@ -2175,7 +2432,8 @@ export function conductCoach(input: CoachInput): CoachCard | null {
+@@ -2184,7 +2441,8 @@ export function conductCoach(input: CoachInput): CoachCard | null {
        (signal.exerciseId === undefined || today.has(signal.exerciseId)) &&
        !isDeclined(input.declines, signal, input.now) &&
        !isAccepted(input.accepted, signal) &&
@@ -2194,6 +2194,19 @@ index 30cd662..fdf53b6 100644
      strategy: [],
      lastExportAt: RECORD_NOW,
      workoutCount: history.length,
+diff --git a/src/engine/coach/coachOffersSwappedAway.test.ts b/src/engine/coach/coachOffersSwappedAway.test.ts
+index d54a12c..8d2af80 100644
+--- a/src/engine/coach/coachOffersSwappedAway.test.ts
++++ b/src/engine/coach/coachOffersSwappedAway.test.ts
+@@ -77,7 +77,7 @@ function pushDay() {
+     },
+     /** The exercises the coach offers to add, as its cards' actions name them. */
+     offered(): string[] {
+-      const fatigue = interpretFatigue(history, NOW, null);
++      const fatigue = interpretFatigue(history, NOW);
+       const input: CoachInput = {
+         workout,
+         status: 'preview',
 diff --git a/src/engine/coach/coachPolicy.test.ts b/src/engine/coach/coachPolicy.test.ts
 index 786a27d..7326b5c 100644
 --- a/src/engine/coach/coachPolicy.test.ts
@@ -5986,7 +5999,7 @@ index 1c4988b..53283e2 100644
  
      const fresh = run(
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index d1c129b..8fdeb88 100644
+index f4a7c1b..ae448e0 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
 @@ -1,4 +1,13 @@
@@ -6011,7 +6024,7 @@ index d1c129b..8fdeb88 100644
    withCatchUpLines,
    offPlanSpec,
    emptiedFor,
-@@ -276,11 +286,17 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
+@@ -278,11 +288,17 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
      const layer: Layer = {
        shown,
        finish: (workout, constraints) =>
@@ -6031,7 +6044,7 @@ index d1c129b..8fdeb88 100644
      markEmptied(constraints, request, next);
      // The time and the lines say what the plan now holds, eased or given back.
      if (next !== outcome.workout || bare !== shown) {
-@@ -401,6 +417,7 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
+@@ -403,6 +419,7 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
      readiness: constraints.readiness ? { ...constraints.readiness } : null,
      intensity: constraints.intensity,
      ...(constraints.badStart ? { badStart: true } : {}),
@@ -6039,7 +6052,7 @@ index d1c129b..8fdeb88 100644
      deload: constraints.deload ? { ...constraints.deload } : null,
      focus: constraints.focus ?? null,
      ...(constraints.catchUp !== undefined
-@@ -513,6 +530,16 @@ function intensityAdjust(level: number): PrescriptionAdjustment | undefined {
+@@ -518,6 +535,16 @@ function intensityAdjust(level: number): PrescriptionAdjustment | undefined {
  /** A hard start (Maintenance 26, item 42): the low check-in's treatment, a set fewer and a rep more in reserve. */
  const HARD_START: PrescriptionAdjustment = { sets: -1, rir: 1, restFactor: 1 };
  
@@ -6056,7 +6069,7 @@ index d1c129b..8fdeb88 100644
  /** Whether two of the day's adjustments ask the same of the lifts still to come. */
  function sameAdjust(
    a: PrescriptionAdjustment | undefined,
-@@ -521,7 +548,8 @@ function sameAdjust(
+@@ -526,7 +553,8 @@ function sameAdjust(
    return (
      (a?.sets ?? 0) === (b?.sets ?? 0) &&
      (a?.rir ?? 0) === (b?.rir ?? 0) &&
@@ -6066,7 +6079,7 @@ index d1c129b..8fdeb88 100644
    );
  }
  
-@@ -538,6 +566,7 @@ function feltAdjust(constraints: SessionConstraints): PrescriptionAdjustment | u
+@@ -543,6 +571,7 @@ function feltAdjust(constraints: SessionConstraints): PrescriptionAdjustment | u
      sets: Math.min(checkIn.sets, HARD_START.sets),
      rir: Math.max(checkIn.rir, HARD_START.rir),
      restFactor: Math.max(checkIn.restFactor, HARD_START.restFactor),
@@ -6074,7 +6087,7 @@ index d1c129b..8fdeb88 100644
    };
  }
  
-@@ -553,6 +582,7 @@ function withIntensity(
+@@ -558,6 +587,7 @@ function withIntensity(
      sets: harder.sets + felt.sets,
      rir: harder.rir + felt.rir,
      restFactor: harder.restFactor * felt.restFactor,
@@ -6082,7 +6095,7 @@ index d1c129b..8fdeb88 100644
    };
  }
  
-@@ -1145,9 +1175,26 @@ function prescriptionToday(
+@@ -1161,9 +1191,26 @@ function prescriptionToday(
    role: TrainingRole,
  ): Prescription {
    const base = prescribeFor(exercise, role, request.profile, request.history);
@@ -6112,7 +6125,7 @@ index d1c129b..8fdeb88 100644
  }
  
  /**
-@@ -1286,6 +1333,25 @@ function offPlanToday(request: RecalibrationRequest, workout: GeneratedWorkout):
+@@ -1302,6 +1349,25 @@ function offPlanToday(request: RecalibrationRequest, workout: GeneratedWorkout):
    return offPlanSpec(request.constraints, workout) !== null;
  }
  
@@ -6138,7 +6151,7 @@ index d1c129b..8fdeb88 100644
  /** A lift begun with one set left, as a refusal and a stop say it. */
  function oneSetLeft(name: string): string {
    return `${name} has one set left, too few for another lift to take over`;
-@@ -1395,7 +1461,10 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
+@@ -1411,7 +1477,10 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
    const day = dayAdjust(request.constraints)?.rir ?? 0;
    // The day's settings, the whole of them first: a reserve held at its limit (4, or the
    // exercise's floor) shows them as much as any.
@@ -6150,7 +6163,7 @@ index d1c129b..8fdeb88 100644
    for (let shift = day; shift !== 0; shift -= Math.sign(day)) {
      if (carriesDayRir(sets, Math.min(4, Math.max(floor, plainRir + shift)))) return shift;
    }
-@@ -1427,10 +1496,40 @@ function backOffDay(
+@@ -1443,10 +1512,40 @@ function backOffDay(
  
  /** Fatigue high today: a main lift goes straight (item 11, the research). */
  function fatigueHigh(request: RecalibrationRequest): boolean {
@@ -6195,7 +6208,7 @@ index d1c129b..8fdeb88 100644
  }
  
  /** The reserve the day asks of a lift as the plan holds it: its effort and the catch-up's kept. */
-@@ -1444,6 +1543,7 @@ function dayReserve(
+@@ -1460,6 +1559,7 @@ function dayReserve(
      prescriptionToday(request, exercise, entry.role),
      heldShift(request, workout, exercise, entry.role, dayShiftOf(request, workout, entry)),
      exercise,
@@ -6203,7 +6216,7 @@ index d1c129b..8fdeb88 100644
    ).rir;
  }
  
-@@ -1544,7 +1644,7 @@ function targetBuilt(
+@@ -1560,7 +1660,7 @@ function targetBuilt(
      prescription,
      suits: backOffsSuit(exercise, role, request.profile),
      profile: request.profile,
@@ -6212,7 +6225,7 @@ index d1c129b..8fdeb88 100644
      exerciseId: exercise.id,
      history: request.history,
      load: { step: loading.step, floor: barWeightFor(exercise, request.profile.units), loading },
-@@ -1558,16 +1658,18 @@ function targetBuilt(
+@@ -1574,16 +1674,18 @@ function targetBuilt(
    };
  }
  
@@ -6233,7 +6246,7 @@ index d1c129b..8fdeb88 100644
    };
  }
  
-@@ -1596,7 +1698,7 @@ function targetToday(
+@@ -1612,7 +1714,7 @@ function targetToday(
      prescription,
      history: request.history,
      profile: request.profile,
@@ -6242,7 +6255,7 @@ index d1c129b..8fdeb88 100644
      now: request.timestamp,
      maxes: request.maxes,
      session: { precedingSets: context.precedingSets },
-@@ -2092,6 +2194,7 @@ function refitEntry(
+@@ -2113,6 +2215,7 @@ function refitEntry(
      plain,
      heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),
      exercise,
@@ -6250,7 +6263,7 @@ index d1c129b..8fdeb88 100644
    );
    const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
    const context = sessionContextFor(request, workout, entry.id, exercise);
-@@ -2234,6 +2337,7 @@ function targetedSets(
+@@ -2255,6 +2358,7 @@ function targetedSets(
      prescriptionToday(request, exercise, role),
      options.shift ?? 0,
      exercise,
@@ -6258,7 +6271,7 @@ index d1c129b..8fdeb88 100644
    );
    const context = sessionContextFor(request, workout, entryId, exercise, options.through);
    const loading = loadingOf(request, exercise);
-@@ -2251,11 +2355,7 @@ function targetedSets(
+@@ -2272,11 +2376,7 @@ function targetedSets(
          prescription: asked,
          history,
          profile: request.profile,
@@ -6271,7 +6284,7 @@ index d1c129b..8fdeb88 100644
          now: request.timestamp,
          maxes: request.maxes,
          session: { precedingSets: context.precedingSets },
-@@ -2273,7 +2373,7 @@ function targetedSets(
+@@ -2294,7 +2394,7 @@ function targetedSets(
      prescription,
      suits: backOffsSuit(exercise, role, request.profile),
      profile: request.profile,
@@ -6280,7 +6293,7 @@ index d1c129b..8fdeb88 100644
      exerciseId: exercise.id,
      history: request.history,
      load: { step: loading.step, floor, loading },
-@@ -2464,16 +2564,26 @@ function easeTheRest(
+@@ -2485,16 +2585,26 @@ function easeTheRest(
    request: RecalibrationRequest,
    constraints: SessionConstraints,
  ): GeneratedWorkout {
@@ -6313,7 +6326,7 @@ index d1c129b..8fdeb88 100644
        }
        continue;
      }
-@@ -2482,8 +2592,20 @@ function easeTheRest(
+@@ -2503,8 +2613,20 @@ function easeTheRest(
        const working = entry.sets.filter((set) => set.kind === 'working');
        if (entry.eased || isStopped(entry) || working.length === 0) continue;
        const exercise = requireExercise(entry.exerciseId);
@@ -6335,7 +6348,7 @@ index d1c129b..8fdeb88 100644
      }
      if (changed) {
        syncRounds(block);
-@@ -2543,6 +2665,10 @@ function easeEntry(
+@@ -2564,6 +2686,10 @@ function easeEntry(
    request: RecalibrationRequest,
    /** The sets the ease itself took, for its words, where `take` holds others too. */
    said = take,
@@ -6346,7 +6359,7 @@ index d1c129b..8fdeb88 100644
  ): boolean {
    const working = entry.sets.filter((set) => set.kind === 'working');
    const gone = new Set(working.slice(working.length - take));
-@@ -2551,7 +2677,9 @@ function easeEntry(
+@@ -2572,7 +2698,9 @@ function easeEntry(
    const sets = entry.sets
      .filter((set) => !gone.has(set))
      .map((set) =>
@@ -6357,7 +6370,7 @@ index d1c129b..8fdeb88 100644
      );
    const moved = sets.some((set) => !entry.sets.includes(set));
    if (take === 0 && !moved) return false;
-@@ -2565,7 +2693,55 @@ function easeEntry(
+@@ -2586,7 +2714,55 @@ function easeEntry(
    if (entry.progression && what) {
      entry.progression = {
        ...entry.progression,
@@ -6414,7 +6427,7 @@ index d1c129b..8fdeb88 100644
      };
    }
    return true;
-@@ -2607,9 +2783,10 @@ function recordOf(entry: WorkoutEntry, block: WorkoutBlock): NonNullable<Workout
+@@ -2628,9 +2804,10 @@ function recordOf(entry: WorkoutEntry, block: WorkoutBlock): NonNullable<Workout
   * A working set `up` reps more in reserve, never heavier (Maintenance 26, the sixth pass of item
   * 42). Its reps stay on the load the place makes nearest the plan's own rule for that reserve
   * (`loadAtMoreReserve`), where that load is lighter; otherwise it keeps its load and does a rep
@@ -6428,7 +6441,7 @@ index d1c129b..8fdeb88 100644
   */
  function easedSet(
    set: SetPrescription,
-@@ -2618,13 +2795,14 @@ function easedSet(
+@@ -2639,13 +2816,14 @@ function easedSet(
    manual: WorkoutEntry['manual'],
    loading: Loading,
    bar: number | null,
@@ -6444,7 +6457,7 @@ index d1c129b..8fdeb88 100644
      const exact = loadAtMoreReserve(weight, high, set.targetRir, more);
      let load = weight;
      for (;;) {
-@@ -3137,7 +3315,20 @@ function applySubstitution(
+@@ -3158,7 +3336,20 @@ function applySubstitution(
    // part of them (the seventh pass of item 42: a later change put the old exercise's back).
    delete entry.eased;
    if (plan) {
@@ -6466,7 +6479,7 @@ index d1c129b..8fdeb88 100644
      entry.eased = { ...(entry.eased ?? recordOf(entry, block)), kept: true };
    } else if (marked) {
      entry.eased = { exerciseId: exercise.id, kept: true };
-@@ -3677,18 +3868,45 @@ function formatClock(iso: string): string {
+@@ -3698,18 +3889,45 @@ function formatClock(iso: string): string {
  }
  
  /**
@@ -6520,7 +6533,7 @@ index d1c129b..8fdeb88 100644
  }
  
  /** Changes that make no sense on an exercise that has stopped: its sets went to a stand-in. */
-@@ -4232,6 +4450,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4248,6 +4466,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            prescriptionToday(request, exercise, role),
            dayAdjust(constraints)?.rir ?? 0,
            exercise,
@@ -6528,7 +6541,7 @@ index d1c129b..8fdeb88 100644
          ),
          sets: Math.max(1, Math.round(trigger.sets)),
        };
-@@ -4365,6 +4584,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4381,6 +4600,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                effortShift(from, entry, plainTarget.rir),
              ),
              exercise,
@@ -6536,7 +6549,7 @@ index d1c129b..8fdeb88 100644
            );
            // A load read from an estimate for a rep range, with reps set by hand: the load for those
            // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
-@@ -4432,7 +4652,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4452,7 +4672,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                prescription,
                suits,
                profile: from.profile,
@@ -6545,7 +6558,7 @@ index d1c129b..8fdeb88 100644
                exerciseId: exercise.id,
                history: from.history,
                load: {
-@@ -4713,6 +4933,18 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4733,6 +4953,18 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          ? readinessAdjustment(request.constraints.readiness)
          : undefined;
        const restored = !adjust && earlier !== undefined;
@@ -6564,7 +6577,7 @@ index d1c129b..8fdeb88 100644
        // Short on time asks for 45 minutes, never longer than a catch-up's own shorter length (the
        // second review of round M).
        const defaultMinutes = request.profile.schedule.typicalDurationMinutes;
-@@ -4730,12 +4962,25 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4750,12 +4982,25 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        ) {
          // A hard start still eases the rest: never "full workout kept" while it does (the review
          // of item 42).
@@ -6593,7 +6606,7 @@ index d1c129b..8fdeb88 100644
          };
        }
        const settled = settleKept(request, constraints);
-@@ -4761,7 +5006,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4781,7 +5026,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const more = sets > 0 && change.more;
        const { easier, harder } = change;
        const parts: string[] = [];
@@ -6611,7 +6624,7 @@ index d1c129b..8fdeb88 100644
        if (fewer || easier) parts.push(cut.filter(Boolean).join(' with '));
        if (more || harder) {
          parts.push(
-@@ -4773,6 +5027,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4793,6 +5047,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          );
        }
        const back = restored && parts.length === 1 && (more || harder);
@@ -6622,7 +6635,7 @@ index d1c129b..8fdeb88 100644
        // A sore joint is named only where a lift it rules out, with sets still to come, left the plan
        // or stopped for it.
        const { isDone } = classify(request);
-@@ -4807,20 +5065,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4827,20 +5085,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          workout,
          constraints,
          duration: choice,
@@ -6658,7 +6671,7 @@ index d1c129b..8fdeb88 100644
          // Nothing left to bring back (the lift under way keeps its sets, and sets at their fewest
          // stay): no claim that anything came back. Otherwise the words name only what changed.
          unchanged:
-@@ -4891,6 +5150,41 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4911,6 +5170,41 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        };
      }
  
@@ -6700,7 +6713,7 @@ index d1c129b..8fdeb88 100644
      case 'bad-start': {
        // Maintenance 26, item 42 (docs/research/bad-start.md): the first two lifts that can be
        // judged fell well short, or no longer do after an undo or a correction.
-@@ -4899,15 +5193,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4919,15 +5213,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const before = shownAdjust(request.constraints);
        const after = shownAdjust(constraints);
        const names = trigger.lifts.map((id) => requireExercise(id).name).join(' and ');
@@ -6718,7 +6731,7 @@ index d1c129b..8fdeb88 100644
        // The ease is laid over the plan, or taken off it, as a layer (the sixth pass).
        const workout = layer.finish(request.workout, constraints);
        // As a check-in's words: only what changed on the lifts still to come (Maintenance 24).
-@@ -4928,7 +5215,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4948,7 +5235,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                : '';
        // "Back to plan" only when nothing else of the day's settings stays (a check-in, harder or
        // easier): otherwise the lifts come back to those (the review of item 42).
@@ -6727,7 +6740,7 @@ index d1c129b..8fdeb88 100644
        const up = [more ? 'sets' : '', change.harder ? 'effort' : ''].filter(Boolean).join(' and ');
        return {
          ...base,
-@@ -5221,6 +5508,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -5241,6 +5528,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const existing = entry.sets.find((set) => set.kind === 'drop');
        if (trigger.on) {
          if (!exercise.dropSetSafe) throw new Error(`${exercise.name} is not safe for a drop set.`);
@@ -6792,7 +6805,7 @@ index 581f317..c3ae861 100644
        return trigger.time ? 'Fitting to an exact end time' : 'Returning to the chosen length';
      case 'session-kind':
 diff --git a/src/engine/recalibration/types.ts b/src/engine/recalibration/types.ts
-index 4142626..f670dc3 100644
+index 40cdf35..c2b7caf 100644
 --- a/src/engine/recalibration/types.ts
 +++ b/src/engine/recalibration/types.ts
 @@ -1,3 +1,4 @@
@@ -8987,7 +9000,7 @@ index bc956ae..c943e62 100644
        headline: 'Recovery is behind',
      });
 diff --git a/src/engine/strategy/strategy.ts b/src/engine/strategy/strategy.ts
-index d30be03..4646b26 100644
+index 83ff188..ff209bc 100644
 --- a/src/engine/strategy/strategy.ts
 +++ b/src/engine/strategy/strategy.ts
 @@ -337,18 +337,18 @@ function recoveryInsights(
@@ -9231,7 +9244,7 @@ index 086aa92..54f52b6 100644
      workout: {
        ...workout,
 diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
-index 5e4dd5f..02ec26a 100644
+index 828f2ed..63254cf 100644
 --- a/src/engine/workoutGenerator/generate.ts
 +++ b/src/engine/workoutGenerator/generate.ts
 @@ -82,6 +82,7 @@ import {
@@ -9259,7 +9272,7 @@ index 5e4dd5f..02ec26a 100644
  }
  
  /** A logged set as the session context needs it: whose, what kind, when, and whether it was skipped. */
-@@ -1349,6 +1360,7 @@ function withDeload(
+@@ -1383,6 +1394,7 @@ function withDeload(
          rir: (day?.rir ?? 0) + DELOAD_RIR_DELTA,
          restFactor: day?.restFactor ?? 1,
          loadScale: DELOAD_LOAD_SCALE,
@@ -9267,7 +9280,7 @@ index 5e4dd5f..02ec26a 100644
        }
      : day;
  }
-@@ -1374,7 +1386,7 @@ function adjustPrescription(
+@@ -1408,7 +1420,7 @@ function adjustPrescription(
    return {
      ...prescription,
      sets: clamp(prescription.sets + adjust.sets, floor, 5),
@@ -9276,7 +9289,7 @@ index 5e4dd5f..02ec26a 100644
      restSeconds: Math.max(
        MIN_REST_SECONDS[restCategory(role)],
        round5(prescription.restSeconds * adjust.restFactor),
-@@ -1428,12 +1440,16 @@ export function pushedPrescription(
+@@ -1462,12 +1474,16 @@ export function pushedPrescription(
      return {
        ...adjusted,
        sets: clamp(sets + Math.min(0, adjust?.sets ?? 0), 2, sets),
@@ -9295,7 +9308,7 @@ index 5e4dd5f..02ec26a 100644
  }
  
  /** Whether an exercise trains one of a lift's primary muscles as one of its own. */
-@@ -1728,7 +1744,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1762,7 +1778,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      chosen: chosenBy([], push),
      ...(resting.size > 0 ? { resting } : {}),
    };
@@ -9304,7 +9317,7 @@ index 5e4dd5f..02ec26a 100644
  
    // Entries the caller keeps: logged work is frozen; pinned picks, explicit
    // selections, and accepted alternatives stay in their slots.
-@@ -1845,7 +1861,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1879,7 +1895,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        prescription,
        suits: backOffsSuit(exercise, role, profile),
        profile,
@@ -9314,7 +9327,7 @@ index 5e4dd5f..02ec26a 100644
        exerciseId: exercise.id,
        history,
        load: { step: loading.step, floor, loading },
-@@ -2948,7 +2965,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -3009,7 +3026,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
    // to failure, so a style that takes nothing to failure plans none.
    // None in a catch-up or a second workout: a few sets each, none to failure (the review of round M).
@@ -9967,10 +9980,10 @@ index 5312122..06707d5 100644
       "  const day = (new Date(iso).getDay() + 6) % 7;\n  return startOfLocalDay(addLocalDays(iso, -day));",
       "  const date = new Date(iso);\n  const day = (date.getUTCDay() + 6) % 7;\n  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - day)).toISOString();",
 diff --git a/tools/reverts/mutate-m31.py b/tools/reverts/mutate-m31.py
-index 1f27484..f4af39d 100644
+index 4808b45..f884545 100644
 --- a/tools/reverts/mutate-m31.py
 +++ b/tools/reverts/mutate-m31.py
-@@ -353,8 +353,8 @@ MUTATIONS = [
+@@ -358,8 +358,8 @@ MUTATIONS = [
       "    text: `You trained today${nothingBehind}: nothing more for today.`,\n    action: { label: 'Full session', full: true },",
       "    text: `You trained today${nothingBehind}: nothing more for today.`,", [T_NOTE], None),
      ("R19 nothing to start when nothing is left", CARD,
@@ -9981,7 +9994,7 @@ index 1f27484..f4af39d 100644
      ("R20 the switch knows the day's kind", STORE,
       "    return this.recalibrate({ type: 'session-kind', full, ...(kind ? { kind } : {}) });",
       "    return this.recalibrate({ type: 'session-kind', full });", [T_STORE], None),
-@@ -372,8 +372,8 @@ MUTATIONS = [
+@@ -377,8 +377,8 @@ MUTATIONS = [
       "      if (next.primaryMuscles.some((muscle) => rests.has(muscle))) continue;\n", "",
       [T_OFF], None),
      ("V4 no drop set off the plan", GENERATE,
@@ -9993,10 +10006,10 @@ index 1f27484..f4af39d 100644
       "    const spent = [...budget]\n      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)\n      .map(([muscle]) => muscle);",
       "    const spent: MuscleId[] = [];", [T_DAY], None),
 diff --git a/tools/reverts/mutate-m32.py b/tools/reverts/mutate-m32.py
-index 3eef68a..93c51a5 100644
+index 0b9aa58..8b8b8b8 100644
 --- a/tools/reverts/mutate-m32.py
 +++ b/tools/reverts/mutate-m32.py
-@@ -226,7 +226,7 @@ MUTATIONS = [
+@@ -231,7 +231,7 @@ MUTATIONS = [
       "      !offPlan && deload === null && !pushPick && owed === undefined,",
       "      !offPlan && deload === null && owed === undefined,", [T_PLAN], None),
      ("N35 ... with fatigue high", GENERATE,
@@ -10005,7 +10018,7 @@ index 3eef68a..93c51a5 100644
      ("N36 the target read at the top set's reserve", BACKOFFS,
       "    const asked = { ...prescription, rir: topSetRir(prescription.rir) };",
       "    const asked = prescription;", [T_PLAN], None),
-@@ -245,10 +245,10 @@ MUTATIONS = [
+@@ -250,10 +250,10 @@ MUTATIONS = [
      ("N41 the day decides in a rebuild", ENGINE,
       "  return request.constraints.deload === null && !offPlan && entry.push === undefined && !standsIn;",
       "  return true;", [T_PLAN], None),
@@ -10018,7 +10031,7 @@ index 3eef68a..93c51a5 100644
       "    day: options.backOffs === true,", [T_PLAN], None),
      ("N44 a swap before a set takes it", ENGINE,
       "    { shift, backOffs: backOffDay(request, workout, entry) },", "    { shift },",
-@@ -256,7 +256,7 @@ MUTATIONS = [
+@@ -261,7 +261,7 @@ MUTATIONS = [
      ("N45 a kept lift through the day's change keeps it", ENGINE,
       "        backOffs: backOffDay(next, workout, entry),\n", "", [T_PLAN], None),
      ("N46 an entered max keeps it", ENGINE,
@@ -10027,7 +10040,7 @@ index 3eef68a..93c51a5 100644
       "              day: false,", [T_PLAN], None),
      ("N47 swapped back after its top set: its back-offs", ENGINE,
       "asBackOffs(request, workout, stopped, built.sets, isDone)", "built.sets", [T_PLAN], None),
-@@ -573,7 +573,7 @@ MUTATIONS = [
+@@ -578,7 +578,7 @@ MUTATIONS = [
      ("N157 a saved copy's straight sets are the lifter's own", BACKOFFS,
       "        delete entry.atBackOffs;\n", "", [T_AT_BACKOFFS], None),
      ("N158 a max entered reads the target as every plan does", ENGINE,
@@ -10036,7 +10049,7 @@ index 3eef68a..93c51a5 100644
       "              day: false,", [T_MAX_STRAIGHT, T_MAX_HAND_REPS, T_MAX_PAST_MARKED], None),
      ("N159 straight sets after a capped top set at the back-offs' reps", BACKOFFS,
       "    reps: top.asked?.reps ?? top.reps,\n", "", [T_CAPPED_REPS], None),
-@@ -706,7 +706,7 @@ MUTATIONS = [
+@@ -711,7 +711,7 @@ MUTATIONS = [
       "      if (plan.kind === 'weight') {\n        const from = log.weight ?? current;",
       "      if (false) {\n        const from = log.weight ?? current;", [T_PICK_UP], None),
      ("N202 the fatigue's drift reads no back-offs", FATIGUE,
@@ -10045,7 +10058,7 @@ index 3eef68a..93c51a5 100644
       [T_SKIPPED_TOP_DRIFT], None),
      ("N203 the Progress trend reads the top sets alone", ANALYTICS,
       "      Number.POSITIVE_INFINITY,\n    ).filter((point) => !point.viaFamily);",
-@@ -727,8 +727,8 @@ MUTATIONS = [
+@@ -732,8 +732,8 @@ MUTATIONS = [
       "            hand !== undefined &&\n            (true || hand.reps[0] !== prescription.reps[0]",
       [T_MAX_HAND_REPS], None),
      ("N208 a target read past the marked days reads the day's fatigue off the whole log", ENGINE,
@@ -10442,7 +10455,7 @@ index 0000000..c9dca07
 +survived = [r for r in results if r[1] != "KILLED"]
 +print(f"\n{len(results) - len(survived)} killed, {len(survived)} not killed")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
-index da3da09..fc0607b 100644
+index 5e37276..e6f2385 100644
 --- a/tools/reverts/table_m31.txt
 +++ b/tools/reverts/table_m31.txt
 @@ -226,8 +226,8 @@ MUTATIONS = [
@@ -10468,7 +10481,7 @@ index da3da09..fc0607b 100644
       "    const spent = [...budget]\n      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)\n      .map(([muscle]) => muscle);",
       "    const spent: MuscleId[] = [];", [T_DAY], None),
 diff --git a/tools/reverts/table_m32.txt b/tools/reverts/table_m32.txt
-index 8753786..a64f5f3 100644
+index eb2b7d3..01e85b2 100644
 --- a/tools/reverts/table_m32.txt
 +++ b/tools/reverts/table_m32.txt
 @@ -88,7 +88,7 @@ MUTATIONS = [
