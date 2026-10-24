@@ -5,6 +5,17 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 15:25 UTC (supersedes the states below)
+
+- **Rounds M and N**: unchanged (`4cb40d7`, `34dc615`); their eighteenth and ninth reviews running.
+- **Maintenance 33**: local `cebcffb` (on `34dc615`). Its revert table is complete for now: 51
+  entries, every one caught (two left out as equivalent, with the reasons in the table), with new
+  tests for the rest day on Today, a log grown in place, the completion line's muscles, the
+  hard-work rule and an untargeted session's pairing. Its first adversarial review is running in
+  `/home/user/wc4-o-review` (tests to come in `src/review-m33a/`). Next: the three reviews'
+  findings; then ship Round M, Round N and Maintenance 33 in order, each after a clean pass, its
+  full revert run, verify and the live checks.
+
 ### Checkpoint, 2026-10-24 15:05 UTC (supersedes the states below)
 
 - **Rounds M and N**: unchanged (`4cb40d7`, `34dc615`); their eighteenth and ninth reviews running.

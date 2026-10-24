@@ -229,10 +229,31 @@ index b740798..52018b3 100644
  
    it('drops an end time already past when the focus rebuilds the preview', async () => {
 diff --git a/src/core/state/appStore.progress.test.ts b/src/core/state/appStore.progress.test.ts
-index bf150bb..e0f95d0 100644
+index bf150bb..6304bac 100644
 --- a/src/core/state/appStore.progress.test.ts
 +++ b/src/core/state/appStore.progress.test.ts
-@@ -93,7 +93,11 @@ describe('AppStore saved workouts, records, and the session summary', () => {
+@@ -87,13 +87,32 @@ describe('AppStore saved workouts, records, and the session summary', () => {
+     expect(target.store.getSnapshot().savedWorkouts.map((item) => item.name)).toEqual(['Keeper']);
+   });
+ 
++  it('names only the muscles the session worked hard in its recovery line', async () => {
++    // Maintenance 33: the bench press session first, then the next one the plan builds; the second's
++    // line names its own muscles, never the chest still recovering from the first.
++    const handle = await seeded();
++    await trainMainLift(handle, 185);
++    handle.store.dismissCompletion();
++    expect(allEntries(session(handle).workout.blocks)[0]?.exerciseId).toBe(
++      'incline-dumbbell-press',
++    );
++    const second = await trainMainLift(handle, 100, 8);
++    expect(second.recoveryNote).toBe(
++      'Recovery before loading them hard again: Upper chest and Front delts about 36 h.',
++    );
++  });
++
+   it('detects personal records on the second session and fills the session summary', async () => {
+     const handle = await seeded();
+     const first = await trainMainLift(handle, 185);
      expect(first.prs).toEqual([]);
      expect(first.nextTargets[0]).toMatch(/^Barbell Bench Press: 190 lb × 4-6 \(load up\)$/);
      expect(first.nextFocus).toMatch(/^Next focus: /);
@@ -5353,10 +5374,10 @@ index 0000000..dcb6c19
 +});
 diff --git a/src/engine/recovery/recovery.test.ts b/src/engine/recovery/recovery.test.ts
 new file mode 100644
-index 0000000..c09318d
+index 0000000..656ee85
 --- /dev/null
 +++ b/src/engine/recovery/recovery.test.ts
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,187 @@
 +import { describe, expect, it } from 'vitest';
 +import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 +import { RECORD_NOW, record, type SetSpec } from '../../test/records';
@@ -5420,6 +5441,16 @@ index 0000000..c09318d
 +    const window = windowOf(history, 'chest')!;
 +    expect(window.hours).toBe(24);
 +    expect(hoursSince(window, RECORD_NOW)).toBe(24);
++  });
++
++  it('reads a log grown in place again: what it read is kept only while the log is the same', () => {
++    const history = [
++      record(60, 'barbell-bench-press', sets(3, 6, 2)),
++      record(3, 'barbell-bench-press', sets(3, 6, 2)),
++    ];
++    expect(hoursOf(history, 'chest')).toBe(36);
++    history.push(record(1, 'barbell-bench-press', sets(3, 6, 0)));
++    expect(hoursOf(history, 'chest')).toBe(48);
 +  });
 +});
 +
@@ -7198,6 +7229,66 @@ index ddf73f9..9e57f38 100644
  
    return (
      <Card tone="accent" eyebrow="Today's workout" title={workout.title}>
+diff --git a/src/features/today/restDay.screens.test.tsx b/src/features/today/restDay.screens.test.tsx
+new file mode 100644
+index 0000000..9e99a98
+--- /dev/null
++++ b/src/features/today/restDay.screens.test.tsx
+@@ -0,0 +1,54 @@
++import { act, render, screen } from '@testing-library/react';
++import { describe, expect, it, vi } from 'vitest';
++import { App } from '../../app/App';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import { REST_TODAY } from '../../engine/readiness/checkIn';
++import { Providers, TEST_NOW, createTestStore } from '../../test/testStore';
++
++vi.mock('../library/useCustomMedia', () => ({ useCustomMedia: () => null }));
++vi.mock('../../core/time/clock', async (original) => ({
++  ...(await original<typeof import('../../core/time/clock')>()),
++  useNow: () => Date.parse('2026-09-02T12:01:00.000Z'),
++  useMomentReached: () => false,
++}));
++
++/**
++ * Maintenance 33, the illness gate (docs/research/readiness-and-soreness.md): a fever or aches all
++ * over make the day a rest day. Today says so, offers the check-in again, and has nothing to start.
++ * Synthetic data only.
++ */
++describe('a fever or aches all over, on Today', () => {
++  it('says to rest today and hides Start', async () => {
++    const { store } = createTestStore();
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
++      createDefaultLocations({ gymAccess: true }, TEST_NOW),
++    );
++    const done = await store.recalibrate({
++      type: 'readiness',
++      readiness: {
++        energy: 3,
++        sleep: 3,
++        soreness: 2,
++        motivation: 3,
++        jointDiscomfort: [],
++        timePressure: false,
++        illness: 'body',
++      },
++    });
++    expect(done?.ok).toBe(true);
++    act(() => {
++      window.location.hash = '#/today';
++    });
++    render(
++      <Providers store={store}>
++        <App />
++      </Providers>,
++    );
++    expect(await screen.findByTestId('day-note-text')).toHaveTextContent(REST_TODAY);
++    expect(screen.queryByTestId('start-workout')).not.toBeInTheDocument();
++    expect(screen.getAllByRole('button', { name: 'Update check-in' }).length).toBeGreaterThan(0);
++  });
++});
 diff --git a/tools/reverts/mutate-m27.py b/tools/reverts/mutate-m27.py
 index 7d494ce..817bf0f 100644
 --- a/tools/reverts/mutate-m27.py
@@ -7324,10 +7415,10 @@ index 8dadf1e..f763133 100644
       "this.backOffLogOf({ ...session, completed }, entry, isDone)", "this.backOffLogOf(session, entry, isDone)",
 diff --git a/tools/reverts/mutate-m33.py b/tools/reverts/mutate-m33.py
 new file mode 100644
-index 0000000..c8bbb1d
+index 0000000..6326721
 --- /dev/null
 +++ b/tools/reverts/mutate-m33.py
-@@ -0,0 +1,259 @@
+@@ -0,0 +1,268 @@
 +"""Maintenance 33 mutation checks: revert each recovery and readiness rule alone, run its tests,
 +expect a failure, restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -7361,6 +7452,7 @@ index 0000000..c8bbb1d
 +PLAN = "src/engine/planning/weeklyPlan.ts"
 +BUILDER = "src/core/state/workoutRecordBuilder.ts"
 +LEARNED = "src/engine/learned/learned.ts"
++TODAY = "src/features/today/TodayScreen.tsx"
 +
 +T_RECOVERY = "src/engine/recovery/recovery.test.ts"
 +T_LEARNED_W = "src/engine/recovery/recovery.learned.test.ts"
@@ -7376,6 +7468,7 @@ index 0000000..c8bbb1d
 +T_LEARNED_PAGE = "src/engine/learned/learned.test.ts"
 +T_STRATEGY = "src/engine/strategy/strategy.test.ts"
 +T_RECALIBRATE = "src/engine/recalibration/recalibrate.test.ts"
++T_REST_DAY = "src/features/today/restDay.screens.test.tsx"
 +
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
@@ -7520,6 +7613,13 @@ index 0000000..c8bbb1d
 +     "  return false;", [T_TOO_SOON], None),
 +    ("K3 a card already shown stays", COACH,
 +     "  if (shown[declineKey(signal)] !== undefined) return false;\n", "", [T_TOO_SOON], None),
++    ("I2 a fever or aches all over: Today has nothing to start", TODAY,
++     "        restToday={resting}", "        restToday={false}", [T_REST_DAY], None),
++    ("X1 the history is read again once it grows", RECOVERY,
++     "  if (cached && cached.signature === signatureOf(history)) return cached;",
++     "  if (cached) return cached;", [T_RECOVERY], None),
++    # No entry for the schedule card's kept check: it only spares the coach the week's rebuild each
++    # minute, and the card reads the same either way.
 +]
 +
 +
@@ -7700,10 +7800,10 @@ index 0000000..e3a0e43
 +print("written")
 diff --git a/tools/reverts/table_m33.txt b/tools/reverts/table_m33.txt
 new file mode 100644
-index 0000000..9516947
+index 0000000..d579f6f
 --- /dev/null
 +++ b/tools/reverts/table_m33.txt
-@@ -0,0 +1,144 @@
+@@ -0,0 +1,151 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The windows from the hardest sets.
@@ -7847,4 +7947,11 @@ index 0000000..9516947
 +     "  return false;", [T_TOO_SOON], None),
 +    ("K3 a card already shown stays", COACH,
 +     "  if (shown[declineKey(signal)] !== undefined) return false;\n", "", [T_TOO_SOON], None),
++    ("I2 a fever or aches all over: Today has nothing to start", TODAY,
++     "        restToday={resting}", "        restToday={false}", [T_REST_DAY], None),
++    ("X1 the history is read again once it grows", RECOVERY,
++     "  if (cached && cached.signature === signatureOf(history)) return cached;",
++     "  if (cached) return cached;", [T_RECOVERY], None),
++    # No entry for the schedule card's kept check: it only spares the coach the week's rebuild each
++    # minute, and the card reads the same either way.
 +]
