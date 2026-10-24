@@ -5,6 +5,44 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-24 20:05 UTC (supersedes the states below)
+
+- **Round M**: local `0fe4cb9` (diff on `2595631`: `docs/handoff/round-m-wip/round-m.diff`). The
+  nineteenth pass is complete: four findings fixed at the shared level. A lift swapped away today
+  is judged as a slot's own pick only where a kept swap has a lift in its place (so the kept swap
+  applies), and never comes back by itself when the swap-in cannot join; a lift put back in another
+  place stays on the day's list (a swap back where the plan had it takes it off); every coach offer
+  reads the day's list through one helper (`dayExclusions`); the mark of a plan emptied keeps the
+  layout emptied (`emptiedLayout`, optional with a catch), and the generator itself lays that layout
+  out empty wherever it finds a lift (`GenerationConstraints.emptiedLayout`), for every rebuild and
+  for a later plan the same day (`ensureSession` keeps the mark for the same offer). The review's
+  tests moved into place; new store tests for the later plan, a reload and another place; the M31
+  table at 285 entries, every one run caught. Full suite before the last tests: 2910 passed.
+  Report: the nineteenth pass written, `TWENTIETH_PASS` placeholder, two known limits added. Next:
+  the twentieth review on `0fe4cb9`.
+- **Round N**: local `25fd689` on Round M's old `0f8d10f`; next: rebase onto `0fe4cb9`, then the
+  tenth review's five findings (tests in `/home/user/wc4-n-review/src/review-m32j/`, report saved
+  in the session scratchpad): (1) MEDIUM, a max with reps set by hand at another range drops the
+  day's `atBackOffs` mark (keep `mainLiftTarget(...).straight` in the other-range branch of
+  `fittedFrom`); (2) the hand-weight replay in `backOffsAsPlanned` is not capped at the top set
+  (`top: null`); (3) `sessionFeedback` calls `backOffMiss` without `backOffAt`; (4) after that max
+  the first straight set keeps the old top set's reserve (`withReps` restores each set's old
+  reserve); (5) the generator's pick-up (`reopened`) keeps `manual.backOffs`.
+- **Maintenance 33**: local `065e13c` on Round N's `25fd689` (diff:
+  `docs/handoff/round-o-wip/round-o.diff`). The first review's thirteen findings are fixed: every
+  reading that sets a lift's session against another's (the fatigue drift, a first set against the
+  rested sessions, the learned windows) reads each set against what it asked
+  (`src/engine/recovery/againstAsked.ts`: the same ask as lifted, a changed ask with reps in the
+  range as asked); any illness keeps a workout under way at the head cold's floor; no drop-set
+  offer or "too soon" card where the day forbids them; one day context for every reader of the
+  windows (`dayRecovery`); the schedule line is the card's footnote; "Lighter" keeps every load;
+  stale ease marks go while it is in force; the learned page names the "too soon" Not now; item
+  43's day rule for the reserve check is back; the pain gate is said beside "Hurts, protect it".
+  The M33 table at 80 entries, every one run caught. Next: rebase onto Round N's new head, then
+  its second review.
+- **Not ours**: the launcher icon and PWA install are the Life Mirror builder's (the owner,
+  2026-10-24): nothing about them is to be done in this work.
+
 ### Checkpoint, 2026-10-24 17:00 UTC (supersedes the states below)
 
 - **Round M**: `0f8d10f`; its nineteenth review is running (tests to come in
