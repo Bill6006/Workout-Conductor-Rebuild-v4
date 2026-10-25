@@ -1,9 +1,9 @@
 diff --git a/docs/reports/maintenance-33.md b/docs/reports/maintenance-33.md
 new file mode 100644
-index 0000000..73e14e9
+index 0000000..54d07e4
 --- /dev/null
 +++ b/docs/reports/maintenance-33.md
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,207 @@
 +# Maintenance 33: the recovery and readiness core
 +
 +Built on 2026-10-23 and 2026-10-24 on the owner's word to build the whole agreed queue, round by
@@ -156,7 +156,34 @@ index 0000000..73e14e9
 +  review's notes: the card raised by a first set says the hours when it was lifted, and the pain
 +  gate is said beside "Hurts, protect it".
 +
-+SECOND_PASS
++**The second pass** found twelve: one HIGH, five MEDIUM, six LOW. Eleven were in the build before
++the first pass's fixes; one part of one came with them.
++
++- HIGH: an illness told under way left the lift in progress at its own reserve, a finisher to
++  failure, beside "every set 2 or more short of failure for the head cold".
++- MEDIUM: a check-in told after a hard start re-judged it, and the next set took the ease away just
++  after the words said it stays (the windows' part came with the first pass's day context); a load
++  step after reps past the top of the range, lifted as asked, read as a fall; the completion read
++  the windows without the session's check-in; a fever's rest day still offered sets to add; the
++  day's reserve check landed on a lift "Lighter" had eased.
++- LOW: "Lighter" was lost when the preview was made again, and after a swap and a swap back under
++  way; "too soon" read today's first set as logged against rested sessions read through the reserve
++  check's estimate; a reserve check taken to failure set its muscle's window as a set short of it;
++  the Plan screen read yesterday's check-in while yesterday's finished workout was still on screen;
++  the long-length lifts missed the dumbbell Romanian deadlift and the cable overhead extension.
++- Fixed: any illness holds every set still to come at its floor, a lift under way's too, at its
++  load, as "Lighter" eases one. A set past what it asked reads as asked, no more. A check-in told
++  with a hard start in force leaves the start's reading as it was (`checkInAfterStart`, optional
++  with a catch). One day context (`dayRecovery`) for every reader of the windows, the completion
++  with its session's check-in, and a check-in is the day's its session was made on. A rest day adds
++  no work. The reserve check never lands on a lift the plan eases. "Lighter" is a choice of the day
++  through a preview made again and comes back eased on a lift swapped back. Today's sets are read as
++  the rules read the log (`readLoggedReserve`; the estimate kept beside the read log). A reserve
++  check taken to failure reads as a set to failure. The long-length lifts include every implement
++  of the lifts the research names. The schedule card's line names Monday too in its test week: the
++  dumbbell Romanian deadlift now lengthens the hamstrings' and glutes' windows.
++
++THIRD_PASS
 +
 +## Known limits
 +
@@ -401,11 +428,37 @@ index bf150bb..6304bac 100644
      // Save the completed session before leaving it, then repeat it: the next generated
      // session may rotate to another template.
      const saved = await handle.store.saveCurrentWorkout('Repeat');
+diff --git a/src/core/state/appStore.reserveCheck.test.ts b/src/core/state/appStore.reserveCheck.test.ts
+index 2b1245b..416b81a 100644
+--- a/src/core/state/appStore.reserveCheck.test.ts
++++ b/src/core/state/appStore.reserveCheck.test.ts
+@@ -291,6 +291,13 @@ describe('the log the rules read', () => {
+     };
+   };
+ 
++  it('keeps the estimate it reads the log through beside it, for today’s sets (the second review of Maintenance 33)', async () => {
++    const store = await ready({}, four);
++    expect(store.getSnapshot().readEstimate).toMatchObject({ correction: 2 });
++    const three = await ready({}, four.slice(0, 3));
++    expect(three.getSnapshot().readEstimate).toBeNull();
++  });
++
+   it("reads a covered reserve through the lifter's error once four checks are in", async () => {
+     const store = await ready({}, four);
+     // Each check had 3 left at the stop against 1 judged: an error of 2, read in as 2 more; the
 diff --git a/src/core/state/appStore.ts b/src/core/state/appStore.ts
-index d43e8ab..54590e5 100644
+index 683401a..d91e268 100644
 --- a/src/core/state/appStore.ts
 +++ b/src/core/state/appStore.ts
-@@ -165,8 +165,13 @@ import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
+@@ -99,6 +99,7 @@ import { personalPace } from '../../engine/duration/trainingTime';
+ import { wouldPair } from '../../engine/progression/personalCurve';
+ import {
+   measuredReserve,
++  readLoggedReserve,
+   readReserve,
+   reserveCheckSet,
+   reserveCheckStatus,
+@@ -165,8 +166,13 @@ import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
  import { normalizeName } from '../backup/legacyImport';
  import {
    COACH_DECLINES_ID,
@@ -419,7 +472,7 @@ index d43e8ab..54590e5 100644
    restLengthened,
    restOfferStands,
    restRunning,
-@@ -177,6 +182,7 @@ import {
+@@ -177,6 +183,7 @@ import {
    setAsideKey,
    type CoachAction,
    type CoachDeclines,
@@ -427,7 +480,19 @@ index d43e8ab..54590e5 100644
    type CoachSignal,
  } from '../../engine/coach/coachConductor';
  import { coachingPolicy } from '../../engine/coach/experience';
-@@ -404,6 +410,8 @@ export interface AppState {
+@@ -352,6 +359,11 @@ export interface AppState {
+    * the log, its exports and its copies use `history`.
+    */
+   readHistory: WorkoutHistoryRecord[];
++  /**
++   * The reserve-check estimate the log is read through (`readHistory`), or none: today's sets are
++   * read through it too (the second review of Maintenance 33).
++   */
++  readEstimate: ReserveEstimate | null;
+   /** Today's workout session: the generated workout plus session-only state. */
+   session: WorkoutSession | null;
+   /** Today asked for the end-of-workout sheet; the workout screen opens it and clears this. */
+@@ -404,6 +416,8 @@ export interface AppState {
    coachRoutes: CoachRoutes;
    /** Declined coach offers, kept in the meta store and backed up. */
    coachDeclines: CoachDeclines;
@@ -436,7 +501,7 @@ index d43e8ab..54590e5 100644
    /** A planned deload week, kept in the meta store and backed up; null when none. */
    deloadWeek: DeloadWeek | null;
    /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
-@@ -495,6 +503,27 @@ function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
+@@ -495,6 +509,27 @@ function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
    return windowIsPast(week, now) ? null : week;
  }
  
@@ -464,7 +529,7 @@ index d43e8ab..54590e5 100644
  /**
   * The declined offers as stored: an entry that does not read (no count, no time) is dropped, never
   * the rest (the re-check of item 47: one such entry broke the page that lists them).
-@@ -835,8 +864,10 @@ export class AppStore {
+@@ -835,8 +870,10 @@ export class AppStore {
     */
    private resetsVersion = 0;
    private declinesVersion = 0;
@@ -475,7 +540,15 @@ index d43e8ab..54590e5 100644
    /**
     * Bumped by every write of the lifter's own demonstrations: a read of the data begun before one
     * keeps the count it made (Maintenance 26, the re-check of item 50: a hydrate across a pick put
-@@ -932,6 +963,7 @@ export class AppStore {
+@@ -914,6 +951,7 @@ export class AppStore {
+       workoutCount: 0,
+       history: [],
+       readHistory: [],
++      readEstimate: null,
+       savedWorkouts: [],
+       session: null,
+       finishRequested: false,
+@@ -932,6 +970,7 @@ export class AppStore {
        customMediaGone: {},
        coachRoutes: emptyRoutes(),
        coachDeclines: emptyDeclines(),
@@ -483,7 +556,15 @@ index d43e8ab..54590e5 100644
        deloadWeek: null,
        strengthMaxes: emptyMaxes(),
        coachFocus: null,
-@@ -1010,7 +1042,7 @@ export class AppStore {
+@@ -953,6 +992,7 @@ export class AppStore {
+     // The log the rules read follows the log and the profile (Maintenance 27, item 43).
+     if ('history' in patch || 'profile' in patch || 'learnedResets' in patch) {
+       next.readHistory = this.readHistoryOf(next);
++      next.readEstimate = this.reserveReadOf(next);
+     }
+     this.state = next;
+     for (const listener of this.listeners) listener();
+@@ -1010,7 +1050,7 @@ export class AppStore {
        now,
        day: {
          deload: session.constraints.deload !== null,
@@ -492,7 +573,7 @@ index d43e8ab..54590e5 100644
          hardStart: session.constraints.badStart === true,
        },
        // A check where it would pair with a recent one for the lift's own curve (item 41): its
-@@ -1049,6 +1081,7 @@ export class AppStore {
+@@ -1049,6 +1089,7 @@ export class AppStore {
      const swapsSeen = this.swapsVersion;
      const resetsSeen = this.resetsVersion;
      const declinesSeen = this.declinesVersion;
@@ -500,7 +581,7 @@ index d43e8ab..54590e5 100644
      const mediaSeen = this.mediaVersion;
      const barcodesSeen = this.barcodesVersion;
      try {
-@@ -1072,6 +1105,7 @@ export class AppStore {
+@@ -1072,6 +1113,7 @@ export class AppStore {
          swapsRaw,
          resetsRaw,
          deviceRaw,
@@ -508,7 +589,7 @@ index d43e8ab..54590e5 100644
        ] = await Promise.all([
          db.getAll<Identified>('profile'),
          db.getAll<Identified>('locations'),
-@@ -1088,6 +1122,7 @@ export class AppStore {
+@@ -1088,6 +1130,7 @@ export class AppStore {
          db.get<Identified>('meta', LASTING_SWAPS_ID),
          db.get<Identified>('meta', LEARNED_RESETS_ID),
          db.getAll<Identified>('device'),
@@ -516,7 +597,7 @@ index d43e8ab..54590e5 100644
        ]);
        const deviceId = ensureDeviceId(this.storage);
        // Finds the token in either of its copies and heals the other. A copy that
-@@ -1106,9 +1141,16 @@ export class AppStore {
+@@ -1106,9 +1149,16 @@ export class AppStore {
            customInstructions.length +
            savedRaw.length ===
            0 &&
@@ -536,7 +617,7 @@ index d43e8ab..54590e5 100644
        await noteDatabaseBirth(db, this.now(), empty).catch(() => null);
        // A barcode the database lost comes back from the phone's second copy.
        const barcodes = await this.reconcileBarcodes(db, parsePlaceBarcodes(deviceRaw));
-@@ -1162,6 +1204,8 @@ export class AppStore {
+@@ -1162,6 +1212,8 @@ export class AppStore {
            this.declinesVersion === declinesSeen
              ? parseCoachDeclines(declinesRaw)
              : this.state.coachDeclines,
@@ -545,8 +626,16 @@ index d43e8ab..54590e5 100644
          learnedResets:
            this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
          deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
-@@ -2248,9 +2292,13 @@ export class AppStore {
-           : done.rir);
+@@ -2230,16 +2282,17 @@ export class AppStore {
+     const estimate = this.reserveReadOf(this.state);
+     // A check set's measured reserve, whatever the estimate; the error only where one is in force.
+     const sets = session.completed.sets.map((done) => {
+-      const rir =
+-        measuredReserve(done) ??
+-        (estimate
+-          ? readReserve(getExercise(done.exerciseId), done.reps, done.rir, estimate)
+-          : done.rir);
++      const rir = readLoggedReserve(done, estimate);
        return rir === done.rir ? done : { ...done, rir };
      });
 +    // The log as the rules read it, as the coach and the Plan screen read it (the first review of
@@ -556,11 +645,21 @@ index d43e8ab..54590e5 100644
 -      history: this.state.history,
 +      history: this.state.readHistory,
 +      readiness: session.constraints.readiness,
++      checkInAfterStart: session.constraints.checkInAfterStart === true,
 +      resets: this.state.learnedResets,
      });
    }
  
-@@ -4608,6 +4656,27 @@ export class AppStore {
+@@ -4098,6 +4151,8 @@ export class AppStore {
+     const chosen =
+       emptied ||
+       away.length > 0 ||
++      // "Lighter" taken today stays taken (the second review of Maintenance 33).
++      (today.lighter?.length ?? 0) > 0 ||
+       session.duration !== fresh.duration ||
+       today.readiness !== null ||
+       today.intensity !== 0 ||
+@@ -4650,6 +4705,27 @@ export class AppStore {
      await this.regeneratePreview();
    }
  
@@ -846,6 +945,81 @@ index 8a5fe1a..73aa150 100644
 +    await hardStart(store);
 +  });
 +});
+diff --git a/src/core/state/badStartReadLog.store.test.ts b/src/core/state/badStartReadLog.store.test.ts
+new file mode 100644
+index 0000000..b554c4a
+--- /dev/null
++++ b/src/core/state/badStartReadLog.store.test.ts
+@@ -0,0 +1,69 @@
++import { describe, expect, it, vi } from 'vitest';
++import { readStart } from '../../engine/recalibration/badStart';
++import { allEntries } from '../../engine/workout/types';
++import { record } from '../../test/records';
++import { TEST_NOW, createTestStore } from '../../test/testStore';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++
++vi.mock('../../engine/recalibration/badStart', async (original) => {
++  const actual = await original<typeof import('../../engine/recalibration/badStart')>();
++  return { ...actual, readStart: vi.fn(actual.readStart) };
++});
++
++/**
++ * The first and second reviews of Maintenance 33: the hard start reads the log as the rules read it
++ * (`readHistory`, a logged reserve the lifter's checked error covers read through it), as the coach
++ * and the Plan screen do, never the log as logged. Synthetic data only.
++ */
++
++const DAY = 86_400_000;
++
++describe('the log the hard start reads', () => {
++  it('is the log as the rules read it', async () => {
++    const { store } = createTestStore();
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(TEST_NOW), bodyweight: 185, reserveCheck: true },
++      createDefaultLocations({ gymAccess: true }, TEST_NOW),
++    );
++    // Four checks: each check set reads the reserve it measured, so the read log is its own.
++    const db = await store.getDatabase();
++    for (const daysAgo of [5, 12, 19, 26]) {
++      const when = new Date(Date.parse(TEST_NOW) - daysAgo * DAY).toISOString();
++      const done = record(0, 'cable-curl', [
++        [12, 40, 1],
++        [12, 40, 1],
++      ]);
++      await db.put('workouts', {
++        ...done,
++        id: `curl-check-${daysAgo}`,
++        startedAt: when,
++        completedAt: when,
++        entries: done.entries.map((entry) => ({
++          ...entry,
++          sets: entry.sets.map((set, index) =>
++            index === 1 ? { ...set, reserveCheck: { total: 15 } } : set,
++          ),
++        })),
++      });
++    }
++    await store.hydrate();
++    const { history, readHistory } = store.getSnapshot();
++    expect(readHistory).not.toBe(history);
++    store.startWorkout();
++    const entry = allEntries(store.getSnapshot().session!.workout.blocks).find((candidate) =>
++      candidate.sets.some((set) => set.kind === 'working'),
++    )!;
++    const set = entry.sets.find((candidate) => candidate.kind === 'working')!;
++    vi.mocked(readStart).mockClear();
++    await store.logSet(entry.id, set.index, {
++      weight: set.targetWeight,
++      reps: set.targetReps[0],
++      rir: set.targetRir,
++    });
++    const calls = vi.mocked(readStart).mock.calls;
++    expect(calls.length).toBeGreaterThan(0);
++    expect(calls.at(-1)![2].history).toBe(store.getSnapshot().readHistory);
++  });
++});
 diff --git a/src/core/state/coachShown.store.test.ts b/src/core/state/coachShown.store.test.ts
 new file mode 100644
 index 0000000..0bbc16f
@@ -892,6 +1066,263 @@ index 0000000..0bbc16f
 +    });
 +    await store.hydrate();
 +    expect(store.getSnapshot().coachShown.shown).toEqual({ [`${chest.source}|*`]: TEST_NOW });
++  });
++});
+diff --git a/src/core/state/feverRestDayCoachOffer.store.test.ts b/src/core/state/feverRestDayCoachOffer.store.test.ts
+new file mode 100644
+index 0000000..e3ea5ca
+--- /dev/null
++++ b/src/core/state/feverRestDayCoachOffer.store.test.ts
+@@ -0,0 +1,113 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import type { WorkoutRecord } from '../validation/workoutRecord';
++import { REST_TODAY } from '../../engine/readiness/checkIn';
++import { coachContextOf } from '../../features/coach/useCoach';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * The second adversarial review of Maintenance 33: on a fever's rest day the Today screen says "rest
++ * today" and hides Start, while its coach card offers to add work to today's workout.
++ *
++ * Steps: Monday noon, a lifter with two sets of biceps work this week. Before starting, they check in
++ * "Fever or aches". Today shows the rest day (`REST_TODAY`, no Start), and the coach card beneath it.
++ *
++ * The rule: the readiness model's illness gate (proposal part 2: "With fever or whole-body symptoms,
++ * no session"; checkIn.ts `REST_TODAY`: "Fever or aches all over: rest today, and train again once
++ * they have gone"); the first review's fix: "the coach offers no drop set and no 'too soon' card where
++ * the day forbids them" (coachConductor.ts: "no workout to lighten, and no card spent on one").
++ *
++ * What happens: only the "too soon" card and the drop set are held back on the rest day. The coverage
++ * card still wins: "Biceps are under target this week" with "About 5 min of room today: two sets of
++ * Dumbbell Curl close most of the gap" and the button "Add 2 sets of Dumbbell Curl", on the screen
++ * that says to rest today, for a workout that cannot be started.
++ *
++ * Synthetic data only.
++ */
++
++const NOW = '2026-09-07T12:00:00.000Z';
++const HOUR = 3_600_000;
++
++type Lift = [
++  exerciseId: string,
++  weight: number,
++  reps: number,
++  rir: number,
++  range: [number, number],
++];
++
++function past(hoursAgo: number, templateId: string, lifts: Lift[]): WorkoutRecord {
++  const when = new Date(Date.parse(NOW) - hoursAgo * HOUR).toISOString();
++  return {
++    id: `${templateId}-${hoursAgo}`,
++    startedAt: when,
++    completedAt: when,
++    locationId: 'gym',
++    templateId,
++    endedEarly: false,
++    rating: null,
++    skippedExerciseIds: [],
++    painJoints: [],
++    readiness: null,
++    prs: [],
++    entries: lifts.map(([exerciseId, weight, reps, rir, range]) => ({
++      exerciseId,
++      plannedSets: 4,
++      sets: [0, 1, 2, 3].map((setIndex) => ({
++        kind: 'working' as const,
++        reps,
++        weight,
++        rir,
++        completed: true,
++        setIndex,
++        targetReps: range,
++        targetRir: rir,
++        targetWeight: weight,
++      })),
++    })),
++  };
++}
++
++const history: WorkoutRecord[] = [
++  past(24 * 6, 'pull-arms', [['barbell-row', 135, 8, 2, [6, 10]]]),
++  past(24 * 3, 'legs', [['back-squat', 185, 5, 2, [4, 6]]]),
++  past(20, 'push-arms', [
++    ['barbell-bench-press', 185, 5, 1, [4, 6]],
++    ['cable-triceps-pushdown', 50, 12, 1, [10, 15]],
++  ]),
++];
++
++describe('the coach on a fever rest day', () => {
++  it('offers no work for today', async () => {
++    const { store } = createTestStore({ now: () => NOW });
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(NOW), bodyweight: 185 },
++      createDefaultLocations({ gymAccess: true }, NOW),
++    );
++    const db = await store.getDatabase();
++    for (const record of history) await db.put('workouts', record);
++    await store.hydrate();
++
++    const result = await store.recalibrate({
++      type: 'readiness',
++      readiness: {
++        energy: 3,
++        soreness: 2,
++        sleep: 3,
++        motivation: 3,
++        jointDiscomfort: [],
++        timePressure: false,
++        illness: 'body',
++      },
++    });
++    expect(result?.ok && result.summary.headline).toBe(REST_TODAY);
++    const state = store.getSnapshot();
++    expect(state.session?.status).toBe('preview');
++
++    const signal = coachContextOf({ ...state, lastExportAt: NOW }, Date.parse(NOW))?.card?.signal;
++    expect(signal?.why.join(' ') ?? '').not.toMatch(/room today/);
++    expect(signal?.action?.kind === 'recalibrate' ? signal.action.trigger.type : null).toBeNull();
++  });
++});
+diff --git a/src/core/state/lighterPreviewRebuild.store.test.ts b/src/core/state/lighterPreviewRebuild.store.test.ts
+new file mode 100644
+index 0000000..5a479b0
+--- /dev/null
++++ b/src/core/state/lighterPreviewRebuild.store.test.ts
+@@ -0,0 +1,132 @@
++import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import type { WorkoutRecord } from '../validation/workoutRecord';
++import type { AppStore } from './appStore';
++import { allEntries } from '../../engine/workout/types';
++import { coachContextOf } from '../../features/coach/useCoach';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * The second adversarial review of Maintenance 33: "Lighter" taken on today's plan before the start
++ * is lost when the plan is made again for another setting, unless a check-in happens to be in force.
++ *
++ * Steps: Monday noon. Push day yesterday afternoon (20 h ago): the bench press and the triceps
++ * pushdown, four sets each a rep short of failure. Today's plan, not started, is the pull day, whose
++ * skull crushers ask three sets at 1 in reserve: the coach shows "The triceps may not have
++ * recovered" with "Lighter for the triceps", and the lifter taps it (the skull crushers become two
++ * sets at 2 in reserve). Then, still before the start, they set a coach focus (or plan a deload
++ * week, or reset something on the learned page): the store makes today's plan again.
++ *
++ * The rule: the store's own rule for a plan made again before the start: "Today's choices hold
++ * through it (Maintenance 24): the length, a check-in, the plates missing today, and what was set
++ * aside for today ... are applied to the new plan by the engine" (`regeneratePreview`); the lighter
++ * option is a day's setting kept in the session's constraints like them ("The muscles the lifter
++ * chose to go lighter on today", types.ts), and a check-in in force carries it through the same
++ * rebuild. The card's own words: "Lighter keeps the loads: a set fewer and a rep more in reserve on
++ * its lifts today."
++ *
++ * What happens: `rebuildPreview` re-applies the day's choices only when one of its listed choices is
++ * in force (`chosen`: a check-in, an effort change, an end time, a skip, a move, a sore joint, plates
++ * missing, a length); `lighter` is not among them, so the fresh plan is kept as built: the skull
++ * crushers are back at three sets at 1 in reserve, `lighter` is gone from the constraints, and the
++ * card comes back offering the same thing. With any check-in in force the same rebuild keeps it.
++ *
++ * Synthetic data only.
++ */
++
++const NOW = '2026-09-07T12:00:00.000Z';
++const HOUR = 3_600_000;
++
++type Lift = [
++  exerciseId: string,
++  weight: number,
++  reps: number,
++  rir: number,
++  range: [number, number],
++];
++
++function past(hoursAgo: number, templateId: string, lifts: Lift[]): WorkoutRecord {
++  const when = new Date(Date.parse(NOW) - hoursAgo * HOUR).toISOString();
++  return {
++    id: `${templateId}-${hoursAgo}`,
++    startedAt: when,
++    completedAt: when,
++    locationId: 'gym',
++    templateId,
++    endedEarly: false,
++    rating: null,
++    skippedExerciseIds: [],
++    painJoints: [],
++    readiness: null,
++    prs: [],
++    entries: lifts.map(([exerciseId, weight, reps, rir, range]) => ({
++      exerciseId,
++      plannedSets: 4,
++      sets: [0, 1, 2, 3].map((setIndex) => ({
++        kind: 'working' as const,
++        reps,
++        weight,
++        rir,
++        completed: true,
++        setIndex,
++        targetReps: range,
++        targetRir: rir,
++        targetWeight: weight,
++      })),
++    })),
++  };
++}
++
++const history: WorkoutRecord[] = [
++  past(24 * 7, 'push-arms', [['barbell-bench-press', 185, 5, 2, [4, 6]]]),
++  past(24 * 6, 'pull-arms', [['barbell-row', 135, 8, 2, [6, 10]]]),
++  past(24 * 5, 'legs', [['back-squat', 185, 5, 2, [4, 6]]]),
++  past(24 * 2, 'legs', [['back-squat', 185, 5, 2, [4, 6]]]),
++  past(20, 'push-arms', [
++    ['barbell-bench-press', 185, 5, 1, [4, 6]],
++    ['cable-triceps-pushdown', 50, 12, 1, [10, 15]],
++  ]),
++];
++
++/** The working sets of today's lifts for the triceps, as reserve per set. */
++function tricepsWork(store: AppStore): number[][] {
++  return allEntries(store.getSnapshot().session!.workout.blocks)
++    .filter((entry) => requireExercise(entry.exerciseId).primaryMuscles.includes('triceps'))
++    .map((entry) => entry.sets.filter((set) => set.kind === 'working').map((set) => set.targetRir));
++}
++
++describe('"Lighter" on a plan not started, made again for another setting', () => {
++  it('stays taken, as the day’s other choices do', async () => {
++    const { store } = createTestStore({ now: () => NOW });
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(NOW), bodyweight: 185 },
++      createDefaultLocations({ gymAccess: true }, NOW),
++    );
++    const db = await store.getDatabase();
++    for (const record of history) await db.put('workouts', record);
++    await store.hydrate();
++
++    const state = store.getSnapshot();
++    expect(state.session?.status).toBe('preview');
++    const card = coachContextOf({ ...state, lastExportAt: NOW }, Date.parse(NOW))?.card;
++    expect(card?.signal.headline).toBe('The triceps may not have recovered');
++    const action = card!.signal.action!;
++    if (action.kind !== 'recalibrate') throw new Error('no lighter option');
++    expect(action.trigger).toEqual({ type: 'lighter', muscle: 'triceps' });
++    expect(tricepsWork(store)).toEqual([[1, 1, 1]]);
++
++    const taken = await store.takeCoachChange(action, card!.signal);
++    expect(taken?.ok).toBe(true);
++    expect(tricepsWork(store)).toEqual([[2, 2]]);
++    expect(store.getSnapshot().session!.constraints.lighter).toEqual(['triceps']);
++
++    // Another setting, still before the start: the plan is made again.
++    await store.setCoachFocus('biceps');
++    expect(store.getSnapshot().session!.constraints.focus).toBe('biceps');
++    expect(store.getSnapshot().session!.constraints.lighter).toEqual(['triceps']);
++    expect(tricepsWork(store)).toEqual([[2, 2]]);
 +  });
 +});
 diff --git a/src/core/state/lighterUndoBackOffs.store.test.ts b/src/core/state/lighterUndoBackOffs.store.test.ts
@@ -1008,8 +1439,429 @@ index 0000000..375f618
 +    expect(backOffs(benchOf())).toEqual(eased);
 +  });
 +});
+diff --git a/src/core/state/lowCheckInTakesHardStart.store.test.ts b/src/core/state/lowCheckInTakesHardStart.store.test.ts
+new file mode 100644
+index 0000000..a142d90
+--- /dev/null
++++ b/src/core/state/lowCheckInTakesHardStart.store.test.ts
+@@ -0,0 +1,220 @@
++import { describe, expect, it } from 'vitest';
++import { getExercise } from '../../catalog/exercises/catalog';
++import { isHold } from '../../catalog/exercises/exerciseSchema';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import type { AppStore } from './appStore';
++import { topSetRir } from '../../engine/progression/backOffs';
++import { prescribeFor } from '../../engine/progression/roles';
++import { ESTIMATED_MODES } from '../../engine/recalibration/recalibrate';
++import { allEntries, type WorkoutEntry } from '../../engine/workout/types';
++import type { WorkoutRecord } from '../validation/workoutRecord';
++import { record } from '../../test/records';
++import { TEST_NOW, createTestStore } from '../../test/testStore';
++
++/**
++ * The second adversarial review of Maintenance 33: a low check-in told after a hard start says "the
++ * rest stays eased for the hard start", and the next set logged takes the ease away.
++ *
++ * Steps: the lifter's first two lifts (targets from their own log: the bench press and the incline
++ * dumbbell press) each fall three reps of capacity short: a hard start, and the rest of the workout
++ * is eased. They then check in: energy "Exhausted" (1) and sleep "Poor" (1). The summary says
++ * "Checked in: the rest stays eased for the hard start." and "Energy and sleep low: today's first
++ * sets are judged a step easier; the plan stays." They log the next set of their first lift as
++ * asked. In the second case the chest was worked 40 h before the first set (a 36 h window, run),
++ * and the check-in is sleep "Poor" alone, one item.
++ *
++ * The rule: the check-in's own words ("the rest stays eased for the hard start"; "the plan stays");
++ * decision 1: the check-in lowers what the app expects of the day's first sets, "never the plan"
++ * (the report: "two items clearly worse ... lower what the day's first sets are expected to do,
++ * never the plan"; `RULES.worseItems`: "Two or more items clearly worse act; one alone does not");
++ * item 42: the hard start's ease is the day's change, taken back when the start no longer reads
++ * short after an undo or a correction ("or no longer do after an undo or a correction", types.ts).
++ *
++ * What happens: the hard start's reading reads today's check-in (`readStart`'s `lowered`), and since
++ * the first review's fix its windows do too (`dayRecovery`: a short night adds 12 h to every
++ * window). A check-in told after the start raises what the same two sets must fall short by: two
++ * items clearly worse ask a rep more of each lift; a single short night puts the chest back inside
++ * its window (40 h of 48), which asks a rep more of the bench press. The next set logged runs
++ * `settleStart`, and the store takes the ease off: "Back to plan (the planned sets and effort
++ * back)", the lifter having just reported an exhausted or sleepless day, a set after the check-in
++ * said the rest stays eased. The first case also fails before the first review's fixes (d3877aa);
++ * the second passes there: it came with the fix that put the check-in on the hard start's windows.
++ *
++ * Synthetic data only.
++ */
++
++async function trained(extra: readonly WorkoutRecord[] = []): Promise<AppStore> {
++  const handle = createTestStore({ minOverlayMs: 0 });
++  await handle.store.hydrate();
++  const profile = createDefaultProfile(TEST_NOW);
++  await handle.store.completeOnboarding(
++    {
++      ...profile,
++      bodyweight: 185,
++      schedule: { ...profile.schedule, availableDays: [...profile.schedule.availableDays, 'wed'] },
++    },
++    createDefaultLocations({ gymAccess: true }, TEST_NOW),
++  );
++  const planned = allEntries(handle.store.getSnapshot().session!.workout.blocks);
++  const db = await handle.store.getDatabase();
++  for (const daysAgo of [9, 5]) {
++    const when = new Date(Date.parse(TEST_NOW) - daysAgo * 86_400_000).toISOString();
++    for (const entry of planned) {
++      const working = entry.sets.find((set) => set.kind === 'working');
++      if (!working) continue;
++      const reps = Math.round((working.targetReps[0] + working.targetReps[1]) / 2);
++      await db.put('workouts', {
++        ...record(
++          daysAgo,
++          entry.exerciseId,
++          [
++            [reps, working.targetWeight ?? null, working.targetRir],
++            [reps, working.targetWeight ?? null, working.targetRir],
++          ],
++          working.targetReps,
++          working.targetRir,
++        ),
++        id: `${entry.exerciseId}-${daysAgo}`,
++        startedAt: when,
++        completedAt: when,
++      });
++    }
++  }
++  for (const record of extra) await db.put('workouts', record);
++  await handle.store.hydrate();
++  await handle.store.setCoachFocus('chest');
++  return handle.store;
++}
++
++const entries = (store: AppStore) => allEntries(store.getSnapshot().session!.workout.blocks);
++
++function judgeable(store: AppStore): WorkoutEntry[] {
++  return entries(store).filter((entry) => {
++    const exercise = getExercise(entry.exerciseId);
++    const mode = entry.progression?.mode;
++    return (
++      exercise &&
++      !isHold(exercise) &&
++      mode !== undefined &&
++      !ESTIMATED_MODES.has(mode) &&
++      entry.sets.some((set) => set.kind === 'working')
++    );
++  });
++}
++
++function planRir(store: AppStore, entry: WorkoutEntry): number {
++  const exercise = getExercise(entry.exerciseId)!;
++  const { profile, history } = store.getSnapshot();
++  const rir = prescribeFor(exercise, entry.role, profile!, history).rir;
++  const first = entry.sets.find((set) => set.kind === 'working');
++  return first?.tier === 'top' ? topSetRir(rir) : rir;
++}
++
++/** A lift's first working set three reps of capacity under what the plan asked. */
++async function fallShort(store: AppStore, entry: WorkoutEntry) {
++  store.skipWarmup(entry.id);
++  const set = entry.sets.find((candidate) => candidate.kind === 'working')!;
++  const reserve = Math.min(set.targetRir, planRir(store, entry));
++  const reps = set.targetReps[0] + reserve - 3;
++  await store.logSet(entry.id, set.index, { weight: set.targetWeight, reps, rir: 0 });
++}
++
++/** The next working set of a lift, logged as asked. */
++async function nextAsAsked(store: AppStore, entryId: string) {
++  const session = store.getSnapshot().session!;
++  const lift = entries(store).find((entry) => entry.id === entryId)!;
++  const done = new Set(session.completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
++  const next = lift.sets.find(
++    (set) => set.kind === 'working' && !done.has(`${lift.id}:${set.index}`),
++  )!;
++  await store.logSet(lift.id, next.index, {
++    weight: next.targetWeight,
++    reps: next.targetReps[0],
++    rir: next.targetRir,
++  });
++}
++
++const checkIn = (energy: number, sleep: number) => ({
++  energy,
++  soreness: 2,
++  sleep,
++  motivation: 3,
++  jointDiscomfort: [],
++  timePressure: false,
++});
++
++describe('a low check-in after a hard start', () => {
++  it('keeps the rest eased, as its summary says', async () => {
++    const store = await trained();
++    store.startWorkout();
++    const [first, second] = judgeable(store);
++    await fallShort(store, first!);
++    await fallShort(store, second!);
++    expect(store.getSnapshot().session!.constraints.badStart).toBe(true);
++
++    await store.recalibrate({ type: 'readiness', readiness: checkIn(1, 1) });
++    const told = store.getSnapshot().session!;
++    expect(told.lastSummary?.headline).toBe('Checked in: the rest stays eased for the hard start.');
++    expect(told.constraints.badStart).toBe(true);
++
++    // The next set of the first lift, as asked.
++    await nextAsAsked(store, first!.id);
++    const after = store.getSnapshot().session!;
++    expect(after.lastSummary?.headline ?? '').not.toMatch(/no longer falls short|Back to plan/);
++    expect(after.constraints.badStart).toBe(true);
++  });
++
++  it('keeps the rest eased through a change made after the check-in', async () => {
++    const store = await trained();
++    store.startWorkout();
++    const [first, second] = judgeable(store);
++    await fallShort(store, first!);
++    await fallShort(store, second!);
++    await store.recalibrate({ type: 'readiness', readiness: checkIn(1, 1) });
++    expect(store.getSnapshot().session!.constraints.checkInAfterStart).toBe(true);
++    // A rest made longer on the lift still to come: a change of its own, the mark kept through it.
++    await store.recalibrate({ type: 'rest-adjust', entryId: first!.id, deltaSeconds: 30 });
++    expect(store.getSnapshot().session!.constraints.checkInAfterStart).toBe(true);
++    await nextAsAsked(store, first!.id);
++    expect(store.getSnapshot().session!.constraints.badStart).toBe(true);
++  });
++
++  it('keeps the rest eased after a single short night, through the window it lengthens', async () => {
++    // The chest worked 40 h before the first set: a 36 h window (one rep short), already run.
++    const when = new Date(Date.parse(TEST_NOW) - 40 * 3_600_000).toISOString();
++    const fly = {
++      ...record(
++        0,
++        'cable-fly',
++        [
++          [10, 40, 1],
++          [10, 40, 1],
++          [10, 40, 1],
++        ],
++        [10, 15],
++        1,
++      ),
++      id: 'cable-fly-40h',
++      startedAt: when,
++      completedAt: when,
++    };
++    const store = await trained([fly]);
++    store.startWorkout();
++    const [first, second] = judgeable(store);
++    expect(first!.exerciseId).toBe('barbell-bench-press');
++    await fallShort(store, first!);
++    await fallShort(store, second!);
++    expect(store.getSnapshot().session!.constraints.badStart).toBe(true);
++
++    // Sleep "Poor" alone: one item, which lowers nothing by itself (decision 1), but a short night.
++    await store.recalibrate({ type: 'readiness', readiness: checkIn(3, 1) });
++    const told = store.getSnapshot().session!;
++    expect(told.lastSummary?.headline).toBe('Checked in: the rest stays eased for the hard start.');
++
++    await nextAsAsked(store, first!.id);
++    const after = store.getSnapshot().session!;
++    expect(after.lastSummary?.headline ?? '').not.toMatch(/no longer falls short|Back to plan/);
++    expect(after.constraints.badStart).toBe(true);
++  });
++});
+diff --git a/src/core/state/reserveCheckOnLighter.store.test.ts b/src/core/state/reserveCheckOnLighter.store.test.ts
+new file mode 100644
+index 0000000..c48b22b
+--- /dev/null
++++ b/src/core/state/reserveCheckOnLighter.store.test.ts
+@@ -0,0 +1,132 @@
++import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import type { WorkoutRecord } from '../validation/workoutRecord';
++import { allEntries } from '../../engine/workout/types';
++import { coachContextOf } from '../../features/coach/useCoach';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * The second adversarial review of Maintenance 33: right after "Lighter for the triceps", the day's
++ * reserve check (a set to failure, item 43) goes on the triceps pushdown the lighter option eased.
++ *
++ * Steps: a hybrid lifter with "Check how well I judge reps in reserve" on, a check due this week.
++ * Push day yesterday afternoon (20 h ago): the bench press and skull crushers, four sets each a rep
++ * short of failure. Today's plan, not started, is the pull day with three sets of the triceps
++ * pushdown at 1 in reserve. The coach shows "The triceps may not have recovered", and the lifter
++ * taps "Lighter for the triceps": the pushdown becomes two sets of 9-14 at 2 in reserve.
++ *
++ * The rule: the "too soon" card's own words: "Lighter keeps the loads: a set fewer and a rep more in
++ * reserve on its lifts today"; item 43's day rule (docs/research/reserve-check.md, "Which day"):
++ * "None in a deload week, after a low or sore check-in, on a hard-start day (item 42) ...: a day the
++ * plan is easing", since a set to failure "costs more fatigue, muscle damage and discomfort,
++ * recovered within 24 to 48 hours". The lighter option is the hard start's ease for one muscle
++ * ("their lifts take a hard start's ease, never on top of one", types.ts), and Maintenance 33 added
++ * its own days (a check-in that lowers, any illness) to that rule.
++ *
++ * What happens: `reserveCheckSetFor` reads the deload, the check-in and the hard start only, never
++ * the lighter option, so the check moves onto the eased pushdown's new last set: the lifter is asked
++ * to take the triceps to failure today, on the muscle the coach has just said may not have
++ * recovered, minutes after choosing a rep more in reserve on it.
++ *
++ * Synthetic data only.
++ */
++
++const NOW = '2026-09-07T12:00:00.000Z';
++const HOUR = 3_600_000;
++
++type Lift = [
++  exerciseId: string,
++  weight: number,
++  reps: number,
++  rir: number,
++  range: [number, number],
++];
++
++function past(hoursAgo: number, templateId: string, lifts: Lift[]): WorkoutRecord {
++  const when = new Date(Date.parse(NOW) - hoursAgo * HOUR).toISOString();
++  return {
++    id: `${templateId}-${hoursAgo}`,
++    startedAt: when,
++    completedAt: when,
++    locationId: 'gym',
++    templateId,
++    endedEarly: false,
++    rating: null,
++    skippedExerciseIds: [],
++    painJoints: [],
++    readiness: null,
++    prs: [],
++    entries: lifts.map(([exerciseId, weight, reps, rir, range]) => ({
++      exerciseId,
++      plannedSets: 4,
++      sets: [0, 1, 2, 3].map((setIndex) => ({
++        kind: 'working' as const,
++        reps,
++        weight,
++        rir,
++        completed: true,
++        setIndex,
++        targetReps: range,
++        targetRir: rir,
++        targetWeight: weight,
++      })),
++    })),
++  };
++}
++
++const history: WorkoutRecord[] = [
++  past(24 * 7, 'push-arms', [
++    ['barbell-bench-press', 185, 5, 2, [4, 6]],
++    ['skull-crusher', 50, 10, 1, [8, 12]],
++  ]),
++  past(24 * 6, 'pull-arms', [
++    ['barbell-row', 135, 8, 2, [6, 10]],
++    ['cable-triceps-pushdown', 50, 12, 1, [10, 15]],
++  ]),
++  past(24 * 5, 'legs', [['back-squat', 185, 5, 2, [4, 6]]]),
++  past(24 * 2, 'legs', [['back-squat', 185, 5, 2, [4, 6]]]),
++  past(20, 'push-arms', [
++    ['barbell-bench-press', 185, 5, 1, [4, 6]],
++    ['skull-crusher', 50, 10, 1, [8, 12]],
++  ]),
++];
++
++describe('the reserve check after "Lighter" on a muscle', () => {
++  it('never asks a set to failure of a lift the lighter option eased', async () => {
++    const { store } = createTestStore({ now: () => NOW });
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(NOW), bodyweight: 185, reserveCheck: true },
++      createDefaultLocations({ gymAccess: true }, NOW),
++    );
++    const db = await store.getDatabase();
++    for (const record of history) await db.put('workouts', record);
++    await store.hydrate();
++
++    const state = store.getSnapshot();
++    const card = coachContextOf({ ...state, lastExportAt: NOW }, Date.parse(NOW))?.card;
++    expect(card?.signal.headline).toBe('The triceps may not have recovered');
++    const action = card!.signal.action!;
++    if (action.kind !== 'recalibrate') throw new Error('no lighter option');
++    const taken = await store.takeCoachChange(action, card!.signal);
++    expect(taken?.ok).toBe(true);
++    const pushdown = allEntries(store.getSnapshot().session!.workout.blocks).find(
++      (entry) => entry.exerciseId === 'cable-triceps-pushdown',
++    )!;
++    // Eased: two sets, a rep more in reserve.
++    expect(
++      pushdown.sets
++        .filter((set) => set.kind === 'working')
++        .map((set) => [set.targetReps, set.targetRir]),
++    ).toEqual([
++      [[9, 14], 2],
++      [[9, 14], 2],
++    ]);
++
++    const check = store.reserveCheckSetFor();
++    const checked = check ? requireExercise(check.exerciseId) : null;
++    expect(checked?.primaryMuscles.includes('triceps') ?? false).toBe(false);
++  });
++});
+diff --git a/src/core/state/session.checkInAfterStart.test.ts b/src/core/state/session.checkInAfterStart.test.ts
+new file mode 100644
+index 0000000..b0cca43
+--- /dev/null
++++ b/src/core/state/session.checkInAfterStart.test.ts
+@@ -0,0 +1,51 @@
++import { describe, expect, it } from 'vitest';
++import { generateWorkout } from '../../engine/workoutGenerator/generate';
++import { RECORD_NOW } from '../../test/records';
++import { createMemoryStorage } from '../storage/localSettings';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import { SESSION_KEY, createSession, readSession, writeSession } from './session';
++
++/**
++ * The second review of Maintenance 33: the mark of a check-in told with a hard start in force
++ * (`checkInAfterStart`) reads back after a reload, and one that cannot be read is dropped alone,
++ * never the session (a stored field is optional, with a catch). Synthetic data only.
++ */
++const [, gym] = createDefaultLocations({ gymAccess: true }, RECORD_NOW);
++
++function stored() {
++  const workout = generateWorkout({
++    profile: { ...createDefaultProfile(RECORD_NOW), bodyweight: 185 },
++    location: gym!,
++    history: [],
++    now: RECORD_NOW,
++    duration: 'default',
++  });
++  const session = createSession('key', workout, RECORD_NOW);
++  return {
++    ...session,
++    constraints: { ...session.constraints, badStart: true, checkInAfterStart: true as const },
++  };
++}
++
++describe('the mark of a check-in told after a hard start, in the stored session', () => {
++  it('reads back as it was saved', () => {
++    const storage = createMemoryStorage();
++    writeSession(stored(), storage);
++    expect(readSession(storage)?.constraints.checkInAfterStart).toBe(true);
++  });
++
++  it('is dropped alone when it cannot be read', () => {
++    const storage = createMemoryStorage();
++    writeSession(stored(), storage);
++    const raw = JSON.parse(storage.getItem(SESSION_KEY)!) as {
++      constraints: Record<string, unknown>;
++    };
++    raw.constraints.checkInAfterStart = 'yes';
++    storage.setItem(SESSION_KEY, JSON.stringify(raw));
++    const read = readSession(storage);
++    expect(read).not.toBeNull();
++    expect(read?.constraints.checkInAfterStart).toBeUndefined();
++    expect(read?.constraints.badStart).toBe(true);
++  });
++});
 diff --git a/src/core/state/session.ts b/src/core/state/session.ts
-index 0084cb5..960da96 100644
+index 007c98d..72959fb 100644
 --- a/src/core/state/session.ts
 +++ b/src/core/state/session.ts
 @@ -7,6 +7,7 @@ import { getExercise } from '../../catalog/exercises/catalog';
@@ -1028,8 +1880,14 @@ index 0084cb5..960da96 100644
 +  illness: z.enum(ILLNESSES).optional().catch(undefined),
  });
  
- const ConstraintsSchema = z.looseObject({
-@@ -275,6 +278,8 @@ const ConstraintsSchema = z.looseObject({
+ /** A plan the lifter emptied today (`EmptiedPlan`): its offer, and the layout it was laid out on. */
+@@ -275,9 +278,14 @@ const ConstraintsSchema = z.looseObject({
+     .catch(undefined),
+   endBy: z.iso.datetime().nullable(),
+   readiness: ReadinessSchema.nullable(),
++  // The second review of Maintenance 33: one that fails to read is dropped, and the check-in reads as
++  // told before the start.
++  checkInAfterStart: z.literal(true).optional().catch(undefined),
    intensity: z.number().int().min(-2).max(2),
    // Maintenance 26 (item 42): a session saved before has none; one that fails to read keeps none.
    badStart: z.boolean().optional().catch(undefined),
@@ -1039,27 +1897,33 @@ index 0084cb5..960da96 100644
      .object({ startsAt: z.iso.datetime(), endsAt: z.iso.datetime() })
      .nullable()
 diff --git a/src/core/state/workoutRecordBuilder.ts b/src/core/state/workoutRecordBuilder.ts
-index c3afe4f..87218c1 100644
+index c3afe4f..7404fce 100644
 --- a/src/core/state/workoutRecordBuilder.ts
 +++ b/src/core/state/workoutRecordBuilder.ts
 @@ -28,6 +28,7 @@ import {
  import type { LoggedExercise, SessionRating, WorkoutRecord } from '../validation/workoutRecord';
  import type { CompletionSummary, WorkoutSession } from './session';
  import { painNextLine } from '../../engine/recovery/painReport';
-+import { recoveryWindows } from '../../engine/recovery/recovery';
++import { dayRecovery, recoveryWindows } from '../../engine/recovery/recovery';
  import {
    estimateDoneSeconds,
    measureTrainingSeconds,
-@@ -370,12 +371,29 @@ export function buildCompletion(
+@@ -370,12 +371,35 @@ export function buildCompletion(
      .slice(0, 3)
      .map((priority) => muscleName(priority.muscle))
      .join(', ')}.`;
 +  // Each muscle's own window from this session's hard work (Maintenance 33, `recoveryWindows`): by
-+  // its hardest sets and the body region, the dose, a new lift, long lengths. Light work sets none.
-+  const windows = recoveryWindows(after, {
-+    now: completedAtIso,
-+    resets,
-+  });
++  // its hardest sets and the body region, the dose, a new lift, long lengths, the session's own
++  // check-in (a short night), as the Plan screen reads it (the second review). Light work sets none.
++  const windows = recoveryWindows(
++    after,
++    dayRecovery({
++      readiness: session.constraints.readiness,
++      history: after,
++      now: completedAtIso,
++      resets,
++    }),
++  );
 +  const byHours = new Map<number, string[]>();
 +  for (const window of windows.values()) {
 +    if (window.at !== completedAtIso) continue;
@@ -1339,7 +2203,7 @@ index ca48a6d..6fe06df 100644
      lastExportAt: NOW,
      workoutCount: history.length,
 diff --git a/src/engine/coach/coachConductor.schedule.test.ts b/src/engine/coach/coachConductor.schedule.test.ts
-index 18bbdb6..49cf6da 100644
+index 18bbdb6..3316d76 100644
 --- a/src/engine/coach/coachConductor.schedule.test.ts
 +++ b/src/engine/coach/coachConductor.schedule.test.ts
 @@ -66,7 +66,7 @@ function input(profile: UserProfile, extra: Partial<CoachInput> = {}): CoachInpu
@@ -1351,7 +2215,7 @@ index 18bbdb6..49cf6da 100644
      strategy: [],
      lastExportAt: RECORD_NOW,
      workoutCount: history.length,
-@@ -140,3 +140,55 @@ describe('the card to move the schedule', () => {
+@@ -140,3 +140,57 @@ describe('the card to move the schedule', () => {
      expect(card(input(fits))).toBeUndefined();
    });
  });
@@ -1386,8 +2250,10 @@ index 18bbdb6..49cf6da 100644
 +      ...input(base),
 +      history: weeks(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']),
 +    });
++    // The full-body day's dumbbell Romanian deadlift loads the hamstrings and glutes long, 12 h
++    // more (the second review of Maintenance 33): Monday's plan comes inside their windows too.
 +    expect(signal?.footnote).toBe(
-+      'On Tue, Sat and Sun the plan would work the biceps and triceps hard again when they may not have recovered; the coach offers a lighter option those days.',
++      'On Mon, Tue, Sat and Sun the plan would work the biceps, triceps, hamstrings and glutes hard again when they may not have recovered; the coach offers a lighter option those days.',
 +    );
 +  });
 +
@@ -1790,7 +2656,7 @@ index 0000000..a40a76c
 +  });
 +});
 diff --git a/src/engine/coach/coachConductor.ts b/src/engine/coach/coachConductor.ts
-index 8d7d2df..03fb74b 100644
+index e24d5eb..69d2ec7 100644
 --- a/src/engine/coach/coachConductor.ts
 +++ b/src/engine/coach/coachConductor.ts
 @@ -1,9 +1,15 @@
@@ -1820,11 +2686,12 @@ index 8d7d2df..03fb74b 100644
  import { activePush } from '../planning/pushLift';
  import type { LearnedResets } from '../learned/resets';
  import { dayList, scheduleFit } from '../planning/scheduleFit';
-@@ -29,6 +35,17 @@ import {
+@@ -29,6 +35,18 @@ import {
    shortTwiceRunning,
    targetIn,
  } from '../planning/pushPace';
 +import { REST_TODAY, illnessOf, readCheckIn } from '../readiness/checkIn';
++import { readLoggedReserve, type ReserveEstimate } from '../progression/reserveCheck';
 +import {
 +  FIRST_SET,
 +  againstRested,
@@ -1838,7 +2705,7 @@ index 8d7d2df..03fb74b 100644
  import type { FatigueSignal } from '../recovery/fatigue';
  import { painPatterns } from '../recovery/painPattern';
  import { lastPainReport, painSourceLine } from '../recovery/painReport';
-@@ -62,7 +79,7 @@ import {
+@@ -62,7 +80,7 @@ import {
    microDeload,
    stepUp,
  } from '../progression/progression';
@@ -1847,7 +2714,7 @@ index 8d7d2df..03fb74b 100644
  import {
    accessoryPicker,
    builtCatchUp,
-@@ -71,6 +88,7 @@ import {
+@@ -71,6 +89,7 @@ import {
    sessionConflictContext,
    splitFor,
    swappedOutIds,
@@ -1855,7 +2722,7 @@ index 8d7d2df..03fb74b 100644
  } from '../workoutGenerator/generate';
  import { ADDS_TO_BODYWEIGHT, LOADED_VERSIONS } from '../workoutGenerator/loadedVersions';
  import {
-@@ -320,6 +338,8 @@ export interface CoachInput {
+@@ -320,6 +339,8 @@ export interface CoachInput {
    lastExportAt: string | null;
    /** The cloud copy is on and holds everything logged, so a backup reminder would be noise. */
    cloudCurrent?: boolean;
@@ -1864,14 +2731,26 @@ index 8d7d2df..03fb74b 100644
    /** Offers already taken this session (see `acceptKey`): they are not made twice. */
    accepted?: readonly string[];
    /** The rest now: when it ends, or what is left of it while paused (Maintenance 25). */
-@@ -618,6 +638,20 @@ function safetySignals(input: CoachInput): CoachSignal[] {
+@@ -344,6 +365,11 @@ export interface CoachInput {
+   swaps?: readonly LastingSwap[];
+   /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
+   resets?: LearnedResets | null;
++  /**
++   * The reserve-check estimate the history is read through (item 43): today's sets are read through
++   * it too (the second review of Maintenance 33). Absent: today's sets as logged.
++   */
++  reserveEstimate?: Pick<ReserveEstimate, 'correction' | 'band'> | null;
+ }
+ 
+ const DAY_MS = 86_400_000;
+@@ -624,6 +650,20 @@ function safetySignals(input: CoachInput): CoachSignal[] {
    // A finished workout has nothing left to swap: its warnings were for the sets still to come.
    if (input.status === 'completed') return [];
    const signals: CoachSignal[] = [];
 +  // A fever or aches all over reported under way (Maintenance 33, the readiness model's illness
 +  // gate): no day to train, so the coach offers to finish here. Before the start, Today itself
 +  // says it is a rest day.
-+  if (illnessOf(input.constraints.readiness) === 'body' && input.status !== 'preview') {
++  if (restToday(input) && input.status !== 'preview') {
 +    signals.push({
 +      domain: 'safety',
 +      headline: 'Fever or aches: finish here',
@@ -1885,7 +2764,7 @@ index 8d7d2df..03fb74b 100644
    const remaining = remainingEntries(input);
    for (const joint of input.constraints.painJoints) {
      const loaded = remaining.find((entry) => {
-@@ -783,9 +817,176 @@ function saveSignals(input: CoachInput): CoachSignal[] {
+@@ -789,9 +829,177 @@ function saveSignals(input: CoachInput): CoachSignal[] {
    ];
  }
  
@@ -1941,7 +2820,8 @@ index 8d7d2df..03fb74b 100644
 +    const reading = readFirstSet({
 +      reps: first.reps,
 +      weight: first.weight,
-+      rir: first.rir,
++      // As the rules read the rested sessions it is set against (`readLoggedReserve`).
++      rir: readLoggedReserve(first, input.reserveEstimate ?? null),
 +      targetWeight: asked?.targetWeight,
 +      targetReps: asked?.targetReps,
 +      targetRir: asked?.targetRir,
@@ -2063,7 +2943,7 @@ index 8d7d2df..03fb74b 100644
    const checkedIn = input.constraints.readiness !== null;
    // A check-in adjusts today's workout, so a finished one is not offered it.
    const finished = input.status === 'completed';
-@@ -814,7 +1015,8 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
+@@ -820,7 +1028,8 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
        headline: 'Fatigue is building',
        why: [
          ...fatigue.evidence.slice(0, 2),
@@ -2073,7 +2953,22 @@ index 8d7d2df..03fb74b 100644
        ],
        action: checkedIn || finished ? null : { kind: 'readiness', label: 'Quick check-in' },
        confidence: 'medium',
-@@ -1553,7 +1755,10 @@ function tipSignals(input: CoachInput): CoachSignal[] {
+@@ -974,6 +1183,14 @@ function offPlanToday(input: CoachInput): boolean {
+   return stored.kind === 'second' || builtCatchUp(stored, input.workout).muscles.length > 0;
+ }
+ 
++/**
++ * A fever or aches all over (Maintenance 33, the readiness model's illness gate): a rest day, with
++ * no workout to add to (the second review of Maintenance 33: the coverage card offered two sets).
++ */
++function restToday(input: CoachInput): boolean {
++  return illnessOf(input.constraints.readiness) === 'body';
++}
++
+ /** An offer that adds work: a set, a drop set, a range with a set more, or an exercise. */
+ function addsWork(signal: CoachSignal): boolean {
+   const trigger = signal.action?.kind === 'recalibrate' ? signal.action.trigger : null;
+@@ -1559,7 +1776,10 @@ function tipSignals(input: CoachInput): CoachSignal[] {
    if (
      input.profile.techniques.dropSets &&
      input.status !== 'completed' &&
@@ -2085,7 +2980,7 @@ index 8d7d2df..03fb74b 100644
    ) {
      const volume = computeWeeklyVolume(input.history, input.now);
      const exposure = computeExposure(input.history, input.now);
-@@ -2095,6 +2300,45 @@ export const SCHEDULE_SOURCE = 'schedule move';
+@@ -2101,6 +2321,45 @@ export const SCHEDULE_SOURCE = 'schedule move';
   * complete weeks of training on one side of the schedule, or on other days, bring one card to move
   * it. It shows the weeks, the schedule and the move; the split follows the new number on the tap.
   */
@@ -2131,7 +3026,7 @@ index 8d7d2df..03fb74b 100644
  function scheduleSignals(input: CoachInput): CoachSignal[] {
    if (input.status === 'completed') return [];
    const fit = scheduleFit(input.history, input.profile, input.now);
-@@ -2116,6 +2360,18 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
+@@ -2122,6 +2381,18 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
        : fit.measured !== null && fit.measured > proposal.weeklyFrequency
          ? ` (the most the plan sets)`
          : '';
@@ -2150,7 +3045,7 @@ index 8d7d2df..03fb74b 100644
    return [
      {
        domain: 'coverage',
-@@ -2127,6 +2383,7 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
+@@ -2133,6 +2404,7 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
          `Your last ${fit.weeks.length} weeks of training: ${fit.weeks.map((week) => dayList(week.days)).join('; ')}.`,
          `Your schedule: ${plural(schedule.weeklyFrequency)} a week, on ${dayList(schedule.availableDays)}. Moved: ${plural(proposal.weeklyFrequency)}${fewest}, on ${dayList(proposal.availableDays)}${follows}; Settings, Schedule, changes it any time.`,
        ],
@@ -2158,7 +3053,16 @@ index 8d7d2df..03fb74b 100644
        action: {
          kind: 'schedule',
          weeklyFrequency: proposal.weeklyFrequency,
-@@ -2184,7 +2441,8 @@ export function conductCoach(input: CoachInput): CoachCard | null {
+@@ -2170,7 +2442,7 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
+     ...pushSignals(input),
+   ]
+     .filter((signal) => !addsToPushedMuscles(input, signal))
+-    .filter((signal) => !offPlanToday(input) || !addsWork(signal));
++    .filter((signal) => !addsWork(signal) || (!offPlanToday(input) && !restToday(input)));
+   return inDeloadWeek(input) ? signals.filter((signal) => !pushesForMore(signal)) : signals;
+ }
+ 
+@@ -2190,7 +2462,8 @@ export function conductCoach(input: CoachInput): CoachCard | null {
        (signal.exerciseId === undefined || today.has(signal.exerciseId)) &&
        !isDeclined(input.declines, signal, input.now) &&
        !isAccepted(input.accepted, signal) &&
@@ -2441,6 +3345,19 @@ index 34c7fdf..e8db835 100644
    return {
      workout: { ...workout, blocks },
      status: 'preview',
+diff --git a/src/engine/coach/painCardDayLists.test.ts b/src/engine/coach/painCardDayLists.test.ts
+index 3822a85..aba6c2b 100644
+--- a/src/engine/coach/painCardDayLists.test.ts
++++ b/src/engine/coach/painCardDayLists.test.ts
+@@ -146,7 +146,7 @@ function lowerDay() {
+     },
+     /** The four-week swaps the coach's cards offer, as "from -> to". */
+     lastingSwaps(): string[] {
+-      const fatigue = interpretFatigue(history, NOW, null);
++      const fatigue = interpretFatigue(history, NOW);
+       const input: CoachInput = {
+         workout,
+         status: 'preview',
 diff --git a/src/engine/coach/restDayTooSoon.test.ts b/src/engine/coach/restDayTooSoon.test.ts
 new file mode 100644
 index 0000000..ac485c4
@@ -2885,6 +3802,162 @@ index 0000000..205eb8e
 +      'Your first Barbell Bench Press set read 9% under your rested sessions.',
 +    );
 +    expect(chest?.why[0]).toMatch(/^Worked hard 30 h before your first Barbell Bench Press set; /);
++  });
++});
+diff --git a/src/engine/coach/tooSoonFirstSetReadReserve.test.ts b/src/engine/coach/tooSoonFirstSetReadReserve.test.ts
+new file mode 100644
+index 0000000..66d6f81
+--- /dev/null
++++ b/src/engine/coach/tooSoonFirstSetReadReserve.test.ts
+@@ -0,0 +1,150 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { TOO_SOON_SOURCE, gatherSignals, type CoachInput } from './coachConductor';
++import { withReadReserve } from '../progression/reserveCheck';
++import { emptyCompleted, emptyConstraints } from '../recalibration/recalibrate';
++import type { CompletedWork } from '../recalibration/types';
++import { interpretFatigue } from '../recovery/fatigue';
++import { allEntries } from '../workout/types';
++import { generateWorkout } from '../workoutGenerator/generate';
++import { RECORD_NOW, record } from '../../test/records';
++
++/**
++ * The second adversarial review of Maintenance 33: "too soon" reads today's first set as logged
++ * against rested sessions read through the reserve check's estimate, so a dip within the noise
++ * reads past the 8% line.
++ *
++ * Steps: a lifter with the reserve check on and a usable estimate: they leave a rep more than they
++ * judge on machine and cable lifts (correction +1). Three rested sessions of the triceps pushdown:
++ * 10 reps at 50 lb, logged "1 in reserve" (8-12 asked at 1). Skull crushers 30 h ago put the triceps
++ * in a 36 h window (past three quarters of it, so the plan alone raises nothing). Today the
++ * pushdown's first set: 7 reps at 50 lb, logged "1 in reserve", as asked of it.
++ *
++ * The rule: the first set against the rested sessions, "each read against what it asked", acts only
++ * at "8% or more" (the report; proposal part 2: "One session is noisy (about ±4%), so a single day
++ * acts only on a drop of 8% or more"); every reader reads the log "as the rules read it" (the first
++ * review's fix: the hard start "reads the history as the rules read it", and `readStartOf` reads
++ * today's sets through the same estimate: "A check set's measured reserve, whatever the estimate;
++ * the error only where one is in force").
++ *
++ * What happens: the rested sessions come from the read log (`readHistory`: 1 judged reads as 2), but
++ * `tooSoonSignals` reads today's set as logged (1), so the same lift at the same ask reads 9.5%
++ * under (63.3 against 70), and the coach says "Your first Cable Triceps Pushdown set read 10% under
++ * your rested sessions" and that the triceps may not have recovered. Read as the rules read it (2 in
++ * reserve), the set is 7.1% under: no card.
++ *
++ * Synthetic data only.
++ */
++
++const profile = { ...createDefaultProfile(RECORD_NOW), bodyweight: 185 };
++const gym = createDefaultLocations({ gymAccess: true }, RECORD_NOW).find(
++  (place) => place.id === 'gym',
++)!;
++// Its band spans today's set (7 reps and 1 in reserve, 8 in all) as it spans the rested ones (11):
++// the rules read both through it.
++const ESTIMATE = { correction: 1, band: [8, 14] as [number, number] };
++
++const pushdowns = (daysAgo: number): WorkoutRecord => {
++  const done = record(
++    daysAgo,
++    'cable-triceps-pushdown',
++    [
++      [10, 50, 1],
++      [10, 50, 1],
++      [10, 50, 1],
++    ],
++    [8, 12],
++    1,
++  );
++  return {
++    ...done,
++    entries: done.entries.map((entry) => ({
++      ...entry,
++      sets: entry.sets.map((set) => ({ ...set, targetWeight: 50 })),
++    })),
++  };
++};
++
++const raw: WorkoutRecord[] = [
++  pushdowns(14),
++  pushdowns(10),
++  pushdowns(6),
++  record(
++    30 / 24,
++    'skull-crusher',
++    [
++      [10, 50, 1],
++      [10, 50, 1],
++      [10, 50, 1],
++      [10, 50, 1],
++    ],
++    [8, 12],
++    1,
++  ),
++];
++
++describe('"too soon" from a first set read through the reserve estimate', () => {
++  it('reads today’s set as it reads the rested ones', () => {
++    // The log as the store gives the rules: the estimate's rep added to each judged reserve.
++    const history = withReadReserve(raw, ESTIMATE);
++    expect(history[0]!.entries[0]!.sets[0]!.rir).toBe(2);
++
++    const plan = generateWorkout({
++      profile,
++      location: gym,
++      history,
++      now: RECORD_NOW,
++      duration: 'default',
++      constraints: { templateId: 'push-arms' },
++    });
++    const workout = structuredClone(plan);
++    const lead = allEntries(workout.blocks)[0]!;
++    lead.exerciseId = 'cable-triceps-pushdown';
++    for (const set of lead.sets) {
++      if (set.kind !== 'working') continue;
++      set.targetWeight = 50;
++      set.targetReps = [8, 12];
++      set.targetRir = 1;
++    }
++    const first = lead.sets.find((set) => set.kind === 'working')!;
++    const completed: CompletedWork = {
++      ...emptyCompleted(),
++      startedAt: RECORD_NOW,
++      currentEntryId: lead.id,
++      sets: [
++        {
++          entryId: lead.id,
++          exerciseId: lead.exerciseId,
++          setIndex: first.index,
++          kind: 'working',
++          reps: 7,
++          weight: 50,
++          rir: 1,
++          completedAt: RECORD_NOW,
++        },
++      ],
++    };
++    const input: CoachInput = {
++      workout,
++      status: 'active',
++      duration: 'default',
++      completed,
++      constraints: emptyConstraints(),
++      profile,
++      history,
++      now: RECORD_NOW,
++      fatigue: interpretFatigue(history, RECORD_NOW),
++      strategy: [],
++      lastExportAt: RECORD_NOW,
++      workoutCount: history.length,
++    };
++    const triceps = (from: CoachInput) =>
++      gatherSignals(from).find((signal) => signal.source.startsWith(`${TOO_SOON_SOURCE}|triceps|`));
++    // The estimate the log is read through, as the coach is given it (`useCoach`).
++    expect(triceps({ ...input, reserveEstimate: ESTIMATE })?.why ?? []).toEqual([]);
++    // Read as logged, the same set reads 10% under: the card the review found.
++    expect(triceps(input)?.why.join(' ')).toContain('read 10% under your rested sessions');
 +  });
 +});
 diff --git a/src/engine/learned/learned.test.ts b/src/engine/learned/learned.test.ts
@@ -3533,6 +4606,52 @@ index f2f4a58..cefb828 100644
      });
      expect(benchNotes.some((note) => note.recommendation === 'micro-deload')).toBe(true);
    });
+diff --git a/src/engine/progression/reserveCheck.ts b/src/engine/progression/reserveCheck.ts
+index b285285..8e67cfd 100644
+--- a/src/engine/progression/reserveCheck.ts
++++ b/src/engine/progression/reserveCheck.ts
+@@ -315,11 +315,12 @@ export function reserveCheckSet(input: {
+   }, null);
+   if (latest !== null && daysBetween(latest, input.now) >= RESERVE_CHECK.RETURN_DAYS) return null;
+   // A straight set or a superset's: a circuit runs on with short rests, where a set to failure
+-  // would hold up the round.
++  // would hold up the round. Never on a lift the plan eases today, "Lighter" for its muscle as a
++  // hard start does for the day (the second review of Maintenance 33).
+   const candidates = input.blocks
+     .filter((block) => block.kind !== 'circuit')
+     .flatMap((block) => block.entries)
+-    .filter(takesReserveCheck);
++    .filter((entry) => takesReserveCheck(entry) && !entry.eased?.sets);
+   if (candidates.length === 0) return null;
+   // Sessions in the last twelve weeks that logged the lift.
+   const regular = (exerciseId: string) =>
+@@ -377,6 +378,26 @@ export function measuredReserve(set: {
+   return Math.min(10, check.total - set.reps);
+ }
+ 
++/**
++ * A logged set's reserve as the rules read it: a check set's as it measured it, else with the
++ * lifter's typical error read in where the estimate covers the set (`readReserve`). Today's sets are
++ * read so wherever the log is (the second review of Maintenance 33: "too soon" read today's first
++ * set as logged against rested sessions read through the estimate).
++ */
++export function readLoggedReserve(
++  set: {
++    exerciseId: string;
++    reps: number;
++    rir: number | null;
++    reserveCheck?: { total: number; failedEarly?: boolean; stopped?: boolean };
++  },
++  estimate: Pick<ReserveEstimate, 'correction' | 'band'> | null,
++): number | null {
++  return (
++    measuredReserve(set) ?? readReserve(getExercise(set.exerciseId), set.reps, set.rir, estimate)
++  );
++}
++
+ /**
+  * The log as the rules read it: every logged reserve the estimate covers read through it, and a
+  * check set's own reserve as it measured it. A view for the engines only, each changed set keeping
 diff --git a/src/engine/progression/reserveCheckSoreDay.test.ts b/src/engine/progression/reserveCheckSoreDay.test.ts
 new file mode 100644
 index 0000000..8db4658
@@ -4024,7 +5143,7 @@ index 6d506ce..c50ef82 100644
 +  });
 +});
 diff --git a/src/engine/recalibration/badStart.ts b/src/engine/recalibration/badStart.ts
-index aeb0f73..8be21ba 100644
+index aeb0f73..214dcd5 100644
 --- a/src/engine/recalibration/badStart.ts
 +++ b/src/engine/recalibration/badStart.ts
 @@ -1,12 +1,22 @@
@@ -4051,7 +5170,7 @@ index aeb0f73..8be21ba 100644
  
  /**
   * A bad start carries over to the rest of the workout (Maintenance 26, the owner's item 42,
-@@ -46,10 +56,42 @@ export function startKey(reading: StartReading): string {
+@@ -46,10 +56,47 @@ export function startKey(reading: StartReading): string {
  export interface StartContext {
    profile: UserProfile;
    history: readonly WorkoutRecord[];
@@ -4060,6 +5179,11 @@ index aeb0f73..8be21ba 100644
 +   * more short of a lift before it reads as a hard start.
 +   */
 +  readiness?: Readiness | null;
++  /**
++   * The check-in was told with a hard start in force: the start reads none of it (the second review
++   * of Maintenance 33: told after a hard start, it took the hard start back).
++   */
++  checkInAfterStart?: boolean;
 +  /** What the lifter reset: the windows read only what was logged after it of what sessions teach. */
 +  resets?: Pick<LearnedResets, 'recovery'> | null;
 +}
@@ -4095,7 +5219,7 @@ index aeb0f73..8be21ba 100644
    const exercise = getExercise(entry.exerciseId);
    if (!exercise || isHold(exercise)) return null;
    // Only a target the lifter's own logged sets set says something about today: not one read from
-@@ -94,7 +136,8 @@ function shortOf(entry: WorkoutEntry, first: CompletedSet, context: StartContext
+@@ -94,7 +141,8 @@ function shortOf(entry: WorkoutEntry, first: CompletedSet, context: StartContext
      first.planRir ?? prescribeFor(exercise, entry.role, context.profile, context.history).rir;
    const reserve = Math.min(set.targetRir, planRir);
    if (set.targetReps[0] + reserve > JUDGED_REPS) return null;
@@ -4105,17 +5229,17 @@ index aeb0f73..8be21ba 100644
  }
  
  /**
-@@ -123,6 +166,27 @@ export function readStart(
+@@ -123,6 +171,27 @@ export function readStart(
      if (first) firsts.push({ entry, set: first, at: Date.parse(first.completedAt), order });
    });
    firsts.sort((a, b) => a.at - b.at || a.order - b.order);
 +  // What the day lowers the expectation by: the check-in, read when the first set was logged, and
 +  // each muscle's window from the work before today (Maintenance 33).
 +  const at = firsts[0]?.set.completedAt;
++  // A check-in told after the start was called judges none of it.
++  const readiness = context.checkInAfterStart ? null : (context.readiness ?? null);
 +  const lowered =
-+    at !== undefined && context.readiness
-+      ? readCheckIn(context.readiness, context.history, at).lowered
-+      : false;
++    at !== undefined && readiness ? readCheckIn(readiness, context.history, at).lowered : false;
 +  // The windows as the coach and the Plan screen read them, today's check-in on them too (the first
 +  // review of Maintenance 33: a short night lengthened the chest's window everywhere but here).
 +  const windows =
@@ -4123,7 +5247,7 @@ index aeb0f73..8be21ba 100644
 +      ? recoveryWindows(
 +          context.history,
 +          dayRecovery({
-+            readiness: context.readiness,
++            readiness,
 +            history: context.history,
 +            now: at,
 +            resets: context.resets,
@@ -4133,7 +5257,7 @@ index aeb0f73..8be21ba 100644
    const judged: { exerciseId: string; short: boolean }[] = [];
    const places = new Set<string>();
    const begun = new Set<string>();
-@@ -133,7 +197,7 @@ export function readStart(
+@@ -133,7 +202,7 @@ export function readStart(
      places.add(place);
      begun.add(entry.exerciseId);
      if (standIn) continue;
@@ -4473,6 +5597,201 @@ index 0000000..f9ce21a
 +    const plan = recoveryBalance(history, sets[0]!.completedAt, { readiness: shortNight });
 +    expect(plan.find((row) => row.muscle === 'chest')?.state).toBe('recovering');
 +    expect(reading).toEqual({ low: false, lifts: [] });
++  });
++});
+diff --git a/src/engine/recalibration/headColdLiftUnderWay.test.ts b/src/engine/recalibration/headColdLiftUnderWay.test.ts
+new file mode 100644
+index 0000000..82def66
+--- /dev/null
++++ b/src/engine/recalibration/headColdLiftUnderWay.test.ts
+@@ -0,0 +1,189 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import { emptyCompleted, emptyConstraints, recalibrate } from './recalibrate';
++import type {
++  CompletedSet,
++  CompletedWork,
++  Readiness,
++  RecalibrationSuccess,
++  SessionConstraints,
++} from './types';
++import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../workout/types';
++import { generateWorkout } from '../workoutGenerator/generate';
++import { RECORD_NOW, record } from '../../test/records';
++
++/**
++ * The second adversarial review of Maintenance 33: a head cold (or a fever) told under way leaves
++ * the lift under way below the head cold's floor, to failure on a finisher, while the summary says
++ * "every set 2 or more short of failure for the head cold".
++ *
++ * Steps: a hybrid lifter's pull day (drop sets on). Its chin-ups ask 6-12 reps at 1 in reserve; the
++ * dumbbell curl, a finisher, asks two sets at 0 in reserve (to failure) and a drop set. The lifter
++ * logs the barbell row's working sets and the first chin-up set, then checks in with "Head cold".
++ * In the second case they are on the curl: its first set logged, then the head cold. In the third,
++ * "Fever or aches" on the curl.
++ *
++ * The rule: the readiness model's illness gate (proposal part 2; `RULES.headColdRir`: "Symptoms
++ * above the neck are trainable ...: every set at 2 or more in reserve"); the report: "above the
++ * neck, every set keeps two or more reps in reserve, no top set to failure and no drop set", and,
++ * fixed after the first review, "Any illness keeps a workout under way at the head cold's floor at
++ * least". The engine already takes a lift under way's drop set still to come away for it
++ * (`withoutDropSetsToCome`: "On a day that keeps every set short of failure ... no drop set is
++ * still to come").
++ *
++ * What happens: the floor reaches only lifts not begun. The rebuild keeps a begun lift's sets as
++ * they were (`keptEntries`, `refitStarted` refits loads only), so the chin-ups' two sets still to
++ * come stay at 1 in reserve, and the curl's second set stays at 0 (to failure), its drop set gone,
++ * beside the headline "Adjusted for today (every set 2 or more short of failure for the head
++ * cold)". Under a fever the curl's set stays at 0 under "Fever or aches all over: rest today".
++ *
++ * Synthetic data only.
++ */
++
++const base = createDefaultProfile(RECORD_NOW);
++const profile = {
++  ...base,
++  bodyweight: 185,
++  programStyle: 'hybrid' as const,
++  techniques: { ...base.techniques, dropSets: true },
++};
++const gym = createDefaultLocations({ gymAccess: true }, RECORD_NOW).find(
++  (place) => place.id === 'gym',
++)!;
++const history = [7, 3].map((daysAgo) =>
++  record(
++    daysAgo,
++    'barbell-row',
++    [
++      [5, 130, 2],
++      [5, 130, 2],
++      [5, 130, 2],
++    ],
++    [4, 6],
++    2,
++  ),
++);
++
++const checkIn = (illness: NonNullable<Readiness['illness']>): Readiness => ({
++  energy: 3,
++  soreness: 2,
++  sleep: 3,
++  motivation: 3,
++  jointDiscomfort: [],
++  timePressure: false,
++  illness,
++});
++
++const plan = (): GeneratedWorkout =>
++  generateWorkout({
++    profile,
++    location: gym,
++    history,
++    now: RECORD_NOW,
++    duration: 'default',
++    constraints: { templateId: 'pull-arms' },
++  });
++
++const entryOf = (workout: GeneratedWorkout, exerciseId: string): WorkoutEntry =>
++  allEntries(workout.blocks).find((entry) => entry.exerciseId === exerciseId)!;
++
++const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
++
++/** Working sets logged as asked, each a minute after the last. */
++function logged(sets: { entry: WorkoutEntry; index: number }[]): CompletedWork {
++  const done: CompletedSet[] = sets.map(({ entry, index }, at) => {
++    const set = entry.sets.find((each) => each.index === index)!;
++    return {
++      entryId: entry.id,
++      exerciseId: entry.exerciseId,
++      setIndex: index,
++      kind: 'working',
++      reps: set.targetReps[0],
++      weight: set.targetWeight,
++      rir: set.targetRir,
++      completedAt: new Date(Date.parse(RECORD_NOW) + at * 60_000).toISOString(),
++    };
++  });
++  const last = sets.at(-1)!.entry;
++  return { ...emptyCompleted(), startedAt: RECORD_NOW, currentEntryId: last.id, sets: done };
++}
++
++function tell(
++  workout: GeneratedWorkout,
++  completed: CompletedWork,
++  readiness: Readiness,
++  constraints: SessionConstraints = emptyConstraints(),
++): RecalibrationSuccess {
++  const result = recalibrate({
++    trigger: { type: 'readiness', readiness },
++    workout,
++    completed,
++    lockedEntryIds: [],
++    currentEntryId: completed.currentEntryId,
++    duration: 'default',
++    profile,
++    location: gym,
++    loading: { missingPlates: [] },
++    history,
++    constraints,
++    reason: 'test',
++    timestamp: new Date(Date.parse(RECORD_NOW) + 30 * 60_000).toISOString(),
++  });
++  if (!result.ok) throw new Error(result.error);
++  return result;
++}
++
++/** Every working set still to come, as `exercise@reserve`. */
++const stillToCome = (workout: GeneratedWorkout, completed: CompletedWork) => {
++  const done = new Set(completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
++  return allEntries(workout.blocks).flatMap((entry) =>
++    working(entry)
++      .filter((set) => !done.has(`${entry.id}:${set.index}`))
++      .map((set) => `${entry.exerciseId}@${set.targetRir}`),
++  );
++};
++const underFloor = (sets: string[]) => sets.filter((set) => Number(set.split('@')[1]) < 2);
++
++describe('an illness told with a lift under way', () => {
++  it('a head cold holds the chin-ups still to come at 2 or more in reserve', () => {
++    const workout = plan();
++    const row = entryOf(workout, 'barbell-row');
++    const chin = entryOf(workout, 'chin-up');
++    // As built: the chin-ups ask 1 in reserve.
++    expect(working(chin).map((set) => set.targetRir)).toEqual([1, 1, 1]);
++    const completed = logged([
++      ...working(row).map((set) => ({ entry: row, index: set.index })),
++      { entry: chin, index: working(chin)[0]!.index },
++    ]);
++    const cold = tell(workout, completed, checkIn('head'));
++    expect(cold.summary.headline).toMatch(/every set 2 or more short of failure/);
++    expect(underFloor(stillToCome(cold.workout, completed))).toEqual([]);
++  });
++
++  it('a head cold takes the finisher under way off failure, as it takes its drop set', () => {
++    const workout = plan();
++    const curl = entryOf(workout, 'dumbbell-curl');
++    // As built: two sets to failure and a drop set.
++    expect(working(curl).map((set) => set.targetRir)).toEqual([0, 0]);
++    expect(curl.dropSet).toBe(true);
++    const completed = logged([{ entry: curl, index: working(curl)[0]!.index }]);
++    const cold = tell(workout, completed, checkIn('head'));
++    const after = entryOf(cold.workout, 'dumbbell-curl');
++    // The drop set goes for the head cold ...
++    expect(after.sets.some((set) => set.kind === 'drop')).toBe(false);
++    // ... and so must the set to failure still to come.
++    expect(underFloor(stillToCome(cold.workout, completed))).toEqual([]);
++  });
++
++  it('a fever keeps at least the head cold floor on the finisher under way', () => {
++    const workout = plan();
++    const curl = entryOf(workout, 'dumbbell-curl');
++    const completed = logged([{ entry: curl, index: working(curl)[0]!.index }]);
++    const fever = tell(workout, completed, checkIn('body'));
++    expect(fever.summary.headline).toBe(
++      'Fever or aches all over: rest today, and train again once they have gone.',
++    );
++    expect(underFloor(stillToCome(fever.workout, completed))).toEqual([]);
 +  });
 +});
 diff --git a/src/engine/recalibration/lighter.test.ts b/src/engine/recalibration/lighter.test.ts
@@ -5069,6 +6388,85 @@ index 0000000..ba39cdc
 +    );
 +    const chest = run({ type: 'lighter', muscle: 'chest' }, back.workout, back.constraints, undone);
 +    expect(working(flyOf(chest.workout))).toEqual([2, 2]);
++  });
++});
+diff --git a/src/engine/recalibration/lighterSwapBack.test.ts b/src/engine/recalibration/lighterSwapBack.test.ts
+new file mode 100644
+index 0000000..4e8e3e0
+--- /dev/null
++++ b/src/engine/recalibration/lighterSwapBack.test.ts
+@@ -0,0 +1,73 @@
++import { describe, expect, it } from 'vitest';
++import type { CompletedWork } from './types';
++import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../workout/types';
++import { BENCH, DB_BENCH, bench, plan, profileOf, run, topDone } from '../../test/backOffs';
++
++/**
++ * The second adversarial review of Maintenance 33: "Lighter" on a lift under way is lost when the
++ * lifter swaps the lift and then swaps back to it.
++ *
++ * Steps: a hybrid lifter's push day: the bench press's top set (190 lb for 4-6 at 1 in reserve) and
++ * three back-offs (180 lb for 4-6 at 2). They log the top set, then tap "Lighter for the chest": the
++ * back-offs still to come become two at 180 lb for 3-5 at 3 in reserve. The bench is taken, so they
++ * swap to the dumbbell bench press (what stands in carries the eased sets: two at 3 in reserve), and
++ * when the bench is free they swap back to it.
++ *
++ * The rule: the lighter option takes a lift under way "on its sets still to come, for good: the
++ * workout never gives it back" (recalibrate.ts, `lightenUnderWay`); the first review's fix for a swap
++ * ("Eased under way by the lighter option alone, what comes in is eased as it eases, its loads kept
++ * and in its words", `applySubstitution`); the card: "a set fewer and a rep more in reserve on its
++ * lifts today". The muscle stays in `constraints.lighter`, so the card does not come back.
++ *
++ * What happens: `swapBack` builds the sets the bench owes afresh at the plan's reserve
++ * (`dayShiftOf` reads only the day's own settings, and the lighter option is a layer, as the hard
++ * start's ease is), and the layer never eases a block begun: the bench's back-offs come back as two
++ * at 180 lb for 4-6 at 2 in reserve, the plan's, with "Lighter" still in force for the chest.
++ *
++ * Synthetic data only.
++ */
++
++const backOffs = (entry: WorkoutEntry) =>
++  entry.sets
++    .filter((set) => set.tier === 'back-off')
++    .map((set) => [set.targetWeight, set.targetReps, set.targetRir]);
++
++const live = (workout: GeneratedWorkout, exerciseId: string) =>
++  allEntries(workout.blocks).find(
++    (entry) => entry.exerciseId === exerciseId && entry.stopped === undefined,
++  )!;
++
++describe('"Lighter" on a lift under way, swapped and swapped back', () => {
++  it('keeps the lighter sets still to come', () => {
++    const profile = profileOf('hybrid');
++    const workout = plan(undefined, profile);
++    const completed: CompletedWork = topDone(bench(workout), 190);
++
++    const lighter = run({ type: 'lighter', muscle: 'chest' }, workout, { completed, profile });
++    const eased = backOffs(live(lighter.workout, BENCH));
++    expect(eased).toEqual([
++      [180, [3, 5], 3],
++      [180, [3, 5], 3],
++    ]);
++
++    const swapped = run(
++      { type: 'replace', entryId: live(lighter.workout, BENCH).id, exerciseId: DB_BENCH },
++      lighter.workout,
++      { completed, profile, constraints: lighter.constraints },
++    );
++    // What stands in carries the lighter sets.
++    expect(
++      live(swapped.workout, DB_BENCH)
++        .sets.filter((set) => set.kind === 'working')
++        .map((set) => set.targetRir),
++    ).toEqual([3, 3]);
++
++    const back = run(
++      { type: 'replace', entryId: live(swapped.workout, DB_BENCH).id, exerciseId: BENCH },
++      swapped.workout,
++      { completed, profile, constraints: swapped.constraints },
++    );
++    expect(back.constraints.lighter).toEqual(['chest']);
++    expect(backOffs(live(back.workout, BENCH))).toEqual(eased);
 +  });
 +});
 diff --git a/src/engine/recalibration/recalibrate.busy.test.ts b/src/engine/recalibration/recalibrate.busy.test.ts
@@ -5999,7 +7397,7 @@ index 1c4988b..53283e2 100644
  
      const fresh = run(
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index f4a7c1b..ae448e0 100644
+index 0a641b7..c68ea4c 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
 @@ -1,4 +1,13 @@
@@ -6016,15 +7414,15 @@ index f4a7c1b..ae448e0 100644
  import { allExercises, requireExercise } from '../../catalog/exercises/catalog';
  import { holdById, targetText } from '../workout/setText';
  import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
-@@ -102,6 +111,7 @@ import {
+@@ -104,6 +113,7 @@ import {
    type GenerationConstraints,
    type KeptEntry,
    type PrescriptionAdjustment,
 +  dayRirFloor,
    withCatchUpLines,
    offPlanSpec,
-   emptiedFor,
-@@ -278,11 +288,17 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
+   emptiedLayoutsFor,
+@@ -280,11 +290,13 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
      const layer: Layer = {
        shown,
        finish: (workout, constraints) =>
@@ -6036,23 +7434,22 @@ index f4a7c1b..ae448e0 100644
      const outcome = execute(plain, scope, layer);
      const constraints = outcome.constraints;
 -    const next = layer.finish(outcome.workout, constraints);
-+    const next = withoutDropSetsToCome(
-+      layer.finish(outcome.workout, constraints),
-+      constraints,
-+      request.completed,
-+    );
++    const next = heldToTheDay(layer.finish(outcome.workout, constraints), request, constraints);
      markEmptied(constraints, request, next);
      // The time and the lines say what the plan now holds, eased or given back.
      if (next !== outcome.workout || bare !== shown) {
-@@ -403,6 +419,7 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
+@@ -403,8 +415,10 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
+       : {}),
+     endBy: constraints.endBy,
      readiness: constraints.readiness ? { ...constraints.readiness } : null,
++    ...(constraints.checkInAfterStart ? { checkInAfterStart: true as const } : {}),
      intensity: constraints.intensity,
      ...(constraints.badStart ? { badStart: true } : {}),
 +    ...(constraints.lighter ? { lighter: [...constraints.lighter] } : {}),
      deload: constraints.deload ? { ...constraints.deload } : null,
      focus: constraints.focus ?? null,
      ...(constraints.catchUp !== undefined
-@@ -518,6 +535,16 @@ function intensityAdjust(level: number): PrescriptionAdjustment | undefined {
+@@ -517,6 +531,16 @@ function intensityAdjust(level: number): PrescriptionAdjustment | undefined {
  /** A hard start (Maintenance 26, item 42): the low check-in's treatment, a set fewer and a rep more in reserve. */
  const HARD_START: PrescriptionAdjustment = { sets: -1, rir: 1, restFactor: 1 };
  
@@ -6069,7 +7466,7 @@ index f4a7c1b..ae448e0 100644
  /** Whether two of the day's adjustments ask the same of the lifts still to come. */
  function sameAdjust(
    a: PrescriptionAdjustment | undefined,
-@@ -526,7 +553,8 @@ function sameAdjust(
+@@ -525,7 +549,8 @@ function sameAdjust(
    return (
      (a?.sets ?? 0) === (b?.sets ?? 0) &&
      (a?.rir ?? 0) === (b?.rir ?? 0) &&
@@ -6079,7 +7476,7 @@ index f4a7c1b..ae448e0 100644
    );
  }
  
-@@ -543,6 +571,7 @@ function feltAdjust(constraints: SessionConstraints): PrescriptionAdjustment | u
+@@ -542,6 +567,7 @@ function feltAdjust(constraints: SessionConstraints): PrescriptionAdjustment | u
      sets: Math.min(checkIn.sets, HARD_START.sets),
      rir: Math.max(checkIn.rir, HARD_START.rir),
      restFactor: Math.max(checkIn.restFactor, HARD_START.restFactor),
@@ -6087,7 +7484,7 @@ index f4a7c1b..ae448e0 100644
    };
  }
  
-@@ -558,6 +587,7 @@ function withIntensity(
+@@ -557,6 +583,7 @@ function withIntensity(
      sets: harder.sets + felt.sets,
      rir: harder.rir + felt.rir,
      restFactor: harder.restFactor * felt.restFactor,
@@ -6095,7 +7492,7 @@ index f4a7c1b..ae448e0 100644
    };
  }
  
-@@ -1161,9 +1191,26 @@ function prescriptionToday(
+@@ -1159,9 +1186,26 @@ function prescriptionToday(
    role: TrainingRole,
  ): Prescription {
    const base = prescribeFor(exercise, role, request.profile, request.history);
@@ -6125,7 +7522,7 @@ index f4a7c1b..ae448e0 100644
  }
  
  /**
-@@ -1302,6 +1349,25 @@ function offPlanToday(request: RecalibrationRequest, workout: GeneratedWorkout):
+@@ -1300,6 +1344,25 @@ function offPlanToday(request: RecalibrationRequest, workout: GeneratedWorkout):
    return offPlanSpec(request.constraints, workout) !== null;
  }
  
@@ -6151,7 +7548,7 @@ index f4a7c1b..ae448e0 100644
  /** A lift begun with one set left, as a refusal and a stop say it. */
  function oneSetLeft(name: string): string {
    return `${name} has one set left, too few for another lift to take over`;
-@@ -1411,7 +1477,10 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
+@@ -1415,7 +1478,10 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
    const day = dayAdjust(request.constraints)?.rir ?? 0;
    // The day's settings, the whole of them first: a reserve held at its limit (4, or the
    // exercise's floor) shows them as much as any.
@@ -6163,7 +7560,7 @@ index f4a7c1b..ae448e0 100644
    for (let shift = day; shift !== 0; shift -= Math.sign(day)) {
      if (carriesDayRir(sets, Math.min(4, Math.max(floor, plainRir + shift)))) return shift;
    }
-@@ -1443,10 +1512,40 @@ function backOffDay(
+@@ -1447,10 +1513,64 @@ function backOffDay(
  
  /** Fatigue high today: a main lift goes straight (item 11, the research). */
  function fatigueHigh(request: RecalibrationRequest): boolean {
@@ -6183,32 +7580,56 @@ index f4a7c1b..ae448e0 100644
 +}
 +
 +/**
-+ * On a day that keeps every set short of failure (a head cold, Maintenance 33), no drop set is
-+ * still to come: one done stays as logged.
++ * On a day that keeps every set short of failure (an illness, Maintenance 33), every set still to
++ * come keeps the day's reserve at least, a lift under way's too, at its load, a rep fewer for each
++ * rep more in reserve as "Lighter" eases one; and no drop set is still to come. One done stays as
++ * logged (the second review of Maintenance 33: a head cold told under way left the lift under way
++ * at its reserve, a finisher to failure).
 + */
-+function withoutDropSetsToCome(
++function heldToTheDay(
 +  workout: GeneratedWorkout,
++  request: RecalibrationRequest,
 +  constraints: SessionConstraints,
-+  completed: CompletedWork,
 +): GeneratedWorkout {
-+  if (dayFloor(constraints) === 0) return workout;
-+  const done = new Set(completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
++  const floor = dayFloor(constraints);
++  if (floor === 0) return workout;
++  const done = new Set(request.completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
 +  const toCome = (entry: WorkoutEntry, set: SetPrescription) =>
-+    set.kind === 'drop' && !done.has(`${entry.id}:${set.index}`);
-+  if (!allEntries(workout.blocks).some((entry) => entry.sets.some((set) => toCome(entry, set)))) {
++    !done.has(`${entry.id}:${set.index}`);
++  const short = (entry: WorkoutEntry, set: SetPrescription) =>
++    toCome(entry, set) &&
++    (set.kind === 'drop' || (set.kind === 'working' && set.targetRir < floor));
++  if (!allEntries(workout.blocks).some((entry) => entry.sets.some((set) => short(entry, set)))) {
 +    return workout;
 +  }
-+  const cleared = cloneWorkout(workout);
-+  for (const entry of allEntries(cleared.blocks)) {
-+    if (!entry.sets.some((set) => toCome(entry, set))) continue;
-+    entry.sets = entry.sets.filter((set) => !toCome(entry, set));
++  const held = cloneWorkout(workout);
++  for (const entry of allEntries(held.blocks)) {
++    if (!entry.sets.some((set) => short(entry, set))) continue;
++    const exercise = requireExercise(entry.exerciseId);
++    const loading = loadingOf(request, exercise);
++    const bar = barWeightFor(exercise, request.profile.units);
++    entry.sets = entry.sets
++      .filter((set) => !(set.kind === 'drop' && toCome(entry, set)))
++      .map((set) => {
++        if (!short(entry, set)) return set;
++        const eased = easedSet(
++          set,
++          floor - set.targetRir,
++          exercise,
++          entry.manual,
++          loading,
++          bar,
++          true,
++        );
++        return eased.targetRir >= floor ? eased : { ...eased, targetRir: floor };
++      });
 +    entry.dropSet = entry.sets.some((set) => set.kind === 'drop');
 +  }
-+  return cleared;
++  return held;
  }
  
  /** The reserve the day asks of a lift as the plan holds it: its effort and the catch-up's kept. */
-@@ -1460,6 +1559,7 @@ function dayReserve(
+@@ -1464,6 +1584,7 @@ function dayReserve(
      prescriptionToday(request, exercise, entry.role),
      heldShift(request, workout, exercise, entry.role, dayShiftOf(request, workout, entry)),
      exercise,
@@ -6216,7 +7637,7 @@ index f4a7c1b..ae448e0 100644
    ).rir;
  }
  
-@@ -1560,7 +1660,7 @@ function targetBuilt(
+@@ -1574,7 +1695,7 @@ function targetBuilt(
      prescription,
      suits: backOffsSuit(exercise, role, request.profile),
      profile: request.profile,
@@ -6225,7 +7646,7 @@ index f4a7c1b..ae448e0 100644
      exerciseId: exercise.id,
      history: request.history,
      load: { step: loading.step, floor: barWeightFor(exercise, request.profile.units), loading },
-@@ -1574,16 +1674,18 @@ function targetBuilt(
+@@ -1588,16 +1709,18 @@ function targetBuilt(
    };
  }
  
@@ -6246,7 +7667,7 @@ index f4a7c1b..ae448e0 100644
    };
  }
  
-@@ -1612,7 +1714,7 @@ function targetToday(
+@@ -1626,7 +1749,7 @@ function targetToday(
      prescription,
      history: request.history,
      profile: request.profile,
@@ -6255,7 +7676,7 @@ index f4a7c1b..ae448e0 100644
      now: request.timestamp,
      maxes: request.maxes,
      session: { precedingSets: context.precedingSets },
-@@ -2113,6 +2215,7 @@ function refitEntry(
+@@ -2127,6 +2250,7 @@ function refitEntry(
      plain,
      heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),
      exercise,
@@ -6263,7 +7684,7 @@ index f4a7c1b..ae448e0 100644
    );
    const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
    const context = sessionContextFor(request, workout, entry.id, exercise);
-@@ -2255,6 +2358,7 @@ function targetedSets(
+@@ -2269,6 +2393,7 @@ function targetedSets(
      prescriptionToday(request, exercise, role),
      options.shift ?? 0,
      exercise,
@@ -6271,7 +7692,7 @@ index f4a7c1b..ae448e0 100644
    );
    const context = sessionContextFor(request, workout, entryId, exercise, options.through);
    const loading = loadingOf(request, exercise);
-@@ -2272,11 +2376,7 @@ function targetedSets(
+@@ -2286,11 +2411,7 @@ function targetedSets(
          prescription: asked,
          history,
          profile: request.profile,
@@ -6284,7 +7705,7 @@ index f4a7c1b..ae448e0 100644
          now: request.timestamp,
          maxes: request.maxes,
          session: { precedingSets: context.precedingSets },
-@@ -2294,7 +2394,7 @@ function targetedSets(
+@@ -2308,7 +2429,7 @@ function targetedSets(
      prescription,
      suits: backOffsSuit(exercise, role, request.profile),
      profile: request.profile,
@@ -6293,7 +7714,7 @@ index f4a7c1b..ae448e0 100644
      exerciseId: exercise.id,
      history: request.history,
      load: { step: loading.step, floor, loading },
-@@ -2485,16 +2585,26 @@ function easeTheRest(
+@@ -2499,16 +2620,26 @@ function easeTheRest(
    request: RecalibrationRequest,
    constraints: SessionConstraints,
  ): GeneratedWorkout {
@@ -6326,7 +7747,7 @@ index f4a7c1b..ae448e0 100644
        }
        continue;
      }
-@@ -2503,8 +2613,20 @@ function easeTheRest(
+@@ -2517,8 +2648,20 @@ function easeTheRest(
        const working = entry.sets.filter((set) => set.kind === 'working');
        if (entry.eased || isStopped(entry) || working.length === 0) continue;
        const exercise = requireExercise(entry.exerciseId);
@@ -6348,7 +7769,7 @@ index f4a7c1b..ae448e0 100644
      }
      if (changed) {
        syncRounds(block);
-@@ -2564,6 +2686,10 @@ function easeEntry(
+@@ -2578,6 +2721,10 @@ function easeEntry(
    request: RecalibrationRequest,
    /** The sets the ease itself took, for its words, where `take` holds others too. */
    said = take,
@@ -6359,7 +7780,7 @@ index f4a7c1b..ae448e0 100644
  ): boolean {
    const working = entry.sets.filter((set) => set.kind === 'working');
    const gone = new Set(working.slice(working.length - take));
-@@ -2572,7 +2698,9 @@ function easeEntry(
+@@ -2586,7 +2733,9 @@ function easeEntry(
    const sets = entry.sets
      .filter((set) => !gone.has(set))
      .map((set) =>
@@ -6370,7 +7791,7 @@ index f4a7c1b..ae448e0 100644
      );
    const moved = sets.some((set) => !entry.sets.includes(set));
    if (take === 0 && !moved) return false;
-@@ -2586,7 +2714,55 @@ function easeEntry(
+@@ -2600,7 +2749,55 @@ function easeEntry(
    if (entry.progression && what) {
      entry.progression = {
        ...entry.progression,
@@ -6427,7 +7848,7 @@ index f4a7c1b..ae448e0 100644
      };
    }
    return true;
-@@ -2628,9 +2804,10 @@ function recordOf(entry: WorkoutEntry, block: WorkoutBlock): NonNullable<Workout
+@@ -2642,9 +2839,10 @@ function recordOf(entry: WorkoutEntry, block: WorkoutBlock): NonNullable<Workout
   * A working set `up` reps more in reserve, never heavier (Maintenance 26, the sixth pass of item
   * 42). Its reps stay on the load the place makes nearest the plan's own rule for that reserve
   * (`loadAtMoreReserve`), where that load is lighter; otherwise it keeps its load and does a rep
@@ -6441,7 +7862,7 @@ index f4a7c1b..ae448e0 100644
   */
  function easedSet(
    set: SetPrescription,
-@@ -2639,13 +2816,14 @@ function easedSet(
+@@ -2653,13 +2851,14 @@ function easedSet(
    manual: WorkoutEntry['manual'],
    loading: Loading,
    bar: number | null,
@@ -6457,7 +7878,7 @@ index f4a7c1b..ae448e0 100644
      const exact = loadAtMoreReserve(weight, high, set.targetRir, more);
      let load = weight;
      for (;;) {
-@@ -3158,7 +3336,20 @@ function applySubstitution(
+@@ -3172,7 +3371,20 @@ function applySubstitution(
    // part of them (the seventh pass of item 42: a later change put the old exercise's back).
    delete entry.eased;
    if (plan) {
@@ -6479,7 +7900,36 @@ index f4a7c1b..ae448e0 100644
      entry.eased = { ...(entry.eased ?? recordOf(entry, block)), kept: true };
    } else if (marked) {
      entry.eased = { exerciseId: exercise.id, kept: true };
-@@ -3698,18 +3889,45 @@ function formatClock(iso: string): string {
+@@ -3326,7 +3538,27 @@ function swapBack(
+     },
+   );
+   // Its top set done, what it owes are its back-offs (item 11).
+-  stopped.sets = [...stopped.sets, ...asBackOffs(request, workout, stopped, built.sets, isDone)];
++  const owes = asBackOffs(request, workout, stopped, built.sets, isDone);
++  // A lift the lighter option eases (`lightenUnderWay`, the layer before it began), with no hard
++  // start's ease over it: what it owes comes back eased as it went, its loads kept (the second
++  // review of Maintenance 33: swapped back, its sets came back at the plan's reserve with "Lighter"
++  // still in force for its muscle).
++  const lighter = new Set(request.constraints.badStart ? [] : (request.constraints.lighter ?? []));
++  const eased = exercise.primaryMuscles.some((muscle) => lighter.has(muscle));
++  const recorded = eased ? recordOf(stopped, findEntry(workout, stopped.id).block) : null;
++  const loading = loadingOf(request, exercise);
++  const bar = barWeightFor(exercise, request.profile.units);
++  stopped.sets = [
++    ...stopped.sets,
++    ...(eased
++      ? owes.map((set) =>
++          set.kind === 'working'
++            ? easedSet(set, LIGHTER.rir, exercise, stopped.manual, loading, bar, true)
++            : set,
++        )
++      : owes),
++  ];
++  if (recorded) stopped.eased = { ...recorded, kept: true };
+   withoutHandTargets(stopped);
+   if (dropOwed && exercise.dropSetSafe && !entryPushedToEffort(stopped)) {
+     stopped.sets.push(dropSetAt(nextSetIndex(stopped)));
+@@ -3699,18 +3931,45 @@ function formatClock(iso: string): string {
  }
  
  /**
@@ -6533,7 +7983,7 @@ index f4a7c1b..ae448e0 100644
  }
  
  /** Changes that make no sense on an exercise that has stopped: its sets went to a stand-in. */
-@@ -4248,6 +4466,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4268,6 +4527,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            prescriptionToday(request, exercise, role),
            dayAdjust(constraints)?.rir ?? 0,
            exercise,
@@ -6541,7 +7991,7 @@ index f4a7c1b..ae448e0 100644
          ),
          sets: Math.max(1, Math.round(trigger.sets)),
        };
-@@ -4381,6 +4600,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4401,6 +4661,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                effortShift(from, entry, plainTarget.rir),
              ),
              exercise,
@@ -6549,7 +7999,7 @@ index f4a7c1b..ae448e0 100644
            );
            // A load read from an estimate for a rep range, with reps set by hand: the load for those
            // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
-@@ -4452,7 +4672,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4472,7 +4733,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                prescription,
                suits,
                profile: from.profile,
@@ -6558,7 +8008,17 @@ index f4a7c1b..ae448e0 100644
                exerciseId: exercise.id,
                history: from.history,
                load: {
-@@ -4733,6 +4953,18 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4743,6 +5004,9 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+     case 'readiness': {
+       const readiness = trigger.readiness;
+       constraints.readiness = { ...readiness, jointDiscomfort: [...readiness.jointDiscomfort] };
++      // Told with a hard start in force, it leaves the start's reading as it was.
++      if (constraints.badStart) constraints.checkInAfterStart = true;
++      else delete constraints.checkInAfterStart;
+       constraints.painJoints = [
+         ...new Set([...constraints.painJoints, ...readiness.jointDiscomfort]),
+       ];
+@@ -4753,6 +5017,18 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          ? readinessAdjustment(request.constraints.readiness)
          : undefined;
        const restored = !adjust && earlier !== undefined;
@@ -6577,7 +8037,7 @@ index f4a7c1b..ae448e0 100644
        // Short on time asks for 45 minutes, never longer than a catch-up's own shorter length (the
        // second review of round M).
        const defaultMinutes = request.profile.schedule.typicalDurationMinutes;
-@@ -4750,12 +4982,25 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4770,12 +5046,25 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        ) {
          // A hard start still eases the rest: never "full workout kept" while it does (the review
          // of item 42).
@@ -6606,7 +8066,7 @@ index f4a7c1b..ae448e0 100644
          };
        }
        const settled = settleKept(request, constraints);
-@@ -4781,7 +5026,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4801,7 +5090,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const more = sets > 0 && change.more;
        const { easier, harder } = change;
        const parts: string[] = [];
@@ -6624,7 +8084,7 @@ index f4a7c1b..ae448e0 100644
        if (fewer || easier) parts.push(cut.filter(Boolean).join(' with '));
        if (more || harder) {
          parts.push(
-@@ -4793,6 +5047,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4813,6 +5111,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          );
        }
        const back = restored && parts.length === 1 && (more || harder);
@@ -6635,7 +8095,7 @@ index f4a7c1b..ae448e0 100644
        // A sore joint is named only where a lift it rules out, with sets still to come, left the plan
        // or stopped for it.
        const { isDone } = classify(request);
-@@ -4827,20 +5085,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4847,20 +5149,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          workout,
          constraints,
          duration: choice,
@@ -6671,7 +8131,7 @@ index f4a7c1b..ae448e0 100644
          // Nothing left to bring back (the lift under way keeps its sets, and sets at their fewest
          // stay): no claim that anything came back. Otherwise the words name only what changed.
          unchanged:
-@@ -4911,6 +5170,41 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4931,6 +5234,41 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        };
      }
  
@@ -6713,7 +8173,7 @@ index f4a7c1b..ae448e0 100644
      case 'bad-start': {
        // Maintenance 26, item 42 (docs/research/bad-start.md): the first two lifts that can be
        // judged fell well short, or no longer do after an undo or a correction.
-@@ -4919,15 +5213,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4939,15 +5277,8 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const before = shownAdjust(request.constraints);
        const after = shownAdjust(constraints);
        const names = trigger.lifts.map((id) => requireExercise(id).name).join(' and ');
@@ -6731,7 +8191,7 @@ index f4a7c1b..ae448e0 100644
        // The ease is laid over the plan, or taken off it, as a layer (the sixth pass).
        const workout = layer.finish(request.workout, constraints);
        // As a check-in's words: only what changed on the lifts still to come (Maintenance 24).
-@@ -4948,7 +5235,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -4968,7 +5299,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                : '';
        // "Back to plan" only when nothing else of the day's settings stays (a check-in, harder or
        // easier): otherwise the lifts come back to those (the review of item 42).
@@ -6740,7 +8200,7 @@ index f4a7c1b..ae448e0 100644
        const up = [more ? 'sets' : '', change.harder ? 'effort' : ''].filter(Boolean).join(' and ');
        return {
          ...base,
-@@ -5241,6 +5528,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -5271,6 +5602,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const existing = entry.sets.find((set) => set.kind === 'drop');
        if (trigger.on) {
          if (!exercise.dropSetSafe) throw new Error(`${exercise.name} is not safe for a drop set.`);
@@ -6805,7 +8265,7 @@ index 581f317..c3ae861 100644
        return trigger.time ? 'Fitting to an exact end time' : 'Returning to the chosen length';
      case 'session-kind':
 diff --git a/src/engine/recalibration/types.ts b/src/engine/recalibration/types.ts
-index 40cdf35..c2b7caf 100644
+index ec99c11..149d4a4 100644
 --- a/src/engine/recalibration/types.ts
 +++ b/src/engine/recalibration/types.ts
 @@ -1,3 +1,4 @@
@@ -6813,7 +8273,7 @@ index 40cdf35..c2b7caf 100644
  import type { MuscleId } from '../../catalog/muscles/muscles';
  import type { StrengthMaxes } from '../progression/maxes';
  import type { DeloadWindow } from '../planning/deload';
-@@ -22,7 +23,10 @@ import type { DurationChoice, GeneratedWorkout, SetKind } from '../workout/types
+@@ -22,7 +23,10 @@ import type { DurationChoice, EmptiedPlan, GeneratedWorkout, SetKind } from '../
  
  export type RecalibrationScope = 'local' | 'partial' | 'full';
  
@@ -6845,7 +8305,20 @@ index 40cdf35..c2b7caf 100644
    | { type: 'end-by'; time: string | null }
    /** The full session on a day that offers a catch-up, or the catch-up again (Maintenance 31). */
    | { type: 'session-kind'; full: boolean; kind?: 'catch-up' | 'second' };
-@@ -204,6 +214,12 @@ export interface SessionConstraints {
+@@ -197,6 +207,12 @@ export interface SessionConstraints {
+   /** ISO time the session must end by, when the exact-end mode is on. */
+   endBy: string | null;
+   readiness: Readiness | null;
++  /**
++   * The day's check-in was told with a hard start in force (the second review of Maintenance 33):
++   * the start's reading reads none of it, so it never takes the hard start back. Absent on a
++   * session saved before, and for a check-in told before a hard start.
++   */
++  checkInAfterStart?: true;
+   /** -2 (much easier) to 2 (much harder) for the remaining work. */
+   intensity: number;
+   /**
+@@ -204,6 +220,12 @@ export interface SessionConstraints {
     * check-in's treatment, never on top of one. Absent on a session saved before.
     */
    badStart?: boolean;
@@ -6860,10 +8333,10 @@ index 40cdf35..c2b7caf 100644
    /** A coach focus: the session leads with this muscle. */
 diff --git a/src/engine/recovery/againstAsked.ts b/src/engine/recovery/againstAsked.ts
 new file mode 100644
-index 0000000..5cd7ec4
+index 0000000..25dc6bd
 --- /dev/null
 +++ b/src/engine/recovery/againstAsked.ts
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,66 @@
 +/**
 + * A set read against what it asked (Maintenance 33; the eighth review of round N, and the first
 + * review of Maintenance 33). Every reading that sets a lift's session against another's to see a
@@ -6875,7 +8348,9 @@ index 0000000..5cd7ec4
 + * session, a day at the back-offs' load, a day's reserve), each is read against its own ask, reps
 + * anywhere in its range at its load being as asked, as the progression reads them: the plan's own
 + * change, lifted as asked, is never a fall, while a set short of its range, or lighter than asked, is.
-+ * A set saved with no target is read as it is, and set only against another such.
++ * A set past what it asked reads as asked, no more (the second review of Maintenance 33: reps past
++ * the range before a load step read the step, lifted as asked, as a fall). A set saved with no
++ * target is read as it is, and set only against another such.
 + */
 +
 +/** A set's max by the reader's own rule, from its load, reps and reserve. */
@@ -6926,7 +8401,7 @@ index 0000000..5cd7ec4
 +  const asked = read.asked as number;
 +  const before = earlier.asked as number;
 +  if (asked <= 0 || before <= 0) return null;
-+  return read.lifted / asked / (earlier.lifted / before);
++  return Math.min(1, read.lifted / asked) / Math.min(1, earlier.lifted / before);
 +}
 diff --git a/src/engine/recovery/backOffs.skippedTopDrift.test.ts b/src/engine/recovery/backOffs.skippedTopDrift.test.ts
 index 32f2e6c..5b94fd8 100644
@@ -6942,7 +8417,7 @@ index 32f2e6c..5b94fd8 100644
      expect(fatigue.evidence.join(' ')).not.toContain('Estimated maxes fell');
      expect(fatigue.performanceDrift ?? 0).toBeGreaterThanOrEqual(0);
 diff --git a/src/engine/recovery/fatigue.test.ts b/src/engine/recovery/fatigue.test.ts
-index e4e1132..245b198 100644
+index e4e1132..5e44f67 100644
 --- a/src/engine/recovery/fatigue.test.ts
 +++ b/src/engine/recovery/fatigue.test.ts
 @@ -11,7 +11,7 @@ describe('fatigue interpretation', () => {
@@ -7005,7 +8480,7 @@ index e4e1132..245b198 100644
    });
  
    it('reads the check-in trend, long rests, and performance drift', () => {
-@@ -100,13 +90,98 @@ describe('fatigue interpretation', () => {
+@@ -100,13 +90,99 @@ describe('fatigue interpretation', () => {
      };
      const history = [slow(1, 165), slow(3, 180), slow(5, 185), slow(7, 185)];
      const signal = interpretFatigue(history, NOW);
@@ -7089,10 +8564,11 @@ index e4e1132..245b198 100644
 +    expect(
 +      interpretFatigue([pressed(1, 35, 35, 6), pressed(3, 30, 30, 10)], NOW_AT).performanceDrift,
 +    ).toBe(0);
-+    // Past the top of its range, a session did more than asked; under the bottom, less.
++    // Past the top of its range, a session reads as asked, no more (the second review of
++    // Maintenance 33: the step lifted as asked read 4.8% down); under the bottom, less.
 +    expect(
 +      interpretFatigue([pressed(1, 35, 35, 6), pressed(3, 30, 30, 12)], NOW_AT).performanceDrift,
-+    ).toBe(-4.8);
++    ).toBe(0);
 +    expect(
 +      interpretFatigue([pressed(1, 35, 35, 4), pressed(3, 30, 30, 10)], NOW_AT).performanceDrift,
 +    ).toBe(-5.6);
@@ -7470,6 +8946,204 @@ index 0000000..a3f36a2
 +    expect(fatigue.performanceDrift ?? 0).toBeGreaterThan(-5);
 +    expect(fatigue.evidence.join(' ')).not.toMatch(/fell/);
 +    expect(fatigue.score).toBe(0);
++  });
++});
+diff --git a/src/engine/recovery/fatigueStepAfterRangePassed.test.ts b/src/engine/recovery/fatigueStepAfterRangePassed.test.ts
+new file mode 100644
+index 0000000..9277748
+--- /dev/null
++++ b/src/engine/recovery/fatigueStepAfterRangePassed.test.ts
+@@ -0,0 +1,108 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { recommendDeload } from '../planning/deload';
++import { interpretFatigue } from './fatigue';
++import { allEntries } from '../workout/types';
++import { generateWorkout } from '../workoutGenerator/generate';
++
++/**
++ * The second adversarial review of Maintenance 33: the plan's own load step after the reps went past
++ * the top of the range, lifted exactly as asked, reads as falling performance.
++ *
++ * Steps: a hypertrophy-focus lifter's bench press asks 185 lb for 4-6 reps at 2 in reserve. They do
++ * 5 a set one session and 9 a set the next (2 in reserve each time). The plan adds 5 lb ("Every set
++ * cleared the floor with reps in reserve: add 5 lb"): 190 lb for 4-6 at 2. They lift it exactly as
++ * asked, even at the top of the range: 6 reps a set, 2 in reserve.
++ *
++ * The rule: the first review's fix, "Every set against what it asked" (the report; againstAsked.ts):
++ * "Where it asked something else (a load step ...), each is read against its own ask, reps anywhere
++ * in its range at its load being as asked ...: the plan's own change, lifted as asked, is never a
++ * fall, while a set short of its range, or lighter than asked, is"; the report: "So the plan's load
++ * step after the reps climbed its range is no fall in the fatigue score".
++ *
++ * What happens: the earlier set is credited for its reps past the range (9 on a top of 6 reads 1.08
++ * of what it asked), while today's set, stopped where the plan asked, can read no more than 1.00, so
++ * the plan's own 5 lb step reads "Lifts fell 7.7% against what their sets asked over the last two
++ * sessions" (+1), and the deload advice repeats it. After 10 reps on a top of 6 the as-asked step
++ * reads 10% (+2), whatever the reps today within the range. A set lifted as asked, at the top of
++ * its range, is no fall by the model's own words.
++ *
++ * Synthetic data only.
++ */
++
++const START = '2026-08-03T12:00:00.000Z';
++const DAY = 86_400_000;
++const profile = {
++  ...createDefaultProfile(START),
++  bodyweight: 185,
++  programStyle: 'hypertrophy-focus' as const,
++};
++const gym = createDefaultLocations({ gymAccess: true }, START).find((place) => place.id === 'gym')!;
++
++/** A session of the bench press: three sets at the load and reps given, 2 in reserve as asked. */
++function bench(index: number, weight: number, reps: number): WorkoutRecord {
++  const at = new Date(Date.parse(START) + index * 3.5 * DAY).toISOString();
++  return {
++    id: `bench-${index}`,
++    startedAt: at,
++    completedAt: at,
++    locationId: 'gym',
++    templateId: 'push-arms',
++    endedEarly: false,
++    rating: null,
++    skippedExerciseIds: [],
++    painJoints: [],
++    readiness: null,
++    prs: [],
++    entries: [
++      {
++        exerciseId: 'barbell-bench-press',
++        role: 'primary-strength',
++        plannedSets: 3,
++        sets: [0, 1, 2].map((setIndex) => ({
++          kind: 'working' as const,
++          reps,
++          weight,
++          rir: 2,
++          completed: true,
++          setIndex,
++          targetReps: [4, 6] as [number, number],
++          targetRir: 2,
++          targetWeight: weight,
++        })),
++      },
++    ],
++  };
++}
++
++describe('the fatigue score at the plan load step after reps past the range', () => {
++  it('reads no fall when the step is lifted as asked', () => {
++    const history = [bench(0, 185, 5), bench(1, 185, 9)];
++    const at = new Date(Date.parse(START) + 2 * 3.5 * DAY).toISOString();
++    const plan = generateWorkout({
++      profile,
++      location: gym,
++      history,
++      now: at,
++      duration: 'default',
++      constraints: { templateId: 'push-arms' },
++    });
++    const asked = allEntries(plan.blocks)
++      .find((entry) => entry.exerciseId === 'barbell-bench-press')!
++      .sets.filter((set) => set.kind === 'working')
++      .map((set) => [set.targetWeight, set.targetReps, set.targetRir]);
++    // The plan's own step: 5 lb more, 4-6 at 2 in reserve.
++    expect(asked[0]).toEqual([190, [4, 6], 2]);
++
++    // Lifted exactly as asked, at the top of the range.
++    const next = bench(2, 190, 6);
++    const fatigue = interpretFatigue([...history, next], at);
++    expect(fatigue.performanceDrift ?? 0).toBeGreaterThan(-5);
++    expect(fatigue.evidence.join(' ')).not.toMatch(/fell/);
++    expect(fatigue.score).toBe(0);
++    const advice = recommendDeload([...history, next], fatigue, profile, at);
++    expect(advice.reasons.join(' ')).not.toMatch(/fell/);
++  });
++});
+diff --git a/src/engine/recovery/longLengthVariants.test.ts b/src/engine/recovery/longLengthVariants.test.ts
+new file mode 100644
+index 0000000..c842e76
+--- /dev/null
++++ b/src/engine/recovery/longLengthVariants.test.ts
+@@ -0,0 +1,78 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { recoveryWindows } from './recovery';
++
++/**
++ * The second adversarial review of Maintenance 33: the long-length adjuster reads the barbell
++ * Romanian deadlift and the dumbbell overhead extension, but not the dumbbell Romanian deadlift (the
++ * plan's own hinge on the full-body day) nor the cable overhead triceps extension.
++ *
++ * Steps: two sessions of the same work at the same reserve, three sets of 8 at 2 in reserve: one of
++ * the Romanian deadlift, one of the Dumbbell Romanian Deadlift ("Dumbbell RDL"); and two of the
++ * triceps: the Overhead Triceps Extension and the Cable Overhead Triceps Extension ("Rope Overhead
++ * Extension").
++ *
++ * The rule: the windows' adjuster for long-length work (the report: "long-length work such as
++ * Romanian deadlifts (12 h)"; recovery-time-course.md: "Eccentric or long-length (RDL, Nordic, deep
++ * fly, overhead extension): +12 h"); recovery.ts `LONG_LENGTH_LIFTS`: "Lifts that load a muscle at
++ * long lengths ...: the Romanian deadlift, the deep fly, the overhead extension".
++ *
++ * What happens: the set lists four catalogue ids, so the same hinge with dumbbells and the same
++ * overhead extension on a cable set windows 12 h shorter than their namesakes: the hamstrings 48 h
++ * after the dumbbell RDL against 60 h after the RDL, the triceps 36 h after the cable overhead
++ * extension against 48 h after the dumbbell one.
++ *
++ * Synthetic data only.
++ */
++
++const DONE = '2026-09-07T12:00:00.000Z';
++
++function session(exerciseId: string, weight: number): WorkoutRecord {
++  return {
++    id: exerciseId,
++    startedAt: DONE,
++    completedAt: DONE,
++    locationId: 'gym',
++    templateId: null,
++    endedEarly: false,
++    rating: null,
++    skippedExerciseIds: [],
++    painJoints: [],
++    readiness: null,
++    prs: [],
++    entries: [
++      {
++        exerciseId,
++        plannedSets: 3,
++        sets: [0, 1, 2].map((setIndex) => ({
++          kind: 'working' as const,
++          reps: 8,
++          weight,
++          rir: 2,
++          completed: true,
++          setIndex,
++          targetReps: [6, 10] as [number, number],
++          targetRir: 2,
++          targetWeight: weight,
++        })),
++      },
++    ],
++  };
++}
++
++const hours = (record: WorkoutRecord, muscle: 'hamstrings' | 'triceps') =>
++  recoveryWindows([record], { now: DONE }).get(muscle)?.hours;
++
++describe('long-length work by any of its variants', () => {
++  it('lengthens the hamstrings window after a dumbbell Romanian deadlift as after a barbell one', () => {
++    expect(hours(session('dumbbell-romanian-deadlift', 50), 'hamstrings')).toBe(
++      hours(session('romanian-deadlift', 135), 'hamstrings'),
++    );
++  });
++
++  it('lengthens the triceps window after a cable overhead extension as after a dumbbell one', () => {
++    expect(hours(session('cable-overhead-triceps-extension', 40), 'triceps')).toBe(
++      hours(session('overhead-triceps-extension', 40), 'triceps'),
++    );
 +  });
 +});
 diff --git a/src/engine/recovery/painReport.test.ts b/src/engine/recovery/painReport.test.ts
@@ -8024,10 +9698,10 @@ index 0000000..656ee85
 +});
 diff --git a/src/engine/recovery/recovery.ts b/src/engine/recovery/recovery.ts
 new file mode 100644
-index 0000000..e484000
+index 0000000..9c65cab
 --- /dev/null
 +++ b/src/engine/recovery/recovery.ts
-@@ -0,0 +1,643 @@
+@@ -0,0 +1,657 @@
 +import { getExercise } from '../../catalog/exercises/catalog';
 +import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 +import { MUSCLE_IDS, type MuscleId } from '../../catalog/muscles/muscles';
@@ -8093,12 +9767,15 @@ index 0000000..e484000
 +/**
 + * Lifts that load a muscle at long lengths or stress the lowering (direction research: 11194107,
 + * 20852880): the Romanian deadlift, the deep fly, the overhead extension, and by the same reading
-+ * the incline curl.
++ * the incline curl, each with every implement the catalog has for it (the second review of
++ * Maintenance 33: the dumbbell Romanian deadlift and the cable overhead extension were missed).
 + */
 +export const LONG_LENGTH_LIFTS: ReadonlySet<string> = new Set([
 +  'romanian-deadlift',
++  'dumbbell-romanian-deadlift',
 +  'dumbbell-fly',
 +  'overhead-triceps-extension',
++  'cable-overhead-triceps-extension',
 +  'incline-dumbbell-curl',
 +]);
 +
@@ -8143,15 +9820,21 @@ index 0000000..e484000
 + * The day's context for the windows (Maintenance 33): today's check-in (a short night; energy
 + * clearly low against the lifter's own, `readCheckIn`), the time, and what the lifter reset. Every
 + * reader of today's windows reads the day so (the first review of Maintenance 33: the Plan screen
-+ * forgot the resets, the hard start the check-in).
++ * forgot the resets, the hard start the check-in; the second: the completion forgot the check-in,
++ * and the Plan screen read yesterday's as today's). A check-in is the day's its session was made on
++ * (`madeAt`, given by a reader that may hold an earlier day's session): one from an earlier day is
++ * none of today's.
 + */
 +export function dayRecovery(input: {
 +  readiness: Readiness | null | undefined;
++  /** When the session the check-in belongs to was made; absent, the check-in is today's. */
++  madeAt?: string | null;
 +  history: readonly WorkoutRecord[];
 +  now: string;
 +  resets: Pick<LearnedResets, 'recovery'> | null | undefined;
 +}): RecoveryContext {
-+  const readiness = input.readiness ?? null;
++  const today = !input.madeAt || localDayKey(input.madeAt) === localDayKey(input.now);
++  const readiness = today ? (input.readiness ?? null) : null;
 +  return {
 +    readiness,
 +    lowEnergy: readCheckIn(readiness, input.history, input.now).worse.includes('energy'),
@@ -8172,8 +9855,13 @@ index 0000000..e484000
 +
 +type LoggedSet = WorkoutRecord['entries'][number]['sets'][number];
 +
-+/** A set's reserve as logged, or, where none was logged, as its target asked. */
++/**
++ * A set's reserve as it ended: a reserve check taken on to failure (item 43) ended at none, whatever
++ * its stop read (the second review of Maintenance 33: it set its muscle's window as a set short of
++ * failure); else as logged, or, where none was logged, as its target asked.
++ */
 +function reserveOf(set: LoggedSet): number | null {
++  if (set.reserveCheck && !set.reserveCheck.stopped) return 0;
 +  if (typeof set.rir === 'number') return set.rir;
 +  return typeof set.targetRir === 'number' ? set.targetRir : null;
 +}
@@ -8671,6 +10359,85 @@ index 0000000..e484000
 +  }
 +  return found;
 +}
+diff --git a/src/engine/recovery/reserveCheckFailureWindow.test.ts b/src/engine/recovery/reserveCheckFailureWindow.test.ts
+new file mode 100644
+index 0000000..30a4e00
+--- /dev/null
++++ b/src/engine/recovery/reserveCheckFailureWindow.test.ts
+@@ -0,0 +1,73 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { withReadReserve } from '../progression/reserveCheck';
++import { recoveryWindows } from './recovery';
++
++/**
++ * The second adversarial review of Maintenance 33: a reserve check's set taken to failure (item 43)
++ * sets the muscle's window as if it had stopped short of failure.
++ *
++ * Steps: the lifter's triceps pushdown, three sets of 10 at 1 in reserve (8-12 asked at 1); the
++ * last is the day's reserve check: at the usual stop (10 reps, "1 in reserve") they go on to
++ * momentary failure, 12 reps in all, as the check asks. Nothing else works the triceps.
++ *
++ * The rule: the windows key on how close the sets went to failure (the report's table: "To failure,
++ * or a long set a rep short", 48 h upper body; recovery-time-course.md, "Prior R per muscle, from its
++ * hardest prime-mover sets": "0 RIR", 48 h upper); reserve-check.md on what a set to failure costs:
++ * "more fatigue, muscle damage and discomfort, recovered within 24 to 48 hours"; the windows read
++ * the log "as the rules read it" (the read history), and the report counts the check's set as a
++ * working set ("A drop set is not read as hard work ...: a muscle's window and 'too soon' read its
++ * working sets").
++ *
++ * What happens: the check set is read at its stop: 10 reps, its reserve the measured 2 (the read
++ * history, `measuredReserve`) or the judged 1 (as logged), never the failure it was taken to, so the
++ * triceps' window is 36 h ("sets one rep short of failure"), as for a session with no set to failure,
++ * on the Plan screen, the completion, the hard start and "too soon" alike.
++ *
++ * Synthetic data only.
++ */
++
++const DONE = '2026-09-07T12:00:00.000Z';
++
++const pushdowns: WorkoutRecord = {
++  id: 'pushdowns',
++  startedAt: DONE,
++  completedAt: DONE,
++  locationId: 'gym',
++  templateId: 'pull-arms',
++  endedEarly: false,
++  rating: null,
++  skippedExerciseIds: [],
++  painJoints: [],
++  readiness: null,
++  prs: [],
++  entries: [
++    {
++      exerciseId: 'cable-triceps-pushdown',
++      plannedSets: 3,
++      sets: [0, 1, 2].map((setIndex) => ({
++        kind: 'working' as const,
++        reps: 10,
++        weight: 50,
++        rir: 1,
++        completed: true,
++        setIndex,
++        targetReps: [8, 12] as [number, number],
++        targetRir: 1,
++        targetWeight: 50,
++        // The last set is the reserve check: on to failure, 12 reps in all.
++        ...(setIndex === 2 ? { reserveCheck: { total: 12 } } : {}),
++      })),
++    },
++  ],
++};
++
++describe('a reserve check set taken to failure', () => {
++  it('sets the triceps window a set to failure sets', () => {
++    // The log as the rules read it, as the coach, the Plan screen and the completion read it.
++    const read = withReadReserve([pushdowns], null);
++    const window = recoveryWindows(read, { now: DONE }).get('triceps');
++    expect(window?.hours).toBe(48);
++    expect(window?.reasons[0]).toBe('a set to failure or near it: 48 h');
++  });
++});
 diff --git a/src/engine/rules/ruleTable.ts b/src/engine/rules/ruleTable.ts
 new file mode 100644
 index 0000000..8f0b036
@@ -9244,7 +11011,7 @@ index 086aa92..54f52b6 100644
      workout: {
        ...workout,
 diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
-index 828f2ed..63254cf 100644
+index 45a3736..8fe5b9a 100644
 --- a/src/engine/workoutGenerator/generate.ts
 +++ b/src/engine/workoutGenerator/generate.ts
 @@ -82,6 +82,7 @@ import {
@@ -9252,10 +11019,10 @@ index 828f2ed..63254cf 100644
  import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
  import {
 +  BACK_OFF,
+   backOffCap,
    backOffLoadAfter,
    owedBackOffLoad,
-   backOffRir,
-@@ -219,6 +220,16 @@ export interface PrescriptionAdjustment {
+@@ -222,6 +223,16 @@ export interface PrescriptionAdjustment {
    restFactor: number;
    /** Multiplier on every target load (a deload week uses 0.9). */
    loadScale?: number;
@@ -9272,7 +11039,7 @@ index 828f2ed..63254cf 100644
  }
  
  /** A logged set as the session context needs it: whose, what kind, when, and whether it was skipped. */
-@@ -1383,6 +1394,7 @@ function withDeload(
+@@ -1385,6 +1396,7 @@ function withDeload(
          rir: (day?.rir ?? 0) + DELOAD_RIR_DELTA,
          restFactor: day?.restFactor ?? 1,
          loadScale: DELOAD_LOAD_SCALE,
@@ -9280,7 +11047,7 @@ index 828f2ed..63254cf 100644
        }
      : day;
  }
-@@ -1408,7 +1420,7 @@ function adjustPrescription(
+@@ -1410,7 +1422,7 @@ function adjustPrescription(
    return {
      ...prescription,
      sets: clamp(prescription.sets + adjust.sets, floor, 5),
@@ -9289,7 +11056,7 @@ index 828f2ed..63254cf 100644
      restSeconds: Math.max(
        MIN_REST_SECONDS[restCategory(role)],
        round5(prescription.restSeconds * adjust.restFactor),
-@@ -1462,12 +1474,16 @@ export function pushedPrescription(
+@@ -1464,12 +1476,16 @@ export function pushedPrescription(
      return {
        ...adjusted,
        sets: clamp(sets + Math.min(0, adjust?.sets ?? 0), 2, sets),
@@ -9308,7 +11075,7 @@ index 828f2ed..63254cf 100644
  }
  
  /** Whether an exercise trains one of a lift's primary muscles as one of its own. */
-@@ -1762,7 +1778,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1767,7 +1783,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      chosen: chosenBy([], push),
      ...(resting.size > 0 ? { resting } : {}),
    };
@@ -9317,7 +11084,7 @@ index 828f2ed..63254cf 100644
  
    // Entries the caller keeps: logged work is frozen; pinned picks, explicit
    // selections, and accepted alternatives stay in their slots.
-@@ -1879,7 +1895,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1884,7 +1900,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        prescription,
        suits: backOffsSuit(exercise, role, profile),
        profile,
@@ -9327,7 +11094,7 @@ index 828f2ed..63254cf 100644
        exerciseId: exercise.id,
        history,
        load: { step: loading.step, floor, loading },
-@@ -3009,7 +3026,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -3021,7 +3038,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
    // to failure, so a style that takes nothing to failure plans none.
    // None in a catch-up or a second workout: a few sets each, none to failure (the review of round M).
@@ -9403,8 +11170,59 @@ index 619641b..fc5f456 100644
    return {
      workout: {
        ...workout,
+diff --git a/src/features/coach/coachEstimate.test.ts b/src/features/coach/coachEstimate.test.ts
+new file mode 100644
+index 0000000..23b0530
+--- /dev/null
++++ b/src/features/coach/coachEstimate.test.ts
+@@ -0,0 +1,45 @@
++import { describe, expect, it, vi } from 'vitest';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import { conductCoach } from '../../engine/coach/coachConductor';
++import type { ReserveEstimate } from '../../engine/progression/reserveCheck';
++import { TEST_NOW, createTestStore } from '../../test/testStore';
++import { coachContextOf } from './useCoach';
++
++vi.mock('../../engine/coach/coachConductor', async (original) => ({
++  ...(await original<typeof import('../../engine/coach/coachConductor')>()),
++  conductCoach: vi.fn(() => null),
++}));
++
++/**
++ * The second review of Maintenance 33: the coach reads today's sets as the rules read the log, so it
++ * is given the reserve-check estimate the log is read through (`readEstimate`). Synthetic data only.
++ */
++
++describe('the coach’s reading of today’s sets', () => {
++  it('is given the estimate the log is read through', async () => {
++    const { store } = createTestStore();
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
++      createDefaultLocations({ gymAccess: true }, TEST_NOW),
++    );
++    const estimate: ReserveEstimate = {
++      readings: 4,
++      scatter: 0.5,
++      mean: 1,
++      bias: 1,
++      sd: 0.3,
++      usable: true,
++      correction: 1,
++      band: [8, 14],
++    };
++    coachContextOf(
++      { ...store.getSnapshot(), lastExportAt: TEST_NOW, readEstimate: estimate },
++      Date.parse(TEST_NOW),
++    );
++    expect(vi.mocked(conductCoach)).toHaveBeenCalledWith(
++      expect.objectContaining({ reserveEstimate: estimate }),
++    );
++  });
++});
 diff --git a/src/features/coach/useCoach.ts b/src/features/coach/useCoach.ts
-index bc1dbc4..64f6a61 100644
+index bc1dbc4..07fe56a 100644
 --- a/src/features/coach/useCoach.ts
 +++ b/src/features/coach/useCoach.ts
 @@ -1,9 +1,14 @@
@@ -9425,7 +11243,7 @@ index bc1dbc4..64f6a61 100644
  import { coachingPolicy, type CoachingPolicy } from '../../engine/coach/experience';
  import { swapIsPast } from '../../engine/planning/lastingSwaps';
  import { planWeek } from '../../engine/planning/weeklyPlan';
-@@ -32,6 +37,8 @@ export type CoachParts = Pick<
+@@ -32,8 +37,12 @@ export type CoachParts = Pick<
    | 'lastingSwaps'
  > & {
    lastExportAt: AppState['localSettings']['lastExportAt'];
@@ -9433,8 +11251,12 @@ index bc1dbc4..64f6a61 100644
 +  coachShown?: AppState['coachShown'];
    /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
    learnedResets?: AppState['learnedResets'];
++  /** The reserve-check estimate the history is read through (the second review of Maintenance 33). */
++  readEstimate?: AppState['readEstimate'];
  };
-@@ -44,7 +51,7 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
+ 
+ /**
+@@ -44,7 +53,7 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
    const { session, profile, history, locations, cloud } = parts;
    if (!session || !profile) return null;
    const now = nowEpoch ? new Date(nowEpoch).toISOString() : session.createdAt;
@@ -9443,7 +11265,7 @@ index bc1dbc4..64f6a61 100644
    const strategy = analyzeStrategy({ history, profile, now, fatigue });
    const policy = coachingPolicy(profile.experience);
    const location = locations.find((candidate) => candidate.id === profile.currentLocationId);
-@@ -80,6 +87,7 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
+@@ -80,12 +89,14 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
      policy,
      routes: parts.coachRoutes,
      declines: parts.coachDeclines,
@@ -9451,16 +11273,24 @@ index bc1dbc4..64f6a61 100644
      location,
      loading: session.loading,
      upcoming: planWeek(profile, location, history, now, parts.learnedResets ?? null),
-@@ -109,6 +117,8 @@ export function useCoach(): CoachContext | null {
+     focus: parts.coachFocus?.muscle ?? null,
+     swaps: parts.lastingSwaps.filter((swap) => !swapIsPast(swap, now)),
+     resets: parts.learnedResets ?? null,
++    reserveEstimate: parts.readEstimate ?? null,
+   });
+   return { card, fatigue, strategy, policy };
+ }
+@@ -109,6 +120,9 @@ export function useCoach(): CoachContext | null {
    const cloud = useAppSelector((state) => state.cloud);
    const lastingSwaps = useAppSelector((state) => state.lastingSwaps);
    const learnedResets = useAppSelector((state) => state.learnedResets);
 +  const coachShown = useAppSelector((state) => state.coachShown);
++  const readEstimate = useAppSelector((state) => state.readEstimate);
 +  const store = useAppStore();
    const minute = useNow();
    // The minute clock, brought to a running rest's end when it comes, so an offer about the rest
    // goes as the rest ends (Maintenance 25).
-@@ -117,7 +127,7 @@ export function useCoach(): CoachContext | null {
+@@ -117,7 +131,7 @@ export function useCoach(): CoachContext | null {
    const restOver = useMomentReached(restEnd);
    const nowEpoch = restOver && restEnd !== null ? Math.max(minute, restEnd) : minute;
  
@@ -9469,19 +11299,21 @@ index bc1dbc4..64f6a61 100644
      () =>
        coachContextOf(
          {
-@@ -133,6 +143,7 @@ export function useCoach(): CoachContext | null {
+@@ -133,6 +147,8 @@ export function useCoach(): CoachContext | null {
            cloud,
            lastingSwaps,
            learnedResets,
 +          coachShown,
++          readEstimate,
          },
          nowEpoch,
        ),
-@@ -149,7 +160,16 @@ export function useCoach(): CoachContext | null {
+@@ -149,7 +165,17 @@ export function useCoach(): CoachContext | null {
        cloud,
        lastingSwaps,
        learnedResets,
 +      coachShown,
++      readEstimate,
        nowEpoch,
      ],
    );
@@ -9495,7 +11327,7 @@ index bc1dbc4..64f6a61 100644
 +  return context;
  }
 diff --git a/src/features/plan/PlanScreen.tsx b/src/features/plan/PlanScreen.tsx
-index eea50c7..7efbba9 100644
+index eea50c7..2ffa60e 100644
 --- a/src/features/plan/PlanScreen.tsx
 +++ b/src/features/plan/PlanScreen.tsx
 @@ -11,6 +11,7 @@ import { formatWindow, inDeloadWindow, recommendDeload } from '../../engine/plan
@@ -9506,23 +11338,25 @@ index eea50c7..7efbba9 100644
  import { muscleCoverage } from '../../engine/scoring/analytics';
  import { allEntries } from '../../engine/workout/types';
  import { useToast } from '../../components/Toast/useToast';
-@@ -59,17 +60,25 @@ export function PlanScreen() {
+@@ -59,17 +60,27 @@ export function PlanScreen() {
          : [],
      [profile, state.history, nowIso],
    );
 -  const recovery = useMemo(() => recoveryBalance(state.history, nowIso), [state.history, nowIso]);
 +  // Each muscle's window (Maintenance 33), its sets' reserve read as the rules read it (the coach's
-+  // "too soon" reads the same), today's short night or low energy on them all.
++  // "too soon" reads the same), today's short night or low energy on them all: the check-in of a
++  // session made today, never an earlier day's finished one (the second review).
 +  const readiness = state.session?.constraints.readiness ?? null;
++  const madeAt = state.session?.createdAt ?? null;
 +  const resets = state.learnedResets;
 +  const recovery = useMemo(
 +    () =>
 +      recoveryBalance(
 +        state.readHistory,
 +        nowIso,
-+        dayRecovery({ readiness, history: state.readHistory, now: nowIso, resets }),
++        dayRecovery({ readiness, madeAt, history: state.readHistory, now: nowIso, resets }),
 +      ),
-+    [state.readHistory, nowIso, readiness, resets],
++    [state.readHistory, nowIso, readiness, madeAt, resets],
 +  );
    const deloadAdvice = useMemo(() => {
      if (!profile) return null;
@@ -9539,7 +11373,7 @@ index eea50c7..7efbba9 100644
    const [savedName, setSavedName] = useState('');
    // "#/plan/places" brings the places card into view: Settings links to it.
    const section = useHashSection();
-@@ -170,10 +179,12 @@ export function PlanScreen() {
+@@ -170,10 +181,12 @@ export function PlanScreen() {
                      : rows
                          .slice(0, 8)
                          .map((row) =>
@@ -9698,6 +11532,108 @@ index 0000000..3564c12
 +    const balance = await screen.findByTestId('recovery-balance');
 +    expect(balance.textContent).toContain('Chest (16 h left)');
 +    expect(balance.textContent).not.toContain('Chest (4 h left)');
++  });
++});
+diff --git a/src/features/plan/planBalanceStaleCheckIn.screens.test.tsx b/src/features/plan/planBalanceStaleCheckIn.screens.test.tsx
+new file mode 100644
+index 0000000..5678e1d
+--- /dev/null
++++ b/src/features/plan/planBalanceStaleCheckIn.screens.test.tsx
+@@ -0,0 +1,96 @@
++import { act, render, screen } from '@testing-library/react';
++import { describe, expect, it, vi } from 'vitest';
++import { App } from '../../app/App';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import { allEntries } from '../../engine/workout/types';
++import { Providers, createTestStore } from '../../test/testStore';
++
++const clock = vi.hoisted(() => ({ now: '2026-09-02T18:00:00.000Z' }));
++
++vi.mock('../../features/library/useCustomMedia', () => ({ useCustomMedia: () => null }));
++vi.mock('../../core/time/clock', async (original) => ({
++  ...(await original<typeof import('../../core/time/clock')>()),
++  useNow: () => Date.parse(clock.now),
++  useMomentReached: () => false,
++}));
++
++/**
++ * The second adversarial review of Maintenance 33: the Plan screen reads yesterday's check-in as
++ * today's while yesterday's finished workout is still the session.
++ *
++ * Steps: Wednesday evening the lifter checks in with sleep "Poor" (a short night), trains the bench
++ * press (every working set 5 at 185 lb, 2 in reserve) and finishes; they close the app on the
++ * completion screen without tapping Done. Thursday at 9:00 (15 h later), with no check-in today, they
++ * open Plan. Then they tap Done on Wednesday's completion (nothing logged changes) and look again.
++ *
++ * The rule: the whole-body layer is today's ("a short night on today's check-in ... lengthens every
++ * window by 12 h", the report; `RecoveryContext.readiness`: "Today's check-in"); the first review's
++ * fix: "every reader of today's windows reads the same day's context" (`dayRecovery`: "today's
++ * check-in ..., the time, and what the lifter reset").
++ *
++ * What happens: the store keeps a finished session until Done, across days, and `PlanScreen` passes
++ * `state.session?.constraints.readiness` as today's check-in, so on Thursday the chest's window is
++ * still lengthened by Wednesday's short night: "Chest (33 h left)". After Done, with the same log at
++ * the same minute, the same screen says "Chest (21 h left)", as the coach's windows for Thursday's
++ * session read it.
++ *
++ * Synthetic data only.
++ */
++
++describe('the Plan screen the day after a finished workout', () => {
++  it('reads no check-in from an earlier day as today’s', async () => {
++    const handle = createTestStore({ now: () => clock.now });
++    const { store } = handle;
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(clock.now), bodyweight: 185 },
++      createDefaultLocations({ gymAccess: true }, clock.now),
++    );
++    await store.recalibrate({
++      type: 'readiness',
++      readiness: {
++        energy: 3,
++        soreness: 2,
++        sleep: 1,
++        motivation: 3,
++        jointDiscomfort: [],
++        timePressure: false,
++      },
++    });
++    store.startWorkout();
++    const entry = allEntries(store.getSnapshot().session!.workout.blocks)[0]!;
++    expect(entry.exerciseId).toBe('barbell-bench-press');
++    for (const set of entry.sets) {
++      if (set.kind === 'working') {
++        await store.logSet(entry.id, set.index, { reps: 5, weight: 185, rir: 2 });
++      }
++    }
++    await store.finishWorkout(
++      { effort: 'right', pain: false, energyAfter: 4, note: '' },
++      { endedEarly: true },
++    );
++
++    // Thursday morning: the app opened again, Wednesday's completion still the session.
++    clock.now = '2026-09-03T09:00:00.000Z';
++    const again = createTestStore({
++      factory: handle.factory,
++      storage: handle.storage,
++      now: () => clock.now,
++    });
++    await again.store.hydrate();
++    expect(again.store.getSnapshot().session?.status).toBe('completed');
++
++    act(() => {
++      window.location.hash = '#/plan';
++    });
++    render(
++      <Providers store={again.store}>
++        <App />
++      </Providers>,
++    );
++    const balance = await screen.findByTestId('recovery-balance');
++    // No check-in today: 36 h for sets two short of failure, 15 h of them gone.
++    expect(balance.textContent).toContain('Chest (21 h left)');
 +  });
 +});
 diff --git a/src/features/today/ReadinessSheet.tsx b/src/features/today/ReadinessSheet.tsx
@@ -9945,8 +11881,103 @@ index 0000000..9e99a98
 +    expect(screen.getAllByRole('button', { name: 'Update check-in' }).length).toBeGreaterThan(0);
 +  });
 +});
+diff --git a/src/features/workout/completionShortNight.screens.test.tsx b/src/features/workout/completionShortNight.screens.test.tsx
+new file mode 100644
+index 0000000..0042328
+--- /dev/null
++++ b/src/features/workout/completionShortNight.screens.test.tsx
+@@ -0,0 +1,89 @@
++import { act, render, screen } from '@testing-library/react';
++import { describe, expect, it, vi } from 'vitest';
++import { App } from '../../app/App';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import { allEntries } from '../../engine/workout/types';
++import { Providers, TEST_NOW, createTestStore } from '../../test/testStore';
++
++vi.mock('../../features/library/useCustomMedia', () => ({ useCustomMedia: () => null }));
++vi.mock('../../core/time/clock', async (original) => ({
++  ...(await original<typeof import('../../core/time/clock')>()),
++  useNow: () => Date.parse(PLAN_NOW),
++  useMomentReached: () => false,
++}));
++
++/**
++ * The second adversarial review of Maintenance 33: after a short night the completion screen and the
++ * Plan screen give the same session's muscles different windows.
++ *
++ * Steps: the lifter checks in with sleep "Poor" (a short night), trains the bench press (every
++ * working set 5 reps at 185 lb, 2 in reserve) and finishes. The completion screen gives the
++ * session's recovery line; a minute later they open Plan.
++ *
++ * The rule: the windows' whole-body layer, "a short night on today's check-in ... lengthens every
++ * window by 12 h" (the report; recovery.ts `wholeBodyLayer`); the report: "The windows are read where
++ * recovery is said: the Plan screen's balance ..., the completion screen (each muscle's own window
++ * from that session), ... each with the same day's context (today's check-in and what the lifter
++ * reset)"; the first review's fix: "every reader of today's windows reads the same day's context".
++ *
++ * What happens: `buildCompletion` reads `recoveryWindows(after, { now, resets })` without the
++ * session's check-in, so the completion says "Chest and Triceps about 36 h", while the Plan screen
++ * (which passes `dayRecovery` with the session's check-in) says "Chest (48 h left)" for the same
++ * work a minute later.
++ *
++ * Synthetic data only.
++ */
++
++const PLAN_NOW = new Date(Date.parse(TEST_NOW) + 60_000).toISOString();
++
++describe('the recovery line after a short night', () => {
++  it('gives the completion the window the Plan screen gives', async () => {
++    const { store } = createTestStore();
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
++      createDefaultLocations({ gymAccess: true }, TEST_NOW),
++    );
++    const checkIn = await store.recalibrate({
++      type: 'readiness',
++      readiness: {
++        energy: 3,
++        soreness: 2,
++        sleep: 1,
++        motivation: 3,
++        jointDiscomfort: [],
++        timePressure: false,
++      },
++    });
++    expect(checkIn?.ok).toBe(true);
++    store.startWorkout();
++    const entry = allEntries(store.getSnapshot().session!.workout.blocks)[0]!;
++    expect(entry.exerciseId).toBe('barbell-bench-press');
++    for (const set of entry.sets) {
++      if (set.kind === 'working') {
++        await store.logSet(entry.id, set.index, { reps: 5, weight: 185, rir: 2 });
++      }
++    }
++    const completion = await store.finishWorkout(
++      { effort: 'right', pain: false, energyAfter: 4, note: '' },
++      { endedEarly: true },
++    );
++
++    act(() => {
++      window.location.hash = '#/plan';
++    });
++    render(
++      <Providers store={store}>
++        <App />
++      </Providers>,
++    );
++    const balance = await screen.findByTestId('recovery-balance');
++    // The Plan screen: 36 h for sets two short of failure, 12 h more for the short night.
++    expect(balance.textContent).toContain('Chest (48 h left)');
++    // The completion, for the same work, must say the same.
++    expect(completion.recoveryNote).toMatch(
++      /^Recovery before loading them hard again: Chest and Triceps about 48 h\./,
++    );
++  });
++});
 diff --git a/tools/reverts/mutate-m27.py b/tools/reverts/mutate-m27.py
-index 7d494ce..817bf0f 100644
+index 2888bda..894d8b2 100644
 --- a/tools/reverts/mutate-m27.py
 +++ b/tools/reverts/mutate-m27.py
 @@ -483,8 +483,8 @@ MUTATIONS = [
@@ -9980,10 +12011,10 @@ index 5312122..06707d5 100644
       "  const day = (new Date(iso).getDay() + 6) % 7;\n  return startOfLocalDay(addLocalDays(iso, -day));",
       "  const date = new Date(iso);\n  const day = (date.getUTCDay() + 6) % 7;\n  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - day)).toISOString();",
 diff --git a/tools/reverts/mutate-m31.py b/tools/reverts/mutate-m31.py
-index 4808b45..f884545 100644
+index 29c6aa8..3cc83e4 100644
 --- a/tools/reverts/mutate-m31.py
 +++ b/tools/reverts/mutate-m31.py
-@@ -358,8 +358,8 @@ MUTATIONS = [
+@@ -364,8 +364,8 @@ MUTATIONS = [
       "    text: `You trained today${nothingBehind}: nothing more for today.`,\n    action: { label: 'Full session', full: true },",
       "    text: `You trained today${nothingBehind}: nothing more for today.`,", [T_NOTE], None),
      ("R19 nothing to start when nothing is left", CARD,
@@ -9994,7 +12025,7 @@ index 4808b45..f884545 100644
      ("R20 the switch knows the day's kind", STORE,
       "    return this.recalibrate({ type: 'session-kind', full, ...(kind ? { kind } : {}) });",
       "    return this.recalibrate({ type: 'session-kind', full });", [T_STORE], None),
-@@ -377,8 +377,8 @@ MUTATIONS = [
+@@ -383,8 +383,8 @@ MUTATIONS = [
       "      if (next.primaryMuscles.some((muscle) => rests.has(muscle))) continue;\n", "",
       [T_OFF], None),
      ("V4 no drop set off the plan", GENERATE,
@@ -10005,11 +12036,22 @@ index 4808b45..f884545 100644
      ("V5 a muscle with nothing left rests for the slots after", GENERATE,
       "    const spent = [...budget]\n      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)\n      .map(([muscle]) => muscle);",
       "    const spent: MuscleId[] = [];", [T_DAY], None),
+@@ -412,8 +412,8 @@ MUTATIONS = [
+      "    if (session.status !== 'preview' || this.fromEarlierDay(session)) return constraints;",
+      "    if (this.fromEarlierDay(session)) return constraints;", [T_STORE], None),
+     ("V15 the coach adds no work off the plan", COACH,
+-     "    .filter((signal) => !offPlanToday(input) || !addsWork(signal));", "    .filter(() => true);",
+-     [T_OFF, T_RESTS], None),
++     "    .filter((signal) => !addsWork(signal) || (!offPlanToday(input) && !restToday(input)));",
++     "    .filter((signal) => !addsWork(signal) || !restToday(input));", [T_OFF, T_RESTS], None),
+     ("V16 ... a catch-up built is off the plan, one planned as usual is not", COACH,
+      "  return stored.kind === 'second' || builtCatchUp(stored, input.workout).muscles.length > 0;",
+      "  return stored.kind === 'second';", [T_RESTS], None),
 diff --git a/tools/reverts/mutate-m32.py b/tools/reverts/mutate-m32.py
-index 0b9aa58..8b8b8b8 100644
+index 6b667d7..09a6caa 100644
 --- a/tools/reverts/mutate-m32.py
 +++ b/tools/reverts/mutate-m32.py
-@@ -231,7 +231,7 @@ MUTATIONS = [
+@@ -238,7 +238,7 @@ MUTATIONS = [
       "      !offPlan && deload === null && !pushPick && owed === undefined,",
       "      !offPlan && deload === null && owed === undefined,", [T_PLAN], None),
      ("N35 ... with fatigue high", GENERATE,
@@ -10018,7 +12060,7 @@ index 0b9aa58..8b8b8b8 100644
      ("N36 the target read at the top set's reserve", BACKOFFS,
       "    const asked = { ...prescription, rir: topSetRir(prescription.rir) };",
       "    const asked = prescription;", [T_PLAN], None),
-@@ -250,10 +250,10 @@ MUTATIONS = [
+@@ -257,10 +257,10 @@ MUTATIONS = [
      ("N41 the day decides in a rebuild", ENGINE,
       "  return request.constraints.deload === null && !offPlan && entry.push === undefined && !standsIn;",
       "  return true;", [T_PLAN], None),
@@ -10031,7 +12073,7 @@ index 0b9aa58..8b8b8b8 100644
       "    day: options.backOffs === true,", [T_PLAN], None),
      ("N44 a swap before a set takes it", ENGINE,
       "    { shift, backOffs: backOffDay(request, workout, entry) },", "    { shift },",
-@@ -261,7 +261,7 @@ MUTATIONS = [
+@@ -268,7 +268,7 @@ MUTATIONS = [
      ("N45 a kept lift through the day's change keeps it", ENGINE,
       "        backOffs: backOffDay(next, workout, entry),\n", "", [T_PLAN], None),
      ("N46 an entered max keeps it", ENGINE,
@@ -10040,7 +12082,7 @@ index 0b9aa58..8b8b8b8 100644
       "              day: false,", [T_PLAN], None),
      ("N47 swapped back after its top set: its back-offs", ENGINE,
       "asBackOffs(request, workout, stopped, built.sets, isDone)", "built.sets", [T_PLAN], None),
-@@ -578,7 +578,7 @@ MUTATIONS = [
+@@ -585,7 +585,7 @@ MUTATIONS = [
      ("N157 a saved copy's straight sets are the lifter's own", BACKOFFS,
       "        delete entry.atBackOffs;\n", "", [T_AT_BACKOFFS], None),
      ("N158 a max entered reads the target as every plan does", ENGINE,
@@ -10049,7 +12091,7 @@ index 0b9aa58..8b8b8b8 100644
       "              day: false,", [T_MAX_STRAIGHT, T_MAX_HAND_REPS, T_MAX_PAST_MARKED], None),
      ("N159 straight sets after a capped top set at the back-offs' reps", BACKOFFS,
       "    reps: top.asked?.reps ?? top.reps,\n", "", [T_CAPPED_REPS], None),
-@@ -711,7 +711,7 @@ MUTATIONS = [
+@@ -719,7 +719,7 @@ MUTATIONS = [
       "      if (plan.kind === 'weight') {\n        const from = log.weight ?? current;",
       "      if (false) {\n        const from = log.weight ?? current;", [T_PICK_UP], None),
      ("N202 the fatigue's drift reads no back-offs", FATIGUE,
@@ -10058,7 +12100,7 @@ index 0b9aa58..8b8b8b8 100644
       [T_SKIPPED_TOP_DRIFT], None),
      ("N203 the Progress trend reads the top sets alone", ANALYTICS,
       "      Number.POSITIVE_INFINITY,\n    ).filter((point) => !point.viaFamily);",
-@@ -732,8 +732,8 @@ MUTATIONS = [
+@@ -740,8 +740,8 @@ MUTATIONS = [
       "            hand !== undefined &&\n            (true || hand.reps[0] !== prescription.reps[0]",
       [T_MAX_HAND_REPS], None),
      ("N208 a target read past the marked days reads the day's fatigue off the whole log", ENGINE,
@@ -10068,13 +12110,13 @@ index 0b9aa58..8b8b8b8 100644
 +     "    fatigueLevel: interpretFatigue(request.history, request.timestamp).level,",
       [T_REFIT_FATIGUE], None),
      ("N209 back-offs replayed against the top set as corrected", STORE,
-      "this.backOffLogOf({ ...session, completed }, entry, isDone)", "this.backOffLogOf(session, entry, isDone)",
+      "      const backOffLogs = this.backOffLogsOf({ ...session, completed }, entry, isDone);",
 diff --git a/tools/reverts/mutate-m33.py b/tools/reverts/mutate-m33.py
 new file mode 100644
-index 0000000..c9dca07
+index 0000000..a88522e
 --- /dev/null
 +++ b/tools/reverts/mutate-m33.py
-@@ -0,0 +1,379 @@
+@@ -0,0 +1,453 @@
 +"""Maintenance 33 mutation checks: revert each recovery and readiness rule alone, run its tests,
 +expect a failure, restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -10114,6 +12156,9 @@ index 0000000..c9dca07
 +SHEET = "src/components/ExerciseDetail/ExerciseDetailSheet.tsx"
 +PLANSCREEN = "src/features/plan/PlanScreen.tsx"
 +STORE = "src/core/state/appStore.ts"
++RESERVE = "src/engine/progression/reserveCheck.ts"
++USECOACH = "src/features/coach/useCoach.ts"
++SESSION = "src/core/state/session.ts"
 +
 +T_RECOVERY = "src/engine/recovery/recovery.test.ts"
 +T_LEARNED_W = "src/engine/recovery/recovery.learned.test.ts"
@@ -10130,6 +12175,22 @@ index 0000000..c9dca07
 +T_STRATEGY = "src/engine/strategy/strategy.test.ts"
 +T_RECALIBRATE = "src/engine/recalibration/recalibrate.test.ts"
 +T_REST_DAY = "src/features/today/restDay.screens.test.tsx"
++T_HEAD_COLD_UNDER_WAY = "src/engine/recalibration/headColdLiftUnderWay.test.ts"
++T_STEP_PAST_RANGE = "src/engine/recovery/fatigueStepAfterRangePassed.test.ts"
++T_COMPLETION_NIGHT = "src/features/workout/completionShortNight.screens.test.tsx"
++T_PLAN_STALE = "src/features/plan/planBalanceStaleCheckIn.screens.test.tsx"
++T_FEVER_OFFER = "src/core/state/feverRestDayCoachOffer.store.test.ts"
++T_CHECK_ON_LIGHTER = "src/core/state/reserveCheckOnLighter.store.test.ts"
++T_CHECK_AFTER_START = "src/core/state/lowCheckInTakesHardStart.store.test.ts"
++T_CHECK_AFTER_START_STORED = "src/core/state/session.checkInAfterStart.test.ts"
++T_LIGHTER_PREVIEW = "src/core/state/lighterPreviewRebuild.store.test.ts"
++T_LIGHTER_SWAP_BACK = "src/engine/recalibration/lighterSwapBack.test.ts"
++T_FIRST_SET_READ = "src/engine/coach/tooSoonFirstSetReadReserve.test.ts"
++T_COACH_ESTIMATE = "src/features/coach/coachEstimate.test.ts"
++T_PROGRESS_RESERVE = "src/core/state/appStore.reserveCheck.test.ts"
++T_CHECK_FAILURE = "src/engine/recovery/reserveCheckFailureWindow.test.ts"
++T_LONG_VARIANTS = "src/engine/recovery/longLengthVariants.test.ts"
++T_START_READ_LOG = "src/core/state/badStartReadLog.store.test.ts"
 +T_FEVER = "src/engine/recalibration/feverUnderWay.test.ts"
 +T_DROP_ILL = "src/engine/coach/dropSetOfferIll.test.ts"
 +T_REST_TOO_SOON = "src/engine/coach/restDayTooSoon.test.ts"
@@ -10314,11 +12375,11 @@ index 0000000..c9dca07
 +     "  const resets = state.learnedResets;",
 +     "  const resets = null;", [T_PLAN_RESET], None),
 +    ("V6 the hard start's windows read today's check-in", BADSTART,
-+     "            readiness: context.readiness,\n            history: context.history,\n            now: at,",
++     "            readiness,\n            history: context.history,\n            now: at,",
 +     "            readiness: null,\n            history: context.history,\n            now: at,", [T_HARD_SHORT], None),
 +    ("V7 ... and the log as the rules read it", STORE,
-+     "      history: this.state.readHistory,\n      readiness: session.constraints.readiness,\n      resets: this.state.learnedResets,",
-+     "      history: this.state.history,\n      readiness: session.constraints.readiness,\n      resets: this.state.learnedResets,", [T_BADSTART_STORE, T_HARD_SHORT], None),
++     "      history: this.state.readHistory,\n      readiness: session.constraints.readiness,\n      checkInAfterStart:",
++     "      history: this.state.history,\n      readiness: session.constraints.readiness,\n      checkInAfterStart:", [T_BADSTART_STORE, T_HARD_SHORT, T_START_READ_LOG], None),
 +    ("V8 lighter keeps the loads", ENGINE,
 +     "  if (!keepLoad && !manual?.weight && !set.asked && weight !== null && weight > 0) {",
 +     "  if (!manual?.weight && !set.asked && weight !== null && weight > 0) {", [T_LIGHTER, T_LIGHTER_LOADS], None),
@@ -10387,6 +12448,61 @@ index 0000000..c9dca07
 +     "    lowEnergy: false,", [T_TOO_SOON, T_LEARNED_W, T_HARD_SHORT, T_PLAN_RESET], None),
 +    # No entry for the schedule card's kept check: it only spares the coach the week's rebuild each
 +    # minute, and the card reads the same either way.
++    # The second review of Maintenance 33.
++    ("W1 any illness holds every set still to come at its floor, a lift under way's too", ENGINE,
++     "    (set.kind === 'drop' || (set.kind === 'working' && set.targetRir < floor));",
++     "    set.kind === 'drop';", [T_HEAD_COLD_UNDER_WAY], None),
++    ("W2 a set past what it asked reads as asked, no more", AGAINST,
++     "  return Math.min(1, read.lifted / asked) / Math.min(1, earlier.lifted / before);",
++     "  return read.lifted / asked / (earlier.lifted / before);", [T_STEP_PAST_RANGE, T_FATIGUE], None),
++    ("W3 the completion reads the session's check-in", BUILDER,
++     "      readiness: session.constraints.readiness,\n      history: after,",
++     "      readiness: null,\n      history: after,", [T_COMPLETION_NIGHT], None),
++    ("W4 a check-in from an earlier day is none of today's", RECOVERY,
++     "  const today = !input.madeAt || localDayKey(input.madeAt) === localDayKey(input.now);",
++     "  const today = true;", [T_PLAN_STALE], None),
++    ("W5 ... the Plan screen gives the session's day", PLANSCREEN,
++     "        dayRecovery({ readiness, madeAt, history: state.readHistory, now: nowIso, resets }),",
++     "        dayRecovery({ readiness, history: state.readHistory, now: nowIso, resets }),", [T_PLAN_STALE], None),
++    ("W6 a fever's rest day offers no added work", COACH,
++     "    .filter((signal) => !addsWork(signal) || (!offPlanToday(input) && !restToday(input)));",
++     "    .filter((signal) => !addsWork(signal) || !offPlanToday(input));", [T_FEVER_OFFER], None),
++    ("W7 the reserve check never lands on a lift the plan eases", RESERVE,
++     "    .filter((entry) => takesReserveCheck(entry) && !entry.eased?.sets);",
++     "    .filter(takesReserveCheck);", [T_CHECK_ON_LIGHTER], None),
++    ("W8 a check-in told with a hard start in force is marked so", ENGINE,
++     "      if (constraints.badStart) constraints.checkInAfterStart = true;",
++     "      if (false) constraints.checkInAfterStart = true;", [T_CHECK_AFTER_START], None),
++    ("W9 ... the start reads none of it", BADSTART,
++     "  const readiness = context.checkInAfterStart ? null : (context.readiness ?? null);",
++     "  const readiness = context.readiness ?? null;", [T_CHECK_AFTER_START], None),
++    ("W10 ... as the store gives it", STORE,
++     "      checkInAfterStart: session.constraints.checkInAfterStart === true,",
++     "      checkInAfterStart: false,", [T_CHECK_AFTER_START], None),
++    ("W11 ... kept through every change", ENGINE,
++     "    ...(constraints.checkInAfterStart ? { checkInAfterStart: true as const } : {}),\n", "",
++     [T_CHECK_AFTER_START], None),
++    ("W12 ... a mark that cannot be read is dropped alone", SESSION,
++     "  checkInAfterStart: z.literal(true).optional().catch(undefined),",
++     "  checkInAfterStart: z.literal(true).optional(),", [T_CHECK_AFTER_START_STORED], None),
++    ("W13 a preview made again keeps Lighter", STORE,
++     "      (today.lighter?.length ?? 0) > 0 ||\n", "", [T_LIGHTER_PREVIEW], None),
++    ("W14 a lift swapped back owes its sets eased as Lighter eased them", ENGINE,
++     "  const eased = exercise.primaryMuscles.some((muscle) => lighter.has(muscle));",
++     "  const eased = false;", [T_LIGHTER_SWAP_BACK], None),
++    ("W15 too soon reads today's first set as the rules read the log", COACH,
++     "      rir: readLoggedReserve(first, input.reserveEstimate ?? null),",
++     "      rir: first.rir,", [T_FIRST_SET_READ], None),
++    ("W16 ... the coach is given the estimate", USECOACH,
++     "    reserveEstimate: parts.readEstimate ?? null,\n", "", [T_COACH_ESTIMATE], None),
++    ("W17 ... the store keeps it beside the read log", STORE,
++     "      next.readEstimate = this.reserveReadOf(next);\n", "", [T_PROGRESS_RESERVE], None),
++    ("W18 a reserve check taken to failure sets the window a set to failure sets", RECOVERY,
++     "  if (set.reserveCheck && !set.reserveCheck.stopped) return 0;\n", "", [T_CHECK_FAILURE], None),
++    ("W19 the long-length lifts include the dumbbell Romanian deadlift", RECOVERY,
++     "  'dumbbell-romanian-deadlift',\n", "", [T_LONG_VARIANTS], None),
++    ("W20 ... and the cable overhead extension", RECOVERY,
++     "  'cable-overhead-triceps-extension',\n", "", [T_LONG_VARIANTS], None),
 +]
 +
 +
@@ -10455,7 +12571,7 @@ index 0000000..c9dca07
 +survived = [r for r in results if r[1] != "KILLED"]
 +print(f"\n{len(results) - len(survived)} killed, {len(survived)} not killed")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
-index 5e37276..e6f2385 100644
+index 9c4a776..3aa2266 100644
 --- a/tools/reverts/table_m31.txt
 +++ b/tools/reverts/table_m31.txt
 @@ -226,8 +226,8 @@ MUTATIONS = [
@@ -10480,8 +12596,19 @@ index 5e37276..e6f2385 100644
      ("V5 a muscle with nothing left rests for the slots after", GENERATE,
       "    const spent = [...budget]\n      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)\n      .map(([muscle]) => muscle);",
       "    const spent: MuscleId[] = [];", [T_DAY], None),
+@@ -274,8 +274,8 @@ MUTATIONS = [
+      "    if (session.status !== 'preview' || this.fromEarlierDay(session)) return constraints;",
+      "    if (this.fromEarlierDay(session)) return constraints;", [T_STORE], None),
+     ("V15 the coach adds no work off the plan", COACH,
+-     "    .filter((signal) => !offPlanToday(input) || !addsWork(signal));", "    .filter(() => true);",
+-     [T_OFF, T_RESTS], None),
++     "    .filter((signal) => !addsWork(signal) || (!offPlanToday(input) && !restToday(input)));",
++     "    .filter((signal) => !addsWork(signal) || !restToday(input));", [T_OFF, T_RESTS], None),
+     ("V16 ... a catch-up built is off the plan, one planned as usual is not", COACH,
+      "  return stored.kind === 'second' || builtCatchUp(stored, input.workout).muscles.length > 0;",
+      "  return stored.kind === 'second';", [T_RESTS], None),
 diff --git a/tools/reverts/table_m32.txt b/tools/reverts/table_m32.txt
-index eb2b7d3..01e85b2 100644
+index 6bf83ab..feaf341 100644
 --- a/tools/reverts/table_m32.txt
 +++ b/tools/reverts/table_m32.txt
 @@ -88,7 +88,7 @@ MUTATIONS = [
@@ -10524,7 +12651,7 @@ index eb2b7d3..01e85b2 100644
       "              day: false,", [T_MAX_STRAIGHT, T_MAX_HAND_REPS, T_MAX_PAST_MARKED], None),
      ("N159 straight sets after a capped top set at the back-offs' reps", BACKOFFS,
       "    reps: top.asked?.reps ?? top.reps,\n", "", [T_CAPPED_REPS], None),
-@@ -568,7 +568,7 @@ MUTATIONS = [
+@@ -569,7 +569,7 @@ MUTATIONS = [
       "      if (plan.kind === 'weight') {\n        const from = log.weight ?? current;",
       "      if (false) {\n        const from = log.weight ?? current;", [T_PICK_UP], None),
      ("N202 the fatigue's drift reads no back-offs", FATIGUE,
@@ -10533,7 +12660,7 @@ index eb2b7d3..01e85b2 100644
       [T_SKIPPED_TOP_DRIFT], None),
      ("N203 the Progress trend reads the top sets alone", ANALYTICS,
       "      Number.POSITIVE_INFINITY,\n    ).filter((point) => !point.viaFamily);",
-@@ -589,8 +589,8 @@ MUTATIONS = [
+@@ -590,8 +590,8 @@ MUTATIONS = [
       "            hand !== undefined &&\n            (true || hand.reps[0] !== prescription.reps[0]",
       [T_MAX_HAND_REPS], None),
      ("N208 a target read past the marked days reads the day's fatigue off the whole log", ENGINE,
@@ -10543,7 +12670,7 @@ index eb2b7d3..01e85b2 100644
 +     "    fatigueLevel: interpretFatigue(request.history, request.timestamp).level,",
       [T_REFIT_FATIGUE], None),
      ("N209 back-offs replayed against the top set as corrected", STORE,
-      "this.backOffLogOf({ ...session, completed }, entry, isDone)", "this.backOffLogOf(session, entry, isDone)",
+      "      const backOffLogs = this.backOffLogsOf({ ...session, completed }, entry, isDone);",
 diff --git a/tools/reverts/table_m33.py b/tools/reverts/table_m33.py
 new file mode 100644
 index 0000000..e3a0e43
@@ -10567,10 +12694,10 @@ index 0000000..e3a0e43
 +print("written")
 diff --git a/tools/reverts/table_m33.txt b/tools/reverts/table_m33.txt
 new file mode 100644
-index 0000000..61dbc1a
+index 0000000..43bbcbb
 --- /dev/null
 +++ b/tools/reverts/table_m33.txt
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,295 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The windows from the hardest sets.
@@ -10737,11 +12864,11 @@ index 0000000..61dbc1a
 +     "  const resets = state.learnedResets;",
 +     "  const resets = null;", [T_PLAN_RESET], None),
 +    ("V6 the hard start's windows read today's check-in", BADSTART,
-+     "            readiness: context.readiness,\n            history: context.history,\n            now: at,",
++     "            readiness,\n            history: context.history,\n            now: at,",
 +     "            readiness: null,\n            history: context.history,\n            now: at,", [T_HARD_SHORT], None),
 +    ("V7 ... and the log as the rules read it", STORE,
-+     "      history: this.state.readHistory,\n      readiness: session.constraints.readiness,\n      resets: this.state.learnedResets,",
-+     "      history: this.state.history,\n      readiness: session.constraints.readiness,\n      resets: this.state.learnedResets,", [T_BADSTART_STORE, T_HARD_SHORT], None),
++     "      history: this.state.readHistory,\n      readiness: session.constraints.readiness,\n      checkInAfterStart:",
++     "      history: this.state.history,\n      readiness: session.constraints.readiness,\n      checkInAfterStart:", [T_BADSTART_STORE, T_HARD_SHORT, T_START_READ_LOG], None),
 +    ("V8 lighter keeps the loads", ENGINE,
 +     "  if (!keepLoad && !manual?.weight && !set.asked && weight !== null && weight > 0) {",
 +     "  if (!manual?.weight && !set.asked && weight !== null && weight > 0) {", [T_LIGHTER, T_LIGHTER_LOADS], None),
@@ -10810,4 +12937,59 @@ index 0000000..61dbc1a
 +     "    lowEnergy: false,", [T_TOO_SOON, T_LEARNED_W, T_HARD_SHORT, T_PLAN_RESET], None),
 +    # No entry for the schedule card's kept check: it only spares the coach the week's rebuild each
 +    # minute, and the card reads the same either way.
++    # The second review of Maintenance 33.
++    ("W1 any illness holds every set still to come at its floor, a lift under way's too", ENGINE,
++     "    (set.kind === 'drop' || (set.kind === 'working' && set.targetRir < floor));",
++     "    set.kind === 'drop';", [T_HEAD_COLD_UNDER_WAY], None),
++    ("W2 a set past what it asked reads as asked, no more", AGAINST,
++     "  return Math.min(1, read.lifted / asked) / Math.min(1, earlier.lifted / before);",
++     "  return read.lifted / asked / (earlier.lifted / before);", [T_STEP_PAST_RANGE, T_FATIGUE], None),
++    ("W3 the completion reads the session's check-in", BUILDER,
++     "      readiness: session.constraints.readiness,\n      history: after,",
++     "      readiness: null,\n      history: after,", [T_COMPLETION_NIGHT], None),
++    ("W4 a check-in from an earlier day is none of today's", RECOVERY,
++     "  const today = !input.madeAt || localDayKey(input.madeAt) === localDayKey(input.now);",
++     "  const today = true;", [T_PLAN_STALE], None),
++    ("W5 ... the Plan screen gives the session's day", PLANSCREEN,
++     "        dayRecovery({ readiness, madeAt, history: state.readHistory, now: nowIso, resets }),",
++     "        dayRecovery({ readiness, history: state.readHistory, now: nowIso, resets }),", [T_PLAN_STALE], None),
++    ("W6 a fever's rest day offers no added work", COACH,
++     "    .filter((signal) => !addsWork(signal) || (!offPlanToday(input) && !restToday(input)));",
++     "    .filter((signal) => !addsWork(signal) || !offPlanToday(input));", [T_FEVER_OFFER], None),
++    ("W7 the reserve check never lands on a lift the plan eases", RESERVE,
++     "    .filter((entry) => takesReserveCheck(entry) && !entry.eased?.sets);",
++     "    .filter(takesReserveCheck);", [T_CHECK_ON_LIGHTER], None),
++    ("W8 a check-in told with a hard start in force is marked so", ENGINE,
++     "      if (constraints.badStart) constraints.checkInAfterStart = true;",
++     "      if (false) constraints.checkInAfterStart = true;", [T_CHECK_AFTER_START], None),
++    ("W9 ... the start reads none of it", BADSTART,
++     "  const readiness = context.checkInAfterStart ? null : (context.readiness ?? null);",
++     "  const readiness = context.readiness ?? null;", [T_CHECK_AFTER_START], None),
++    ("W10 ... as the store gives it", STORE,
++     "      checkInAfterStart: session.constraints.checkInAfterStart === true,",
++     "      checkInAfterStart: false,", [T_CHECK_AFTER_START], None),
++    ("W11 ... kept through every change", ENGINE,
++     "    ...(constraints.checkInAfterStart ? { checkInAfterStart: true as const } : {}),\n", "",
++     [T_CHECK_AFTER_START], None),
++    ("W12 ... a mark that cannot be read is dropped alone", SESSION,
++     "  checkInAfterStart: z.literal(true).optional().catch(undefined),",
++     "  checkInAfterStart: z.literal(true).optional(),", [T_CHECK_AFTER_START_STORED], None),
++    ("W13 a preview made again keeps Lighter", STORE,
++     "      (today.lighter?.length ?? 0) > 0 ||\n", "", [T_LIGHTER_PREVIEW], None),
++    ("W14 a lift swapped back owes its sets eased as Lighter eased them", ENGINE,
++     "  const eased = exercise.primaryMuscles.some((muscle) => lighter.has(muscle));",
++     "  const eased = false;", [T_LIGHTER_SWAP_BACK], None),
++    ("W15 too soon reads today's first set as the rules read the log", COACH,
++     "      rir: readLoggedReserve(first, input.reserveEstimate ?? null),",
++     "      rir: first.rir,", [T_FIRST_SET_READ], None),
++    ("W16 ... the coach is given the estimate", USECOACH,
++     "    reserveEstimate: parts.readEstimate ?? null,\n", "", [T_COACH_ESTIMATE], None),
++    ("W17 ... the store keeps it beside the read log", STORE,
++     "      next.readEstimate = this.reserveReadOf(next);\n", "", [T_PROGRESS_RESERVE], None),
++    ("W18 a reserve check taken to failure sets the window a set to failure sets", RECOVERY,
++     "  if (set.reserveCheck && !set.reserveCheck.stopped) return 0;\n", "", [T_CHECK_FAILURE], None),
++    ("W19 the long-length lifts include the dumbbell Romanian deadlift", RECOVERY,
++     "  'dumbbell-romanian-deadlift',\n", "", [T_LONG_VARIANTS], None),
++    ("W20 ... and the cable overhead extension", RECOVERY,
++     "  'cable-overhead-triceps-extension',\n", "", [T_LONG_VARIANTS], None),
 +]

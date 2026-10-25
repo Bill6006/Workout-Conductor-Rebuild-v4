@@ -25,10 +25,10 @@ index 416f674..ec6c1c8 100644
  
 diff --git a/docs/reports/maintenance-31.md b/docs/reports/maintenance-31.md
 new file mode 100644
-index 0000000..ff1c169
+index 0000000..1edbd32
 --- /dev/null
 +++ b/docs/reports/maintenance-31.md
-@@ -0,0 +1,596 @@
+@@ -0,0 +1,626 @@
 +# Maintenance 31: round M, the week as it stands
 +
 +Built on 2026-10-17 on the owner's word to build the whole agreed queue, round by round, to live,
@@ -573,7 +573,37 @@ index 0000000..ff1c169
 +  The split's day standing in for an offer emptied elsewhere keeps the mark, and a second workout
 +  at such a place is the split's own day, as a catch-up is.
 +
-+TWENTIETH_PASS
++**The twentieth pass** (on those fixes, and older code beside them) found seven: two MEDIUM, five
++LOW. About 26,500 random runs of changes in the engine and 2,190 runs through the store found
++nothing outside them.
++
++- MEDIUM: a plan the lifter emptied came back whole after a trip to a place that read another offer
++  and back: the plan built there for the new offer ended the old offer's mark; a second workout's
++  lifts for none of the day's muscles took their own reserve, so a finisher went to failure, and
++  "Make it harder" took a second workout with nothing behind, or the split's day standing in for
++  one, to none in reserve (from the round's first review).
++- LOW: the mark kept one layout, so a second plan emptied the same day wrote over the first, and
++  lifts laid out as the offer at another place ended the mark of the split's day the lifter emptied
++  (one case a regression of the nineteenth pass); a mark read without its layout named the wrong one
++  for a second workout with nothing behind (a regression of the nineteenth pass); the pain pattern's
++  card could offer a lift swapped away or set aside today, or one already in today's plan, whose tap
++  was refused (from item 45); the preview made again dropped the day's list of lifts swapped away
++  when the swap was the day's only choice; an emptied plan taken to another place kept the old
++  place's lines.
++- Fixed: each plan the lifter empties is kept with its offer and its layout together (`emptied`, a
++  list, each plan dropped alone when unreadable). Every later plan of that offer laid out the same
++  way takes no lift: every rebuild, the way back from the full session, a later plan the same day. A
++  plan of another offer, or laid out another way, leaves each mark as it is, and lifts back in a plan
++  end its own mark only. The rebuild no longer hands back the old plan: the generator lays out an
++  emptied plan empty and says where it was built, and a place that lays out another plan (the
++  split's own day standing in) builds that one. No set of a day off the plan goes to failure: a lift
++  for none of the day's muscles keeps a rep in reserve, through "harder" too. The pain card's
++  alternative reads the day's list and today's plan, as every other offer does. The preview made
++  again keeps the day's list; a swap kept for weeks and stopped the same day brings back the lift it
++  stood in for, off the day's list, as a swap back does (the review left this open: stopping the
++  swap is the lifter putting the plan's own pick back).
++
++TWENTYFIRST_PASS
 +
 +## Known limits
 +
@@ -601,8 +631,8 @@ index 0000000..ff1c169
 +  out stays out.
 +- **A save that changes the day's offer builds the new plan whole.** A swap or a pin made on the
 +  catch-up stays with the catch-up, and one on the usual plan with the usual plan, as switching to
-+  the full session already did. The old offer's mark of a plan emptied stays, read by no plan of the
-+  new offer.
++  the full session already did. The old offer's marks of plans emptied stay, read by no plan of the
++  new offer, and again once the old offer comes back (a trip to a place that reads another offer).
 +- **Full session where the split's own day has no lift.** At such a place Full session is refused
 +  ("The rebuilt workout came back empty") though Today offers it: the split's day is chosen without
 +  the place, as before the round.
@@ -813,7 +843,7 @@ index 7c77cb3..32ac712 100644
  
  for (const { zone, offset } of ZONES) {
 diff --git a/src/core/state/appStore.ts b/src/core/state/appStore.ts
-index e76e5ca..1e60b09 100644
+index e76e5ca..cc92d47 100644
 --- a/src/core/state/appStore.ts
 +++ b/src/core/state/appStore.ts
 @@ -17,7 +17,7 @@ import { isHold } from '../../catalog/exercises/exerciseSchema';
@@ -825,7 +855,7 @@ index e76e5ca..1e60b09 100644
  import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
  import { readStart, startKey, type StartReading } from '../../engine/recalibration/badStart';
  import { dropSetWeight, pendingDropSet, withDropWeight } from '../../engine/recalibration/dropSet';
-@@ -129,7 +129,25 @@ import {
+@@ -129,7 +129,24 @@ import {
    type WorkoutEntry,
  } from '../../engine/workout/types';
  import { prescribeFor } from '../../engine/progression/roles';
@@ -833,9 +863,8 @@ index e76e5ca..1e60b09 100644
 +import {
 +  builtCatchUp,
 +  emptiedFor,
-+  emptiedLayoutFor,
++  emptiedLayoutsFor,
 +  generateWorkout,
-+  offerKey,
 +  sessionDose,
 +  firstSessionDose,
 +  offPlanSpec,
@@ -852,7 +881,7 @@ index e76e5ca..1e60b09 100644
  import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
  import { normalizeName } from '../backup/legacyImport';
  import {
-@@ -1220,9 +1238,10 @@ export class AppStore {
+@@ -1220,9 +1237,10 @@ export class AppStore {
     * Reuses the persisted session when it was generated from today's inputs;
     * otherwise (first run, a new day, an edited profile, new history) generates
     * a fresh Default session silently. A started or completed workout is never
@@ -865,7 +894,7 @@ index e76e5ca..1e60b09 100644
      const key = this.baseKey();
      const { profile } = this.state;
      if (!key || !profile) {
-@@ -1251,18 +1270,167 @@ export class AppStore {
+@@ -1251,18 +1269,151 @@ export class AppStore {
          ? { startsAt: this.state.deloadWeek.startsAt, endsAt: this.state.deloadWeek.endsAt }
          : null;
      const focus = this.state.coachFocus?.muscle ?? null;
@@ -883,21 +912,16 @@ index e76e5ca..1e60b09 100644
 +      localDayKey(before.createdAt) === localDayKey(now) &&
 +      before.constraints.fullSession === true &&
 +      before.constraints.catchUp?.kind === catchUp.kind;
-+    // A catch-up or second workout the lifter's hand emptied stays so through the day's later plans
-+    // for the same offer, as the full session taken does (the eighteenth review of round M: a
-+    // workout from another device brought every lift back, the skips forgotten).
++    // The plans the lifter's hand emptied today stay so through the day's later plans, each for its
++    // own offer and layout, as the full session taken does (the eighteenth to twentieth reviews of
++    // round M: a workout from another device brought every lift back, the skips forgotten).
++    const marked =
++      before !== null && localDayKey(before.createdAt) === localDayKey(now)
++        ? (before.constraints.emptied ?? [])
++        : [];
 +    const keepEmptied =
 +      before !== null &&
-+      localDayKey(before.createdAt) === localDayKey(now) &&
-+      emptiedFor({ ...before.constraints, catchUp }, before.workout);
-+    // The mark stays with every later plan the same day for the same offer, the split's own day
-+    // standing in for it at a place with no lift for it too, which is made again there (the
-+    // nineteenth review of round M: back at a place with a lift for it, the offer was built whole).
-+    const keepMark =
-+      before !== null &&
-+      localDayKey(before.createdAt) === localDayKey(now) &&
-+      before.constraints.emptied !== undefined &&
-+      before.constraints.emptied === offerKey({ catchUp });
++      emptiedFor({ ...before.constraints, catchUp, emptied: marked }, before.workout);
 +    const workout = keepEmptied
 +      ? before.workout
 +      : generateWorkout({
@@ -911,14 +935,8 @@ index e76e5ca..1e60b09 100644
 +            focusMuscle: focus,
 +            swaps: this.activeSwaps(),
 +            catchUp: keepFull ? null : catchUp,
-+            // The layout the lifter emptied for this offer stays empty (the nineteenth review).
-+            ...(keepMark && !keepFull
-+              ? emptiedLayoutFor({
-+                  catchUp,
-+                  emptied: before.constraints.emptied,
-+                  emptiedLayout: before.constraints.emptiedLayout,
-+                })
-+              : {}),
++            // Each layout the lifter emptied for this offer stays empty (the nineteenth review).
++            ...(keepFull ? {} : emptiedLayoutsFor({ catchUp, emptied: marked })),
 +          },
 +          maxes: this.state.strengthMaxes,
 +          resets: this.state.learnedResets,
@@ -932,14 +950,9 @@ index e76e5ca..1e60b09 100644
 +        focus,
 +        ...(catchUp ? { catchUp } : {}),
 +        ...(keepFull ? { fullSession: true } : {}),
-+        // The catch-up it emptied before, for the way back (the seventeenth review of round M), or
-+        // the one it keeps so (the eighteenth).
-+        ...((keepFull || keepEmptied || keepMark) && before.constraints.emptied !== undefined
-+          ? { emptied: before.constraints.emptied }
-+          : {}),
-+        ...((keepFull || keepEmptied || keepMark) && before.constraints.emptiedLayout !== undefined
-+          ? { emptiedLayout: before.constraints.emptiedLayout }
-+          : {}),
++        // The plans emptied before, for the way back (the seventeenth review of round M) and for
++        // every later plan the same day (the eighteenth to twentieth).
++        ...(marked.length > 0 ? { emptied: marked.map((plan) => ({ ...plan })) } : {}),
 +      },
 +    });
 +  }
@@ -1040,7 +1053,7 @@ index e76e5ca..1e60b09 100644
    }
  
    /** Puts the kept-workout notice away; the kept copy itself stays on the device. */
-@@ -1415,6 +1583,16 @@ export class AppStore {
+@@ -1415,6 +1566,16 @@ export class AppStore {
      // The history read before the overlay's pause, as the session and profile are.
      const request = this.calibrationRequest(trigger, session, profile, reason ?? described.title, {
        history,
@@ -1057,7 +1070,7 @@ index e76e5ca..1e60b09 100644
      });
      let result: RecalibrationResult;
      try {
-@@ -1638,7 +1816,12 @@ export class AppStore {
+@@ -1638,7 +1799,12 @@ export class AppStore {
      this.leaveEarlierDay();
      const { session, profile } = this.state;
      if (!session || !profile) return Promise.resolve(null);
@@ -1071,7 +1084,7 @@ index e76e5ca..1e60b09 100644
      const time = on ? new Date(this.nowMs() + minutes * 60_000).toISOString() : null;
      return this.recalibrate({ type: 'end-by', time });
    }
-@@ -2481,7 +2664,8 @@ export class AppStore {
+@@ -2481,7 +2647,8 @@ export class AppStore {
      if (!session || session.status === 'preview' || session.status === 'completed') return;
      clearSession(this.storage);
      this.setState({ session: null });
@@ -1081,7 +1094,22 @@ index e76e5ca..1e60b09 100644
    }
  
    // ---------------------------------------------------------------- custom content
-@@ -3579,7 +3763,7 @@ export class AppStore {
+@@ -3568,18 +3735,19 @@ export class AppStore {
+    * busy equipment, an end time still ahead) are applied to the new plan by the engine, as every
+    * rebuild applies them.
+    */
+-  private regeneratePreview(): Promise<void> {
+-    const run = this.calibrationQueue.then(() => this.rebuildPreview());
++  private regeneratePreview(putBack: string | null = null): Promise<void> {
++    const run = this.calibrationQueue.then(() => this.rebuildPreview(putBack));
+     this.calibrationQueue = run.catch(() => undefined);
+     return run;
+   }
+ 
+-  private rebuildPreview(): void {
++  /** `putBack`: a lift the lifter puts back today, off the day's list of lifts swapped away. */
++  private rebuildPreview(putBack: string | null = null): void {
+     const session = this.state.session;
      if (!session || session.status !== 'preview') return;
      clearSession(this.storage);
      this.setState({ session: null });
@@ -1090,7 +1118,7 @@ index e76e5ca..1e60b09 100644
      const fresh = this.state.session;
      const { profile, readHistory: history } = this.state;
      if (!fresh || !profile || this.fromEarlierDay(session)) return;
-@@ -3589,8 +3773,25 @@ export class AppStore {
+@@ -3589,8 +3757,32 @@ export class AppStore {
        Date.parse(session.constraints.endBy) > Date.parse(this.now())
          ? session.constraints.endBy
          : null;
@@ -1111,12 +1139,19 @@ index e76e5ca..1e60b09 100644
 +    // The slots the lifter closed were the old plan's: a plan made again lays them out again (the
 +    // eighteenth review of round M).
 +    delete today.closedSlots;
++    // The lifts swapped away today stay away in the plan made again (the twentieth review of round
++    // M: with a swap the only choice of the day, the new plan brought the lift back), but for one
++    // the lifter puts back.
++    const away = (today.swappedAway ?? []).filter((id) => id !== putBack);
++    if (away.length > 0) today.swappedAway = away;
++    else delete today.swappedAway;
      const chosen =
 +      emptied ||
++      away.length > 0 ||
        session.duration !== fresh.duration ||
        today.readiness !== null ||
        today.intensity !== 0 ||
-@@ -3604,7 +3805,7 @@ export class AppStore {
+@@ -3604,7 +3796,7 @@ export class AppStore {
      try {
        result = this.engine({
          trigger: { type: 'duration', choice: session.duration },
@@ -1125,6 +1160,17 @@ index e76e5ca..1e60b09 100644
          completed: fresh.completed,
          lockedEntryIds: [],
          currentEntryId: null,
+@@ -4259,7 +4451,9 @@ export class AppStore {
+   async stopLastingSwap(from: string): Promise<void> {
+     const change = await this.changeSwaps((current) => withoutSwap(current, from));
+     if (!change.saved) throw new Error('The swap could not be stopped.');
+-    await this.regeneratePreview();
++    // The lift the swap stood in for comes back where the plan has it, as a swap back puts it back:
++    // off the day's list of lifts swapped away (the twentieth review of round M).
++    await this.regeneratePreview(from);
+   }
+ 
+   /**
 diff --git a/src/core/state/badStart.store.test.ts b/src/core/state/badStart.store.test.ts
 index eb98a5e..a8a947e 100644
 --- a/src/core/state/badStart.store.test.ts
@@ -2668,7 +2714,7 @@ index 0000000..c683162
 +});
 diff --git a/src/core/state/catchUpEmptiedRoundTrip.store.test.ts b/src/core/state/catchUpEmptiedRoundTrip.store.test.ts
 new file mode 100644
-index 0000000..5656b49
+index 0000000..6fc0774
 --- /dev/null
 +++ b/src/core/state/catchUpEmptiedRoundTrip.store.test.ts
 @@ -0,0 +1,147 @@
@@ -2764,8 +2810,10 @@ index 0000000..5656b49
 +    expect(session(handle).workout.templateId).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
 +    const offer = session(handle).constraints.catchUp!;
 +    await skipEvery(handle);
-+    expect(session(handle).constraints.emptied).toBe(offerKey({ catchUp: offer }));
-+    expect(session(handle).constraints.emptiedLayout).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
++    const mark = [
++      { offer: offerKey({ catchUp: offer }), layout: CATCH_UP_TEMPLATE_IDS['catch-up'] },
++    ];
++    expect(session(handle).constraints.emptied).toEqual(mark);
 +    // The split's own day with the mark, as the way back at a place with no lift for the offer
 +    // leaves it (catchUpEmptiedRoundTrip: the review's own steps, engine and store reading alike).
 +    await handle.store.setFullSession(true);
@@ -2778,8 +2826,7 @@ index 0000000..5656b49
 +    // A reload reads the mark and the layout back.
 +    const reloaded = createTestStore({ factory: handle.factory, storage: handle.storage });
 +    await reloaded.store.hydrate();
-+    expect(session(reloaded).constraints.emptied).toBe(offerKey({ catchUp: offer }));
-+    expect(session(reloaded).constraints.emptiedLayout).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
++    expect(session(reloaded).constraints.emptied).toEqual(mark);
 +
 +    // A later plan the same day, made at the gym: the catch-up laid out again, emptied still.
 +    await anotherDevice(reloaded);
@@ -2787,7 +2834,7 @@ index 0000000..5656b49
 +    // On 0f8d10f: the mark went, and the catch-up came back whole.
 +    expect(allEntries(session(reloaded).workout.blocks)).toEqual([]);
 +    expect(dayNoteOf(session(reloaded))?.text).toBe(NOTHING);
-+    expect(session(reloaded).constraints.emptiedLayout).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
++    expect(session(reloaded).constraints.emptied).toEqual(mark);
 +  });
 +
 +  it('the split’s own day emptied standing in leaves the catch-up to another place', async () => {
@@ -2802,8 +2849,7 @@ index 0000000..5656b49
 +        workout: { ...today.workout, templateId: 'push-arms', blocks: [] },
 +        constraints: {
 +          ...today.constraints,
-+          emptied: offerKey({ catchUp: offer }),
-+          emptiedLayout: 'push-arms',
++          emptied: [{ offer: offerKey({ catchUp: offer }), layout: 'push-arms' }],
 +        },
 +      },
 +      handle.storage,
@@ -2952,6 +2998,274 @@ index 0000000..73d7ea6
 +      entryId: raise.id,
 +    }));
 +    expectBeginnerDose(handle, steps);
++  });
++});
+diff --git a/src/core/state/emptiedLinesOtherPlace.store.test.ts b/src/core/state/emptiedLinesOtherPlace.store.test.ts
+new file mode 100644
+index 0000000..2453a9c
+--- /dev/null
++++ b/src/core/state/emptiedLinesOtherPlace.store.test.ts
+@@ -0,0 +1,111 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations, type LocationProfile } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import { allEntries } from '../../engine/workout/types';
++import { offerKey } from '../../engine/workoutGenerator/generate';
++import { dayNoteOf } from '../../features/today/dayNote';
++import { record } from '../../test/records';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * Twentieth review of round M, on the plan the lifter emptied kept through a change of place (the
++ * fourteenth to sixteenth passes' `rebuild`: "a catch-up or a second workout the lifter's changes
++ * emptied stays so through every rebuild"), which returns the old plan as it was, its lines with it.
++ *
++ * The rule its lines break: the eighth pass fixed a compromise line that named what a place could
++ * not do where it was not true ("No elbow extension option fits Home"), and "Why this workout" says
++ * what the plan is for and where it was built ("Built for Gym from the equipment saved there"). It
++ * shows on an empty plan too (`WorkoutPreviewCard`: only the warm-up note and Start are hidden).
++ *
++ * What happens: `rebuild` hands back a clone of the emptied plan, only its length changed, so at the
++ * new place "Why this workout" still says "Built for Flat from the equipment saved there ..." and
++ * "No incline push option fits Flat and your limits.", under "Rebuilt for Gym: no changes needed."
++ * (and the plan keeps Flat's place).
++ *
++ * Steps (synthetic data only): on Saturday, with no sessions left this week (so the offer reads the
++ * same at every place), a bench press, a squat and a row this week; at Flat (dumbbells only) the
++ * catch-up is built, with "No incline push option fits Flat and your limits.". The lifter skips each
++ * lift: "nothing more for today". The place set to the gym: "Rebuilt for Gym: no changes needed.",
++ * and the plan's lines still name Flat.
++ *
++ * Also fails on 0f8d10f (from the fourteenth to sixteenth passes).
++ */
++
++const SATURDAY = '2026-09-05T12:00:00.000Z';
++const DAY = 86_400_000;
++const [dumbbells] = createDefaultLocations(
++  { gymAccess: false, homeEquipment: ['dumbbells'] },
++  SATURDAY,
++) as [LocationProfile];
++const flat: LocationProfile = { ...dumbbells, id: 'flat', name: 'Flat' };
++
++async function lifter() {
++  const handle = createTestStore({ now: () => SATURDAY });
++  await handle.store.hydrate();
++  await handle.store.completeOnboarding(
++    { ...createDefaultProfile(SATURDAY), bodyweight: 185 },
++    createDefaultLocations({ gymAccess: true }, SATURDAY),
++  );
++  const db = await handle.store.getDatabase();
++  for (const [exerciseId, daysAgo] of [
++    ['barbell-bench-press', 4],
++    ['back-squat', 3],
++    ['barbell-row', 1],
++  ] as const) {
++    const when = new Date(Date.parse(SATURDAY) - daysAgo * DAY).toISOString();
++    await db.put('workouts', {
++      ...record(
++        0,
++        exerciseId,
++        [
++          [10, 100, 2],
++          [10, 100, 2],
++          [10, 100, 2],
++        ],
++        [8, 12],
++        2,
++      ),
++      id: `w-${exerciseId}`,
++      startedAt: when,
++      completedAt: when,
++    });
++  }
++  await handle.store.hydrate();
++  await handle.store.saveLocation(flat);
++  return handle;
++}
++
++type Handle = Awaited<ReturnType<typeof lifter>>;
++const session = (handle: Handle) => handle.store.getSnapshot().session!;
++const lines = (handle: Handle) => [
++  ...session(handle).workout.explanation.reasons,
++  ...session(handle).workout.compromises,
++];
++
++async function moveTo(handle: Handle, id: string) {
++  const profile = handle.store.getSnapshot().profile!;
++  await handle.store.saveProfile({ ...profile, currentLocationId: id });
++}
++
++describe('a catch-up the lifter emptied, taken to another place', () => {
++  it('says nothing of the place it was emptied at', async () => {
++    const handle = await lifter();
++    await moveTo(handle, 'flat');
++    const offer = offerKey(session(handle).constraints);
++    expect(lines(handle)).toContain('No incline push option fits Flat and your limits.');
++    for (const entry of allEntries(session(handle).workout.blocks)) {
++      await handle.store.recalibrate({ type: 'skip', entryId: entry.id });
++    }
++    expect(dayNoteOf(session(handle))?.text).toBe(
++      'Not one of your training days: nothing more for today.',
++    );
++    await moveTo(handle, 'gym');
++    // The same offer at the gym, and the plan kept empty, as the rules say.
++    expect(offerKey(session(handle).constraints)).toBe(offer);
++    expect(allEntries(session(handle).workout.blocks)).toEqual([]);
++    expect(session(handle).lastSummary?.headline).toBe('Rebuilt for Gym: no changes needed.');
++    // On 0fe4cb9 and 0f8d10f: "Built for Flat from the equipment saved there, ..." and "No
++    // incline push option fits Flat and your limits.".
++    expect(lines(handle).filter((line) => line.includes('Flat'))).toEqual([]);
++  });
++});
+diff --git a/src/core/state/emptiedTripOtherOffer.store.test.ts b/src/core/state/emptiedTripOtherOffer.store.test.ts
+new file mode 100644
+index 0000000..ffb45c8
+--- /dev/null
++++ b/src/core/state/emptiedTripOtherOffer.store.test.ts
+@@ -0,0 +1,145 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations, type LocationProfile } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import { allEntries, CATCH_UP_TEMPLATE_IDS } from '../../engine/workout/types';
++import { offerKey } from '../../engine/workoutGenerator/generate';
++import { dayNoteOf } from '../../features/today/dayNote';
++import { describeWorkout } from '../../test/clockDays';
++import { record } from '../../test/records';
++import { TEST_NOW, createTestStore } from '../../test/testStore';
++
++/**
++ * Twentieth review of round M, on the eighteenth and nineteenth passes' mark of a plan the lifter
++ * emptied (`emptied`, `emptiedLayout`) where it meets the store's reading of a change of place
++ * (`offerOverrides`, the week model read at the new place).
++ *
++ * The rules: "a catch-up or a second workout emptied stays so through every rebuild" (the
++ * fourteenth to sixteenth passes); "Every rebuild, the way back from the full session and a later
++ * plan the same day read the mark" (the eighteenth); and the known limit the nineteenth pass wrote
++ * for a change of offer: "A save that changes the day's offer builds the new plan whole ... The old
++ * offer's mark of a plan emptied stays, read by no plan of the new offer."
++ *
++ * What happens: the week model plans the week's sessions still to come at the current place, so a
++ * place with less equipment reads another offer (more muscles behind). The store builds the plan
++ * whole for it, as the known limit says, but `markEmptied` then ends the mark of the old offer,
++ * since the new plan has lifts and is laid out as an offer (`laidOutAsOffer` reads the template
++ * only, not whose offer the mark is). Back at the first place the old offer comes back, the mark is
++ * gone, and the plan the lifter emptied there is built whole with new lifts. The nineteenth pass's
++ * engine test of the same trip ("without the full session, a trip there and back keeps it empty")
++ * holds the offer fixed, which the store does not.
++ *
++ * Steps (synthetic data only):
++ * - Monday's bench press in the log; on Wednesday, a day the schedule does not tick, at the gym, the
++ *   catch-up has seven lifts. The lifter skips each: "Not one of your training days: nothing more
++ *   for today." The place set to Travel (no equipment): another offer, a catch-up of the push-up,
++ *   the Bulgarian split squat and more. The place set back to the gym: the gym's offer again, and a
++ *   catch-up of seven lifts (the close-grip bench press, the incline barbell bench press, the cable
++ *   lateral raise ...), though the lifter emptied it there.
++ * - The same for a second workout, with a row six days ago and a bench press done this morning:
++ *   six lifts at the gym, the Bulgarian split squat and a calf raise at Travel, and six lifts back
++ *   at the gym (the incline barbell bench press, the cable lateral raise ...).
++ *
++ * Also fails on 0f8d10f (the mark ended by any lift in the plan there).
++ */
++
++const DAY = 86_400_000;
++const daysBefore = (days: number) => new Date(Date.parse(TEST_NOW) - days * DAY).toISOString();
++const [bare] = createDefaultLocations({ gymAccess: false, homeEquipment: [] }, TEST_NOW) as [
++  LocationProfile,
++];
++const travel: LocationProfile = { ...bare, id: 'travel', name: 'Travel' };
++
++async function lifter(morning: boolean) {
++  const handle = createTestStore();
++  await handle.store.hydrate();
++  await handle.store.completeOnboarding(
++    { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
++    createDefaultLocations({ gymAccess: true }, TEST_NOW),
++  );
++  const db = await handle.store.getDatabase();
++  const put = (id: string, exerciseId: string, when: string) =>
++    db.put('workouts', {
++      ...record(
++        0,
++        exerciseId,
++        [
++          [10, 100, 2],
++          [10, 100, 2],
++          [10, 100, 2],
++        ],
++        [8, 12],
++        2,
++      ),
++      id,
++      startedAt: when,
++      completedAt: when,
++    });
++  await put('w-bench-monday', 'barbell-bench-press', daysBefore(2));
++  if (morning) {
++    await put('w-row', 'barbell-row', daysBefore(6));
++    await put(
++      'w-morning',
++      'barbell-bench-press',
++      new Date(Date.parse(TEST_NOW) - 4 * 3600_000).toISOString(),
++    );
++  }
++  await handle.store.hydrate();
++  await handle.store.saveLocation(travel);
++  return handle;
++}
++
++type Handle = Awaited<ReturnType<typeof lifter>>;
++const session = (handle: Handle) => handle.store.getSnapshot().session!;
++const lifts = (handle: Handle) => describeWorkout(session(handle).workout).join('; ');
++
++async function moveTo(handle: Handle, id: string) {
++  const profile = handle.store.getSnapshot().profile!;
++  await handle.store.saveProfile({ ...profile, currentLocationId: id });
++}
++
++async function emptiedAtTheGym(handle: Handle) {
++  await moveTo(handle, 'gym');
++  const offer = session(handle).constraints.catchUp!;
++  expect(allEntries(session(handle).workout.blocks).length).toBeGreaterThan(1);
++  for (const entry of allEntries(session(handle).workout.blocks)) {
++    await handle.store.recalibrate({ type: 'skip', entryId: entry.id });
++  }
++  expect(allEntries(session(handle).workout.blocks)).toEqual([]);
++  expect(session(handle).constraints.emptied).toEqual([
++    { offer: offerKey({ catchUp: offer }), layout: session(handle).workout.templateId },
++  ]);
++  return offer;
++}
++
++describe('a plan the lifter emptied at the gym, through a trip to a place that reads another offer', () => {
++  it('a catch-up stays empty back at the gym', async () => {
++    const handle = await lifter(false);
++    const offer = await emptiedAtTheGym(handle);
++    expect(session(handle).workout.templateId).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
++    await moveTo(handle, 'travel');
++    const there = lifts(handle);
++    // Another offer at Travel, built whole for it, as the known limit says.
++    expect(offerKey(session(handle).constraints)).not.toBe(offerKey({ catchUp: offer }));
++    await moveTo(handle, 'gym');
++    expect(session(handle).constraints.catchUp).toEqual(offer);
++    // On 0fe4cb9 and 0f8d10f: seven lifts, "close-grip-bench-press x3 @RIR 2/2/2; ...".
++    expect(lifts(handle), `Travel: ${there}`).toBe('');
++    expect(dayNoteOf(session(handle))?.text).toBe(
++      'Not one of your training days: nothing more for today.',
++    );
++  });
++
++  it('a second workout stays empty back at the gym', async () => {
++    const handle = await lifter(true);
++    const offer = await emptiedAtTheGym(handle);
++    expect(offer.kind).toBe('second');
++    await moveTo(handle, 'travel');
++    const there = lifts(handle);
++    expect(offerKey(session(handle).constraints)).not.toBe(offerKey({ catchUp: offer }));
++    await moveTo(handle, 'gym');
++    expect(session(handle).constraints.catchUp).toEqual(offer);
++    // On 0fe4cb9 and 0f8d10f: six lifts, "incline-barbell-bench-press x3 @RIR 1/1/1; ...".
++    expect(lifts(handle), `Travel: ${there}`).toBe('');
++    expect(dayNoteOf(session(handle))?.text).toBe('You trained today: nothing more for today.');
 +  });
 +});
 diff --git a/src/core/state/keptSwapAwayFrom.store.test.ts b/src/core/state/keptSwapAwayFrom.store.test.ts
@@ -3137,12 +3451,148 @@ index 0000000..514ae80
 +    );
 +  });
 +});
+diff --git a/src/core/state/previewAgainSwappedAway.store.test.ts b/src/core/state/previewAgainSwappedAway.store.test.ts
+new file mode 100644
+index 0000000..be1e309
+--- /dev/null
++++ b/src/core/state/previewAgainSwappedAway.store.test.ts
+@@ -0,0 +1,130 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import { allEntries } from '../../engine/workout/types';
++import { describeWorkout } from '../../test/clockDays';
++import { record } from '../../test/records';
++import { TEST_NOW, createTestStore } from '../../test/testStore';
++
++/**
++ * Twentieth review of round M, on the eighteenth pass's day's list of lifts swapped away
++ * (`swappedAway`) where it meets the store's preview made again (`rebuildPreview`: a coach focus set
++ * or cleared, a deload week planned or cancelled, a kept swap stopped, a reset of what the app
++ * learned).
++ *
++ * The rules: "A lift the lifter swaps away stays away for the day (`swappedAway`): no change picks
++ * it by itself, as a slot's own pick" (the eighteenth pass); the nineteenth pass held kept swaps to
++ * it through "the preview made again"; and `regeneratePreview`'s own doc: "Today's choices hold
++ * through it ...: the length, a check-in, the plates missing today, and what was set aside for today
++ * ... are applied to the new plan by the engine, as every rebuild applies them."
++ *
++ * What happens: `rebuildPreview` builds a fresh plan and applies today's choices to it only when one
++ * of them is set (`chosen`), and `chosen` does not read `swappedAway`. With a swap the only choice
++ * of the day, the fresh plan stands as it is made, without the day's list: the lift swapped away is
++ * its slot's own pick again, and the list is gone for every later rebuild that day. With any other
++ * choice beside it (a length picked, a skip), the engine applies the list and the lift stays away.
++ *
++ * Steps (synthetic data only): Monday's bench press in the log; on Wednesday, a day the schedule
++ * does not tick, at the gym, the catch-up has the EZ-bar curl. The lifter swaps it for the cable
++ * curl (not kept). The coach focus set to the chest: the catch-up has the EZ-bar curl again, and the
++ * day's list is empty. With 45 minutes picked before the focus, it stays away.
++ *
++ * Also fails on 0f8d10f (from the eighteenth pass).
++ */
++
++const DAY = 86_400_000;
++const daysBefore = (days: number) => new Date(Date.parse(TEST_NOW) - days * DAY).toISOString();
++
++async function lifter() {
++  const handle = createTestStore();
++  await handle.store.hydrate();
++  await handle.store.completeOnboarding(
++    { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
++    createDefaultLocations({ gymAccess: true }, TEST_NOW),
++  );
++  const db = await handle.store.getDatabase();
++  const when = daysBefore(2);
++  await db.put('workouts', {
++    ...record(
++      0,
++      'barbell-bench-press',
++      [
++        [10, 100, 2],
++        [10, 100, 2],
++        [10, 100, 2],
++      ],
++      [8, 12],
++      2,
++    ),
++    id: 'w-bench-monday',
++    startedAt: when,
++    completedAt: when,
++  });
++  await handle.store.hydrate();
++  return handle;
++}
++
++type Handle = Awaited<ReturnType<typeof lifter>>;
++const session = (handle: Handle) => handle.store.getSnapshot().session!;
++const ids = (handle: Handle) =>
++  allEntries(session(handle).workout.blocks).map((entry) => entry.exerciseId);
++
++async function swapTheCurl(handle: Handle) {
++  expect(session(handle).workout.templateId).toBe('catch-up');
++  const curl = allEntries(session(handle).workout.blocks).find(
++    (entry) => entry.exerciseId === 'ez-bar-curl',
++  );
++  expect(curl).toBeDefined();
++  const swapped = await handle.store.swapExercise(curl!.id, 'cable-curl');
++  expect(swapped?.ok).toBe(true);
++  expect(session(handle).constraints.swappedAway).toEqual(['ez-bar-curl']);
++}
++
++describe('a lift swapped away today, through the preview made again', () => {
++  it('stays away with a length picked beside the swap', async () => {
++    const handle = await lifter();
++    await swapTheCurl(handle);
++    await handle.store.setDurationChoice(45);
++    await handle.store.setCoachFocus('chest');
++    expect(ids(handle)).not.toContain('ez-bar-curl');
++    expect(session(handle).constraints.swappedAway).toContain('ez-bar-curl');
++  });
++
++  it('stays away with the swap the only choice of the day', async () => {
++    const handle = await lifter();
++    await swapTheCurl(handle);
++    await handle.store.setCoachFocus('chest');
++    const plan = describeWorkout(session(handle).workout).join('; ');
++    // On 0fe4cb9 and 0f8d10f: "... ez-bar-curl x3 @RIR 1/1/1 ...", and the list empty.
++    expect(ids(handle), plan).not.toContain('ez-bar-curl');
++    expect(session(handle).constraints.swappedAway ?? []).toContain('ez-bar-curl');
++  });
++
++  it('comes back when the lifter stops the swap kept for weeks, as a swap back brings it', async () => {
++    const handle = await lifter();
++    const curl = allEntries(session(handle).workout.blocks).find(
++      (entry) => entry.exerciseId === 'ez-bar-curl',
++    );
++    expect((await handle.store.swapExercise(curl!.id, 'cable-curl', true))?.ok).toBe(true);
++    expect(session(handle).constraints.swappedAway).toEqual(['ez-bar-curl']);
++    await handle.store.stopLastingSwap('ez-bar-curl');
++    // The plan's own pick back where the plan has it, off the day's list.
++    expect(ids(handle)).toContain('ez-bar-curl');
++    expect(ids(handle)).not.toContain('cable-curl');
++    expect(session(handle).constraints.swappedAway ?? []).toEqual([]);
++  });
++
++  it('comes back when the swap is stopped, the day’s other lifts swapped away kept away', async () => {
++    const handle = await lifter();
++    const plan = () => allEntries(session(handle).workout.blocks);
++    const curl = plan().find((entry) => entry.exerciseId === 'ez-bar-curl')!;
++    expect((await handle.store.swapExercise(curl.id, 'cable-curl', true))?.ok).toBe(true);
++    const raise = plan().find((entry) => entry.exerciseId === 'lateral-raise')!;
++    expect((await handle.store.swapExercise(raise.id, 'cable-lateral-raise'))?.ok).toBe(true);
++    expect(session(handle).constraints.swappedAway).toEqual(['ez-bar-curl', 'lateral-raise']);
++    await handle.store.stopLastingSwap('ez-bar-curl');
++    expect(ids(handle)).toContain('ez-bar-curl');
++    expect(ids(handle)).not.toContain('lateral-raise');
++    expect(session(handle).constraints.swappedAway).toEqual(['lateral-raise']);
++  });
++});
 diff --git a/src/core/state/session.catchUp.test.ts b/src/core/state/session.catchUp.test.ts
 new file mode 100644
-index 0000000..3126f9c
+index 0000000..cab4743
 --- /dev/null
 +++ b/src/core/state/session.catchUp.test.ts
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,115 @@
 +import { describe, expect, it } from 'vitest';
 +import { generateWorkout } from '../../engine/workoutGenerator/generate';
 +import type { CatchUpSpec } from '../../engine/planning/catchUp';
@@ -3201,7 +3651,7 @@ index 0000000..3126f9c
 +  });
 +
 +  it('keeps the marks of a catch-up the lifter emptied, closed or swapped, and drops ones it cannot read', () => {
-+    // The seventeenth and eighteenth reviews of round M: the offer the lifter's hand emptied, a slot
++    // The seventeenth to twentieth reviews of round M: the plans the lifter's hand emptied, a slot
 +    // closed, the lifts swapped away today.
 +    const storage = createMemoryStorage();
 +    const session = stored();
@@ -3211,8 +3661,10 @@ index 0000000..3126f9c
 +        ...session,
 +        constraints: {
 +          ...session.constraints,
-+          emptied: 'catch-up chest',
-+          emptiedLayout: 'push-arms',
++          emptied: [
++            { offer: 'catch-up chest', layout: 'catch-up' },
++            { offer: 'catch-up chest', layout: 'push-arms' },
++          ],
 +          closedSlots: [0],
 +          swappedAway: ['push-up'],
 +        },
@@ -3220,19 +3672,29 @@ index 0000000..3126f9c
 +      storage,
 +    );
 +    const read = readSession(storage);
-+    expect(read?.constraints.emptied).toBe('catch-up chest');
-+    expect(read?.constraints.emptiedLayout).toBe('push-arms');
++    expect(read?.constraints.emptied).toEqual([
++      { offer: 'catch-up chest', layout: 'catch-up' },
++      { offer: 'catch-up chest', layout: 'push-arms' },
++    ]);
 +    expect(read?.constraints.closedSlots).toEqual([0]);
 +    expect(read?.constraints.swappedAway).toEqual(['push-up']);
 +    const raw = JSON.parse(storage.getItem(SESSION_KEY)!) as {
 +      constraints: Record<string, unknown>;
 +    };
-+    // The nineteenth review: the layout emptied, dropped alone when unreadable, the mark kept.
-+    raw.constraints.emptiedLayout = 7;
++    // The twentieth review: a plan that cannot be read, its layout lost, is dropped alone.
++    raw.constraints.emptied = [
++      { offer: 'catch-up chest', layout: 7 },
++      { offer: 'catch-up chest', layout: 'push-arms' },
++    ];
 +    storage.setItem(SESSION_KEY, JSON.stringify(raw));
 +    const layoutLost = readSession(storage);
-+    expect(layoutLost?.constraints.emptiedLayout).toBeUndefined();
-+    expect(layoutLost?.constraints.emptied).toBe('catch-up chest');
++    expect(layoutLost?.constraints.emptied).toEqual([
++      { offer: 'catch-up chest', layout: 'push-arms' },
++    ]);
++    // A mark saved before the plans were kept: dropped.
++    raw.constraints.emptied = 'catch-up chest';
++    storage.setItem(SESSION_KEY, JSON.stringify(raw));
++    expect(readSession(storage)?.constraints.emptied).toBeUndefined();
 +    raw.constraints.emptied = 5;
 +    raw.constraints.closedSlots = 'yes';
 +    raw.constraints.swappedAway = [3];
@@ -3247,7 +3709,7 @@ index 0000000..3126f9c
 +  });
 +});
 diff --git a/src/core/state/session.ts b/src/core/state/session.ts
-index 3b095f0..0084cb5 100644
+index 3b095f0..007c98d 100644
 --- a/src/core/state/session.ts
 +++ b/src/core/state/session.ts
 @@ -6,6 +6,7 @@ import { PersonalRecordSchema, ReserveCheckLogSchema } from '../validation/worko
@@ -3258,7 +3720,17 @@ index 3b095f0..0084cb5 100644
  import { emptyCompleted, emptyConstraints } from '../../engine/recalibration/recalibrate';
  import type {
    ChangeSummary,
-@@ -279,6 +280,34 @@ const ConstraintsSchema = z.looseObject({
+@@ -243,6 +244,9 @@ const ReadinessSchema = z.looseObject({
+   timePressure: z.boolean(),
+ });
+ 
++/** A plan the lifter emptied today (`EmptiedPlan`): its offer, and the layout it was laid out on. */
++const EmptiedPlanSchema = z.looseObject({ offer: z.string(), layout: z.string().min(1) });
++
+ const ConstraintsSchema = z.looseObject({
+   busyEquipment: z.array(z.string()),
+   // Maintenance 25: a session saved before has none; one that fails to read keeps none.
+@@ -279,6 +283,40 @@ const ConstraintsSchema = z.looseObject({
      .nullable()
      .default(null),
    focus: z.enum(MUSCLE_IDS).nullable().default(null),
@@ -3281,12 +3753,18 @@ index 3b095f0..0084cb5 100644
 +    .optional()
 +    .catch(undefined),
 +  fullSession: z.boolean().optional().catch(undefined),
-+  // The seventeenth review of round M: one that fails to read is dropped, and the way back from the
-+  // full session lays the catch-up out again.
-+  emptied: z.string().optional().catch(undefined),
-+  // The nineteenth review of round M: one that fails to read is dropped, and the mark reads as the
-+  // offer's own.
-+  emptiedLayout: z.string().optional().catch(undefined),
++  // The seventeenth to twentieth reviews of round M: each plan that fails to read is dropped alone,
++  // and a plan of its offer and layout is built as usual.
++  emptied: z
++    .array(z.unknown())
++    .transform((items) =>
++      items.flatMap((item) => {
++        const read = EmptiedPlanSchema.safeParse(item);
++        return read.success ? [{ offer: read.data.offer, layout: read.data.layout }] : [];
++      }),
++    )
++    .optional()
++    .catch(undefined),
 +  // The eighteenth review of round M: each dropped alone when unreadable.
 +  closedSlots: z.array(z.number().int().min(0)).optional().catch(undefined),
 +  swappedAway: z.array(z.string()).optional().catch(undefined),
@@ -3294,9 +3772,18 @@ index 3b095f0..0084cb5 100644
  
  const CompletedSchema = z.looseObject({
 diff --git a/src/engine/coach/coachConductor.ts b/src/engine/coach/coachConductor.ts
-index 6901b7c..9dc8602 100644
+index 6901b7c..65a8a17 100644
 --- a/src/engine/coach/coachConductor.ts
 +++ b/src/engine/coach/coachConductor.ts
+@@ -53,7 +53,7 @@ import {
+   computeWeeklyVolume,
+ } from '../volume/weeklyVolume';
+ import { checkExerciseFit, isBlocked } from '../conflicts/conflictEngine';
+-import { buildConflictContext, preferredIdsOf } from '../conflicts/context';
++import { preferredIdsOf } from '../conflicts/context';
+ import { barWeightFor, startRatio } from '../progression/startingLoad';
+ import {
+   EFFORT_REPS_CEILING,
 @@ -65,7 +65,9 @@ import {
  import { MAX_WORKING_SETS } from '../recalibration/recalibrate';
  import {
@@ -3307,14 +3794,15 @@ index 6901b7c..9dc8602 100644
    sessionConflictContext,
    splitFor,
    swappedOutIds,
-@@ -544,6 +546,15 @@ export const PAIN_HELP_LINE =
+@@ -544,6 +546,16 @@ export const PAIN_HELP_LINE =
   */
  export const PAIN_PATTERN_FOOTNOTE = `A pattern in what you logged, not a diagnosis. ${PAIN_HELP_LINE}`;
  
 +/**
 + * The lifts the day sets aside from every offer the coach makes: the day's avoid list and the lifts
 + * the lifter swapped away today, which no change brings back by itself (the nineteenth review of
-+ * round M: the coverage card offered the curl swapped away).
++ * round M: the coverage card offered the curl swapped away; the twentieth: so did the pain pattern's
++ * card).
 + */
 +function dayExclusions(input: CoachInput): string[] {
 +  return [...input.constraints.avoidExerciseIds, ...(input.constraints.swappedAway ?? [])];
@@ -3323,7 +3811,27 @@ index 6901b7c..9dc8602 100644
  /**
   * The pain pattern's card (Maintenance 27, item 45, docs/research/pain-patterns.md): it names the
   * joint, the exercise, the counts and the dates, says it is a pattern in what was logged and not a
-@@ -938,10 +949,42 @@ export function spareMinutes(
+@@ -553,12 +565,17 @@ function painPatternSignal(
+   input: CoachInput,
+   remaining: readonly WorkoutEntry[],
+ ): { signal: CoachSignal; joint: Joint } | null {
+-  const context = buildConflictContext(input.profile, input.location);
++  // The alternative fits the place and the day's list, and is not in today's plan already, where
++  // the swap would be refused (the twentieth review of round M).
++  const context = sessionConflictContext(input.profile, input.location, {
++    excludeExerciseIds: dayExclusions(input),
++  });
++  const today = new Set(allEntries(input.workout.blocks).map((entry) => entry.exerciseId));
+   const found = painPatterns({
+     history: input.history,
+     now: input.now,
+     swaps: input.swaps,
+-    fits: (exercise) => !isBlocked(checkExerciseFit(exercise, context)),
++    fits: (exercise) => !today.has(exercise.id) && !isBlocked(checkExerciseFit(exercise, context)),
+     since: input.resets?.pain ?? null,
+   });
+   for (const pattern of found) {
+@@ -938,10 +955,42 @@ export function spareMinutes(
    return input.workout.duration.targetMinutes - elapsed / 60 - left;
  }
  
@@ -3366,7 +3874,7 @@ index 6901b7c..9dc8602 100644
    const accessory = pickAccessoryFor(
      muscle,
      entries.map((entry) => requireExercise(entry.exerciseId)),
-@@ -949,13 +992,14 @@ function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction |
+@@ -949,13 +998,14 @@ function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction |
        profile: input.profile,
        location: input.location,
        constraints: {
@@ -3382,7 +3890,7 @@ index 6901b7c..9dc8602 100644
      }),
    );
    if (!accessory) return null;
-@@ -1063,7 +1107,7 @@ function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | n
+@@ -1063,7 +1113,7 @@ function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | n
    const reps: [number, number] = [Math.max(1, floor - 3), floor - 1];
    const today = new Set(allEntries(input.workout.blocks).map((candidate) => candidate.exerciseId));
    const context = sessionConflictContext(input.profile, input.location, {
@@ -3391,7 +3899,7 @@ index 6901b7c..9dc8602 100644
      painJoints: jointsToProtect(input),
    });
    // Never one the lifter swapped out for weeks, nor the same move made heavier: its loaded
-@@ -1424,12 +1468,15 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
+@@ -1424,12 +1474,15 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
    const covered = new Set(
      entries.flatMap((entry) => requireExercise(entry.exerciseId).primaryMuscles),
    );
@@ -3408,7 +3916,7 @@ index 6901b7c..9dc8602 100644
    );
    if (!gap) return [];
    const left = Math.max(0, planned - doneThisWeek - 1);
-@@ -1458,13 +1505,14 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
+@@ -1458,13 +1511,14 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
              profile: input.profile,
              location: input.location,
              constraints: {
@@ -3424,7 +3932,7 @@ index 6901b7c..9dc8602 100644
            }),
          )
        : undefined;
-@@ -1585,7 +1633,7 @@ function varietyOffer(
+@@ -1585,7 +1639,7 @@ function varietyOffer(
      history: input.history,
      now: input.now,
      context: sessionConflictContext(input.profile, input.location, {
@@ -3433,7 +3941,7 @@ index 6901b7c..9dc8602 100644
        painJoints: jointsToProtect(input),
      }),
      swaps: input.swaps,
-@@ -2109,7 +2157,9 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
+@@ -2109,7 +2163,9 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
      ...scheduleSignals(input),
      ...tipSignals(input),
      ...pushSignals(input),
@@ -3572,6 +4080,240 @@ index 0000000..d54a12c
 +    expect(offered.length).toBeGreaterThan(0);
 +    // On 0f8d10f: ['dumbbell-curl'].
 +    expect(offered).not.toContain('dumbbell-curl');
++  });
++});
+diff --git a/src/engine/coach/painCardDayLists.test.ts b/src/engine/coach/painCardDayLists.test.ts
+new file mode 100644
+index 0000000..3822a85
+--- /dev/null
++++ b/src/engine/coach/painCardDayLists.test.ts
+@@ -0,0 +1,228 @@
++import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { rankAlternatives } from '../alternatives/rankAlternatives';
++import { gatherSignals, type CoachInput } from './coachConductor';
++import {
++  contextFor,
++  emptyCompleted,
++  emptyConstraints,
++  recalibrate,
++  swapsOffered,
++} from '../recalibration/recalibrate';
++import type { RecalibrationTrigger, SessionConstraints } from '../recalibration/types';
++import { interpretFatigue } from '../recovery/fatigue';
++import { analyzeStrategy } from '../strategy/strategy';
++import { allEntries, type GeneratedWorkout } from '../workout/types';
++import { generateWorkout } from '../workoutGenerator/generate';
++import { record } from '../../test/records';
++
++/**
++ * Twentieth review of round M, on the nineteenth pass's coach fix. The report: "Every coach offer
++ * reads the day's list (one helper for all four)": `dayExclusions` (the avoid list and the lifts
++ * swapped away today) in the extra set's accessory, the fewer-reps swap, the coverage accessory and
++ * the variety swap. The eighteenth pass: "A lift the lifter swaps away stays away for the day
++ * (`swappedAway`)". The variety offer's own rule (Maintenance 27, the review of item 49): "the
++ * alternative fits today as every offer reads it: the place, the lifter's limits, what they avoid
++ * today and the joints protected today".
++ *
++ * The coach makes a fifth offer that names a lift: the pain-pattern card's four-week swap (item 45,
++ * `painPatternSignal`). Its alternative is checked against the place only
++ * (`buildConflictContext(profile, location)`), so it can be a lift the lifter swapped away today,
++ * or one set aside today ("Uncomfortable", a skip), and the card offers it for four weeks, one tap
++ * from putting it back in the plan.
++ *
++ * Steps (synthetic data only): knee pain logged with the back squat on two lower days a week apart,
++ * and two lower days on the leg press since, without it. Today's lower day at the gym leads with the
++ * back squat; the coach: "Knee pain with Back Squat, not with Leg Press", "Use Leg Press for 4
++ * weeks".
++ * - The lifter swaps the Bulgarian split squat for the leg press, then the leg press for the dumbbell
++ *   Bulgarian split squat (both on the swap sheet): the leg press is on the day's list
++ *   (`swappedAway`). The card still offers "Use Leg Press for 4 weeks".
++ * - Or the lifter swaps the Bulgarian split squat for the leg press and calls it uncomfortable: the
++ *   leg press is set aside today. The card still offers it.
++ * - From before the round (item 45), in the same offer: with the leg press in today's plan (the
++ *   Bulgarian split squat swapped for it), the card still offers "Use Leg Press for 4 weeks", and the
++ *   tap is refused: "The same exercise appeared twice, so nothing was changed." The variety offer
++ *   reads today's plan (`today`); this one does not.
++ *
++ * All three also fail on 0f8d10f (the card has read neither list, nor today's plan, since item 45).
++ */
++
++const NOW = '2026-09-10T12:00:00.000Z';
++const profile = createDefaultProfile(NOW);
++const [, gym] = createDefaultLocations({ gymAccess: true }, NOW) as [
++  LocationProfile,
++  LocationProfile,
++];
++const squatHurt = (days: number): WorkoutRecord => ({
++  ...record(days, 'back-squat', [
++    [5, 185, 2],
++    [5, 185, 2],
++    [5, 185, 2],
++  ]),
++  templateId: 'lower',
++  painJoints: ['knee'],
++  painReports: [{ exerciseId: 'back-squat', joint: 'knee' }],
++});
++const legPress = (days: number): WorkoutRecord => ({
++  ...record(
++    days,
++    'leg-press',
++    [
++      [10, 300, 2],
++      [10, 300, 2],
++      [10, 300, 2],
++    ],
++    [8, 12],
++  ),
++  templateId: 'lower',
++  painReports: [],
++});
++const history: WorkoutRecord[] = [squatHurt(20), legPress(16), squatHurt(13), legPress(9)];
++
++function lowerDay() {
++  let workout: GeneratedWorkout = generateWorkout({
++    profile,
++    location: gym,
++    history,
++    now: NOW,
++    duration: 'default',
++    constraints: { templateId: 'lower' },
++  });
++  let constraints: SessionConstraints = emptyConstraints();
++  const find = (id: string) => allEntries(workout.blocks).find((entry) => entry.exerciseId === id);
++  return {
++    get constraints() {
++      return constraints;
++    },
++    find,
++    /** What the swap sheet offers for a lift, as Today builds it. */
++    sheet(id: string): string[] {
++      const entry = find(id)!;
++      const ranked = rankAlternatives({
++        current: requireExercise(entry.exerciseId),
++        context: contextFor({ profile, location: gym }, constraints),
++        otherExercises: allEntries(workout.blocks)
++          .filter((other) => other.id !== entry.id)
++          .map((other) => requireExercise(other.exerciseId)),
++        dropSetPlanned: entry.dropSet,
++        plannedSets: { sets: entry.sets.length, restSeconds: entry.restSeconds },
++        limit: 6,
++      });
++      const day = {
++        constraints,
++        completed: emptyCompleted(),
++        history,
++        timestamp: NOW,
++        profile,
++        location: gym,
++      };
++      return swapsOffered(ranked, day, workout, entry).candidates.map(
++        (candidate) => candidate.exercise.id,
++      );
++    },
++    run(trigger: RecalibrationTrigger) {
++      const result = recalibrate({
++        trigger,
++        workout,
++        completed: emptyCompleted(),
++        lockedEntryIds: [],
++        currentEntryId: null,
++        duration: 'default',
++        profile,
++        location: gym,
++        loading: { missingPlates: [] },
++        history,
++        constraints,
++        reason: 'test',
++        timestamp: NOW,
++      });
++      if (!result.ok) throw new Error(`${trigger.type}: ${result.error}`);
++      workout = result.workout;
++      constraints = result.constraints;
++    },
++    /** The four-week swaps the coach's cards offer, as "from -> to". */
++    lastingSwaps(): string[] {
++      const fatigue = interpretFatigue(history, NOW, null);
++      const input: CoachInput = {
++        workout,
++        status: 'preview',
++        duration: 'default',
++        completed: emptyCompleted(),
++        constraints,
++        profile,
++        history,
++        now: NOW,
++        fatigue,
++        strategy: analyzeStrategy({ history, profile, now: NOW, fatigue }),
++        lastExportAt: NOW,
++        workoutCount: history.length,
++        location: gym,
++      };
++      return gatherSignals(input).flatMap((signal) => {
++        const action = signal.action;
++        if (action?.kind !== 'lasting-swap') return [];
++        const from = allEntries(workout.blocks).find((entry) => entry.id === action.entryId);
++        return [`${from?.exerciseId} -> ${action.exerciseId}`];
++      });
++    },
++  };
++}
++
++describe('the pain-pattern card’s four-week swap', () => {
++  it('offers the alternative on a day that leaves it alone', () => {
++    const day = lowerDay();
++    expect(day.find('back-squat')).toBeDefined();
++    expect(day.lastingSwaps()).toEqual(['back-squat -> leg-press']);
++  });
++
++  it('offers no lift the lifter swapped away today', () => {
++    const day = lowerDay();
++    expect(day.sheet('bulgarian-split-squat')).toContain('leg-press');
++    day.run({
++      type: 'replace',
++      entryId: day.find('bulgarian-split-squat')!.id,
++      exerciseId: 'leg-press',
++    });
++    expect(day.sheet('leg-press')).toContain('dumbbell-bulgarian-split-squat');
++    day.run({
++      type: 'replace',
++      entryId: day.find('leg-press')!.id,
++      exerciseId: 'dumbbell-bulgarian-split-squat',
++    });
++    expect(day.constraints.swappedAway).toContain('leg-press');
++    // On 0fe4cb9 and 0f8d10f: ['back-squat -> leg-press'].
++    expect(day.lastingSwaps()).not.toContain('back-squat -> leg-press');
++  });
++
++  it('offers no lift set aside today', () => {
++    const day = lowerDay();
++    day.run({
++      type: 'replace',
++      entryId: day.find('bulgarian-split-squat')!.id,
++      exerciseId: 'leg-press',
++    });
++    day.run({ type: 'uncomfortable', entryId: day.find('leg-press')!.id });
++    expect(day.constraints.avoidExerciseIds).toContain('leg-press');
++    // On 0fe4cb9 and 0f8d10f: ['back-squat -> leg-press'].
++    expect(day.lastingSwaps()).not.toContain('back-squat -> leg-press');
++  });
++
++  it('offers no lift already in today’s plan, whose tap is refused', () => {
++    const day = lowerDay();
++    day.run({
++      type: 'replace',
++      entryId: day.find('bulgarian-split-squat')!.id,
++      exerciseId: 'leg-press',
++    });
++    expect(day.find('leg-press')).toBeDefined();
++    expect(() =>
++      day.run({ type: 'replace', entryId: day.find('back-squat')!.id, exerciseId: 'leg-press' }),
++    ).toThrow('The same exercise appeared twice');
++    // On 0fe4cb9 and 0f8d10f: ['back-squat -> leg-press'].
++    expect(day.lastingSwaps()).not.toContain('back-squat -> leg-press');
 +  });
 +});
 diff --git a/src/engine/duration/duration.ts b/src/engine/duration/duration.ts
@@ -6220,10 +6962,10 @@ index 0000000..98da13c
 +});
 diff --git a/src/engine/recalibration/catchUpEmptiedByHand.test.ts b/src/engine/recalibration/catchUpEmptiedByHand.test.ts
 new file mode 100644
-index 0000000..176feb5
+index 0000000..bf4d6f5
 --- /dev/null
 +++ b/src/engine/recalibration/catchUpEmptiedByHand.test.ts
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,177 @@
 +import { describe, expect, it } from 'vitest';
 +import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
 +import type { CatchUpSpec } from '../planning/catchUp';
@@ -6343,7 +7085,7 @@ index 0000000..176feb5
 +    for (const entry of allEntries(today.workout.blocks)) {
 +      today.run({ type: 'skip', entryId: entry.id });
 +    }
-+    expect(today.constraints.emptied).toBe('second side-delts');
++    expect(today.constraints.emptied).toEqual([{ offer: 'second side-delts', layout: 'lower' }]);
 +    // At the gym the second workout has the lateral raise: another plan, built whole.
 +    today.run({ type: 'location' }, gym);
 +    expect(lifts(today.workout), today.steps.join(' | ')).toBe('lateral-raise x3 @RIR 1/1/1');
@@ -6365,7 +7107,9 @@ index 0000000..176feb5
 +    for (const entry of allEntries(today.workout.blocks)) {
 +      today.run({ type: 'skip', entryId: entry.id });
 +    }
-+    expect(today.constraints.emptied).toBe('catch-up forearms chest');
++    expect(today.constraints.emptied).toEqual([
++      { offer: 'catch-up forearms chest', layout: 'catch-up' },
++    ]);
 +    today.run({ type: 'add-exercise', exerciseId: 'wrist-curl', muscle: 'forearms', sets: 2 });
 +    expect(today.constraints.emptied).toBeUndefined();
 +    today.run({ type: 'session-kind', full: true, kind: 'catch-up' });
@@ -10581,12 +11325,109 @@ index 0000000..b19543e
 +    expect(again.length, lifts(back.workout)).toBe(1);
 +  });
 +});
+diff --git a/src/engine/recalibration/emptiedNothingBehindWayBack.test.ts b/src/engine/recalibration/emptiedNothingBehindWayBack.test.ts
+new file mode 100644
+index 0000000..e236320
+--- /dev/null
++++ b/src/engine/recalibration/emptiedNothingBehindWayBack.test.ts
+@@ -0,0 +1,91 @@
++import { describe, expect, it } from 'vitest';
++import type { CatchUpSpec } from '../planning/catchUp';
++import { emptyCompleted, emptyConstraints, recalibrate } from './recalibrate';
++import type { RecalibrationTrigger, SessionConstraints } from './types';
++import { allEntries, CATCH_UP_TEMPLATE_IDS, type GeneratedWorkout } from '../workout/types';
++import { generateWorkout } from '../workoutGenerator/generate';
++import { at, describeWorkout, gym, profileOf, session } from '../../test/clockDays';
++
++/**
++ * Twentieth review of round M, on the nineteenth pass's mark of a plan emptied read without its
++ * layout (`emptiedLayout`, then read as the offer's own template, `CATCH_UP_TEMPLATE_IDS[kind]`):
++ * the offer's own template is the layout of a catch-up, and of a second workout with muscles behind
++ * where the place has a lift for them, but never of a second workout with nothing behind, which is
++ * the split's own day without what was trained today. Read so, the way back from the full session
++ * laid the split's day out with lifts, and the plan the lifter emptied came back whole.
++ *
++ * Fixed at the mark: each plan the lifter emptied is kept with its offer and its layout together
++ * (`emptied`, a list of both), so no mark is read without its layout, and one that cannot be read is
++ * dropped alone. The rule it serves, from the seventeenth pass: "the way back to the same offer finds
++ * it empty again".
++ *
++ * Steps (synthetic data only): a morning bench press and overhead press; nothing is behind this
++ * week, so the second workout is the lower day without the chest, the triceps and the front delts.
++ * The lifter skips each of its seven lifts: "nothing more for today", the mark kept with the lower
++ * day. Full session; Go easy instead: on 0fe4cb9, with the layout lost, "The second workout: no
++ * changes needed", the front squat, the Romanian deadlift, the reverse lunge, the calf raise and the
++ * dead bug.
++ */
++
++const profile = profileOf();
++const NOW = at(9, 18);
++const nothingBehind: CatchUpSpec = {
++  kind: 'second',
++  muscles: [],
++  sitOut: ['chest', 'triceps', 'front-delts'],
++};
++const history = [
++  session(at(3, 18), [['barbell-row', 3]]),
++  session(at(9, 9), [
++    ['barbell-bench-press', 3],
++    ['overhead-press', 3],
++  ]),
++];
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++
++describe('a second workout with nothing behind, emptied by the lifter', () => {
++  it('the way back from the full session finds it empty', () => {
++    let workout = generateWorkout({
++      profile,
++      location: gym,
++      history,
++      now: NOW,
++      duration: 'default',
++      constraints: { catchUp: nothingBehind },
++    });
++    // The split's own day, never the offer's own template.
++    expect(workout.templateId).not.toBe(CATCH_UP_TEMPLATE_IDS.second);
++    let constraints: SessionConstraints = { ...emptyConstraints(), catchUp: nothingBehind };
++    const steps: string[] = [lifts(workout)];
++    const run = (trigger: RecalibrationTrigger) => {
++      const result = recalibrate({
++        trigger,
++        workout,
++        completed: emptyCompleted(),
++        lockedEntryIds: [],
++        currentEntryId: null,
++        duration: 'default',
++        profile,
++        location: gym,
++        loading: { missingPlates: [] },
++        history,
++        constraints,
++        reason: 'test',
++        timestamp: NOW,
++      });
++      if (!result.ok) throw new Error(`${trigger.type}: ${result.error}`);
++      workout = result.workout;
++      constraints = result.constraints;
++      steps.push(`${trigger.type}: ${result.summary.headline} => ${lifts(workout)}`);
++    };
++    for (const entry of allEntries(workout.blocks)) run({ type: 'skip', entryId: entry.id });
++    expect(allEntries(workout.blocks)).toEqual([]);
++    // The mark keeps the split's own day, the layout the lifter emptied.
++    expect(constraints.emptied).toEqual([{ offer: 'second', layout: workout.templateId }]);
++    run({ type: 'session-kind', full: true, kind: 'second' });
++    expect(allEntries(workout.blocks).length).toBeGreaterThan(0);
++    run({ type: 'session-kind', full: false, kind: 'second' });
++    // On 0fe4cb9: "front-squat x4 @RIR 2/2/2/2; romanian-deadlift x3 @RIR 1/1/1; ...".
++    expect(lifts(workout), steps.join(' | ')).toBe('');
++  });
++});
 diff --git a/src/engine/recalibration/emptiedRoundTrip.test.ts b/src/engine/recalibration/emptiedRoundTrip.test.ts
 new file mode 100644
-index 0000000..edea407
+index 0000000..a7fd7f4
 --- /dev/null
 +++ b/src/engine/recalibration/emptiedRoundTrip.test.ts
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,164 @@
 +import { describe, expect, it } from 'vitest';
 +import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
 +import type { CatchUpSpec } from '../planning/catchUp';
@@ -10651,11 +11492,6 @@ index 0000000..edea407
 +      return workout;
 +    },
 +    steps,
-+    /** The mark as a session saved before the layout emptied was kept holds it. */
-+    forgetLayout() {
-+      constraints = { ...constraints };
-+      delete constraints.emptiedLayout;
-+    },
 +    run(trigger: RecalibrationTrigger, to?: LocationProfile): RecalibrationSuccess {
 +      if (to) location = to;
 +      // As the store reads a change of place (`offerOverrides`): a plan made where the day's offer
@@ -10734,14 +11570,6 @@ index 0000000..edea407
 +    }
 +  });
 +
-+  it("a mark kept before its layout was reads as the offer's own", () => {
-+    const today = emptied(catchUp, catchUpHistory, 'ez-bar-curl');
-+    today.forgetLayout();
-+    today.run({ type: 'session-kind', full: true, kind: 'catch-up' });
-+    today.run({ type: 'session-kind', full: false, kind: 'catch-up' });
-+    expect(lifts(today.workout), today.steps.join(' | ')).toBe('');
-+  });
-+
 +  it('a catch-up stays empty back at the gym', () => {
 +    const today = emptied(catchUp, catchUpHistory, 'ez-bar-curl');
 +    today.run({ type: 'session-kind', full: true, kind: 'catch-up' });
@@ -10761,6 +11589,205 @@ index 0000000..edea407
 +    expect(today.workout.templateId).not.toBe(CATCH_UP_TEMPLATE_IDS.second);
 +    today.run({ type: 'location' }, gym);
 +    // On 0f8d10f and 4cb40d7: "cable-lateral-raise x3 @RIR 1/1/1", the second workout built whole.
++    expect(lifts(today.workout), today.steps.join(' | ')).toBe('');
++  });
++});
+diff --git a/src/engine/recalibration/emptiedTwoLayouts.test.ts b/src/engine/recalibration/emptiedTwoLayouts.test.ts
+new file mode 100644
+index 0000000..f138879
+--- /dev/null
++++ b/src/engine/recalibration/emptiedTwoLayouts.test.ts
+@@ -0,0 +1,193 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
++import type { CatchUpSpec } from '../planning/catchUp';
++import { emptyCompleted, emptyConstraints, recalibrate } from './recalibrate';
++import type { RecalibrationSuccess, RecalibrationTrigger, SessionConstraints } from './types';
++import { allEntries, CATCH_UP_TEMPLATE_IDS, type GeneratedWorkout } from '../workout/types';
++import { builtCatchUp, generateWorkout } from '../workoutGenerator/generate';
++import { at, describeWorkout, gym, profileOf, session } from '../../test/clockDays';
++
++/**
++ * Twentieth review of round M, on the nineteenth pass's layout of a plan emptied (`emptiedLayout`).
++ * The report: "The mark of a plan emptied keeps the layout emptied ...: the offer's own, or the
++ * split's own day a place with no lift for the offer puts in its place. The generator lays that
++ * layout out empty wherever it finds a lift for it"; "a second workout at such a place is the
++ * split's own day, as a catch-up is"; and from the fourteenth to sixteenth passes, "a catch-up or a
++ * second workout emptied stays so through every rebuild".
++ *
++ * A second workout's stand-in, the split's own day at a place with no lift for it, is off the plan,
++ * so the lifter can empty it too. The mark keeps one layout: emptying the second layout writes over
++ * the first (`markEmptied`: `constraints.emptiedLayout = next.templateId`), and the layout the
++ * lifter emptied first is then "another plan", laid out with lifts again. And lifts laid out as the
++ * offer at another place end the mark (`laidOutAsOffer`), the split's day the lifter emptied with
++ * it, so a trip there and back brings that day back with lifts.
++ *
++ * Steps (synthetic data only), a second workout for the side delts after a morning upper session,
++ * the store's reading of a change of place mirrored as the nineteenth pass's tests do:
++ * - At the gym it is the lateral raise; the lifter skips it. Full session; the place set to Travel
++ *   (no equipment); Go easy instead: the split's own day, the lower day's Bulgarian split squat,
++ *   calf raise and dead bug, which the lifter skips one by one. Back at the gym: "Rebuilt for Gym: 1
++ *   exercise added", the cable lateral raise.
++ * - The other way round: at Travel the split's own day stands in, and the lifter skips its three
++ *   lifts; at the gym the second workout is built whole (another layout, as the report says), and
++ *   the lifter skips its lateral raise. Back at Travel it stays empty; Full session, then Go easy
++ *   instead: "The second workout: no changes needed", the reverse lunge and the plank, the split's
++ *   day the lifter emptied there laid out with lifts again.
++ * - With one emptying only: at Travel the split's own day stands in, and the lifter skips its three
++ *   lifts. The place set to the gym: the second workout built whole there (the lateral raise), left
++ *   as it is. The place set back to Travel: "Rebuilt for Travel", the reverse lunge and the plank.
++ *
++ * The first also fails on 0f8d10f, for the nineteenth pass's own finding (back at the gym after the
++ * full session at a place with no lift for it); the second passes on 0f8d10f, where the way back at
++ * Travel found the second workout empty (a regression of the nineteenth pass); the third also fails
++ * on 0f8d10f (any lift in the plan ended the mark there).
++ */
++
++const profile = profileOf();
++const NOW = at(9, 18);
++const lifts = (workout: GeneratedWorkout) => describeWorkout(workout).join('; ');
++const [noEquipment] = createDefaultLocations({ gymAccess: false, homeEquipment: [] }, at(1)) as [
++  LocationProfile,
++];
++const travel: LocationProfile = { ...noEquipment, id: 'travel', name: 'Travel' };
++const theGym = gym as LocationProfile;
++const second: CatchUpSpec = {
++  kind: 'second',
++  muscles: [{ muscle: 'side-delts', sets: 3, minRir: 1, why: 'behind' }],
++  sitOut: ['chest', 'triceps', 'upper-back', 'lats', 'biceps'],
++};
++const history = [
++  session(at(3, 18), [['barbell-row', 3]]),
++  session(at(9, 9), [
++    ['barbell-bench-press', 3],
++    ['barbell-row', 3],
++    ['lat-pulldown', 3],
++    ['barbell-curl', 3],
++  ]),
++];
++
++function day(start: LocationProfile) {
++  let location = start;
++  let workout: GeneratedWorkout = generateWorkout({
++    profile,
++    location,
++    history,
++    now: NOW,
++    duration: 'default',
++    constraints: { catchUp: second },
++  });
++  let constraints: SessionConstraints = { ...emptyConstraints(), catchUp: second };
++  const steps: string[] = [`[${workout.templateId}] ${lifts(workout)}`];
++  const run = (trigger: RecalibrationTrigger, to?: LocationProfile): RecalibrationSuccess => {
++    if (to) location = to;
++    // As the store reads a change of place (`offerOverrides`): a plan made where the day's offer
++    // had no lift is built whole at the new place, unless the full session is on.
++    const unbuilt =
++      trigger.type === 'location' &&
++      !constraints.fullSession &&
++      builtCatchUp(second, workout).muscles.length === 0;
++    const result = recalibrate({
++      trigger,
++      workout,
++      completed: emptyCompleted(),
++      lockedEntryIds: [],
++      currentEntryId: null,
++      duration: 'default',
++      profile,
++      location,
++      ...(unbuilt ? { offerChanged: true } : {}),
++      loading: { missingPlates: [] },
++      history,
++      constraints,
++      reason: 'test',
++      timestamp: NOW,
++    });
++    if (!result.ok) throw new Error(`${trigger.type}: ${result.error}`);
++    workout = result.workout;
++    constraints = result.constraints;
++    steps.push(
++      `${trigger.type}@${location.name}: ${result.summary.headline} => [${workout.templateId}] ${lifts(workout)}`,
++    );
++    return result;
++  };
++  return {
++    get workout() {
++      return workout;
++    },
++    get constraints() {
++      return constraints;
++    },
++    steps,
++    run,
++    /** Every lift skipped, one by one, by the lifter's hand. */
++    skipEvery() {
++      expect(allEntries(workout.blocks).length).toBeGreaterThan(0);
++      for (const entry of allEntries(workout.blocks)) run({ type: 'skip', entryId: entry.id });
++      expect(allEntries(workout.blocks)).toEqual([]);
++    },
++  };
++}
++
++describe('a second workout emptied in two layouts, at two places', () => {
++  it('the gym’s, then the split’s day standing in at Travel: back at the gym it stays empty', () => {
++    const today = day(theGym);
++    expect(lifts(today.workout)).toBe('lateral-raise x3 @RIR 1/1/1');
++    today.skipEvery();
++    today.run({ type: 'session-kind', full: true, kind: 'second' });
++    today.run({ type: 'location' }, travel);
++    today.run({ type: 'session-kind', full: false, kind: 'second' });
++    // The split's own day stands in at Travel, as for a catch-up: the lifter empties it too.
++    expect(today.workout.templateId).not.toBe(CATCH_UP_TEMPLATE_IDS.second);
++    today.skipEvery();
++    today.run({ type: 'location' }, theGym);
++    // On 0fe4cb9: "cable-lateral-raise x3 @RIR 1/1/1", the second workout built whole.
++    expect(lifts(today.workout), today.steps.join(' | ')).toBe('');
++  });
++
++  it('the split’s day standing in at Travel, then the gym’s: the way back at Travel stays empty', () => {
++    const today = day(travel);
++    expect(today.workout.templateId).not.toBe(CATCH_UP_TEMPLATE_IDS.second);
++    today.skipEvery();
++    today.run({ type: 'location' }, theGym);
++    // Another layout: built whole at the gym, as the nineteenth pass decided; emptied there too.
++    expect(lifts(today.workout)).toBe('lateral-raise x3 @RIR 1/1/1');
++    today.skipEvery();
++    today.run({ type: 'location' }, travel);
++    expect(lifts(today.workout)).toBe('');
++    today.run({ type: 'session-kind', full: true, kind: 'second' });
++    today.run({ type: 'session-kind', full: false, kind: 'second' });
++    // On 0fe4cb9: "reverse-lunge x3 @RIR 1/1/1; plank x2 @RIR 2/2", the split's day the lifter
++    // emptied at Travel laid out with lifts again. On 0f8d10f: empty.
++    expect(lifts(today.workout), today.steps.join(' | ')).toBe('');
++  });
++
++  it('the split’s day standing in at Travel, then a trip to the gym and back: it stays empty', () => {
++    const today = day(travel);
++    expect(today.workout.templateId).not.toBe(CATCH_UP_TEMPLATE_IDS.second);
++    today.skipEvery();
++    today.run({ type: 'location' }, theGym);
++    // Another layout: built whole at the gym, as the nineteenth pass decided, and left as it is.
++    expect(lifts(today.workout)).toBe('lateral-raise x3 @RIR 1/1/1');
++    today.run({ type: 'location' }, travel);
++    // On 0fe4cb9 and 0f8d10f: "reverse-lunge x3 @RIR 1/1/1; plank x2 @RIR 2/2".
++    expect(lifts(today.workout), today.steps.join(' | ')).toBe('');
++  });
++
++  it('a lift put back in the split’s day at Travel ends its mark only: the gym’s stays empty', () => {
++    const today = day(theGym);
++    today.skipEvery();
++    today.run({ type: 'session-kind', full: true, kind: 'second' });
++    today.run({ type: 'location' }, travel);
++    today.run({ type: 'session-kind', full: false, kind: 'second' });
++    const layout = today.workout.templateId;
++    today.skipEvery();
++    today.run({ type: 'add-exercise', exerciseId: 'reverse-lunge', muscle: 'quads', sets: 2 });
++    expect(lifts(today.workout)).toBe('reverse-lunge x2 @RIR 1/1');
++    expect(today.constraints.emptied).toEqual([
++      { offer: 'second side-delts', layout: CATCH_UP_TEMPLATE_IDS.second },
++    ]);
++    expect(layout).not.toBe(CATCH_UP_TEMPLATE_IDS.second);
++    today.run({ type: 'location' }, theGym);
 +    expect(lifts(today.workout), today.steps.join(' | ')).toBe('');
 +  });
 +});
@@ -11002,7 +12029,7 @@ index 0000000..6609c9b
 +  });
 +});
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index 551281d..504bc2d 100644
+index 551281d..a21647e 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
 @@ -1,9 +1,10 @@
@@ -11044,20 +12071,26 @@ index 551281d..504bc2d 100644
    sessionConflictContext,
    sessionWork,
    targetAtPlace,
-@@ -79,6 +87,12 @@ import {
+@@ -79,6 +87,10 @@ import {
    type GenerationConstraints,
    type KeptEntry,
    type PrescriptionAdjustment,
 +  withCatchUpLines,
 +  offPlanSpec,
-+  emptiedFor,
-+  emptiedLayoutFor,
-+  laidOutAsOffer,
++  emptiedLayoutsFor,
 +  offerKey,
    withSwapLines,
  } from '../workoutGenerator/generate';
  import {
-@@ -200,13 +214,39 @@ export function hasStarted(completed: CompletedWork): boolean {
+@@ -93,6 +105,7 @@ import {
+   withoutStops,
+   workingSets,
+   type DurationChoice,
++  type EmptiedPlan,
+   type EntryProgression,
+   type GeneratedWorkout,
+   type ProgressionMode,
+@@ -200,13 +213,39 @@ export function hasStarted(completed: CompletedWork): boolean {
    return completed.startedAt !== null || completed.elapsedSeconds > 0 || completed.sets.length > 0;
  }
  
@@ -11098,7 +12131,7 @@ index 551281d..504bc2d 100644
    return hasStarted(request.completed) || anyLocked ? 'partial' : 'full';
  }
  
-@@ -228,6 +268,7 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
+@@ -228,6 +267,7 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
      const outcome = execute(plain, scope, layer);
      const constraints = outcome.constraints;
      const next = layer.finish(outcome.workout, constraints);
@@ -11106,7 +12139,7 @@ index 551281d..504bc2d 100644
      // The time and the lines say what the plan now holds, eased or given back.
      if (next !== outcome.workout || bare !== shown) {
        refresh(
-@@ -238,7 +279,9 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
+@@ -238,7 +278,9 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
        );
      }
      const context = contextFor(request, constraints);
@@ -11117,7 +12150,7 @@ index 551281d..504bc2d 100644
      const changes = diffWorkouts(shown, next);
      const summary = composeSummary({
        prefix: outcome.prefix,
-@@ -347,6 +390,24 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
+@@ -347,6 +389,21 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
      ...(constraints.badStart ? { badStart: true } : {}),
      deload: constraints.deload ? { ...constraints.deload } : null,
      focus: constraints.focus ?? null,
@@ -11133,16 +12166,13 @@ index 551281d..504bc2d 100644
 +        }
 +      : {}),
 +    ...(constraints.fullSession ? { fullSession: true } : {}),
-+    ...(constraints.emptied !== undefined ? { emptied: constraints.emptied } : {}),
-+    ...(constraints.emptiedLayout !== undefined
-+      ? { emptiedLayout: constraints.emptiedLayout }
-+      : {}),
++    ...(constraints.emptied ? { emptied: constraints.emptied.map((plan) => ({ ...plan })) } : {}),
 +    ...(constraints.closedSlots ? { closedSlots: [...constraints.closedSlots] } : {}),
 +    ...(constraints.swappedAway ? { swappedAway: [...constraints.swappedAway] } : {}),
    };
  }
  
-@@ -390,7 +451,7 @@ function classify(request: RecalibrationRequest): Classified {
+@@ -390,7 +447,7 @@ function classify(request: RecalibrationRequest): Classified {
    const frozenIds = new Set(request.completed.sets.map((set) => set.entryId));
    const lockedIds = new Set<string>(request.lockedEntryIds);
    for (const entry of allEntries(request.workout.blocks)) {
@@ -11151,7 +12181,7 @@ index 551281d..504bc2d 100644
    }
    if (request.currentEntryId) lockedIds.add(request.currentEntryId);
    return {
-@@ -522,13 +583,45 @@ function minutesLeft(
+@@ -522,13 +579,47 @@ function minutesLeft(
      if (left !== null) return Math.max(MIN_REMAINING_MINUTES, Math.round(left));
    }
    if (!hasStarted(request.completed)) return null;
@@ -11168,37 +12198,39 @@ index 551281d..504bc2d 100644
 +const BY_HAND = new Set<TriggerType>(['skip', 'uncomfortable', 'pain']);
 +
 +/**
-+ * Marks today's catch-up or second workout the lifter's own change emptied (the eighteenth review of
-+ * round M): its last lift gone by the lifter's hand, skipped or left out for comfort or pain, with
-+ * the layout emptied: the offer's own, or the split's own day a place with no lift for the offer put
-+ * in its place (`emptiedLayout`). A place with no lift for what was left leaves no mark: another
-+ * place may have one (the fifth review). The mark holds through the full session and back; lifts of
-+ * the offer, or of the layout emptied, in the plan again end it, never the split's day standing in
-+ * for an offer emptied elsewhere (the nineteenth review: back at a place with a lift for it, the
-+ * offer was built whole).
++ * Marks today's catch-up or second workout the lifter's own change emptied (the eighteenth to
++ * twentieth reviews of round M): its last lift gone by the lifter's hand, skipped or left out for
++ * comfort or pain, the plan known by its offer and its layout, the offer's own or the split's own
++ * day a place with no lift for the offer put in its place (`emptied`). A place with no lift for what
++ * was left leaves no mark: another place may have one (the fifth review). Each mark holds through
++ * the full session and back, whose plan is the split's own, of no offer marked; lifts back in that
++ * plan end it, and a plan of another offer or layout leaves it as it is (the twentieth review: a trip
++ * to a place that read another offer, or laid out another plan, ended the mark, and the plan the
++ * lifter emptied came back whole).
 + */
 +function markEmptied(
 +  constraints: SessionConstraints,
 +  request: RecalibrationRequest,
 +  next: GeneratedWorkout,
 +): void {
-+  if (constraints.fullSession) return;
++  const offer = offerKey(constraints);
++  const marked = constraints.emptied ?? [];
++  const isThis = (plan: EmptiedPlan) => plan.offer === offer && plan.layout === next.templateId;
 +  // A day of the plan never comes to nothing: the change that would empty it is refused.
 +  if (allEntries(next.blocks).length > 0) {
-+    if (laidOutAsOffer(constraints, next) || next.templateId === constraints.emptiedLayout) {
-+      delete constraints.emptied;
-+      delete constraints.emptiedLayout;
-+    }
-+  } else if (BY_HAND.has(request.trigger.type)) {
-+    constraints.emptied = offerKey(constraints);
-+    constraints.emptiedLayout = next.templateId;
++    if (!marked.some(isThis)) return;
++    const others = marked.filter((plan) => !isThis(plan));
++    if (others.length > 0) constraints.emptied = others;
++    else delete constraints.emptied;
++  } else if (BY_HAND.has(request.trigger.type) && !marked.some(isThis)) {
++    constraints.emptied = [...marked, { offer, layout: next.templateId }];
 +  }
 +}
 +
  function rebuild(
    request: RecalibrationRequest,
    scope: RecalibrationScope,
-@@ -538,7 +631,24 @@ function rebuild(
+@@ -538,7 +629,21 @@ function rebuild(
    const context = contextFor(request, constraints);
    const classified = classify(request);
    const started = hasStarted(request.completed);
@@ -11211,20 +12243,17 @@ index 551281d..504bc2d 100644
 +  // A catch-up or a second workout the lifter's changes emptied stays so through every rebuild,
 +  // the full session a tap away (the fourteenth review of round M: a skipped lift's slot took a lift
 +  // back, a length picked planned the split's day), a rebuild of the whole plan too (the sixteenth:
-+  // a length picked brought back the lift swapped away). Only a plan built whole for a changed
-+  // offer reads it afresh (the fifteenth review: a save that brought new muscles kept the old empty
-+  // plan); one the lifter emptied stays the catch-up there as well (`emptiedByLifter`). Emptied by
-+  // the lifter's hand, not by a place with no lift for what was left (the eighteenth review: a trip
-+  // with a slot closed lost the catch-up's other lifts for the day).
-+  if (!request.offerChanged && emptiedFor(constraints, request.workout)) {
-+    const workout = cloneWorkout(request.workout);
-+    workout.duration = { ...workout.duration, choice, targetMinutes: fullTarget };
-+    return workout;
-+  }
++  // a length picked brought back the lift swapped away): the generator lays out each plan the
++  // lifter emptied today, for the day's offer, with no lift (`emptiedLayouts`), and says where it
++  // was built (the twentieth review: one kept as it was named the place it was emptied at). A plan
++  // built for another offer, or laid out another way, is another plan (the fifteenth and nineteenth
++  // reviews); one the lifter emptied stays the catch-up there as well (`emptiedByLifter`). Emptied
++  // by the lifter's hand, not by a place with no lift for what was left (the eighteenth review: a
++  // trip with a slot closed lost the catch-up's other lifts for the day).
    let targetMinutesOverride: number | undefined = started
      ? Math.max(
          MIN_REMAINING_MINUTES,
-@@ -553,7 +663,14 @@ function rebuild(
+@@ -553,7 +658,14 @@ function rebuild(
        hardCap = true;
      }
    }
@@ -11240,7 +12269,7 @@ index 551281d..504bc2d 100644
    const generation: GenerationConstraints = {
      keep,
      keepBlocks: request.workout.blocks,
-@@ -569,6 +686,24 @@ function rebuild(
+@@ -569,6 +681,24 @@ function rebuild(
      readiness: constraints.readiness,
      deload: constraints.deload,
      focusMuscle: constraints.focus,
@@ -11261,11 +12290,11 @@ index 551281d..504bc2d 100644
 +      : {}),
 +    ...(constraints.closedSlots ? { closedSlots: constraints.closedSlots } : {}),
 +    ...(constraints.swappedAway ? { awayIds: constraints.swappedAway } : {}),
-+    ...emptiedLayoutFor(constraints),
++    ...emptiedLayoutsFor(constraints),
      sessionLoading: request.loading,
      swaps: request.swaps,
    };
-@@ -599,6 +734,69 @@ function rebuild(
+@@ -599,6 +729,69 @@ function rebuild(
    return workout;
  }
  
@@ -11335,7 +12364,7 @@ index 551281d..504bc2d 100644
  /**
   * Each lift moved for busy equipment behind the lifts it gave way to, as the plan now stands
   * (Maintenance 25): the rows put in one order that meets every move, kept as they were wherever no
-@@ -953,6 +1151,231 @@ function prescriptionToday(
+@@ -953,6 +1146,237 @@ function prescriptionToday(
      : base;
  }
  
@@ -11533,18 +12562,24 @@ index 551281d..504bc2d 100644
 + * What the day's catch-up or second workout asks of a lift as the plan holds it: its own muscles'
 + * sets and reserve, and for a lift for none of them (one the lifter swapped in) the least reserve
 + * any of them asks (the twelfth review of round M: a curl for the forearms' hammer curl came in at
-+ * none in reserve).
++ * none in reserve), or, with none, a set short of failure. None on a day of the plan.
 + */
 +function heldIn(
 +  spec: CatchUpSpec | null,
 +  exercise: CatalogExercise,
 +): { sets: number; minRir: number } | null {
-+  return (
-+    catchUpHold(spec, exercise) ??
-+    (spec && spec.muscles.length > 0
-+      ? { sets: Infinity, minRir: Math.min(...spec.muscles.map((item) => item.minRir)) }
-+      : null)
-+  );
++  const own = catchUpHold(spec, exercise);
++  if (own || !spec || (spec.kind !== 'second' && spec.muscles.length === 0)) return own;
++  // On any day off the plan, no set goes to failure (the twentieth review of round M: "harder"
++  // took a second workout with nothing behind, or the split's day standing in for one, to none in
++  // reserve).
++  return {
++    sets: Infinity,
++    minRir:
++      spec.muscles.length > 0
++        ? Math.min(...spec.muscles.map((item) => item.minRir))
++        : CATCH_UP.MIN_RIR,
++  };
 +}
 +
 +/**
@@ -11567,7 +12602,7 @@ index 551281d..504bc2d 100644
  /**
   * How far a lift's effort sits from its plain target (Maintenance 24): "Make it harder" or
   * "easier" and a check-in move its reps in reserve, and a refit, a max or a swap keeps that. It
-@@ -1499,8 +1922,14 @@ function refitEntry(
+@@ -1499,8 +1923,14 @@ function refitEntry(
    const exercise = requireExercise(entry.exerciseId);
    const plain = prescriptionToday(request, exercise, entry.role);
    const plainTarget = targetToday(request, workout, entry.id, exercise, entry.role, plain);
@@ -11584,7 +12619,7 @@ index 551281d..504bc2d 100644
    const target =
      prescription === plain
        ? plainTarget
-@@ -1675,7 +2104,7 @@ function settleKept(
+@@ -1675,7 +2105,7 @@ function settleKept(
      entries.some((other) => other !== entry && other.slot === entry.slot && isStopped(other));
    const settling = entries.filter(
      (entry) =>
@@ -11593,7 +12628,7 @@ index 551281d..504bc2d 100644
        // One the coach added sits outside the plan's places, with the sets it offered.
        !(entry.locked && entry.slot === undefined) &&
        !logged.has(entry.id) &&
-@@ -1690,6 +2119,7 @@ function settleKept(
+@@ -1690,6 +2120,7 @@ function settleKept(
    );
    const trimmable = new Set<string>();
    if (settling.length === 0) return { workout: request.workout, trimmable };
@@ -11601,7 +12636,7 @@ index 551281d..504bc2d 100644
    const workout = cloneWorkout(request.workout);
    const next = { ...request, workout, constraints };
    for (const kept of settling) {
-@@ -1742,9 +2172,16 @@ function settleKept(
+@@ -1742,9 +2173,16 @@ function settleKept(
      // review of item 44): a harder day adds no set to it and takes its reserve no lower than one.
      // By the plan's rule it has its count; without one (the push ended since), it adds none.
      const pushed = mark !== undefined;
@@ -11621,7 +12656,7 @@ index 551281d..504bc2d 100644
      const built = targetedSets(
        next,
        workout,
-@@ -1988,7 +2425,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
+@@ -1988,7 +2426,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
      }
    }
    const plan = withoutStops(restored);
@@ -11630,7 +12665,7 @@ index 551281d..504bc2d 100644
    const general = generalWarmupMinutes(target);
    const time = estimateWorkout(
      plan.blocks,
-@@ -2270,8 +2707,11 @@ function dropSetAt(index: number): SetPrescription {
+@@ -2270,8 +2708,11 @@ function dropSetAt(index: number): SetPrescription {
  }
  
  /** An entry id the workout does not use yet. */
@@ -11644,7 +12679,7 @@ index 551281d..504bc2d 100644
      Number(/^e(\d+)$/.exec(entry.id)?.[1] ?? 0),
    );
    return `e${Math.max(0, ...numbers) + 1}`;
-@@ -2406,20 +2846,34 @@ function applySubstitution(
+@@ -2406,20 +2847,34 @@ function applySubstitution(
    // A count set by hand comes in as set, the ease taking no set from it (the fifteenth pass).
    const planWorking =
      plan && !entry.manual?.sets ? plan.filter((set) => set.kind === 'working') : shownWorking;
@@ -11681,7 +12716,7 @@ index 551281d..504bc2d 100644
      entry.restSeconds,
      { shift },
    );
-@@ -2480,14 +2934,21 @@ function standIn(
+@@ -2480,14 +2935,21 @@ function standIn(
      (set) => set.kind === 'working' && !isDone(entry.id, set.index),
    ).length;
    const dropOwed = entry.sets.some((set) => set.kind === 'drop' && !isDone(entry.id, set.index));
@@ -11706,7 +12741,7 @@ index 551281d..504bc2d 100644
      exerciseId: exercise.id,
      role: entry.role,
      sets: [],
-@@ -2503,13 +2964,15 @@ function standIn(
+@@ -2503,13 +2965,15 @@ function standIn(
      ...(entry.push === 'extra' ? { push: 'extra' as const } : {}),
    };
    placeStandIn(workout, entry, block, stand, isDone);
@@ -11723,7 +12758,7 @@ index 551281d..504bc2d 100644
      entry.restSeconds,
      { shift },
    );
-@@ -2561,15 +3024,28 @@ function swapBack(
+@@ -2561,15 +3025,28 @@ function swapBack(
    }
    if (owed === 0) return;
    const exercise = requireExercise(stopped.exerciseId);
@@ -11754,7 +12789,7 @@ index 551281d..504bc2d 100644
    );
    stopped.sets = [...stopped.sets, ...built.sets];
    withoutHandTargets(stopped);
-@@ -2589,6 +3065,45 @@ function swapBack(
+@@ -2589,6 +3066,45 @@ function swapBack(
    }
  }
  
@@ -11800,7 +12835,7 @@ index 551281d..504bc2d 100644
  function removeEntry(workout: GeneratedWorkout, entryId: string): WorkoutEntry {
    const { entry, block } = findEntry(workout, entryId);
    block.entries = block.entries.filter((candidate) => candidate.id !== entryId);
-@@ -2637,7 +3152,7 @@ function bestAlternative(
+@@ -2637,7 +3153,7 @@ function bestAlternative(
    entry: WorkoutEntry,
    block: WorkoutBlock,
    context: ConflictContext,
@@ -11809,7 +12844,7 @@ index 551281d..504bc2d 100644
  ): CatalogExercise | undefined {
    const current = requireExercise(entry.exerciseId);
    const others = allEntries(workout.blocks)
-@@ -2645,9 +3160,70 @@ function bestAlternative(
+@@ -2645,9 +3161,70 @@ function bestAlternative(
      .map((candidate) => requireExercise(candidate.exerciseId));
    const partner =
      block.kind === 'superset' ? block.entries.find((member) => member.id !== entry.id) : undefined;
@@ -11880,7 +12915,7 @@ index 551281d..504bc2d 100644
      otherExercises: others,
      supersetPartner: partner ? requireExercise(partner.exerciseId) : undefined,
      dropSetPlanned: entry.dropSet,
-@@ -2720,12 +3296,25 @@ function refresh(
+@@ -2720,12 +3297,25 @@ function refresh(
        )
      : workout.explanation.reasons;
    // The summary says the exercises the plan has and the minutes its timers add up to
@@ -11912,7 +12947,7 @@ index 551281d..504bc2d 100644
    keepOrderLines(workout);
    workout.duration = {
      ...workout.duration,
-@@ -2770,6 +3359,9 @@ function substituteUnfit(
+@@ -2770,6 +3360,9 @@ function substituteUnfit(
    const notes: string[] = [];
    let replaced = 0;
    let removed = 0;
@@ -11922,7 +12957,7 @@ index 551281d..504bc2d 100644
    for (const entry of allEntries(workout.blocks)) {
      if (!entry.sets.some((set) => set.kind === 'working' && !isDone(entry.id, set.index))) continue;
      const exercise = requireExercise(entry.exerciseId);
-@@ -2780,15 +3372,38 @@ function substituteUnfit(
+@@ -2780,15 +3373,38 @@ function substituteUnfit(
      const { block } = findEntry(workout, entry.id);
      const alternative = bestAlternative(request, workout, entry, block, context, {
        preferLowStressOn: options.joint,
@@ -11964,7 +12999,7 @@ index 551281d..504bc2d 100644
      }
    }
    return { replaced, removed, notes };
-@@ -2910,6 +3525,23 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -2910,6 +3526,23 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          workout: rebuild(request, scope, { choice: request.duration, constraints }),
          prefix: 'Rebuilt for your updated profile',
        };
@@ -11988,7 +13023,7 @@ index 551281d..504bc2d 100644
  
      case 'replace': {
        const workout = cloneWorkout(request.workout);
-@@ -2927,8 +3559,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -2927,8 +3560,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        ) {
          throw new Error(`${previous.name} is done: nothing is left to swap.`);
        }
@@ -12010,7 +13045,7 @@ index 551281d..504bc2d 100644
        // A lift a swap brings back (a lift stopped earlier, swapped back) comes to its old row: the
        // moves hold again (the sixth review).
        constraints.postponed = settleMoves(
-@@ -3060,7 +3705,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3060,7 +3706,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const context = contextFor(request, constraints);
        const alternative = bestAlternative(request, workout, entry, block, context);
        if (alternative) {
@@ -12028,7 +13063,7 @@ index 551281d..504bc2d 100644
          renamePostponed(constraints, previous.id, alternative.id, workout);
          refresh(workout, request, constraints);
          return {
-@@ -3070,14 +3724,22 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3070,14 +3725,22 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            headline: `${previous.name} replaced by ${alternative.name} for comfort.`,
          };
        }
@@ -12053,7 +13088,7 @@ index 551281d..504bc2d 100644
        };
      }
  
-@@ -3339,8 +4001,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3339,8 +4002,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
              targetToday(from, workout, entry.id, exercise, entry.role, asked);
            const plainTarget = targetFor(plain);
            // The effort the lift carries ("Make it harder" or "easier", a check-in) stays
@@ -12075,7 +13110,7 @@ index 551281d..504bc2d 100644
            let target = prescription === plain ? plainTarget : targetFor(prescription);
            // A load read from an estimate for a rep range, with reps set by hand: the load for those
            // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
-@@ -3532,8 +4205,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3532,8 +4206,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          ? readinessAdjustment(request.constraints.readiness)
          : undefined;
        const restored = !adjust && earlier !== undefined;
@@ -12092,7 +13127,7 @@ index 551281d..504bc2d 100644
        if (
          !adjust &&
          !restored &&
-@@ -4128,7 +4808,10 @@ function validateWorkout(
+@@ -4128,7 +4809,10 @@ function validateWorkout(
    context: ConflictContext,
  ): void {
    const entries = allEntries(workout.blocks);
@@ -13917,7 +14952,7 @@ index 247c3c3..581f317 100644
  }
  
 diff --git a/src/engine/recalibration/types.ts b/src/engine/recalibration/types.ts
-index 70e7b28..be692c2 100644
+index 70e7b28..8eb1e26 100644
 --- a/src/engine/recalibration/types.ts
 +++ b/src/engine/recalibration/types.ts
 @@ -2,6 +2,7 @@ import type { MuscleId } from '../../catalog/muscles/muscles';
@@ -13928,6 +14963,15 @@ index 70e7b28..be692c2 100644
  import type { LearnedResets } from '../learned/resets';
  import type { AutoregulationPlan } from './autoregulate';
  import type { Joint } from '../../catalog/exercises/exerciseSchema';
+@@ -9,7 +10,7 @@ import type { LocationProfile } from '../../core/validation/location';
+ import type { SessionLoading } from '../loading/loading';
+ import type { UserProfile } from '../../core/validation/profile';
+ import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+-import type { DurationChoice, GeneratedWorkout, SetKind } from '../workout/types';
++import type { DurationChoice, EmptiedPlan, GeneratedWorkout, SetKind } from '../workout/types';
+ 
+ /**
+  * Types for the central Recalibration Engine. A typed request carries the
 @@ -82,7 +83,9 @@ export type RecalibrationTrigger =
     * treatment, or loses it. `lifts` names the two that fell short.
     */
@@ -13939,7 +14983,7 @@ index 70e7b28..be692c2 100644
  
  export type TriggerType = RecalibrationTrigger['type'];
  
-@@ -193,6 +196,40 @@ export interface SessionConstraints {
+@@ -193,6 +196,36 @@ export interface SessionConstraints {
    deload: DeloadWindow | null;
    /** A coach focus: the session leads with this muscle. */
    focus: MuscleId | null;
@@ -13952,19 +14996,15 @@ index 70e7b28..be692c2 100644
 +  /** The lifter took the full session on a day that offers a catch-up (Maintenance 31). */
 +  fullSession?: boolean;
 +  /**
-+   * The offer (`offerKey`) whose catch-up or second workout the lifter's own hand emptied, its last
-+   * lift skipped or left out (the seventeenth and eighteenth reviews of round M): every later
-+   * rebuild, the way back from the full session and a later plan the same day find it so. Absent on
-+   * a session saved before, while the plan has lifts, and when a place emptied it.
++   * The plans the lifter's own hand emptied today, each its last lift skipped or left out (the
++   * seventeenth to twentieth reviews of round M): the offer it was for and its layout, the offer's
++   * own or the split's own day a place with no lift for the offer put in its place. Every later plan
++   * of that offer laid out the same way takes no lift: a rebuild, the way back from the full
++   * session, a later plan the same day. Another offer or another layout is another plan, and leaves
++   * each mark as it is; lifts back in a plan the lifter emptied end its own. Absent on a session
++   * saved before, and with none; a place that empties a plan marks nothing.
 +   */
-+  emptied?: string;
-+  /**
-+   * The layout of the plan the lifter emptied (its template, the nineteenth review of round M): the
-+   * offer's own, or the split's own day a place with no lift for the offer put in its place. A
-+   * rebuild that lays out the same finds it emptied; a place that lays out another builds that one.
-+   * Absent with no mark, and on a mark from before: the offer's own.
-+   */
-+  emptiedLayout?: string;
++  emptied?: EmptiedPlan[];
 +  /**
 +   * The slots of today's catch-up or second workout whose lift the lifter's change left out with
 +   * nothing to come in (the seventeenth and eighteenth reviews of round M): no rebuild that keeps
@@ -13980,7 +15020,7 @@ index 70e7b28..be692c2 100644
  }
  
  export interface RecalibrationRequest {
-@@ -217,6 +254,11 @@ export interface RecalibrationRequest {
+@@ -217,6 +250,11 @@ export interface RecalibrationRequest {
    swaps?: readonly LastingSwap[];
    /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
    resets?: LearnedResets | null;
@@ -14020,7 +15060,7 @@ index 46f1e3a..3fab896 100644
    };
  }
 diff --git a/src/engine/workout/types.ts b/src/engine/workout/types.ts
-index c11914b..99c200d 100644
+index c11914b..3cd9943 100644
 --- a/src/engine/workout/types.ts
 +++ b/src/engine/workout/types.ts
 @@ -1,4 +1,5 @@
@@ -14029,7 +15069,7 @@ index c11914b..99c200d 100644
  import type { MuscleId } from '../../catalog/muscles/muscles';
  
  /**
-@@ -12,6 +13,12 @@ export type DurationChoice = 15 | 30 | 45 | 'default';
+@@ -12,6 +13,21 @@ export type DurationChoice = 15 | 30 | 45 | 'default';
  
  export type SetKind = 'warmup' | 'working' | 'drop';
  
@@ -14039,10 +15079,19 @@ index c11914b..99c200d 100644
 + */
 +export const CATCH_UP_TEMPLATE_IDS = { 'catch-up': 'catch-up', second: 'second-workout' } as const;
 +
++/**
++ * A plan the lifter's own hand emptied today (the twentieth review of round M): the day's offer it
++ * was for (`offerKey`) and the layout it was laid out on (its template).
++ */
++export interface EmptiedPlan {
++  offer: string;
++  layout: string;
++}
++
  /**
   * Every way the progression engine arrives at a target, as one list. The
   * stored-session reader validates against this same list, so the two can never
-@@ -191,8 +198,9 @@ export interface StoppedWork {
+@@ -191,8 +207,9 @@ export interface StoppedWork {
    /**
     * Why it stopped: `place`, the place could not equip it (it picks up again where it fits);
     * `swap`, it was swapped out once started (it stays stopped unless swapped back); `skip`, the
@@ -14054,7 +15103,7 @@ index c11914b..99c200d 100644
     */
    why?: 'place' | 'swap' | 'skip';
  }
-@@ -247,6 +255,22 @@ export interface WorkoutExplanation {
+@@ -247,6 +264,22 @@ export interface WorkoutExplanation {
    time: TimeBreakdown;
  }
  
@@ -14077,7 +15126,7 @@ index c11914b..99c200d 100644
  export interface GeneratedWorkout {
    id: string;
    templateId: string;
-@@ -273,6 +297,12 @@ export interface GeneratedWorkout {
+@@ -273,6 +306,12 @@ export interface GeneratedWorkout {
    confidence: 'high' | 'medium' | 'low';
    compromises: string[];
    recalibration: { version: number; lastTrigger: string | null };
@@ -15768,10 +16817,10 @@ index 0000000..44e6cf9
 +});
 diff --git a/src/engine/workoutGenerator/catchUpReopenedReserve.test.ts b/src/engine/workoutGenerator/catchUpReopenedReserve.test.ts
 new file mode 100644
-index 0000000..97dcd09
+index 0000000..58e9303
 --- /dev/null
 +++ b/src/engine/workoutGenerator/catchUpReopenedReserve.test.ts
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,181 @@
 +import { describe, expect, it } from 'vitest';
 +import { requireExercise } from '../../catalog/exercises/catalog';
 +import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
@@ -15812,21 +16861,22 @@ index 0000000..97dcd09
 +  if (!result.ok) throw new Error(result.error);
 +  return result;
 +};
-+const spec: CatchUpSpec = {
++const specAt = (minRir: number): CatchUpSpec => ({
 +  kind: 'catch-up',
 +  muscles: (['forearms', 'chest'] as const).map((muscle) => ({
 +    muscle,
 +    sets: 3,
-+    minRir: CATCH_UP.MIN_RIR,
++    minRir,
 +    why: 'behind' as const,
 +  })),
 +  sitOut: [],
-+};
++});
 +/** A home with nothing: no cable, no dumbbells. */
 +const [bare] = createDefaultLocations({ gymAccess: false, homeEquipment: [] }, at(1)) as [
 +  LocationProfile,
 +];
 +const request = (
++  spec: CatchUpSpec,
 +  trigger: RecalibrationTrigger,
 +  workout: GeneratedWorkout,
 +  options: Partial<RecalibrationRequest> = {},
@@ -15847,94 +16897,109 @@ index 0000000..97dcd09
 +  ...options,
 +});
 +
++/**
++ * The hammer curl swapped for a cable curl, a set, home and back to the gym: the curl still to come
++ * at the reserve the day's muscles ask.
++ */
++function pickedUpAgain(minRir: number) {
++  const spec = specAt(minRir);
++  // The gym's catch-up: the bench press for the chest, the hammer curl for the forearms.
++  const plan = generateWorkout({
++    profile: profileOf(),
++    location: gym,
++    history: records,
++    now: NOW,
++    duration: 'default',
++    constraints: { catchUp: spec },
++  });
++  const hammer = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'hammer-curl');
++  expect(hammer, lifts(plan)).toBeDefined();
++  // The swap sheet offers the cable curl (biceps, none of the day's muscles).
++  const offered = rankAlternatives({
++    current: requireExercise('hammer-curl'),
++    context: contextFor({ profile: profileOf(), location: gym }, emptyConstraints()),
++    otherExercises: allEntries(plan.blocks)
++      .filter((entry) => entry.id !== hammer!.id)
++      .map((entry) => requireExercise(entry.exerciseId)),
++    limit: 6,
++  }).candidates.map((candidate) => candidate.exercise.id);
++  expect(offered).toContain('cable-curl');
++  const swap = recalibrate(
++    request(spec, { type: 'replace', entryId: hammer!.id, exerciseId: 'cable-curl' }, plan),
++  );
++  // (Were the swap refused, nothing would be picked up again.)
++  if (!swap.ok) return;
++  const swapped = swap;
++  const curl = allEntries(swapped.workout.blocks).find(
++    (entry) => entry.exerciseId === 'cable-curl',
++  )!;
++  // Held at the catch-up's reserve, as the twelfth review made it.
++  expect(
++    Math.min(...working(curl).map((set) => set.targetRir)),
++    lifts(swapped.workout),
++  ).toBeGreaterThanOrEqual(minRir);
++  // A set of it, then home, where it cannot go on: it stops at the set done.
++  const first = working(curl)[0]!;
++  const completed: CompletedWork = {
++    ...emptyCompleted(),
++    startedAt: NOW,
++    elapsedSeconds: 300,
++    sets: [
++      {
++        entryId: curl.id,
++        exerciseId: curl.exerciseId,
++        setIndex: first.index,
++        kind: 'working',
++        reps: 10,
++        weight: first.targetWeight,
++        rir: 2,
++        completedAt: NOW,
++      },
++    ],
++  };
++  const away = succeeded(
++    recalibrate(
++      request(spec, { type: 'location' }, swapped.workout, {
++        completed,
++        location: bare,
++        constraints: swapped.constraints,
++      }),
++    ),
++  );
++  expect(
++    allEntries(away.workout.blocks).find((entry) => entry.id === curl.id),
++    lifts(away.workout),
++  ).toSatisfy((entry: unknown) => entry !== undefined && isStopped(entry as never));
++  // Back at the gym, the curl picks up again for its sets still to come...
++  const back = succeeded(
++    recalibrate(
++      request(spec, { type: 'location' }, away.workout, {
++        completed: { ...completed, elapsedSeconds: 900 },
++        constraints: away.constraints,
++      }),
++    ),
++  );
++  const again = allEntries(back.workout.blocks).find((entry) => entry.id === curl.id);
++  expect(again && !isStopped(again), lifts(back.workout)).toBe(true);
++  const toCome = working(again!).filter((set) => set.index !== first.index);
++  expect(toCome.length, lifts(back.workout)).toBeGreaterThan(0);
++  // ... at the catch-up's reserve, as before it stopped. On a9f07f3: "cable-curl x2 @RIR 1/0",
++  // the set still to come to failure.
++  expect(
++    Math.min(...toCome.map((set) => set.targetRir)),
++    `${back.summary.headline} ${lifts(back.workout)}`,
++  ).toBeGreaterThanOrEqual(minRir);
++}
++
 +describe('a lift for none of the catch-up’s muscles keeps the catch-up’s reserve when picked up again, the thirteenth review of round M', () => {
 +  it('the hammer curl swapped for a cable curl, a set, home and back to the gym: no set to failure', () => {
-+    // The gym's catch-up: the bench press for the chest, the hammer curl for the forearms.
-+    const plan = generateWorkout({
-+      profile: profileOf(),
-+      location: gym,
-+      history: records,
-+      now: NOW,
-+      duration: 'default',
-+      constraints: { catchUp: spec },
-+    });
-+    const hammer = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'hammer-curl');
-+    expect(hammer, lifts(plan)).toBeDefined();
-+    // The swap sheet offers the cable curl (biceps, none of the day's muscles).
-+    const offered = rankAlternatives({
-+      current: requireExercise('hammer-curl'),
-+      context: contextFor({ profile: profileOf(), location: gym }, emptyConstraints()),
-+      otherExercises: allEntries(plan.blocks)
-+        .filter((entry) => entry.id !== hammer!.id)
-+        .map((entry) => requireExercise(entry.exerciseId)),
-+      limit: 6,
-+    }).candidates.map((candidate) => candidate.exercise.id);
-+    expect(offered).toContain('cable-curl');
-+    const swap = recalibrate(
-+      request({ type: 'replace', entryId: hammer!.id, exerciseId: 'cable-curl' }, plan),
-+    );
-+    // (Were the swap refused, nothing would be picked up again.)
-+    if (!swap.ok) return;
-+    const swapped = swap;
-+    const curl = allEntries(swapped.workout.blocks).find(
-+      (entry) => entry.exerciseId === 'cable-curl',
-+    )!;
-+    // Held at the catch-up's reserve, as the twelfth review made it.
-+    expect(
-+      Math.min(...working(curl).map((set) => set.targetRir)),
-+      lifts(swapped.workout),
-+    ).toBeGreaterThanOrEqual(CATCH_UP.MIN_RIR);
-+    // A set of it, then home, where it cannot go on: it stops at the set done.
-+    const first = working(curl)[0]!;
-+    const completed: CompletedWork = {
-+      ...emptyCompleted(),
-+      startedAt: NOW,
-+      elapsedSeconds: 300,
-+      sets: [
-+        {
-+          entryId: curl.id,
-+          exerciseId: curl.exerciseId,
-+          setIndex: first.index,
-+          kind: 'working',
-+          reps: 10,
-+          weight: first.targetWeight,
-+          rir: 2,
-+          completedAt: NOW,
-+        },
-+      ],
-+    };
-+    const away = succeeded(
-+      recalibrate(
-+        request({ type: 'location' }, swapped.workout, {
-+          completed,
-+          location: bare,
-+          constraints: swapped.constraints,
-+        }),
-+      ),
-+    );
-+    expect(
-+      allEntries(away.workout.blocks).find((entry) => entry.id === curl.id),
-+      lifts(away.workout),
-+    ).toSatisfy((entry: unknown) => entry !== undefined && isStopped(entry as never));
-+    // Back at the gym, the curl picks up again for its sets still to come...
-+    const back = succeeded(
-+      recalibrate(
-+        request({ type: 'location' }, away.workout, {
-+          completed: { ...completed, elapsedSeconds: 900 },
-+          constraints: away.constraints,
-+        }),
-+      ),
-+    );
-+    const again = allEntries(back.workout.blocks).find((entry) => entry.id === curl.id);
-+    expect(again && !isStopped(again), lifts(back.workout)).toBe(true);
-+    const toCome = working(again!).filter((set) => set.index !== first.index);
-+    expect(toCome.length, lifts(back.workout)).toBeGreaterThan(0);
-+    // ... at the catch-up's reserve, as before it stopped. On a9f07f3: "cable-curl x2 @RIR 1/0",
-+    // the set still to come to failure.
-+    expect(
-+      Math.min(...toCome.map((set) => set.targetRir)),
-+      `${back.summary.headline} ${lifts(back.workout)}`,
-+    ).toBeGreaterThanOrEqual(CATCH_UP.MIN_RIR);
++    pickedUpAgain(CATCH_UP.MIN_RIR);
++  });
++
++  it('a beginner’s catch-up: picked up again at two in reserve, as its muscles ask', () => {
++    // The twentieth review of round M: a day off the plan holds every lift a set short of failure,
++    // so only a catch-up that asks more shows the least reserve its muscles ask.
++    pickedUpAgain(CATCH_UP.BEGINNER_MIN_RIR);
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/catchUpRests.test.ts b/src/engine/workoutGenerator/catchUpRests.test.ts
@@ -16997,7 +18062,7 @@ index 0000000..def2327
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
-index 0460d18..2d692fb 100644
+index 0460d18..40cb3cf 100644
 --- a/src/engine/workoutGenerator/generate.ts
 +++ b/src/engine/workoutGenerator/generate.ts
 @@ -38,6 +38,7 @@ import {
@@ -17008,7 +18073,7 @@ index 0460d18..2d692fb 100644
    type SetDonePredicate,
  } from '../duration/duration';
  import {
-@@ -101,22 +102,31 @@ import {
+@@ -101,22 +102,32 @@ import {
    type Exposure,
  } from '../volume/weeklyVolume';
  import {
@@ -17021,6 +18086,7 @@ index 0460d18..2d692fb 100644
    workingSets,
 +  type CatchUpSlot,
    type DurationChoice,
++  type EmptiedPlan,
    type PushMark,
    type GeneratedWorkout,
    type MusclePriority,
@@ -17040,7 +18106,7 @@ index 0460d18..2d692fb 100644
  import type { LearnedResets } from '../learned/resets';
  
  /**
-@@ -158,7 +168,7 @@ export interface KeptEntry {
+@@ -158,7 +169,7 @@ export interface KeptEntry {
  export function closeAtLogged(
    entry: WorkoutEntry,
    isDone: SetDonePredicate,
@@ -17049,7 +18115,7 @@ index 0460d18..2d692fb 100644
  ): void {
    const planned = entry.sets.some((set) => set.kind === 'working');
    // A lift owes what it shows still to come: under a hard start's ease, the sets the ease left, as
-@@ -276,6 +286,28 @@ export interface GenerationConstraints {
+@@ -276,6 +287,29 @@ export interface GenerationConstraints {
    unavailableEquipment?: readonly string[];
    painJoints?: readonly Joint[];
    templateId?: string;
@@ -17071,14 +18137,15 @@ index 0460d18..2d692fb 100644
 +  /** The lifts the lifter swapped away today: no slot picks one by itself (the eighteenth review). */
 +  awayIds?: readonly string[];
 +  /**
-+   * The layout of the plan the lifter's hand emptied today, for today's offer (`emptiedLayout`, the
-+   * nineteenth review of round M): laid out again, it takes no lift; another layout is another plan.
++   * The layouts of the plans the lifter's hand emptied today for today's offer (`emptied`, the
++   * nineteenth and twentieth reviews of round M): laid out again, each takes no lift; another
++   * layout is another plan.
 +   */
-+  emptiedLayout?: string;
++  emptiedLayouts?: readonly string[];
    /** Remaining budget for everything in the result, replacing the duration target. */
    targetMinutesOverride?: number;
    generalWarmupMinutesOverride?: number;
-@@ -320,6 +352,12 @@ interface Slot {
+@@ -320,6 +354,12 @@ interface Slot {
    pattern: MovementPatternId;
    role: TrainingRole;
    muscles: MuscleId[];
@@ -17091,7 +18158,7 @@ index 0460d18..2d692fb 100644
  }
  
  interface Template {
-@@ -436,6 +474,380 @@ export function splitFor(profile: UserProfile): readonly Template[] {
+@@ -436,6 +476,378 @@ export function splitFor(profile: UserProfile): readonly Template[] {
        : [PUSH_ARMS, PULL_ARMS, LOWER, UPPER];
  }
  
@@ -17275,45 +18342,43 @@ index 0460d18..2d692fb 100644
 +}
 +
 +/**
-+ * Whether a plan is laid out as today's catch-up or second workout, on its own template: not the
-+ * split's own session a place with no lift for the offer put in its place (the nineteenth review of
-+ * round M).
++ * The layouts the plan for today's offer leaves empty (`GenerationConstraints.emptiedLayouts`): those
++ * the lifter's hand emptied for the offer the constraints hold, none during the full session (the
++ * nineteenth and twentieth reviews of round M). Another offer's marks stay, for that offer.
 + */
-+export function laidOutAsOffer(
-+  constraints: { catchUp?: CatchUpSpec | null; fullSession?: boolean },
-+  workout: Pick<GeneratedWorkout, 'templateId'>,
-+): boolean {
-+  const spec = constraints.fullSession ? null : (constraints.catchUp ?? null);
-+  return spec !== null && workout.templateId === CATCH_UP_TEMPLATE_IDS[spec.kind];
-+}
-+
-+/**
-+ * The layout the plan for today's offer leaves empty (`GenerationConstraints.emptiedLayout`): the
-+ * one the lifter's hand emptied, for the offer the constraints hold, none during the full session
-+ * (the nineteenth review of round M). A mark from before the layout was kept is the offer's own.
-+ */
-+export function emptiedLayoutFor(constraints: {
++export function emptiedLayoutsFor(constraints: {
 +  catchUp?: CatchUpSpec | null;
 +  fullSession?: boolean;
-+  emptied?: string;
-+  emptiedLayout?: string;
-+}): { emptiedLayout?: string } {
++  emptied?: readonly EmptiedPlan[];
++}): { emptiedLayouts?: string[] } {
 +  const spec = constraints.fullSession ? null : (constraints.catchUp ?? null);
-+  if (!spec || !constraints.emptied || constraints.emptied !== offerKey(constraints)) return {};
-+  return { emptiedLayout: constraints.emptiedLayout ?? CATCH_UP_TEMPLATE_IDS[spec.kind] };
++  if (!spec) return {};
++  const offer = offerKey(constraints);
++  const layouts = (constraints.emptied ?? [])
++    .filter((plan) => plan.offer === offer)
++    .map((plan) => plan.layout);
++  return layouts.length > 0 ? { emptiedLayouts: layouts } : {};
 +}
 +
 +/**
-+ * Whether a plan is the day's catch-up or second workout the lifter's own changes emptied, for the
-+ * offer the constraints hold (the eighteenth review of round M): no lift left, and marked so when
-+ * the lifter's hand took out the last one (`emptied`). Every later plan the same day keeps it so; a
-+ * place with no lift for what was left marks nothing, as another place may have one.
++ * Whether a plan is one the lifter's own changes emptied today (the eighteenth to twentieth reviews
++ * of round M): no lift left, and its offer and layout marked when the lifter's hand took out the last
++ * one (`emptied`). Every later plan of them the same day keeps it so; a place with no lift for what
++ * was left marks nothing, as another place may have one.
 + */
 +export function emptiedFor(
-+  constraints: { catchUp?: CatchUpSpec | null; fullSession?: boolean; emptied?: string },
-+  workout: Pick<GeneratedWorkout, 'blocks'>,
++  constraints: {
++    catchUp?: CatchUpSpec | null;
++    fullSession?: boolean;
++    emptied?: readonly EmptiedPlan[];
++  },
++  workout: Pick<GeneratedWorkout, 'blocks' | 'templateId'>,
 +): boolean {
-+  return constraints.emptied === offerKey(constraints) && allEntries(workout.blocks).length === 0;
++  if (constraints.fullSession || allEntries(workout.blocks).length > 0) return false;
++  const offer = offerKey(constraints);
++  return (constraints.emptied ?? []).some(
++    (plan) => plan.offer === offer && plan.layout === workout.templateId,
++  );
 +}
 +
 +/**
@@ -17551,7 +18616,7 @@ index 0460d18..2d692fb 100644
    };
  }
  
-@@ -1168,15 +1609,61 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1168,15 +1609,64 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
    const loads = muscleLoads(history, profile, now);
    const focus = constraints.focusMuscle ?? null;
@@ -17566,6 +18631,9 @@ index 0460d18..2d692fb 100644
 +  // A day off the plan: a catch-up built, or any second workout. The lift to push waits for a
 +  // planned day, and nothing goes to failure (the review of round M).
 +  const offPlan = catchUp !== null || spec?.kind === 'second';
++  // No set of a day off the plan goes to failure, a lift for none of the day's muscles too (the
++  // twentieth review of round M: a second workout's finisher went to failure, and so did "harder").
++  const offPlanRir = offPlan ? CATCH_UP.MIN_RIR : 0;
 +  const closedSlots = new Set(constraints.closedSlots ?? []);
    const deload = constraints.deload ?? null;
    const adjust = withDeload(constraints.adjust, deload);
@@ -17617,7 +18685,7 @@ index 0460d18..2d692fb 100644
    const pushPlace = (slots: readonly Slot[]) =>
      push !== null && slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern);
    // The extra exposure goes on a day with no place for the lift (docs/research/push-lift.md). It
-@@ -1188,14 +1675,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1188,14 +1678,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    // exercise, begun, or stopped and stood in for: the rebuild keeps it and weighs no second one
    // (the review and the re-check of item 44).
    const extraKept = (constraints.keep ?? []).some((item) => item.entry.push === 'extra');
@@ -17633,7 +18701,7 @@ index 0460d18..2d692fb 100644
      !extraKept &&
      !pushPlace(template.slots) &&
      // Weighed only where the lift can go in today (the re-check of item 44).
-@@ -1236,8 +1722,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1236,8 +1725,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      }
    }
    const defaultMinutes = profile.schedule.typicalDurationMinutes;
@@ -17648,7 +18716,7 @@ index 0460d18..2d692fb 100644
    const hardCap = constraints.hardCap ?? false;
    const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
    const completedSets = constraints.completedSets ?? [];
-@@ -1249,13 +1740,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1249,13 +1743,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      exposure,
      loads,
      focus,
@@ -17664,7 +18732,7 @@ index 0460d18..2d692fb 100644
    };
    const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
  
-@@ -1297,21 +1789,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1297,21 +1792,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      ...[...keptBySlot.values()].flat(),
      ...keptUnslotted,
    ].map((entry) => exerciseOf(entry.exerciseId));
@@ -17689,7 +18757,7 @@ index 0460d18..2d692fb 100644
    const entries: WorkoutEntry[] = [];
    const plannedSets = new Map<string, number>();
    // Stopped entries that do not fit here were ended again by the caller; the others fit now.
-@@ -1390,6 +1870,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1390,6 +1873,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     * under way. A stand-in kept only because it came next, with nothing logged, gives way.
     * True when the slot was filled this way.
     */
@@ -17712,7 +18780,7 @@ index 0460d18..2d692fb 100644
    const reopened = (kept: WorkoutEntry[]): boolean => {
      // Only a stop the place made picks up again; one the lifter or a limit made stays.
      const fitting = kept.filter(
-@@ -1401,25 +1897,51 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1401,25 +1900,54 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      const others = kept.filter((entry) => entry !== target);
      if (others.some((entry) => entry.locked || entry.pinned)) return false;
      if (others.some((entry) => !isStopped(entry) && frozenIds.has(entry.id))) return false;
@@ -17744,7 +18812,10 @@ index 0460d18..2d692fb 100644
 +      ),
 +      {
 +        sets: Math.min(...shares.map((left) => left.sets)),
-+        minRir: shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,
++        minRir: Math.max(
++          offPlanRir,
++          shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,
++        ),
 +      },
 +    );
 +    const sets = Math.min(adjusted.sets, owed);
@@ -17775,7 +18846,7 @@ index 0460d18..2d692fb 100644
        restSeconds: target.restSeconds,
      });
      const from = Math.max(-1, ...target.sets.map((set) => set.index)) + 1;
-@@ -1434,17 +1956,28 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1434,17 +1962,28 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      return true;
    };
  
@@ -17808,7 +18879,7 @@ index 0460d18..2d692fb 100644
        if (isBlocked(checkExerciseFit(next, context))) continue;
        if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
          continue;
-@@ -1470,6 +2003,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1470,6 +2009,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const pushFits = (lift: CatalogExercise): boolean =>
      !pushSwappedAway &&
      !swappedOut.has(lift.id) &&
@@ -17816,19 +18887,18 @@ index 0460d18..2d692fb 100644
      !isBlocked(checkExerciseFit(lift, context)) &&
      fitsWith(lift);
    // The place the plan has for the lift, unless a kept entry holds it. The lift leads once it is in
-@@ -1481,6 +2015,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1481,6 +2021,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
              slotSpec.pattern === push.exercise.movementPattern && !keptBySlot.has(index),
          )
        : -1;
 +  // The plan the lifter's hand emptied today, laid out again, takes no lift (the nineteenth review
 +  // of round M: back at a place with a lift for it, a catch-up emptied was built whole); the split's
 +  // own day a place with no lift for the offer lays out is another plan.
-+  const emptiedHere =
-+    constraints.emptiedLayout !== undefined && constraints.emptiedLayout === template.id;
++  const emptiedHere = constraints.emptiedLayouts?.includes(template.id) === true;
    // The lift kept from before a rebuild: today has it already. One swapped away today keeps it out
    // (`pushSwappedAway`): a swap keeps the lift it replaced, through every later swap.
    const pushKept = keptAll.some(
-@@ -1494,6 +2033,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1494,6 +2038,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      push &&
      push.extraSets !== null &&
      constraints.pushProbe !== true &&
@@ -17836,7 +18906,7 @@ index 0460d18..2d692fb 100644
      !pushKept &&
      !extraKept &&
      !template.slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern) &&
-@@ -1511,7 +2051,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1511,7 +2056,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        rirFloor(lift),
      );
      chosenExercises.push(lift);
@@ -17845,7 +18915,7 @@ index 0460d18..2d692fb 100644
      const built = targetedFor(lift, role, prescription);
      entries.push({
        id,
-@@ -1529,15 +2069,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1529,15 +2074,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      });
      extraId = id;
    }
@@ -17911,7 +18981,7 @@ index 0460d18..2d692fb 100644
      // The plan's own pick first, judged as if no swap were kept; one swapped out gives way to its
      // swap-in, or to the next best when the swap-in is already in the workout. An own pick a kept
      // swap already put in an earlier slot gives way to the next best too.
-@@ -1547,39 +2134,113 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1547,39 +2139,110 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      const ownPicks = chosenExercises.map((chosen) =>
        mine.has(chosen.id) ? chosen : (ownOf.get(chosen.id) ?? chosen),
      );
@@ -18018,14 +19088,11 @@ index 0460d18..2d692fb 100644
 +    // The day's muscles this lift works directly: never more sets than the least left of theirs,
 +    // never less reserve than the most any of them asks.
 +    const shares = pick.primaryMuscles.flatMap((muscle) => budget.get(muscle) ?? []);
-+    const limit: Slot =
-+      shares.length === 0
-+        ? slotSpec
-+        : {
-+            ...slotSpec,
-+            sets: Math.min(slotSpec.sets ?? Infinity, ...shares.map((left) => left.sets)),
-+            minRir: Math.max(slotSpec.minRir ?? 0, ...shares.map((left) => left.minRir)),
-+          };
++    const limit: Slot = {
++      ...slotSpec,
++      sets: Math.min(slotSpec.sets ?? Infinity, ...shares.map((left) => left.sets)),
++      minRir: Math.max(slotSpec.minRir ?? 0, offPlanRir, ...shares.map((left) => left.minRir)),
++    };
      if (natural && pick !== natural) ownOf.set(pick.id, natural);
      chosenExercises.push(pick);
 -    const id = idFor(index);
@@ -18038,7 +19105,7 @@ index 0460d18..2d692fb 100644
      // The lift to push keeps to the push's sets for the week and never goes to failure.
      const basePrescription =
        pushPick && push
-@@ -1596,9 +2257,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1596,9 +2259,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
              rirFloor(pick),
            )
          : adjustPrescription(basePrescription, slotSpec.role, adjust, rirFloor(pick));
@@ -18053,7 +19120,7 @@ index 0460d18..2d692fb 100644
      // Asked to make it harder, the time fit may take back an added set, never one the plan had.
      if ((adjust?.sets ?? 0) > 0) {
        plannedSets.set(
-@@ -1607,7 +2271,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1607,7 +2273,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        );
      }
      const built = targetedFor(pick, slotSpec.role, prescription);
@@ -18068,7 +19135,7 @@ index 0460d18..2d692fb 100644
      entries.push({
        id,
        exerciseId: pick.id,
-@@ -1624,7 +2294,87 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1624,7 +2296,87 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        ...(natural && pick !== natural ? { standsFor: natural.id } : {}),
        ...(pushPick ? { push: 'natural' as const } : {}),
      });
@@ -18157,7 +19224,7 @@ index 0460d18..2d692fb 100644
    entries.push(...keptUnslotted);
  
    // The lift to push leads (Maintenance 27, item 44), kept from before a rebuild too. The day's
-@@ -1935,9 +2685,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1935,9 +2687,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      ) {
        return false;
      }
@@ -18179,7 +19246,7 @@ index 0460d18..2d692fb 100644
      const planned = hardCap ? 0 : (plannedSets.get(entry.id) ?? 0);
      return remainingWorking(entry).length > Math.max(floor, planned);
    };
-@@ -2007,7 +2767,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2007,7 +2769,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      for (const set of move.sets) if (set.kind === 'working') set.restSeconds = move.restSeconds;
      const block = straightBlock(move, exerciseOf);
      blocks.push(block);
@@ -18190,7 +19257,7 @@ index 0460d18..2d692fb 100644
      for (;;) {
        if (estimate().totalMinutes <= limit) return move;
        const working = move.sets.filter((set) => set.kind === 'working');
-@@ -2098,7 +2860,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2098,7 +2862,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
  
    // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
    // to failure, so a style that takes nothing to failure plans none.
@@ -18200,7 +19267,7 @@ index 0460d18..2d692fb 100644
      const deficitMuscles = new Set(
        priorities
          .filter(
-@@ -2168,8 +2931,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2168,8 +2933,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    }
  
    // 5. Week-aware order: after the anchor, accessories for muscles behind their weekly target lead.
@@ -18212,7 +19279,7 @@ index 0460d18..2d692fb 100644
      const isBehind = (block: WorkoutBlock) =>
        block.kind === 'straight' &&
        (block.entries[0] as WorkoutEntry).chosenFor.some(
-@@ -2202,13 +2967,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2202,13 +2969,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const anchorExercise = anchor ? exerciseOf(anchor.exerciseId) : undefined;
    const topPriorities = priorities.slice(0, 3);
    const reasons: string[] = [
@@ -18238,7 +19305,7 @@ index 0460d18..2d692fb 100644
    const leader = leaderEntry ? exerciseOf(leaderEntry.exerciseId) : undefined;
    if (push && pushEntry) {
      reasons.push(
-@@ -2306,18 +3081,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2306,18 +3083,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    );
  
    const count = allEntries(blocks).length;
@@ -18271,7 +19338,7 @@ index 0460d18..2d692fb 100644
 +      painJoints: [],
 +      awayIds: [],
 +    };
-+    delete open.emptiedLayout;
++    delete open.emptiedLayouts;
 +    const whole = generateWorkout({ ...input, constraints: open });
 +    return whole.templateId === template.id && allEntries(whole.blocks).length > 0;
 +  };
@@ -18303,7 +19370,7 @@ index 0460d18..2d692fb 100644
      goal: goalLabel(profile.goals.primary),
      generatedAt: now,
      locationId: location?.id ?? null,
-@@ -2347,6 +3166,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2347,6 +3168,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
            : 'low',
      compromises: [...new Set(compromises)],
      recalibration: { version: 1, lastTrigger: null },
@@ -19907,6 +20974,198 @@ index 0000000..3c76473
 +    ).toEqual([]);
 +  });
 +});
+diff --git a/src/engine/workoutGenerator/secondWorkoutToFailure.test.ts b/src/engine/workoutGenerator/secondWorkoutToFailure.test.ts
+new file mode 100644
+index 0000000..fe2ce67
+--- /dev/null
++++ b/src/engine/workoutGenerator/secondWorkoutToFailure.test.ts
+@@ -0,0 +1,186 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations, type LocationProfile } from '../../core/validation/location';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import type { CatchUpSpec } from '../planning/catchUp';
++import { emptyCompleted, emptyConstraints, recalibrate } from '../recalibration/recalibrate';
++import type { CompletedWork, SessionConstraints } from '../recalibration/types';
++import { allEntries, CATCH_UP_TEMPLATE_IDS, type GeneratedWorkout } from '../workout/types';
++import { generateWorkout, offPlanSpec } from './generate';
++import { at, describeWorkout, gym, profileOf, session } from '../../test/clockDays';
++
++/**
++ * Twentieth review of round M, on sets to failure in a second workout outside the day's catch-up
++ * muscles: one with nothing behind (off the plan since the sixteenth pass: "one rule says when the
++ * day is off the plan, a second workout with nothing behind included"), and the split's own day
++ * standing in for one at a place with no lift for what was missed (the nineteenth pass: "a second
++ * workout at such a place is the split's own day, as a catch-up is").
++ *
++ * The rules: generate.ts (the first review of round M), "A day off the plan: a catch-up built, or any
++ * second workout. The lift to push waits for a planned day, and nothing goes to failure", and for
++ * drop sets, "A drop set is a set taken to failure ... None in a catch-up or a second workout: a few
++ * sets each, none to failure"; the research's defaults (`docs/research/catch-up-and-second-workout.md`):
++ * "the app's normal RIR, with no sets to failure", the second workout's muscles behind "dosed as in
++ * Item 12". The second pass held the catch-up's lifts to their reserve through "harder" ("'harder'
++ * made it four sets with none in reserve").
++ *
++ * What happens: only lifts for the offer's muscles are held to a reserve (a catch-up's slots,
++ * `catchUpHold`). The rest of a second workout takes its role's own reserve, and a finisher's is 0
++ * (roles.ts: `rir: foundation ? 2 : style === 'lean-down' ? 1 : 0`): the plan drops the finisher's
++ * drop set off the plan, "none to failure", and keeps its working sets at 0 in reserve. "Make it
++ * harder" then takes every such lift a set further, to 0 in reserve, as on a day of the plan.
++ *
++ * Steps (synthetic data only):
++ * - A morning squat, overhead press and bench press, nothing behind: the second workout is the pull
++ *   day without the trained muscles, "You trained today, and nothing is behind this week: what you
++ *   trained sits out.", and it ends with "dumbbell-curl x2 @RIR 0/0", the finisher, to failure.
++ * - A morning upper session, nothing behind: the lower day, its accessories at 1 in reserve. Make it
++ *   harder: "Rest of the workout made harder: 6 exercises adjusted", the Romanian deadlift, the split
++ *   squat, the leg curl, the leg extension and the calf raise four sets each at 0 in reserve.
++ * - The side delts behind, at a place with no lift for them: the lower day stands in. Make it
++ *   harder: the split squat and the calf raise four sets each at 0 in reserve.
++ * A second workout built for the side delts (the lateral raise) keeps its reserve.
++ *
++ * All three also fail on 0f8d10f (the finisher since the first review of round M; the second
++ * workout with nothing behind off the plan since the sixteenth).
++ */
++
++const profile = profileOf();
++const NOW = at(9, 18);
++const [noEquipment] = createDefaultLocations({ gymAccess: false, homeEquipment: [] }, at(1)) as [
++  LocationProfile,
++];
++const travel: LocationProfile = { ...noEquipment, id: 'travel', name: 'Travel' };
++const theGym = gym as LocationProfile;
++const upperSitOut: CatchUpSpec['sitOut'] = ['chest', 'triceps', 'upper-back', 'lats', 'biceps'];
++const upperMorning = [
++  session(at(3, 18), [['barbell-row', 3]]),
++  session(at(9, 9), [
++    ['barbell-bench-press', 3],
++    ['barbell-row', 3],
++    ['lat-pulldown', 3],
++    ['barbell-curl', 3],
++  ]),
++];
++
++/** The lifts with a working set still to do at less than 1 in reserve. */
++const toFailure = (workout: GeneratedWorkout) =>
++  allEntries(workout.blocks)
++    .filter((entry) => entry.sets.some((set) => set.kind === 'working' && set.targetRir < 1))
++    .map((entry) => entry.exerciseId);
++
++function plan(spec: CatchUpSpec, location: LocationProfile, history: WorkoutRecord[]) {
++  const workout = generateWorkout({
++    profile,
++    location,
++    history,
++    now: NOW,
++    duration: 'default',
++    constraints: { catchUp: spec },
++  });
++  const constraints: SessionConstraints = { ...emptyConstraints(), catchUp: spec };
++  expect(offPlanSpec(constraints, workout)).not.toBeNull();
++  return { workout, constraints };
++}
++
++/**
++ * The plan made harder, before the start or begun with a lift in front a set short of failure,
++ * nothing of it logged: the change holds that lift itself (`settleKept`), as it holds every lift the
++ * plan keeps.
++ */
++function harder(spec: CatchUpSpec, location: LocationProfile, begun = false) {
++  const { workout, constraints } = plan(spec, location, upperMorning);
++  const inFront = allEntries(workout.blocks).find((entry) =>
++    entry.sets.some((each) => each.kind === 'working' && each.targetRir === 1),
++  )!;
++  const completed: CompletedWork = begun
++    ? { ...emptyCompleted(), startedAt: NOW, elapsedSeconds: 300 }
++    : emptyCompleted();
++  const result = recalibrate({
++    trigger: { type: 'intensity', direction: 'harder' },
++    workout,
++    completed,
++    lockedEntryIds: [],
++    currentEntryId: begun ? inFront.id : null,
++    duration: 'default',
++    profile,
++    location,
++    loading: { missingPlates: [] },
++    history: upperMorning,
++    constraints,
++    reason: 'test',
++    timestamp: NOW,
++  });
++  if (!result.ok) throw new Error(result.error);
++  return {
++    before: workout,
++    after: result.workout,
++    steps: `${describeWorkout(workout).join('; ')} => ${describeWorkout(result.workout).join('; ')}`,
++  };
++}
++
++describe('a second workout off the plan, outside the day’s catch-up muscles', () => {
++  it('plans no set to failure with nothing behind: no finisher at 0 in reserve', () => {
++    const { workout } = plan(
++      {
++        kind: 'second',
++        muscles: [],
++        sitOut: ['quads', 'glutes', 'front-delts', 'triceps', 'chest'],
++      },
++      theGym,
++      [
++        session(at(3, 18), [['barbell-row', 3]]),
++        session(at(9, 9), [
++          ['back-squat', 3],
++          ['overhead-press', 3],
++          ['barbell-bench-press', 3],
++        ]),
++      ],
++    );
++    expect(workout.templateId).toBe('pull-arms');
++    // No drop set off the plan, as the rules say.
++    expect(allEntries(workout.blocks).some((entry) => entry.dropSet)).toBe(false);
++    // On 0fe4cb9 and 0f8d10f: ['dumbbell-curl'], "dumbbell-curl x2 @RIR 0/0", the finisher.
++    expect(toFailure(workout), describeWorkout(workout).join('; ')).toEqual([]);
++  });
++
++  it('takes nothing to failure under "Make it harder" with nothing behind', () => {
++    const day = harder({ kind: 'second', muscles: [], sitOut: upperSitOut }, theGym);
++    // On 0fe4cb9 and 0f8d10f: the Romanian deadlift, the split squat, the leg curl, the leg
++    // extension and the calf raise, four sets each at 0 in reserve.
++    expect(toFailure(day.after), day.steps).toEqual([]);
++  });
++
++  it('takes nothing to failure under "Make it harder" on the split’s own day standing in', () => {
++    const day = harder(
++      {
++        kind: 'second',
++        muscles: [{ muscle: 'side-delts', sets: 3, minRir: 1, why: 'behind' }],
++        sitOut: upperSitOut,
++      },
++      travel,
++    );
++    expect(day.before.templateId).not.toBe(CATCH_UP_TEMPLATE_IDS.second);
++    // On 0fe4cb9 and 0f8d10f: the split squat and the calf raise at 0 in reserve.
++    expect(toFailure(day.after), day.steps).toEqual([]);
++  });
++
++  it('takes nothing to failure under "Make it harder" with nothing behind, the workout begun', () => {
++    // Begun, the lift in front is kept and the change holds it (`heldIn`), the generator's own hold
++    // not reached.
++    const day = harder({ kind: 'second', muscles: [], sitOut: upperSitOut }, theGym, true);
++    expect(toFailure(day.after), day.steps).toEqual([]);
++  });
++
++  it('keeps the reserve of a second workout built for what was missed', () => {
++    const day = harder(
++      {
++        kind: 'second',
++        muscles: [{ muscle: 'side-delts', sets: 3, minRir: 1, why: 'behind' }],
++        sitOut: upperSitOut,
++      },
++      theGym,
++    );
++    expect(day.before.templateId).toBe(CATCH_UP_TEMPLATE_IDS.second);
++    expect(toFailure(day.after)).toEqual([]);
++  });
++});
 diff --git a/src/engine/workoutGenerator/swappedAwayPicks.test.ts b/src/engine/workoutGenerator/swappedAwayPicks.test.ts
 new file mode 100644
 index 0000000..03d4f16
@@ -21198,7 +22457,7 @@ index c5e03cb..d2f11e5 100644
  ## Running one on Linux
  
 diff --git a/tools/reverts/mutate-m27.py b/tools/reverts/mutate-m27.py
-index 37aa488..7d494ce 100644
+index 37aa488..2888bda 100644
 --- a/tools/reverts/mutate-m27.py
 +++ b/tools/reverts/mutate-m27.py
 @@ -182,11 +182,9 @@ MUTATIONS = [
@@ -21234,6 +22493,17 @@ index 37aa488..7d494ce 100644
      ("44v the coach offers to end a push that falls short twice", COACH,
       "  const falling = shortTwiceRunning(input.history, exercise.id, push.since);",
       "  const falling = null;",
+@@ -416,8 +414,8 @@ MUTATIONS = [
+     ("R49-7b the route's offer leaves a painful lift to its own card", COACH,
+      "  if (painful) return null;\n", "", [T_VARIETY_COACH], None),
+     ("R49-10 the offer fits today's limits", COACH,
+-     "    context: sessionConflictContext(input.profile, input.location, {\n      excludeExerciseIds: input.constraints.avoidExerciseIds,\n      painJoints: jointsToProtect(input),\n    }),",
+-     "    context: buildConflictContext(input.profile, input.location),", [T_VARIETY_COACH], None),
++     "    context: sessionConflictContext(input.profile, input.location, {\n      excludeExerciseIds: dayExclusions(input),\n      painJoints: jointsToProtect(input),\n    }),",
++     "    context: sessionConflictContext(input.profile, input.location),", [T_VARIETY_COACH], None),
+     ("R46-10 a four-week swap's step waits for the swap", SCREEN_TODAY,
+      "    if (action.kind !== 'lasting-swap') void store.noteCoachAction(action);",
+      "    void store.noteCoachAction(action);", [T_TAPS], None),
 @@ -476,13 +474,14 @@ MUTATIONS = [
       "    const mark = undefined as 'extra' | 'natural' | undefined;",
       [T_PUSH_REVIEW, T_PUSH_RECHECK], None),
@@ -21290,10 +22560,10 @@ index 4c6bd08..f9e76a4 100644
       "          await store.saveLocation(location);", [T_SCREEN, T_AUTOSAVE], None),
 diff --git a/tools/reverts/mutate-m31.py b/tools/reverts/mutate-m31.py
 new file mode 100644
-index 0000000..4808b45
+index 0000000..29c6aa8
 --- /dev/null
 +++ b/tools/reverts/mutate-m31.py
-@@ -0,0 +1,1064 @@
+@@ -0,0 +1,1078 @@
 +"""Maintenance 31 mutation checks: revert each round M rule alone, run its tests, expect a failure,
 +restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -21425,6 +22695,12 @@ index 0000000..4808b45
 +T_HURTS_REPLACED = "src/engine/recalibration/hurtsBringsBackReplaced.test.ts"
 +T_EMPTIED_BY_HAND = "src/engine/recalibration/catchUpEmptiedByHand.test.ts"
 +T_AWAY_PICKS = "src/engine/workoutGenerator/swappedAwayPicks.test.ts"
++T_TRIP_OTHER_OFFER = "src/core/state/emptiedTripOtherOffer.store.test.ts"
++T_TWO_LAYOUTS = "src/engine/recalibration/emptiedTwoLayouts.test.ts"
++T_NOTHING_BEHIND_WAY_BACK = "src/engine/recalibration/emptiedNothingBehindWayBack.test.ts"
++T_PAIN_CARD_DAY = "src/engine/coach/painCardDayLists.test.ts"
++T_PREVIEW_AWAY = "src/core/state/previewAgainSwappedAway.store.test.ts"
++T_SECOND_FAILURE = "src/engine/workoutGenerator/secondWorkoutToFailure.test.ts"
 +
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
@@ -21612,11 +22888,11 @@ index 0000000..4808b45
 +     "  return (usable ? trains.find(takes) : undefined) ?? trains[0];", "  return trains[0];",
 +     [T_RESTS], None),
 +    ("R5 a lift two muscles share takes the fewest sets either has left", GENERATE,
-+     "            sets: Math.min(slotSpec.sets ?? Infinity, ...shares.map((left) => left.sets)),",
-+     "            sets: slotSpec.sets,", [T_RESTS, T_SESSION], None),
++     "      sets: Math.min(slotSpec.sets ?? Infinity, ...shares.map((left) => left.sets)),",
++     "      sets: slotSpec.sets,", [T_RESTS, T_SESSION], None),
 +    ("R6 ... at the most reserve either asks", GENERATE,
-+     "            minRir: Math.max(slotSpec.minRir ?? 0, ...shares.map((left) => left.minRir)),",
-+     "            minRir: slotSpec.minRir,", [T_RESTS], None),
++     "      minRir: Math.max(slotSpec.minRir ?? 0, offPlanRir, ...shares.map((left) => left.minRir)),",
++     "      minRir: Math.max(slotSpec.minRir ?? 0, offPlanRir),", [T_RESTS], None),
 +    ("R7 a slot left out for a muscle that rests says nothing", GENERATE,
 +     "      if (!restsHere && short?.length !== 0) {", "      if (short?.length !== 0) {",
 +     [T_RESTS], None),
@@ -21815,7 +23091,7 @@ index 0000000..4808b45
 +     "      if (trains && covers(next, trains) < covers(pick, trains)) continue;\n", "",
 +     [T_OFF], None),
 +    ("Z16 a lift picked up again keeps the catch-up's reserve", GENERATE,
-+     "        minRir: shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,\n",
++     "        minRir: Math.max(\n          offPlanRir,\n          shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,\n        ),\n",
 +     "", [T_OFF], None),
 +    ("Z17 ... counts against its muscles", GENERATE,
 +     "    spend(exercise.id, sets);\n", "", [T_OFF], None),
@@ -21935,8 +23211,8 @@ index 0000000..4808b45
 +    ("H16 ... after a set too", ENGINE, "    Math.max(1, Math.min(owed, room)),", "    owed,",
 +     [T_WITHIN], None),
 +    ("H17 the catch-up's least reserve for a lift for none of its muscles", ENGINE,
-+     "      ? { sets: Infinity, minRir: Math.min(...spec.muscles.map((item) => item.minRir)) }",
-+     "      ? null", [T_RESERVE], None),
++     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : CATCH_UP.MIN_RIR,",
++     "        ? 0\n        : CATCH_UP.MIN_RIR,", [T_RESERVE], None),
 +    ("H18 ... in the day's re-plan and every rebuild", ENGINE,
 +     [("    const hold = heldIn(spec, exercise);", "    const hold = catchUpHold(spec, exercise);"),
 +      ("    const hold = heldIn(spec, exercise);", "    const hold = catchUpHold(spec, exercise);")],
@@ -21988,8 +23264,8 @@ index 0000000..4808b45
 +     "    title: nothing ? CATCH_UP_TITLES.second.title : template.title,", [T_EMPTIED], None),
 +    ("H33 a lift for none of the day's muscles picked up again keeps the catch-up's reserve",
 +     GENERATE,
-+     "        minRir: shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,",
-+     "        minRir: Math.max(0, ...shares.map((left) => left.minRir)),", [T_REOPENED], None),
++     "          shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,",
++     "          Math.max(0, ...shares.map((left) => left.minRir)),", [T_REOPENED], None),
 +    ("H34 no stand-in for one set owed", GENERATE,
 +     "      if (owed === undefined || (offPlan && owed < CATCH_UP.MIN_SETS)) return;",
 +     "      if (owed === undefined) return;", [T_ONE_OWED], None),
@@ -22013,9 +23289,6 @@ index 0000000..4808b45
 +     "  return offPlanSpec(request.constraints, request.workout) !== null;\n}",
 +     "  return false;\n}", [T_COMFORT_KEPT, T_COMFORT_LENGTH, T_COMFORT_EASIER, T_COMFORT_UNPINNED],
 +     None),
-+    ("H41 a catch-up emptied stays so through every rebuild", ENGINE,
-+     "  if (!request.offerChanged && emptiedFor(constraints, request.workout)) {",
-+     "  if (false) {", [T_EMPTIED_SKIP, T_EMPTIED_LENGTH], None),
 +    ("H42 ... never planned as the split's day for what the lifter set aside", GENERATE,
 +     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain && !emptiedByLifter()) {",
 +     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain) {", [T_EMPTIED_LENGTH], None),
@@ -22049,10 +23322,6 @@ index 0000000..4808b45
 +    ("H52 a catch-up emptied by \"Hurts\" stays so built whole", GENERATE,
 +     "      excludeExerciseIds: [],\n      painJoints: [],\n      awayIds: [],\n    };",
 +     "      excludeExerciseIds: [],\n      awayIds: [],\n    };", [T_HURTS_EMPTIED, T_CHECK_IN_JOINT], None),
-+    ("H53 a plan built whole for a new offer reads it afresh", ENGINE,
-+     "  if (!request.offerChanged && emptiedFor(constraints, request.workout)) {",
-+     "  if (emptiedFor(constraints, request.workout)) {", [T_EMPTIED_NEW_OFFER, T_EMPTIED_BY_HAND],
-+     None),
 +    ("H54 \"Uncomfortable\" reads one set owed before the lift stops", ENGINE,
 +     "      const oneLeft = oneSetOwed(request, workout, entry);\n      const stopped = stopAtLogged(workout, entry, request);",
 +     "      const stopped = stopAtLogged(workout, entry, request);\n      const oneLeft = oneSetOwed(request, workout, entry);",
@@ -22076,10 +23345,6 @@ index 0000000..4808b45
 +    ("H59 a stand-in's name past every name the plan had", GENERATE,
 +     "[...used, ...had.map((was) => was.id)]", "[...used]", [T_STAND_IN_LEFT_OUT], None),
 +    # The sixteenth review.
-+    ("H60 an emptied catch-up stays so through a rebuild of the whole plan", ENGINE,
-+     "  if (!request.offerChanged && emptiedFor(constraints, request.workout)) {",
-+     "  if (scope !== 'full' && !request.offerChanged && emptiedFor(constraints, request.workout)) {",
-+     [T_EMPTIED_WHOLE], None),
 +    ("H61 ... and through the preview built again", STORE,
 +     "        workout: emptied ? session.workout : fresh.workout,",
 +     "        workout: fresh.workout,", [T_EMPTIED_PREVIEW], None),
@@ -22121,26 +23386,28 @@ index 0000000..4808b45
 +     "own !== undefined && !used.has(own) && !had.some((was) => was.id === own)",
 +     "own !== undefined && !used.has(own)", [T_SLOT_OWN_NAME], None),
 +    # The seventeenth review.
-+    ("H73 the way back to a catch-up the lifter emptied finds it so", ENGINE,
-+     "    ...emptiedLayoutFor(constraints),\n",
-+     "", [T_EMPTIED_WAY_BACK, T_STORE], None),
++    ("H73 the way back to a catch-up the lifter emptied finds it so, as every rebuild does", ENGINE,
++     "    ...emptiedLayoutsFor(constraints),\n",
++     "", [T_EMPTIED_WAY_BACK, T_STORE, T_EMPTIED_SKIP, T_EMPTIED_LENGTH, T_EMPTIED_WHOLE], None),
 +    ("H74 ... the lifter's hand emptying it marks it so", ENGINE,
-+     "    constraints.emptied = offerKey(constraints);\n    constraints.emptiedLayout = next.templateId;",
-+     "    constraints.emptiedLayout = next.templateId;", [T_EMPTIED_WAY_BACK, T_STORE], None),
++     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
++     "    constraints.emptied = [...marked, { offer: '-', layout: next.templateId }];",
++     [T_EMPTIED_WAY_BACK, T_STORE], None),
 +    ("H75 ... for that offer only", GENERATE,
-+     "  if (!spec || !constraints.emptied || constraints.emptied !== offerKey(constraints)) return {};",
-+     "  if (!spec || !constraints.emptied) return {};", [T_EMPTIED_WAY_BACK], None),
++     "    .filter((plan) => plan.offer === offer)\n",
++     "", [T_EMPTIED_WAY_BACK, T_EMPTIED_NEW_OFFER, T_EMPTIED_BY_HAND], None),
 +    ("H76 ... where the offer is laid out still", GENERATE,
 +     "  const emptiedAgain = emptiedHere && entries.length > 0;",
 +     "  const emptiedAgain = emptiedHere;", [T_EMPTIED_WAY_BACK, T_ROUND_TRIP], None),
 +    ("H77 ... a change keeps the mark", ENGINE,
-+     "    ...(constraints.emptied !== undefined ? { emptied: constraints.emptied } : {}),\n", "",
++     "    ...(constraints.emptied ? { emptied: constraints.emptied.map((plan) => ({ ...plan })) } : {}),\n",
++     "",
 +     [T_EMPTIED_WAY_BACK, T_STORE], None),
 +    ("H78 ... and so does a later plan the same day", STORE,
-+     "        ...((keepFull || keepEmptied || keepMark) && before.constraints.emptied !== undefined\n          ? { emptied: before.constraints.emptied }\n          : {}),\n",
++     "        ...(marked.length > 0 ? { emptied: marked.map((plan) => ({ ...plan })) } : {}),\n",
 +     "", [T_STORE, T_EMPTIED_LATER, T_ROUND_TRIP_STORE], None),
 +    ("H79 ... a mark that cannot be read is dropped, never the session", SESSION,
-+     "  emptied: z.string().optional().catch(undefined),", "  emptied: z.string().optional(),", [T_STORED],
++     "      }),\n    )\n    .optional()\n    .catch(undefined),", "      }),\n    )\n    .optional(),", [T_STORED],
 +     None),
 +    ("H80 a lift stopped by a place picks up past a stand-in stopped with nothing in", GENERATE,
 +     "    const owed = Math.min(...kept.filter(isStopped).map((entry) => entry.stopped?.owed ?? 0));",
@@ -22189,17 +23456,14 @@ index 0000000..4808b45
 +
 +    # The eighteenth review of round M.
 +    ("H95 only the lifter's hand marks a plan emptied", ENGINE,
-+     "  } else if (BY_HAND.has(request.trigger.type)) {",
-+     "  } else if (true) {", [T_CLOSED_TRIP], None),
-+    ("H96 ... and lifts in the plan again end the mark", ENGINE,
-+     "      delete constraints.emptied;\n      delete constraints.emptiedLayout;\n",
-+     "      delete constraints.emptiedLayout;\n", [T_EMPTIED_BY_HAND, T_ROUND_TRIP], None),
-+    ("H97 ... the mark holds through the full session", ENGINE,
-+     "  if (constraints.fullSession) return;\n  // A day of the plan never comes to nothing",
-+     "  // A day of the plan never comes to nothing", [T_EMPTIED_WAY_BACK, T_STORE], None),
-+    ("H98 a rebuild keeps empty only a plan marked emptied", GENERATE,
-+     "  return constraints.emptied === offerKey(constraints) && allEntries(workout.blocks).length === 0;",
-+     "  return allEntries(workout.blocks).length === 0;", [T_CLOSED_TRIP], None),
++     "  } else if (BY_HAND.has(request.trigger.type) && !marked.some(isThis)) {",
++     "  } else if (!marked.some(isThis)) {", [T_CLOSED_TRIP], None),
++    ("H96 ... and lifts back in the plan end its mark", ENGINE,
++     "    if (!marked.some(isThis)) return;\n    const others",
++     "    return;\n    const others", [T_EMPTIED_BY_HAND, T_TWO_LAYOUTS], None),
++    ("H98 a later plan keeps as it is only a plan marked emptied", GENERATE,
++     "  return (constraints.emptied ?? []).some(\n    (plan) => plan.offer === offer && plan.layout === workout.templateId,\n  );",
++     "  return true;", [T_CLOSED_TRIP, T_EMPTIED_LATER, T_ROUND_TRIP_STORE], None),
 +    ("H99 a layout made again opens the slots closed", ENGINE,
 +     "  if (scope === 'full') delete constraints.closedSlots;\n", "", [T_EMPTIED_BY_HAND], None),
 +    ("H100 ... and so does the preview made again", STORE, "    delete today.closedSlots;\n", "",
@@ -22244,7 +23508,8 @@ index 0000000..4808b45
 +    ("H116 a later plan the same day keeps a catch-up the lifter emptied", STORE,
 +     "    const workout = keepEmptied\n", "    const workout = false\n", [T_EMPTIED_LATER], None),
 +    ("H117 ... only the same day", STORE,
-+     "      localDayKey(before.createdAt) === localDayKey(now) &&\n", "", [T_EMPTIED_LATER], 1),
++     "      before !== null && localDayKey(before.createdAt) === localDayKey(now)\n        ? (before.constraints.emptied ?? [])",
++     "      before !== null\n        ? (before.constraints.emptied ?? [])", [T_EMPTIED_LATER], None),
 +    # The nineteenth review of round M.
 +    ("H119 a kept swap gives way to its swap-in for a lift swapped away today", GENERATE,
 +     "...[...away].filter((id) => !swappedOut.has(id))",
@@ -22258,39 +23523,58 @@ index 0000000..4808b45
 +    ("H122 every coach offer sets aside the lifts swapped away today", COACH,
 +     "  return [...input.constraints.avoidExerciseIds, ...(input.constraints.swappedAway ?? [])];",
 +     "  return [...input.constraints.avoidExerciseIds];", [T_COACH_AWAY], None),
-+    ("H123 the mark keeps the layout emptied", ENGINE,
-+     "    constraints.emptiedLayout = next.templateId;\n",
-+     "", [T_EMPTIED_BY_HAND, T_ROUND_TRIP], None),
-+    ("H124 ... the split's day standing in for an offer emptied elsewhere keeps it", ENGINE,
-+     "    if (laidOutAsOffer(constraints, next) || next.templateId === constraints.emptiedLayout) {",
-+     "    if (true) {", [T_ROUND_TRIP], None),
++    ("H123 each plan the lifter emptied keeps its own mark", ENGINE,
++     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
++     "    constraints.emptied = [{ offer, layout: next.templateId }];", [T_TWO_LAYOUTS], None),
++    ("H124 ... a plan laid out another way leaves the mark", ENGINE,
++     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer && plan.layout === next.templateId;",
++     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer;", [T_TWO_LAYOUTS, T_ROUND_TRIP_STORE],
++     None),
 +    ("H125 the layout emptied, laid out again where it has a lift, takes none", GENERATE,
 +     "  if (emptiedAgain) {\n    entries.length = 0;",
 +     "  if (false) {\n    entries.length = 0;", [T_ROUND_TRIP, T_EMPTIED_WAY_BACK], None),
 +    ("H126 ... and is no fallback to the split's day", GENERATE,
 +     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain && !emptiedByLifter()) {",
 +     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {", [T_ROUND_TRIP_STORE, T_ROUND_TRIP], None),
-+    ("H127 ... the whole offer read without the layout emptied", GENERATE,
-+     "    delete open.emptiedLayout;\n",
++    ("H127 ... the whole offer read without the layouts emptied", GENERATE,
++     "    delete open.emptiedLayouts;\n",
 +     "", [T_BACK_TO_EMPTIED], None),
-+    ("H128 a later plan the same day keeps the mark for the same offer", STORE,
-+     "      before.constraints.emptied === offerKey({ catchUp });",
-+     "      before.constraints.emptied === 'none';", [T_ROUND_TRIP_STORE], None),
-+    ("H129 ... lays the layout emptied out empty", STORE,
-+     "            ...(keepMark && !keepFull\n              ? emptiedLayoutFor({",
-+     "            ...(false\n              ? emptiedLayoutFor({", [T_ROUND_TRIP_STORE], None),
-+    ("H130 ... and keeps the layout", STORE,
-+     "        ...((keepFull || keepEmptied || keepMark) && before.constraints.emptiedLayout !== undefined",
-+     "        ...(false && before.constraints.emptiedLayout !== undefined", [T_ROUND_TRIP_STORE], None),
-+    ("H131 a change keeps the layout emptied", ENGINE,
-+     "    ...(constraints.emptiedLayout !== undefined\n      ? { emptiedLayout: constraints.emptiedLayout }\n      : {}),\n",
-+     "", [T_EMPTIED_BY_HAND, T_ROUND_TRIP], None),
-+    ("H132 a stored layout emptied that cannot be read is dropped alone", SESSION,
-+     "  emptiedLayout: z.string().optional().catch(undefined),",
-+     "  emptiedLayout: z.string().optional(),", [T_STORED], None),
-+    ("H133 a mark with no layout kept reads as the offer's own", GENERATE,
-+     "  return { emptiedLayout: constraints.emptiedLayout ?? CATCH_UP_TEMPLATE_IDS[spec.kind] };",
-+     "  return constraints.emptiedLayout ? { emptiedLayout: constraints.emptiedLayout } : {};", [T_ROUND_TRIP], None),
++    ("H129 a later plan the same day lays each layout emptied out empty", STORE,
++     "            ...(keepFull ? {} : emptiedLayoutsFor({ catchUp, emptied: marked })),\n",
++     "", [T_ROUND_TRIP_STORE], None),
++    ("H132 a stored plan emptied that cannot be read is dropped alone", SESSION,
++     "    .array(z.unknown())\n    .transform((items) =>\n      items.flatMap((item) => {\n        const read = EmptiedPlanSchema.safeParse(item);\n        return read.success ? [{ offer: read.data.offer, layout: read.data.layout }] : [];\n      }),\n    )",
++     "    .array(EmptiedPlanSchema)", [T_STORED], None),
++    # The twentieth review of round M.
++    ("H134 lifts back in one plan the lifter emptied end that plan's mark only", ENGINE,
++     "    const others = marked.filter((plan) => !isThis(plan));",
++     "    const others: EmptiedPlan[] = [];", [T_TWO_LAYOUTS], None),
++    ("H135 ... a plan of another offer leaves the mark", ENGINE,
++     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer && plan.layout === next.templateId;",
++     "  const isThis = (plan: EmptiedPlan) => plan.layout === next.templateId;", [T_TRIP_OTHER_OFFER],
++     None),
++    ("H136 the mark keeps the layout the lifter emptied", ENGINE,
++     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
++     "    constraints.emptied = [...marked, { offer, layout: 'catch-up' }];",
++     [T_NOTHING_BEHIND_WAY_BACK, T_ROUND_TRIP_STORE], None),
++    ("H137 no set of a day off the plan goes to failure", GENERATE,
++     "  const offPlanRir = offPlan ? CATCH_UP.MIN_RIR : 0;", "  const offPlanRir = 0;",
++     [T_SECOND_FAILURE], None),
++    ("H138 ... nor under a day's setting: a second workout with nothing behind held a set short", ENGINE,
++     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : CATCH_UP.MIN_RIR,",
++     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : 0,", [T_SECOND_FAILURE], None),
++    ("H139 the pain card's alternative is none the day sets aside", COACH,
++     "  const context = sessionConflictContext(input.profile, input.location, {\n    excludeExerciseIds: dayExclusions(input),\n  });\n  const today",
++     "  const context = sessionConflictContext(input.profile, input.location, {\n    excludeExerciseIds: [],\n  });\n  const today",
++     [T_PAIN_CARD_DAY], None),
++    ("H140 ... nor one already in today's plan", COACH,
++     "    fits: (exercise) => !today.has(exercise.id) && !isBlocked(checkExerciseFit(exercise, context)),",
++     "    fits: (exercise) => !isBlocked(checkExerciseFit(exercise, context)),", [T_PAIN_CARD_DAY], None),
++    ("H141 the preview made again keeps the lifts swapped away today", STORE,
++     "      emptied ||\n      away.length > 0 ||\n", "      emptied ||\n", [T_PREVIEW_AWAY], None),
++    ("H142 a kept swap stopped brings back the lift it stood in for", STORE,
++     "    const away = (today.swappedAway ?? []).filter((id) => id !== putBack);",
++     "    const away = today.swappedAway ?? [];", [T_PREVIEW_AWAY], None),
 +]
 +
 +
@@ -22406,10 +23690,10 @@ index 0000000..2ae6517
 +print("written")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
 new file mode 100644
-index 0000000..5e37276
+index 0000000..9c4a776
 --- /dev/null
 +++ b/tools/reverts/table_m31.txt
-@@ -0,0 +1,866 @@
+@@ -0,0 +1,874 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The week model.
@@ -22596,11 +23880,11 @@ index 0000000..5e37276
 +     "  return (usable ? trains.find(takes) : undefined) ?? trains[0];", "  return trains[0];",
 +     [T_RESTS], None),
 +    ("R5 a lift two muscles share takes the fewest sets either has left", GENERATE,
-+     "            sets: Math.min(slotSpec.sets ?? Infinity, ...shares.map((left) => left.sets)),",
-+     "            sets: slotSpec.sets,", [T_RESTS, T_SESSION], None),
++     "      sets: Math.min(slotSpec.sets ?? Infinity, ...shares.map((left) => left.sets)),",
++     "      sets: slotSpec.sets,", [T_RESTS, T_SESSION], None),
 +    ("R6 ... at the most reserve either asks", GENERATE,
-+     "            minRir: Math.max(slotSpec.minRir ?? 0, ...shares.map((left) => left.minRir)),",
-+     "            minRir: slotSpec.minRir,", [T_RESTS], None),
++     "      minRir: Math.max(slotSpec.minRir ?? 0, offPlanRir, ...shares.map((left) => left.minRir)),",
++     "      minRir: Math.max(slotSpec.minRir ?? 0, offPlanRir),", [T_RESTS], None),
 +    ("R7 a slot left out for a muscle that rests says nothing", GENERATE,
 +     "      if (!restsHere && short?.length !== 0) {", "      if (short?.length !== 0) {",
 +     [T_RESTS], None),
@@ -22799,7 +24083,7 @@ index 0000000..5e37276
 +     "      if (trains && covers(next, trains) < covers(pick, trains)) continue;\n", "",
 +     [T_OFF], None),
 +    ("Z16 a lift picked up again keeps the catch-up's reserve", GENERATE,
-+     "        minRir: shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,\n",
++     "        minRir: Math.max(\n          offPlanRir,\n          shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,\n        ),\n",
 +     "", [T_OFF], None),
 +    ("Z17 ... counts against its muscles", GENERATE,
 +     "    spend(exercise.id, sets);\n", "", [T_OFF], None),
@@ -22919,8 +24203,8 @@ index 0000000..5e37276
 +    ("H16 ... after a set too", ENGINE, "    Math.max(1, Math.min(owed, room)),", "    owed,",
 +     [T_WITHIN], None),
 +    ("H17 the catch-up's least reserve for a lift for none of its muscles", ENGINE,
-+     "      ? { sets: Infinity, minRir: Math.min(...spec.muscles.map((item) => item.minRir)) }",
-+     "      ? null", [T_RESERVE], None),
++     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : CATCH_UP.MIN_RIR,",
++     "        ? 0\n        : CATCH_UP.MIN_RIR,", [T_RESERVE], None),
 +    ("H18 ... in the day's re-plan and every rebuild", ENGINE,
 +     [("    const hold = heldIn(spec, exercise);", "    const hold = catchUpHold(spec, exercise);"),
 +      ("    const hold = heldIn(spec, exercise);", "    const hold = catchUpHold(spec, exercise);")],
@@ -22972,8 +24256,8 @@ index 0000000..5e37276
 +     "    title: nothing ? CATCH_UP_TITLES.second.title : template.title,", [T_EMPTIED], None),
 +    ("H33 a lift for none of the day's muscles picked up again keeps the catch-up's reserve",
 +     GENERATE,
-+     "        minRir: shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,",
-+     "        minRir: Math.max(0, ...shares.map((left) => left.minRir)),", [T_REOPENED], None),
++     "          shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,",
++     "          Math.max(0, ...shares.map((left) => left.minRir)),", [T_REOPENED], None),
 +    ("H34 no stand-in for one set owed", GENERATE,
 +     "      if (owed === undefined || (offPlan && owed < CATCH_UP.MIN_SETS)) return;",
 +     "      if (owed === undefined) return;", [T_ONE_OWED], None),
@@ -22997,9 +24281,6 @@ index 0000000..5e37276
 +     "  return offPlanSpec(request.constraints, request.workout) !== null;\n}",
 +     "  return false;\n}", [T_COMFORT_KEPT, T_COMFORT_LENGTH, T_COMFORT_EASIER, T_COMFORT_UNPINNED],
 +     None),
-+    ("H41 a catch-up emptied stays so through every rebuild", ENGINE,
-+     "  if (!request.offerChanged && emptiedFor(constraints, request.workout)) {",
-+     "  if (false) {", [T_EMPTIED_SKIP, T_EMPTIED_LENGTH], None),
 +    ("H42 ... never planned as the split's day for what the lifter set aside", GENERATE,
 +     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain && !emptiedByLifter()) {",
 +     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain) {", [T_EMPTIED_LENGTH], None),
@@ -23033,10 +24314,6 @@ index 0000000..5e37276
 +    ("H52 a catch-up emptied by \"Hurts\" stays so built whole", GENERATE,
 +     "      excludeExerciseIds: [],\n      painJoints: [],\n      awayIds: [],\n    };",
 +     "      excludeExerciseIds: [],\n      awayIds: [],\n    };", [T_HURTS_EMPTIED, T_CHECK_IN_JOINT], None),
-+    ("H53 a plan built whole for a new offer reads it afresh", ENGINE,
-+     "  if (!request.offerChanged && emptiedFor(constraints, request.workout)) {",
-+     "  if (emptiedFor(constraints, request.workout)) {", [T_EMPTIED_NEW_OFFER, T_EMPTIED_BY_HAND],
-+     None),
 +    ("H54 \"Uncomfortable\" reads one set owed before the lift stops", ENGINE,
 +     "      const oneLeft = oneSetOwed(request, workout, entry);\n      const stopped = stopAtLogged(workout, entry, request);",
 +     "      const stopped = stopAtLogged(workout, entry, request);\n      const oneLeft = oneSetOwed(request, workout, entry);",
@@ -23060,10 +24337,6 @@ index 0000000..5e37276
 +    ("H59 a stand-in's name past every name the plan had", GENERATE,
 +     "[...used, ...had.map((was) => was.id)]", "[...used]", [T_STAND_IN_LEFT_OUT], None),
 +    # The sixteenth review.
-+    ("H60 an emptied catch-up stays so through a rebuild of the whole plan", ENGINE,
-+     "  if (!request.offerChanged && emptiedFor(constraints, request.workout)) {",
-+     "  if (scope !== 'full' && !request.offerChanged && emptiedFor(constraints, request.workout)) {",
-+     [T_EMPTIED_WHOLE], None),
 +    ("H61 ... and through the preview built again", STORE,
 +     "        workout: emptied ? session.workout : fresh.workout,",
 +     "        workout: fresh.workout,", [T_EMPTIED_PREVIEW], None),
@@ -23105,26 +24378,28 @@ index 0000000..5e37276
 +     "own !== undefined && !used.has(own) && !had.some((was) => was.id === own)",
 +     "own !== undefined && !used.has(own)", [T_SLOT_OWN_NAME], None),
 +    # The seventeenth review.
-+    ("H73 the way back to a catch-up the lifter emptied finds it so", ENGINE,
-+     "    ...emptiedLayoutFor(constraints),\n",
-+     "", [T_EMPTIED_WAY_BACK, T_STORE], None),
++    ("H73 the way back to a catch-up the lifter emptied finds it so, as every rebuild does", ENGINE,
++     "    ...emptiedLayoutsFor(constraints),\n",
++     "", [T_EMPTIED_WAY_BACK, T_STORE, T_EMPTIED_SKIP, T_EMPTIED_LENGTH, T_EMPTIED_WHOLE], None),
 +    ("H74 ... the lifter's hand emptying it marks it so", ENGINE,
-+     "    constraints.emptied = offerKey(constraints);\n    constraints.emptiedLayout = next.templateId;",
-+     "    constraints.emptiedLayout = next.templateId;", [T_EMPTIED_WAY_BACK, T_STORE], None),
++     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
++     "    constraints.emptied = [...marked, { offer: '-', layout: next.templateId }];",
++     [T_EMPTIED_WAY_BACK, T_STORE], None),
 +    ("H75 ... for that offer only", GENERATE,
-+     "  if (!spec || !constraints.emptied || constraints.emptied !== offerKey(constraints)) return {};",
-+     "  if (!spec || !constraints.emptied) return {};", [T_EMPTIED_WAY_BACK], None),
++     "    .filter((plan) => plan.offer === offer)\n",
++     "", [T_EMPTIED_WAY_BACK, T_EMPTIED_NEW_OFFER, T_EMPTIED_BY_HAND], None),
 +    ("H76 ... where the offer is laid out still", GENERATE,
 +     "  const emptiedAgain = emptiedHere && entries.length > 0;",
 +     "  const emptiedAgain = emptiedHere;", [T_EMPTIED_WAY_BACK, T_ROUND_TRIP], None),
 +    ("H77 ... a change keeps the mark", ENGINE,
-+     "    ...(constraints.emptied !== undefined ? { emptied: constraints.emptied } : {}),\n", "",
++     "    ...(constraints.emptied ? { emptied: constraints.emptied.map((plan) => ({ ...plan })) } : {}),\n",
++     "",
 +     [T_EMPTIED_WAY_BACK, T_STORE], None),
 +    ("H78 ... and so does a later plan the same day", STORE,
-+     "        ...((keepFull || keepEmptied || keepMark) && before.constraints.emptied !== undefined\n          ? { emptied: before.constraints.emptied }\n          : {}),\n",
++     "        ...(marked.length > 0 ? { emptied: marked.map((plan) => ({ ...plan })) } : {}),\n",
 +     "", [T_STORE, T_EMPTIED_LATER, T_ROUND_TRIP_STORE], None),
 +    ("H79 ... a mark that cannot be read is dropped, never the session", SESSION,
-+     "  emptied: z.string().optional().catch(undefined),", "  emptied: z.string().optional(),", [T_STORED],
++     "      }),\n    )\n    .optional()\n    .catch(undefined),", "      }),\n    )\n    .optional(),", [T_STORED],
 +     None),
 +    ("H80 a lift stopped by a place picks up past a stand-in stopped with nothing in", GENERATE,
 +     "    const owed = Math.min(...kept.filter(isStopped).map((entry) => entry.stopped?.owed ?? 0));",
@@ -23173,17 +24448,14 @@ index 0000000..5e37276
 +
 +    # The eighteenth review of round M.
 +    ("H95 only the lifter's hand marks a plan emptied", ENGINE,
-+     "  } else if (BY_HAND.has(request.trigger.type)) {",
-+     "  } else if (true) {", [T_CLOSED_TRIP], None),
-+    ("H96 ... and lifts in the plan again end the mark", ENGINE,
-+     "      delete constraints.emptied;\n      delete constraints.emptiedLayout;\n",
-+     "      delete constraints.emptiedLayout;\n", [T_EMPTIED_BY_HAND, T_ROUND_TRIP], None),
-+    ("H97 ... the mark holds through the full session", ENGINE,
-+     "  if (constraints.fullSession) return;\n  // A day of the plan never comes to nothing",
-+     "  // A day of the plan never comes to nothing", [T_EMPTIED_WAY_BACK, T_STORE], None),
-+    ("H98 a rebuild keeps empty only a plan marked emptied", GENERATE,
-+     "  return constraints.emptied === offerKey(constraints) && allEntries(workout.blocks).length === 0;",
-+     "  return allEntries(workout.blocks).length === 0;", [T_CLOSED_TRIP], None),
++     "  } else if (BY_HAND.has(request.trigger.type) && !marked.some(isThis)) {",
++     "  } else if (!marked.some(isThis)) {", [T_CLOSED_TRIP], None),
++    ("H96 ... and lifts back in the plan end its mark", ENGINE,
++     "    if (!marked.some(isThis)) return;\n    const others",
++     "    return;\n    const others", [T_EMPTIED_BY_HAND, T_TWO_LAYOUTS], None),
++    ("H98 a later plan keeps as it is only a plan marked emptied", GENERATE,
++     "  return (constraints.emptied ?? []).some(\n    (plan) => plan.offer === offer && plan.layout === workout.templateId,\n  );",
++     "  return true;", [T_CLOSED_TRIP, T_EMPTIED_LATER, T_ROUND_TRIP_STORE], None),
 +    ("H99 a layout made again opens the slots closed", ENGINE,
 +     "  if (scope === 'full') delete constraints.closedSlots;\n", "", [T_EMPTIED_BY_HAND], None),
 +    ("H100 ... and so does the preview made again", STORE, "    delete today.closedSlots;\n", "",
@@ -23228,7 +24500,8 @@ index 0000000..5e37276
 +    ("H116 a later plan the same day keeps a catch-up the lifter emptied", STORE,
 +     "    const workout = keepEmptied\n", "    const workout = false\n", [T_EMPTIED_LATER], None),
 +    ("H117 ... only the same day", STORE,
-+     "      localDayKey(before.createdAt) === localDayKey(now) &&\n", "", [T_EMPTIED_LATER], 1),
++     "      before !== null && localDayKey(before.createdAt) === localDayKey(now)\n        ? (before.constraints.emptied ?? [])",
++     "      before !== null\n        ? (before.constraints.emptied ?? [])", [T_EMPTIED_LATER], None),
 +    # The nineteenth review of round M.
 +    ("H119 a kept swap gives way to its swap-in for a lift swapped away today", GENERATE,
 +     "...[...away].filter((id) => !swappedOut.has(id))",
@@ -23242,37 +24515,56 @@ index 0000000..5e37276
 +    ("H122 every coach offer sets aside the lifts swapped away today", COACH,
 +     "  return [...input.constraints.avoidExerciseIds, ...(input.constraints.swappedAway ?? [])];",
 +     "  return [...input.constraints.avoidExerciseIds];", [T_COACH_AWAY], None),
-+    ("H123 the mark keeps the layout emptied", ENGINE,
-+     "    constraints.emptiedLayout = next.templateId;\n",
-+     "", [T_EMPTIED_BY_HAND, T_ROUND_TRIP], None),
-+    ("H124 ... the split's day standing in for an offer emptied elsewhere keeps it", ENGINE,
-+     "    if (laidOutAsOffer(constraints, next) || next.templateId === constraints.emptiedLayout) {",
-+     "    if (true) {", [T_ROUND_TRIP], None),
++    ("H123 each plan the lifter emptied keeps its own mark", ENGINE,
++     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
++     "    constraints.emptied = [{ offer, layout: next.templateId }];", [T_TWO_LAYOUTS], None),
++    ("H124 ... a plan laid out another way leaves the mark", ENGINE,
++     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer && plan.layout === next.templateId;",
++     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer;", [T_TWO_LAYOUTS, T_ROUND_TRIP_STORE],
++     None),
 +    ("H125 the layout emptied, laid out again where it has a lift, takes none", GENERATE,
 +     "  if (emptiedAgain) {\n    entries.length = 0;",
 +     "  if (false) {\n    entries.length = 0;", [T_ROUND_TRIP, T_EMPTIED_WAY_BACK], None),
 +    ("H126 ... and is no fallback to the split's day", GENERATE,
 +     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain && !emptiedByLifter()) {",
 +     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {", [T_ROUND_TRIP_STORE, T_ROUND_TRIP], None),
-+    ("H127 ... the whole offer read without the layout emptied", GENERATE,
-+     "    delete open.emptiedLayout;\n",
++    ("H127 ... the whole offer read without the layouts emptied", GENERATE,
++     "    delete open.emptiedLayouts;\n",
 +     "", [T_BACK_TO_EMPTIED], None),
-+    ("H128 a later plan the same day keeps the mark for the same offer", STORE,
-+     "      before.constraints.emptied === offerKey({ catchUp });",
-+     "      before.constraints.emptied === 'none';", [T_ROUND_TRIP_STORE], None),
-+    ("H129 ... lays the layout emptied out empty", STORE,
-+     "            ...(keepMark && !keepFull\n              ? emptiedLayoutFor({",
-+     "            ...(false\n              ? emptiedLayoutFor({", [T_ROUND_TRIP_STORE], None),
-+    ("H130 ... and keeps the layout", STORE,
-+     "        ...((keepFull || keepEmptied || keepMark) && before.constraints.emptiedLayout !== undefined",
-+     "        ...(false && before.constraints.emptiedLayout !== undefined", [T_ROUND_TRIP_STORE], None),
-+    ("H131 a change keeps the layout emptied", ENGINE,
-+     "    ...(constraints.emptiedLayout !== undefined\n      ? { emptiedLayout: constraints.emptiedLayout }\n      : {}),\n",
-+     "", [T_EMPTIED_BY_HAND, T_ROUND_TRIP], None),
-+    ("H132 a stored layout emptied that cannot be read is dropped alone", SESSION,
-+     "  emptiedLayout: z.string().optional().catch(undefined),",
-+     "  emptiedLayout: z.string().optional(),", [T_STORED], None),
-+    ("H133 a mark with no layout kept reads as the offer's own", GENERATE,
-+     "  return { emptiedLayout: constraints.emptiedLayout ?? CATCH_UP_TEMPLATE_IDS[spec.kind] };",
-+     "  return constraints.emptiedLayout ? { emptiedLayout: constraints.emptiedLayout } : {};", [T_ROUND_TRIP], None),
++    ("H129 a later plan the same day lays each layout emptied out empty", STORE,
++     "            ...(keepFull ? {} : emptiedLayoutsFor({ catchUp, emptied: marked })),\n",
++     "", [T_ROUND_TRIP_STORE], None),
++    ("H132 a stored plan emptied that cannot be read is dropped alone", SESSION,
++     "    .array(z.unknown())\n    .transform((items) =>\n      items.flatMap((item) => {\n        const read = EmptiedPlanSchema.safeParse(item);\n        return read.success ? [{ offer: read.data.offer, layout: read.data.layout }] : [];\n      }),\n    )",
++     "    .array(EmptiedPlanSchema)", [T_STORED], None),
++    # The twentieth review of round M.
++    ("H134 lifts back in one plan the lifter emptied end that plan's mark only", ENGINE,
++     "    const others = marked.filter((plan) => !isThis(plan));",
++     "    const others: EmptiedPlan[] = [];", [T_TWO_LAYOUTS], None),
++    ("H135 ... a plan of another offer leaves the mark", ENGINE,
++     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer && plan.layout === next.templateId;",
++     "  const isThis = (plan: EmptiedPlan) => plan.layout === next.templateId;", [T_TRIP_OTHER_OFFER],
++     None),
++    ("H136 the mark keeps the layout the lifter emptied", ENGINE,
++     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
++     "    constraints.emptied = [...marked, { offer, layout: 'catch-up' }];",
++     [T_NOTHING_BEHIND_WAY_BACK, T_ROUND_TRIP_STORE], None),
++    ("H137 no set of a day off the plan goes to failure", GENERATE,
++     "  const offPlanRir = offPlan ? CATCH_UP.MIN_RIR : 0;", "  const offPlanRir = 0;",
++     [T_SECOND_FAILURE], None),
++    ("H138 ... nor under a day's setting: a second workout with nothing behind held a set short", ENGINE,
++     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : CATCH_UP.MIN_RIR,",
++     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : 0,", [T_SECOND_FAILURE], None),
++    ("H139 the pain card's alternative is none the day sets aside", COACH,
++     "  const context = sessionConflictContext(input.profile, input.location, {\n    excludeExerciseIds: dayExclusions(input),\n  });\n  const today",
++     "  const context = sessionConflictContext(input.profile, input.location, {\n    excludeExerciseIds: [],\n  });\n  const today",
++     [T_PAIN_CARD_DAY], None),
++    ("H140 ... nor one already in today's plan", COACH,
++     "    fits: (exercise) => !today.has(exercise.id) && !isBlocked(checkExerciseFit(exercise, context)),",
++     "    fits: (exercise) => !isBlocked(checkExerciseFit(exercise, context)),", [T_PAIN_CARD_DAY], None),
++    ("H141 the preview made again keeps the lifts swapped away today", STORE,
++     "      emptied ||\n      away.length > 0 ||\n", "      emptied ||\n", [T_PREVIEW_AWAY], None),
++    ("H142 a kept swap stopped brings back the lift it stood in for", STORE,
++     "    const away = (today.swappedAway ?? []).filter((id) => id !== putBack);",
++     "    const away = today.swappedAway ?? [];", [T_PREVIEW_AWAY], None),
 +]

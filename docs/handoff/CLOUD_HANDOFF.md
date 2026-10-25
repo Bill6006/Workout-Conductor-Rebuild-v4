@@ -5,6 +5,36 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-25 01:50 UTC (supersedes the states below)
+
+- **Round M**: local `333f1d4` (diff on `2595631`: `docs/handoff/round-m-wip/round-m.diff`). The
+  twentieth pass is complete: each plan the lifter empties is kept with its offer and layout
+  (`emptied`, a list of `{ offer, layout }`); the rebuild no longer returns the old plan, the
+  generator lays out each emptied plan empty; no set of a day off the plan goes to failure
+  (`offPlanRir`, `heldIn`); the pain card reads the day's lists; the preview made again keeps the
+  day's swaps, and a kept swap stopped puts its lift back. M31 table at 286 entries, every new one
+  caught (H41, H53, H60, H97, H128, H130, H131, H133 retired: their code is gone; say so in the
+  report's revert section). M27's R49-10 re-anchored. The twenty-first review is done: five
+  findings (report in the session scratchpad, `m31t-report.txt`; tests in
+  `/home/user/wc4-m-review/src/review-m31t/`): the reserve check on a day off the plan (MEDIUM);
+  the pain card's and variety offer's swaps refused off the plan; a workout saved with nothing
+  logged loses the emptied plans and the full session; a later plan drops `swappedAway`; a
+  beginner's off-plan floor is 1, not 2. Next: fix them, then the twenty-second review.
+- **Round N**: local `f858500` on Round M's `333f1d4` (diff: `docs/handoff/round-n-wip/round-n.diff`).
+  The eleventh pass is complete: one cap for the back-offs (`backOffCap`), a hand weight never
+  stepped down by an easy back-off (`backOffStepped`), a top set logged again or a set added reads
+  the back-offs' logs, `withoutHandTargets` shared, `backOffAt` kept as the top set is logged. M32
+  table at 238 entries, every new one caught (a duplicated test constant fixed:
+  `T_HAND_TOP_CORRECTED`). The twelfth review is running on `f858500` (tests to come in
+  `/home/user/wc4-n-review/src/review-m32l/`).
+- **Maintenance 33**: local `fd01bb6` on Round N's `f858500` (diff: `docs/handoff/round-o-wip/round-o.diff`).
+  The second pass is complete: twelve findings fixed (illness holds every set still to come at its
+  floor; a set past what it asked reads as asked; `checkInAfterStart`; one day context with the
+  session's day; no added work on a rest day; the reserve check off eased lifts; "Lighter" through a
+  preview and a swap back; today's sets read as the rules read the log; a reserve check to failure
+  reads as failure; long-length variants). M33 table at 100 entries, every new one caught. Next: the
+  third review.
+
 ### Checkpoint, 2026-10-24 20:15 UTC (supersedes the states below)
 
 - **Round M**: local `0fe4cb9` (unchanged; diff: `docs/handoff/round-m-wip/round-m.diff`). Its
