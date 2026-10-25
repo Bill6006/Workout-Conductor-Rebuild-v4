@@ -394,6 +394,22 @@ touch.
 
 ## Verification
 
+**After phone review 2: commit `f70a6c1`, the fourth artwork.**
+
+- `npm run verify` on the final code, run alone: lint, types, unit 2539 passed + 5 skipped by
+  design (278 files), the day rules in two more zones, build, privacy scan (819 files, no
+  findings), verify-build, browser 431 passed + 14 skipped by design.
+- Deployed by Deploy Pages run 40168951031 (success). CI rendered the same icons, every check's
+  figure as here and the same bytes (the live hashes are the local ones); browser 431 passed + 14
+  skipped, none flaky.
+- Live: the bundle's marker `shortCommit` `f70a6c1`. The manifest's id, start_url and scope are
+  unchanged, and its icons are `?v=257f1527`, `?v=23ffa36e` and `?v=055e3700`, each the hash of
+  the file served. The worker precaches no manifest, reads it network first, and leaves the
+  manifest and the icons out of its page fallback.
+- Live suite: 426 passed + 19 skipped by design. In the full run one Plan test failed on loading
+  the live page (`net::ERR_TIMED_OUT` before the app ran), and the 10 worker tests that wait on
+  the rest did not start; run again, all 11 behaved as designed (6 passed, 5 skipped).
+
 **After phone review 1: commit `e0883c0`, the angled artwork.**
 
 - `npm run verify` on the final code, run alone: lint, types, unit 2539 passed + 5 skipped by
