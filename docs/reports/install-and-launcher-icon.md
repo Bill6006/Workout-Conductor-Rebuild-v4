@@ -8,6 +8,12 @@ M, N and O) are under way in the cloud session.
 icon was too small at 58%. Every icon now comes from the owner's new artwork, the launcher's
 dumbbell sized on the owner's phone (section 4). YELLOW until the owner confirms it.
 
+**Phone review 2, 2026-10-25:** the angled dumbbell of section 4 reached the owner's installed
+app as an update, in place, with no reinstall: the first run of section 3's path on the phone,
+seen in the owner's screenshot. The owner then sent a fourth artwork and asked for the dumbbell to
+reach closer toward the tile's edges, like the widest icon beside it (section 5). YELLOW until the
+owner confirms it.
+
 ## 1. Install the app, from Settings
 
 **As asked:** "Add Life Mirror's proven PWA install fix from commit "99bae2e" to Workout Conductor.
@@ -179,6 +185,89 @@ carried none.
   the installed app learns of them (section 3): no reinstall. The five icons weigh 1.3 MB, up from
   0.5 MB, because the textured surface does not compress; each phone downloads them once.
 
+## 5. Phone review 2: the owner's fourth artwork, reaching toward the tile's edges
+
+**As asked:** "I have a different icon I want you to switch with the current for the workout
+app", then: "that's kind of how I hoped mine to be where the dumbbell reaches closer towards the
+edges like the [...] icon, which is closer than the previous icon that you swapped for me".
+
+**Measured on the owner's second screenshot** (the same folder, 1080 x 2340):
+
+- The widest glyph beside Conductor, an angled dumbbell, spans 81.4% of its tile's width (61.4% of
+  its height).
+- Conductor's dumbbell, as section 4 shipped it, spans 71.9% (57.5%): the placement measured in
+  section 4 (the tile shows the centre 85.3% of the icon) predicted 72% (57%), so it holds.
+
+**The artwork:** an angled dumbbell, brushed metal with neon-green rings, on a smooth dark studio
+backdrop, lighter toward the top right. Its pixels are kept as provided in `assets/app-icon.png`,
+without the image tool's provenance record, as in section 4. Unlike the earlier artwork, the
+dumbbell spans 90% of the frame and sits 107 px above its centre, its shadow beneath it.
+
+**Delivered:**
+
+- The launcher icon, `icon-maskable-512.png`: the dumbbell's width at 69% of the icon, 81% of the
+  owner's tile, as far toward its edges as the widest glyph beside it. Its ends reach 0.90 of the
+  maskable standard's safe circle, so every launcher that follows the standard shows it whole. The
+  band is 0.86 to 0.94.
+- `icon-192.png` (the header's logo and the notifications' icon), `icon-512.png`,
+  `apple-touch-icon-180.png` and `favicon-32.png`: cut closer, the dumbbell's width at 82%, its
+  ends at 1.06 of that circle. The band is 1.02 to 1.11.
+- Every cut is centred on the dumbbell, not on the frame.
+- The five icons weigh 0.8 MB, against the textured artwork's 1.3 MB.
+
+**How the margin is made.** Mirroring the artwork's edge, as before, would mirror the plates into
+the margin: they come within 50 px of the frame. The backdrop is a smooth gradient instead, so it
+goes on past the frame:
+
+- Inside its frame, the artwork exactly as provided.
+- A cubic in x and y for each channel, fitted to the backdrop's 32-px blocks: those even in
+  shade, refitted without the ones it misses (the dumbbell's shadow). It holds 740 of the 868 even
+  blocks and misses them by 1.22 levels on average.
+- Past the frame: the fit's value at the nearest point of the frame, plus the artwork's own
+  departure from the fit there (over its outer 8 px, averaged over 33 px along the side), fading
+  over 60 px, and bent over about 50 px so it leaves the frame on the artwork's own trend there
+  (how its shade changes over the last 32 px). At the frame it is the artwork's own shade and
+  slope, so the frame leaves neither a step nor a crease; the dark beside the right end cap goes on
+  and fades instead of stopping; farther out it is the fit. A shorter bend creased the frame (a
+  groove of 1.6 at 20 px); a longer one lingered (2.9 off the fit far out at 60 px). Past a corner
+  the two sides' shades and trends are weighted by how far the point lies past each, so the corner
+  meets both sides without a seam.
+
+**Tried and set aside, each seen in a render first:**
+
+- Fading the artwork into the fit over its outer 24 px left a faint outline of the frame.
+- Keeping the artwork whole and carrying a corrected backdrop past it drew the right end cap's
+  glow out as a streak.
+- A fit extrapolated as it is (a quadratic, in the first trials) made the top-right corner lighter
+  than any shade in the artwork, 104 against 85.
+- Redrawing the backdrop inside the frame as well, the artwork kept only where it departed from
+  the fit and handed over to it across its outer 56 px (over 8 px, a step of 5.9 levels). The
+  review found the cost: beside the right end cap the artwork's backdrop is 9 to 13 levels darker
+  than the fit right up to the frame, and the hand-over lifted it, a soft wall 15 px wide inside
+  the owner's tile, in the very band the step check then compared fit with fit.
+- Carrying the artwork's shade past the frame without its trend. The artwork darkens a little over
+  its last 64 px; the carried shade climbed straight back, a groove along the frame of about 2
+  levels, faint at twice the size, unseen at the tile's (the re-check found it).
+
+**New checks in `scripts/generate-icons.mjs`**, each on the written file, besides the earlier ones:
+
+- the fit holds at least three quarters of the even blocks and misses them by 2.5 levels at most,
+  or the backdrop is not a smooth gradient and the run stops;
+- every edge pixel within the artwork's own shades along its frame, give or take 3 (28.7 to 85.0
+  now; the icons' edges run 27.9 to 81.9);
+- at 512 px, along the frame's line in 16-px stretches: the 3 px just inside, the artwork, against
+  the 3 px just outside, never more than 3 levels apart (a step; 0.8 at most now); and the 3 px on
+  the line against the mean of the 3 px 8 px either side, never more than 1.5 apart (a groove or a
+  ridge; 0.9 now, 2.2 without the bend);
+- where a frame line runs on past the artwork, into the margin round a corner, the 3 px either
+  side of it never more than 1.6 apart (a seam where two sides' backdrops meet; 1.1 now, the
+  backdrop's own slope, and 2.2 to 2.5 with the two sides simply averaged);
+- three fades and more past the frame (180 px of the artwork), every edge pixel within 3 levels
+  of the fit (all 1,559 of the launcher icon's, within 1.8).
+
+The new icons' addresses, `icons/icon-maskable-512.png?v=055e3700`, `icon-192.png?v=257f1527`
+and `icon-512.png?v=23ffa36e`, reach the installed app as section 4's did.
+
 ## Tests
 
 - Unit: `src/app/pwa/installOffer.test.ts` (10) and `src/features/settings/installCard.test.tsx` (5).
@@ -239,24 +328,66 @@ report, then re-checked the fixes until a pass found nothing new. Fixed:
   cut saw as well. It mirrors the artwork before the cut now: the comparison with the cut passes
   that (2 to 4 on average), the comparison with the artwork stops it (29.9).
 
+**After phone review 2,** a fourth reviewer read the fourth artwork's code and rebuilt its
+arithmetic in Node, which reproduced the fit and every figure. Fixed:
+
+- **MEDIUM:** a soft wall beside the right end cap. The artwork's backdrop there is 9 to 13 levels
+  darker than the fit, up to the frame, and the 56-px hand-over lifted it to the fit: a straight
+  rise of about 10 levels over 15 px, inside the owner's tile. The frame check could not see it,
+  since both its bands then held the fit. The artwork is now left as provided inside its frame,
+  and its own shade there is carried past it, fading; the frame check compares the artwork with
+  what goes on past it (G2d), and a new check holds the far edge to the fit (G2e).
+- **LOW to MEDIUM:** the shades floor had 0.3 levels of headroom on the launcher icon's bottom
+  edge, where a one-level drift in a newer Chromium would stop CI. The edges now run 27.9 to 81.9
+  against 25.7 to 88.0.
+- **Wording:** "82% of the tile" was 81%; the logo's ends reach 1.06, not 1.07; the step of the
+  8-px hand-over was given as both 5.9 and 4.9 (the launcher icon's and the 512's); and the
+  revert results were written before the run had ended.
+- **From the re-check (LOW):** the frame still read as a faint groove, about 2 levels, where the
+  artwork darkens toward it and the carried shade climbed straight back; the step check, comparing
+  the two sides' means, read a symmetric groove as nothing. The carried shade now bends onto the
+  artwork's own trend, a groove-or-ridge check holds the line (G2h), and the step check compares
+  the 3 px either side of the line, so the backdrop's own slope is no step.
+- **From the re-check (LOW):** the extrapolation entry named the file it failed on by 0.6 levels,
+  so a small drift would have moved the failure to another file: the entries name no file now.
+  Two comments described removed code.
+- **From the last pass (LOW):** past a corner the two sides' shade and trend were simply averaged,
+  while each side beside it used its own: a straight seam of up to 1.6 levels along the frame
+  lines run on into the margin, two of them inside the owner's tile, and no check looked there.
+  The corner now weights each side by how far the point lies past it, and a check holds those
+  lines (G2i). A pass after that found nothing new.
+
 ## Reverts
 
-`tools/reverts/mutate-install-icon.py`: 47 entries, 47 caught, each on its own assertion. Every
+`tools/reverts/mutate-install-icon.py`: 54 entries, 54 caught, each on its own assertion. Every
 command entry names the text its failure must print, and a Vitest entry that only times out is no
 catch (one did, I7, until its test asserted the missing guard directly). Run in a copy of the
-repository (`--repo=`) from a green baseline. After phone review 1, the 11 icon entries ran on the
-angled artwork's code; the other 36 test code that change did not touch. Two of them first failed
-on the edge check, not their own: their revert, 50%, needed more surface than the artwork has. It
-is 59% now, and both are caught on the band.
+repository (`--repo=`) from a green baseline. After each phone review the icon entries ran again
+on the new code, 18 of them on the fourth artwork's; the other 36 test code those changes did not
+touch.
 
 - **I1 to I23**, the offer and the card: Vitest, and the start-up watch in `main.tsx` by the browser
   suite.
-- **G1 to G4**, the icons: each by the generator's own check, and G1 to G3 again by the browser
-  suite on the served file. G1 reverts the launcher icon to 59% (its ends at 0.833 of the safe
-  circle) and to 70% (0.99); the band refuses both. G2 takes out the mirrored margin, then cuts so
-  close (58.5%) that the plates' glow reaches the margin. G3 cuts the logo as loosely as the
-  launcher icon. G4 draws the artwork mirrored before the cut, which only the comparison with the
-  artwork itself sees; compared with its own cut, as in the reviewed code, it passed.
+- **G1 to G5**, the icons: each by the generator's own check, and G1, G2, G3 and G5 again by the
+  browser suite on the served file.
+  - G1 reverts the launcher icon to the size before, 61.4% (its ends at 0.80 of the safe circle),
+    and to 76% (0.99); the band refuses both.
+  - G2 takes the backdrop away past the artwork's edge; extrapolates the fit instead of holding
+    its value at the frame (lighter than the artwork's own shades); carries the fit alone, without
+    the artwork's own shade at its frame (a step of 11.0 beside the right end cap); lets that shade
+    run on without fading (off the fit at the icon's edge); drops the bend onto the artwork's trend
+    (a groove of 2.2); averages the two sides past a corner instead of weighting them (a seam);
+    fits the backdrop without leaving out the shadow (off by 4.64 on average); or fits a plane
+    (which holds 377 of 868 blocks). Their failure texts name no file, since which
+    cut meets a flaw first can change.
+  - G3 cuts the logo as loosely as the launcher icon.
+  - G4 draws the artwork mirrored before the cut, which only the comparison with the artwork
+    itself sees.
+  - G5 centres the cut on the frame instead of the dumbbell (its ends at 1.16 on the logo).
+- **On the way:** with the angled artwork, two entries first failed on the edge check, not their
+  own, until their revert stayed within the surface the artwork had. With the fourth, before the
+  second review, a revert to 61.4% was refused by the shades check before the band; the backdrop
+  past the frame no longer drifts, and the band refuses it now.
 - **P1 to P9**, a changed icon reaching the installed app: each by `verify-build`; the hashed
   addresses, the precache and the network-first route again by the two-release test, and the deny
   list by the worker test.
@@ -306,8 +437,12 @@ is 59% now, and both are caught on the band.
   check was not run end to end there.
 - **Sized for the owner's phone, as asked, not for the narrowest launcher seen.** Where a launcher
   shows only the centre two thirds of the icon, as the emulator's shortcut did, the tips of the
-  angled dumbbell's plates would be clipped by about 1.4% of the icon's width (7 px of 512). Chrome
-  makes such a shortcut only when it cannot install the app.
+  dumbbell's end caps would be clipped by about 2.5% of the icon's width (13 px of 512; 1.4% with
+  section 4's icon). Chrome makes such a shortcut only when it cannot install the app.
+- **The frame's lines run on into the margin are checked for a step, not a groove or a ridge,**
+  and their limit, 1.6, sits about 0.5 above this backdrop's own slope there. A ridge along them
+  would pass (it reads 0.76 now, unseen), and an artwork whose backdrop is steeper near a corner
+  could trip the limit with no seam there. Both were the last pass's notes, not defects.
 - **This machine's antivirus re-signs every HTTPS connection** for scanning, which the emulator
   does not trust, so the emulator reached the live site only while the owner paused that scanning;
   the new build was checked on the emulator over a plain localhost tunnel instead.
@@ -317,8 +452,12 @@ is 59% now, and both are caught on the band.
 **Phone review 1 (2026-10-24):** the install works on the owner's phone (steps 1 to 3 of
 the first list passed); the launcher icon was too small at 58% (section 4).
 
-YELLOW until the owner confirms the new icon. It reaches the installed app as an update,
-with no reinstall; this is the first time that path runs on the phone. The steps:
+**Phone review 2 (2026-10-25):** section 4's icon arrived on the phone as an update, in place,
+with no reinstall; the owner asked for the fourth artwork, reaching closer toward the tile's edges
+(section 5).
+
+YELLOW until the owner confirms the new icon. It reaches the installed app the same way. The
+steps:
 
 1. Open Workout Conductor from its home-screen icon. If "New version available" shows, tap Reload.
    Settings, About this app shows the build under Verification.
@@ -329,8 +468,9 @@ with no reinstall; this is the first time that path runs on the phone. The steps
    home-screen icon changes in place.
 4. If nothing changes after that: in Chrome, open `about://webapks`, tap Update under Workout
    Conductor, then open and close the app once more.
-5. The launcher icon: the angled neon-green dumbbell, whole, about seven tenths of the tile's
-   width, clear of its edges, the dark textured background to the edge. The logo in the app's
-   header and the browser tab's icon show the same dumbbell, closer (after Reload in step 1).
+5. The launcher icon: the new dumbbell, silver plates with green rings on a dark grey backdrop,
+   whole, reaching toward the tile's edges about as far as the widest icon beside it, the backdrop
+   to the edge. The logo in the app's header and the browser tab's icon show the same dumbbell,
+   closer (after Reload in step 1).
 
 Never clear Chrome's site data or storage: one clear wipes every app at bill6006.github.io.

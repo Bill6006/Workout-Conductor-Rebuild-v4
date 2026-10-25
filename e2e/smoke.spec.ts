@@ -110,13 +110,12 @@ test.describe('app shell', () => {
       expect(size?.join('x'), `${icon.src} should decode at its size`).toBe(icon.sizes);
     }
 
-    // The launcher's icon (2026-10-24, sized on the owner's phone): dark (luminance 100 at most)
-    // and opaque to every edge, and the angled dumbbell's farthest end at 84 to 92% of the maskable
+    // The launcher's icon (2026-10-25, sized on the owner's phone): dark (luminance 100 at most)
+    // and opaque to every edge, and the dumbbell's farthest end at 86 to 94% of the maskable
     // standard's safe circle (radius 40% of the width), which every launcher that follows it leaves
-    // whole; that fills the owner's tile like the apps beside it. The header's logo is cut closer,
-    // the ends at 1.16 of that radius. The dumbbell is its bright metal and bright green where most
-    // of the pixels around are bright too, which the artwork's textured surface, bright only in
-    // specks, never is.
+    // whole; that reaches as far toward the owner's tile's edges as the widest glyph beside it. The
+    // header's logo is cut closer, the ends at 1.06 of that radius. The dumbbell is its bright metal
+    // and bright green where most of the pixels around are bright too, which the backdrop never is.
     const geometry = (src: string) =>
       page.evaluate(async (url) => {
         const image = new Image();
@@ -167,14 +166,14 @@ test.describe('app shell', () => {
     expect(maskable, 'the manifest names a maskable icon').toBeDefined();
     const launcher = await geometry(new URL(maskable!.src, manifestUrl).toString());
     expect(launcher.edgesDark, 'the launcher icon is dark to its edge').toBe(true);
-    expect(launcher.reach).toBeGreaterThanOrEqual(0.84);
-    expect(launcher.reach).toBeLessThanOrEqual(0.92);
+    expect(launcher.reach).toBeGreaterThanOrEqual(0.86);
+    expect(launcher.reach).toBeLessThanOrEqual(0.94);
     const header = await geometry(
       new URL((await logo.getAttribute('src')) ?? '', page.url()).toString(),
     );
     expect(header.edgesDark, 'the header logo is dark to its edge').toBe(true);
-    expect(header.reach).toBeGreaterThanOrEqual(1.1);
-    expect(header.reach).toBeLessThanOrEqual(1.22);
+    expect(header.reach).toBeGreaterThanOrEqual(1.02);
+    expect(header.reach).toBeLessThanOrEqual(1.11);
   });
 
   test('PWA manifest, icons, and service worker are served', async ({ page, request }) => {
