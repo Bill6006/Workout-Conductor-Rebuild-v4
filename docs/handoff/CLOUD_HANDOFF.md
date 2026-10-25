@@ -5,6 +5,59 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-25 02:45 UTC: paused at the owner's request (supersedes the states below)
+
+Saved so nothing is lost. **Nothing here is finished or shipped:** no merge to `main`, no deploy.
+Round N's twelfth pass is unverified work in progress, and Maintenance 33's third review's findings
+are not started.
+
+- **Round M**: local `e779122` (diff on `2595631`: `docs/handoff/round-m-wip/round-m.diff`). The
+  twenty-first pass is complete: no reserve check on a day off the plan; the coach offers no
+  four-week swap the day turns down (`dayRefuses`); a workout saved with nothing logged keeps the
+  day's choices, a set skipped being no set done (`dismissCompletion` carry); every later plan the
+  same day keeps `swappedAway`; a beginner's day off the plan keeps two in reserve (`offPlanFloor`).
+  Suite 2954 passed, 5 skipped; M31 table at 298 entries, every new and re-anchored one run caught.
+  New known limit: a saved workout takes its turn in the split's rotation even with nothing logged
+  (shipped behaviour). The **twenty-second review was stopped by the pause with no report**; it left
+  draft tests, unverified, in `docs/handoff/round-m-wip/review-m31u-drafts.diff` (`git apply` on
+  `e779122`; they create `src/review-m31u/`). Next: run that review again on `e779122`.
+- **Round N**: local `07e2d52` on Round M's `e779122` (diff: `docs/handoff/round-n-wip/round-n.diff`,
+  `git apply` after the Round M diff). Rebased cleanly from `f858500` (backup branch
+  `backup/round-n-f858500`). **The twelfth pass is in progress**: its ten findings are fixed and
+  their tests pass (A, MEDIUM: the coach's deload after a top set skipped runs straight; B: a
+  back-off lifted over the cap raises it for none after it, only a weight set by hand does; C: a set
+  added after a back-off keeps the weight and reps set by hand; D: a top set corrected to a skip caps
+  nothing, as one skipped from the start; E: the follow's words name where the back-offs stand after
+  the replay; F: `backOffAt` kept through a correction that keeps the weight, and through an Undo of
+  an earlier change; G: `backOffAt` has its schema line; H: back-offs that follow a top-set weight set
+  by hand are refitted; I: a lift picked up again keeps no load asked on its back-offs; J: one rule,
+  the drop's nearest weight at the same reps, for the refit and every replay, the cap held on a
+  weight the place has). One older test changed with J (`backOffs.pickUpHandFlag`: 155, not 145).
+  Tests moved into `src/core/state/backOffs.*.store.test.ts`, plus `backOffs.dropRuleEverywhere`.
+  M32 table: 11 entries re-anchored, N244 to N265 added, all 260 anchors found. **Not yet done:** run
+  those entries in a copy (`/home/user/wc4-revert-n`); rerun the full suite (the last run, before
+  the final test edits: 3216 passed, 1 failed, that test since fixed); write the report's twelfth
+  pass (`TWELFTH_PASS` in `docs/reports/maintenance-32.md`); then the thirteenth review.
+- **Maintenance 33**: local `fd01bb6`, still on the old Round N `f858500` (not yet rebased).
+  `docs/handoff/round-o-wip/round-o.diff` is unchanged and applies on that old base: rebuild it from
+  this branch's commit `fa10e77` (`git show fa10e77:docs/handoff/round-m-wip/round-m.diff` on
+  `2595631`, then `fa10e77`'s `round-n.diff`), then apply `round-o.diff`. **The third review is
+  done; its ten findings are not started.** Its twelve failing tests:
+  `docs/handoff/round-o-wip/review-m33c-tests.diff` (they create `src/review-m33c/`). The findings:
+  1 (MEDIUM, a regression of the second pass): an illness taken back leaves the lift under way at the
+  illness's floor under "Planned effort back"; 2 (MEDIUM): a workout saved after "Lighter", a swap
+  and a swap back keeps the bench with its top set only (`swapBack`'s `recordOf` overwrites the full
+  record); 3: on a fever rest day the coach still offers changes to today's workout; 4: under a hard
+  start, "Lighter" is lost on a swap back; 5: with "Lighter" in force, a first set three reps short
+  reads as two short; 6 (a regression): `checkInAfterStart` outlives the hard start it was for; 7:
+  `readEstimate` goes stale when the session is refreshed at a new day; 8: a workout past midnight
+  gets one recovery window on the completion and another on Plan; 9: the learned page's "Your
+  recovery" reads the raw log; 10: `LONG_LENGTH_LIFTS` misses the cable fly. Next: rebase onto Round
+  N's head once its twelfth pass is verified, then fix these.
+- **Background work**: none running. The order on resuming: Round M's twenty-second review; finish
+  and verify Round N's twelfth pass, then its thirteenth review; rebase Maintenance 33 and fix its
+  third review's findings; then the normal ship sequence and the rest of the approved queue.
+
 ### Checkpoint, 2026-10-25 01:50 UTC (supersedes the states below)
 
 - **Round M**: local `333f1d4` (diff on `2595631`: `docs/handoff/round-m-wip/round-m.diff`). The
