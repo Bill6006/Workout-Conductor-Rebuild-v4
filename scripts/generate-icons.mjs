@@ -1,23 +1,25 @@
 #!/usr/bin/env node
 /**
- * Renders the approved app icon, assets/app-icon.png (the owner's artwork exactly as provided,
- * 1024 x 1024), into every file the page, the PWA manifest and the app use, then reads each file
- * back from disk and checks it holds the artwork at its size. Uses the Playwright Chromium already
- * required for the browser tests, so there is no extra native image dependency.
+ * Renders the approved app icon, assets/app-icon.png (the owner's artwork, its pixels exactly as
+ * provided on 2026-10-24: an angled dumbbell, neon green on dark metal, glowing on a dark textured
+ * surface, full bleed, 1254 x 1254), into every file the page, the PWA manifest and the app use,
+ * then reads each file back from disk and checks it. Uses the Playwright Chromium already required
+ * for the browser tests, so there is no extra native image dependency.
  * Run: npm run icons (ICONS_CHROMIUM=<path> renders with another Chromium).
  *
- * - icon-192.png and icon-512.png: the artwork, full bleed: the manifest's icons. The 192 is also
- *   the logo in the app's header and the notifications' icon.
- * - icon-maskable-512.png: Android's launcher icon. The artwork at 58%, its own dark edge carried
- *   out to the border, so the background stays full bleed with no seam where the artwork ends,
- *   and the dumbbell keeps clear space on every side even where a launcher shows only the centre
- *   two thirds of the icon (below), whatever shape it cuts.
- * - apple-touch-icon-180.png: full bleed; iOS rounds the corners itself.
- * - favicon-32.png: the browser tab.
+ * Every icon is cut from the artwork around its centre, as the owner composed it, so all of them
+ * show the same picture:
+ * - icon-192.png, icon-512.png, apple-touch-icon-180.png and favicon-32.png: cut so the dumbbell's
+ *   width spans 82% of the icon. The 192 is also the logo in the app's header and the
+ *   notifications' icon; iOS rounds the apple-touch icon's corners itself.
+ * - icon-maskable-512.png: Android's launcher icon, the dumbbell's width at 61.4% (below): the whole
+ *   artwork, with its own edge mirrored past each side, at the very edge of what the owner's
+ *   launcher shows.
  *
- * The icons were once SVG files wrapping the artwork as base64 text, and a truncated copy of that
- * text broke the app's own logo: here nothing is copied by hand, and a file that does not decode,
- * does not show the artwork, is not dark to its edge or has the dumbbell out of place stops the run.
+ * The dumbbell is measured on the artwork: its bright metal and bright green, in dense clusters,
+ * which the textured surface's lone bright specks never form. A file that does not decode, does not
+ * show the artwork, is not dark and opaque to its edge, or has the dumbbell out of place stops the
+ * run.
  */
 // The functions given to page.evaluate run in the page, where these are defined.
 /* global document, Image */
@@ -29,22 +31,21 @@ const SOURCE = path.join('assets', 'app-icon.png');
 const ICON_DIR = path.join('public', 'icons');
 
 /**
- * scale is the artwork's share of the icon's width, centred, its edge carried out to the border.
- * reach is where the dumbbell's farthest point must fall, measured on the written file, as a share
- * of the narrowest launcher circle seen: a third of the icon's width. Chrome's home-screen shortcut
- * on a Pixel launcher (Android 16, Chrome 133, 2026-10-24) showed only the centre 72 of Android's
- * 108 dp, the maskable icon unpadded; a launcher that pads it as the maskable standard intends shows
- * the centre 87%, and the dumbbell only sits farther in. Full bleed, the artwork reaches 1.25.
+ * span is the dumbbell's width as a share of the icon's. reach is where the dumbbell's farthest
+ * point from the icon's centre must fall, measured on the written file, as a share of the maskable
+ * standard's safe circle (radius 40% of the width), which every launcher that follows it leaves
+ * whole; null where the icon is too small to measure.
  */
 const TARGETS = [
-  { file: 'icon-192.png', size: 192, scale: 1, reach: [1.2, 1.3] },
-  { file: 'icon-512.png', size: 512, scale: 1, reach: [1.2, 1.3] },
-  // At 90% (2026-10-23) that launcher cut off both ends of the dumbbell. At 58% it reaches 0.73:
-  // about 71% of a rounded-square tile's width with a seventh clear on each side, and as clear
-  // inside a circle; 55% of the tile where the icon is padded.
-  { file: 'icon-maskable-512.png', size: 512, scale: 0.58, reach: [0.65, 0.8] },
-  { file: 'apple-touch-icon-180.png', size: 180, scale: 1, reach: [1.2, 1.3] },
-  { file: 'favicon-32.png', size: 32, scale: 1, reach: [1.15, 1.3] },
+  { file: 'icon-192.png', size: 192, span: 0.82, reach: [1.1, 1.22] },
+  { file: 'icon-512.png', size: 512, span: 0.82, reach: [1.1, 1.22] },
+  // The owner's phone shows the centre 85% of the icon (measured from the owner's screenshot,
+  // 2026-10-24). At 61.4% the dumbbell spans 72% of that tile and 57% of its height, close to the
+  // angled dumbbell of the app beside it (81% by 60%), clear of the tile's edge. Its ends reach
+  // 0.87 of the safe circle: whole on any launcher that follows the standard.
+  { file: 'icon-maskable-512.png', size: 512, span: 0.614, reach: [0.84, 0.92] },
+  { file: 'apple-touch-icon-180.png', size: 180, span: 0.82, reach: [1.1, 1.22] },
+  { file: 'favicon-32.png', size: 32, span: 0.82, reach: null },
 ];
 
 const dataUrlOf = (bytes) => `data:image/png;base64,${bytes.toString('base64')}`;
@@ -58,19 +59,127 @@ try {
   const page = await browser.newPage();
   await page.setContent('<!doctype html><html><body></body></html>');
 
+  // The dumbbell's width in the artwork: bright metal (luminance over 180) and bright green, where
+  // at least a quarter of the 21 x 21 pixels around are bright too.
+  const artwork = await page.evaluate(async (src) => {
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    const w = image.naturalWidth;
+    const h = image.naturalHeight;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    const data = context.getImageData(0, 0, w, h).data;
+    const n = w * h;
+    const bright = new Float32Array(n);
+    for (let i = 0; i < n; i += 1) {
+      const [r, g, b] = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]];
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      bright[i] = luminance > 180 || (g > 200 && g > r + 60 && g > b + 100) ? 1 : 0;
+    }
+    const radius = 10;
+    const across = new Float32Array(n);
+    const density = new Float32Array(n);
+    const clamp = (v, max) => Math.min(max, Math.max(0, v));
+    for (let y = 0; y < h; y += 1) {
+      let sum = 0;
+      for (let x = -radius; x <= radius; x += 1) sum += bright[y * w + clamp(x, w - 1)];
+      for (let x = 0; x < w; x += 1) {
+        across[y * w + x] = sum;
+        sum +=
+          bright[y * w + clamp(x + radius + 1, w - 1)] - bright[y * w + clamp(x - radius, w - 1)];
+      }
+    }
+    const area = (2 * radius + 1) ** 2;
+    for (let x = 0; x < w; x += 1) {
+      let sum = 0;
+      for (let y = -radius; y <= radius; y += 1) sum += across[clamp(y, h - 1) * w + x];
+      for (let y = 0; y < h; y += 1) {
+        density[y * w + x] = sum / area;
+        sum +=
+          across[clamp(y + radius + 1, h - 1) * w + x] - across[clamp(y - radius, h - 1) * w + x];
+      }
+    }
+    let minX = w;
+    let maxX = 0;
+    let minY = h;
+    let maxY = 0;
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const i = y * w + x;
+        if (bright[i] && density[i] >= 0.25) {
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    }
+    return { size: w, height: h, width: maxX - minX + 1, box: { minX, maxX, minY, maxY } };
+  }, source);
+  // A square artwork with a dumbbell found, clear of its edges; otherwise the measure found nothing
+  // or picked up the background.
+  const margin = artwork.size * 0.05;
+  if (
+    artwork.height !== artwork.size ||
+    !(artwork.width > 0) ||
+    artwork.box.minX < margin ||
+    artwork.box.minY < margin ||
+    artwork.box.maxX > artwork.size - margin ||
+    artwork.box.maxY > artwork.size - margin
+  ) {
+    throw new Error(
+      `generate-icons: ${SOURCE} must be square with the dumbbell clear of its edges; found ${JSON.stringify(artwork)}`,
+    );
+  }
+
   for (const target of TARGETS) {
+    // The square cut around the artwork's centre, in the artwork's pixels; past its edge, the
+    // artwork's own edge mirrored.
+    const side = artwork.width / target.span;
     const png = await page.evaluate(
-      async ({ src, size, scale }) => {
+      async ({ src, side, size }) => {
         const image = new Image();
         image.src = src;
         await image.decode();
+        const S = image.naturalWidth;
+        const pad = Math.max(0, Math.ceil((side - S) / 2) + 2);
+        const padded = document.createElement('canvas');
+        padded.width = S + 2 * pad;
+        padded.height = S + 2 * pad;
+        const p = padded.getContext('2d');
+        p.imageSmoothingEnabled = false;
+        p.drawImage(image, pad, pad);
+        if (pad > 0) {
+          // Each side and corner: the artwork's outermost pixels, reflected across its edge.
+          const mirror = (sx, sy, sw, sh, dx, dy, flipX, flipY) => {
+            p.save();
+            p.translate(dx + (flipX ? sw : 0), dy + (flipY ? sh : 0));
+            p.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+            p.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh);
+            p.restore();
+          };
+          mirror(0, 0, pad, S, 0, pad, true, false);
+          mirror(S - pad, 0, pad, S, S + pad, pad, true, false);
+          mirror(0, 0, S, pad, pad, 0, false, true);
+          mirror(0, S - pad, S, pad, pad, S + pad, false, true);
+          mirror(0, 0, pad, pad, 0, 0, true, true);
+          mirror(S - pad, 0, pad, pad, S + pad, 0, true, true);
+          mirror(0, S - pad, pad, pad, 0, S + pad, true, true);
+          mirror(S - pad, S - pad, pad, pad, S + pad, S + pad, true, true);
+        }
+        const from = pad + S / 2 - side / 2;
         let canvas = document.createElement('canvas');
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-        canvas.getContext('2d').drawImage(image, 0, 0);
+        canvas.width = Math.round(side);
+        canvas.height = Math.round(side);
+        canvas
+          .getContext('2d')
+          .drawImage(padded, from, from, side, side, 0, 0, canvas.width, canvas.height);
         // Halved step by step, then drawn at its size: a smooth downscale with no aliasing.
-        const inner = Math.round(size * scale);
-        while (canvas.width / 2 >= inner) {
+        while (canvas.width / 2 >= size) {
           const half = document.createElement('canvas');
           half.width = Math.round(canvas.width / 2);
           half.height = Math.round(canvas.height / 2);
@@ -79,57 +188,29 @@ try {
           context.drawImage(canvas, 0, 0, half.width, half.height);
           canvas = half;
         }
-        const art = document.createElement('canvas');
-        art.width = inner;
-        art.height = inner;
-        const artContext = art.getContext('2d');
-        artContext.imageSmoothingQuality = 'high';
-        artContext.drawImage(canvas, 0, 0, inner, inner);
         const out = document.createElement('canvas');
         out.width = size;
         out.height = size;
         const context = out.getContext('2d');
-        const at = Math.floor((size - inner) / 2);
-        const far = size - at - inner;
-        // The artwork's outermost pixels carried out to the border, side by side and the corners.
-        context.imageSmoothingEnabled = false;
-        const last = inner - 1;
-        context.drawImage(art, 0, 0, 1, inner, 0, at, at, inner);
-        context.drawImage(art, last, 0, 1, inner, at + inner, at, far, inner);
-        context.drawImage(art, 0, 0, inner, 1, at, 0, inner, at);
-        context.drawImage(art, 0, last, inner, 1, at, at + inner, inner, far);
-        context.drawImage(art, 0, 0, 1, 1, 0, 0, at, at);
-        context.drawImage(art, last, 0, 1, 1, at + inner, 0, far, at);
-        context.drawImage(art, 0, last, 1, 1, 0, at + inner, at, far);
-        context.drawImage(art, last, last, 1, 1, at + inner, at + inner, far, far);
-        context.drawImage(art, at, at);
+        context.imageSmoothingQuality = 'high';
+        context.drawImage(canvas, 0, 0, size, size);
         return out.toDataURL('image/png').split(',')[1];
       },
-      { src: source, size: target.size, scale: target.scale },
+      { src: source, side, size: target.size },
     );
     writeFileSync(path.join(ICON_DIR, target.file), Buffer.from(png, 'base64'));
 
-    // Read back from disk: it decodes, it is its size, its artwork area matches the artwork (both
-    // drawn down to 16 x 16, the channels a little off at most on average), its dark background
-    // reaches every edge, and the dumbbell reaches as far as its target allows, no farther.
-    const { problem, reach } = await page.evaluate(
-      async ({ src, written, size, scale, band }) => {
+    // Read back from disk: it decodes, it is its size, it shows the artwork (the part of the icon
+    // the artwork covers against that part of the artwork itself, drawn straight from the source,
+    // both down to 16 x 16, the channels a little off at most on average), it is dark and opaque to
+    // every edge, and the dumbbell reaches as far as its target allows, no farther.
+    const { problem, reach, difference } = await page.evaluate(
+      async ({ src, written, side, size, band }) => {
         const load = async (url) => {
           const image = new Image();
           image.src = url;
           await image.decode();
           return image;
-        };
-        const thumb = (image, inset) => {
-          const canvas = document.createElement('canvas');
-          canvas.width = 16;
-          canvas.height = 16;
-          const context = canvas.getContext('2d');
-          context.imageSmoothingQuality = 'high';
-          const from = image.naturalWidth * inset;
-          const span = image.naturalWidth - 2 * from;
-          context.drawImage(image, from, from, span, span, 0, 0, 16, 16);
-          return context.getImageData(0, 0, 16, 16).data;
         };
         const icon = await load(written);
         if (icon.naturalWidth !== size || icon.naturalHeight !== size) {
@@ -138,33 +219,48 @@ try {
             reach: null,
           };
         }
-        const expected = thumb(await load(src), 0);
-        const actual = thumb(icon, (1 - scale) / 2);
+        // The cut in the artwork's pixels, the part of it the artwork covers, and where that part
+        // lies in the icon.
+        const art = await load(src);
+        const S = art.naturalWidth;
+        const cut = S / 2 - side / 2;
+        const first = Math.max(0, cut);
+        const last = Math.min(S, cut + side);
+        const inIcon = (x) => ((x - cut) * size) / side;
+        const thumb = (image, from, span) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 16;
+          canvas.height = 16;
+          const context = canvas.getContext('2d');
+          context.imageSmoothingQuality = 'high';
+          context.drawImage(image, from, from, span, span, 0, 0, 16, 16);
+          return context.getImageData(0, 0, 16, 16).data;
+        };
+        const expected = thumb(art, first, last - first);
+        const actual = thumb(icon, inIcon(first), inIcon(last) - inIcon(first));
         let total = 0;
         for (let index = 0; index < expected.length; index += 4) {
           for (let channel = 0; channel < 3; channel += 1) {
             total += Math.abs(expected[index + channel] - actual[index + channel]);
           }
         }
-        const mean = total / ((expected.length / 4) * 3);
-        if (mean > 12) {
+        const difference = total / ((expected.length / 4) * 3);
+        if (difference > 12) {
           return {
-            problem: `does not show the artwork (mean difference ${mean.toFixed(1)})`,
+            problem: `does not show the artwork (mean difference ${difference.toFixed(1)})`,
             reach: null,
           };
         }
-
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const context = canvas.getContext('2d');
         context.drawImage(icon, 0, 0);
         const data = context.getImageData(0, 0, size, size).data;
-        const luminance = (x, y) => {
-          const index = (y * size + x) * 4;
-          return 0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2];
-        };
-        // Full bleed: every edge pixel opaque and as dark as the artwork's own background.
+        const at = (x, y) => (y * size + x) * 4;
+        const luminance = (i) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        // Full bleed: every edge pixel opaque and dark, luminance 100 at most. The surface's own
+        // edge reaches 72; the plates' glow, mirrored into the margin of a cut too close, passes 100.
         for (let along = 0; along < size; along += 1) {
           for (const [x, y] of [
             [along, 0],
@@ -172,42 +268,52 @@ try {
             [0, along],
             [size - 1, along],
           ]) {
-            if (data[(y * size + x) * 4 + 3] !== 255 || luminance(x, y) > 40) {
+            const i = at(x, y);
+            if (data[i + 3] !== 255 || luminance(i) > 100) {
               return { problem: `is not dark and opaque to its edge at ${x},${y}`, reach: null };
             }
           }
         }
-        // The dumbbell is every pixel well above the background; its farthest from the centre,
-        // as a share of the narrowest launcher circle's radius, a third of the width.
+        if (band === null) return { problem: null, reach: null, difference };
+        // The dumbbell is its bright metal and bright green where most of the 3 x 3 pixels around
+        // are bright too; its farthest pixel from the centre, as a share of the safe circle's radius.
+        const bright = (x, y) => {
+          const i = at(x, y);
+          const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+          return luminance(i) > 180 || (g > 200 && g > r + 60 && g > b + 100);
+        };
         const centre = (size - 1) / 2;
         let farthest = 0;
-        for (let y = 0; y < size; y += 1) {
-          for (let x = 0; x < size; x += 1) {
-            if (luminance(x, y) > 60) {
-              farthest = Math.max(farthest, Math.hypot(x - centre, y - centre));
+        for (let y = 1; y < size - 1; y += 1) {
+          for (let x = 1; x < size - 1; x += 1) {
+            if (!bright(x, y)) continue;
+            let around = 0;
+            for (let dy = -1; dy <= 1; dy += 1) {
+              for (let dx = -1; dx <= 1; dx += 1) if (bright(x + dx, y + dy)) around += 1;
             }
+            if (around >= 5) farthest = Math.max(farthest, Math.hypot(x - centre, y - centre));
           }
         }
-        const reach = farthest / (size / 3);
+        const reach = farthest / (0.4 * size);
         if (reach < band[0] || reach > band[1]) {
           return {
-            problem: `has the dumbbell reaching ${reach.toFixed(3)} of the launcher circle, outside ${band[0]} to ${band[1]}`,
+            problem: `has the dumbbell reaching ${reach.toFixed(3)} of the safe circle, outside ${band[0]} to ${band[1]}`,
             reach,
           };
         }
-        return { problem: null, reach };
+        return { problem: null, reach, difference };
       },
       {
         src: source,
         written: dataUrlOf(readFileSync(path.join(ICON_DIR, target.file))),
+        side,
         size: target.size,
-        scale: target.scale,
         band: target.reach,
       },
     );
     if (problem !== null) throw new Error(`generate-icons: ${target.file} ${problem}`);
     console.log(
-      `generate-icons: wrote ${target.file} (${target.size}px), checked: the dumbbell reaches ${reach.toFixed(3)} of the launcher circle`,
+      `generate-icons: wrote ${target.file} (${target.size}px), cut with the dumbbell's width at ${(target.span * 100).toFixed(1)}%; checked: the artwork within ${difference.toFixed(1)} on average, dark to its edge${reach === null ? '' : `, the dumbbell reaching ${reach.toFixed(3)} of the safe circle`}`,
     );
   }
 } finally {

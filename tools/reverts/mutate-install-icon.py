@@ -67,24 +67,29 @@ MANIFEST_FROM_SERVER = re.escape("Error: the manifest comes from the server, not
 NOT_PRECACHED = re.escape("sw.js must not precache manifest.webmanifest")
 NETWORK_FIRST = re.escape("sw.js must serve manifest.webmanifest network first")
 
-CARRY_OUT = (
-    "        context.drawImage(art, 0, 0, 1, inner, 0, at, at, inner);\n"
-    "        context.drawImage(art, last, 0, 1, inner, at + inner, at, far, inner);\n"
-    "        context.drawImage(art, 0, 0, inner, 1, at, 0, inner, at);\n"
-    "        context.drawImage(art, 0, last, inner, 1, at, at + inner, inner, far);\n"
-    "        context.drawImage(art, 0, 0, 1, 1, 0, 0, at, at);\n"
-    "        context.drawImage(art, last, 0, 1, 1, at + inner, 0, far, at);\n"
-    "        context.drawImage(art, 0, last, 1, 1, 0, at + inner, at, far);\n"
-    "        context.drawImage(art, last, last, 1, 1, at + inner, at + inner, far, far);\n"
+MIRRORED = (
+    "          mirror(0, 0, pad, S, 0, pad, true, false);\n"
+    "          mirror(S - pad, 0, pad, S, S + pad, pad, true, false);\n"
+    "          mirror(0, 0, S, pad, pad, 0, false, true);\n"
+    "          mirror(0, S - pad, S, pad, pad, S + pad, false, true);\n"
+    "          mirror(0, 0, pad, pad, 0, 0, true, true);\n"
+    "          mirror(S - pad, 0, pad, pad, S + pad, 0, true, true);\n"
+    "          mirror(0, S - pad, pad, pad, 0, S + pad, true, true);\n"
+    "          mirror(S - pad, S - pad, pad, pad, S + pad, S + pad, true, true);\n"
 )
 CARD_AT_TOP = (
     "      {/* Install from the app's own page, while the browser offers it (2026-10-24). */}\n"
     "      <InstallCard />\n"
 )
-MASKABLE_58 = "  { file: 'icon-maskable-512.png', size: 512, scale: 0.58, reach: [0.65, 0.8] },"
-MASKABLE_72 = "  { file: 'icon-maskable-512.png', size: 512, scale: 0.72, reach: [0.65, 0.8] },"
-LOGO_FULL = "  { file: 'icon-192.png', size: 192, scale: 1, reach: [1.2, 1.3] },"
-LOGO_SHRUNK = "  { file: 'icon-192.png', size: 192, scale: 0.72, reach: [1.2, 1.3] },"
+MASKABLE = "  { file: 'icon-maskable-512.png', size: 512, span: 0.614, reach: [0.84, 0.92] },"
+MASKABLE_SMALLER = "  { file: 'icon-maskable-512.png', size: 512, span: 0.59, reach: [0.84, 0.92] },"
+MASKABLE_GLOW = "  { file: 'icon-maskable-512.png', size: 512, span: 0.585, reach: [0.84, 0.92] },"
+MASKABLE_LARGER = "  { file: 'icon-maskable-512.png', size: 512, span: 0.7, reach: [0.84, 0.92] },"
+LOGO = "  { file: 'icon-192.png', size: 192, span: 0.82, reach: [1.1, 1.22] },"
+LOGO_SMALLER = "  { file: 'icon-192.png', size: 192, span: 0.614, reach: [1.1, 1.22] },"
+ART_DRAWN = "        p.drawImage(image, pad, pad);\n"
+ART_MIRRORED = ("        p.translate(S + 2 * pad, 0);\n        p.scale(-1, 1);\n"
+                "        p.drawImage(image, pad, pad);\n        p.setTransform(1, 0, 0, 1, 0, 0);\n")
 VERSIONED = "  return `icons/${file}?v=${createHash('sha256').update(bytes).digest('hex').slice(0, 8)}`;"
 PLAIN = "  return `icons/${file}`;"
 LEFT_OUT = "(typeof entry === 'string' ? entry : entry.url) !== 'manifest.webmanifest',"
@@ -159,24 +164,45 @@ MUTATIONS = [
     ("I23 ... and the install listener", OFFER,
      "    target.removeEventListener('appinstalled', onInstalled);\n", "", [T_OFFER], None),
 
-    # The launcher's icon: the dumbbell inward, the dark background full bleed.
-    ("G1a the launcher icon's artwork at 58%, not the first pick, 72% (the generator's check)", ICONS,
-     MASKABLE_58, MASKABLE_72,
+    # The launcher's icon, from the owner's angled artwork (2026-10-24): the dumbbell's width at
+    # 61.4%, 72% of the owner's tile; not smaller (59%: much closer, the plates' glow reaches the
+    # mirrored margin, G2c), nor so large its ends leave the maskable standard's safe circle's
+    # margin (70%).
+    ("G1a the launcher icon's dumbbell at 61.4%, not smaller (the generator's check)",
+     ICONS, MASKABLE, MASKABLE_SMALLER,
      command(GENERATE, re.escape("icon-maskable-512.png has the dumbbell reaching")), None),
-    ("G1b ... (the served icon)", ICONS, MASKABLE_58, MASKABLE_72,
-     command(E2E_ICON, failing_line("expect(launcher.reach).toBeLessThanOrEqual(0.8);"),
+    ("G1b ... (the served icon)", ICONS, MASKABLE, MASKABLE_SMALLER,
+     command(E2E_ICON, failing_line("expect(launcher.reach).toBeGreaterThanOrEqual(0.84);"),
              step=GENERATE), None),
-    ("G2a the background carried out to every edge (the generator's check)", ICONS,
-     CARRY_OUT, "",
+    ("G1c ... nor larger (the generator's check)", ICONS, MASKABLE, MASKABLE_LARGER,
+     command(GENERATE, re.escape("icon-maskable-512.png has the dumbbell reaching")), None),
+    ("G1d ... (the served icon)", ICONS, MASKABLE, MASKABLE_LARGER,
+     command(E2E_ICON, failing_line("expect(launcher.reach).toBeLessThanOrEqual(0.92);"),
+             step=GENERATE), None),
+    ("G2a the artwork's own edge mirrored past it, full bleed (the generator's check)", ICONS,
+     MIRRORED, "",
      command(GENERATE, re.escape("icon-maskable-512.png is not dark and opaque to its edge")), None),
-    ("G2b ... (the served icon)", ICONS, CARRY_OUT, "",
+    ("G2b ... (the served icon)", ICONS, MIRRORED, "",
      command(E2E_ICON, failing_line("expect(launcher.edgesDark"), step=GENERATE), None),
-    ("G3a the in-app icon stays full bleed (the generator's check)", ICONS,
-     LOGO_FULL, LOGO_SHRUNK,
+    # From the review, 2026-10-24: a margin the plates' glow reaches is not dark (luminance over
+    # 100 at the edge; the shipped icons reach 72 at most).
+    ("G2c ... and dark: no glow in the margin of a cut too close, 58.5% (the generator's check)",
+     ICONS, MASKABLE, MASKABLE_GLOW,
+     command(GENERATE, re.escape("icon-maskable-512.png is not dark and opaque to its edge")), None),
+    ("G2d ... (the served icon)", ICONS, MASKABLE, MASKABLE_GLOW,
+     command(E2E_ICON, failing_line("expect(launcher.edgesDark"), step=GENERATE), None),
+    ("G3a the in-app icon cut closer, the dumbbell at 82% (the generator's check)", ICONS,
+     LOGO, LOGO_SMALLER,
      command(GENERATE, re.escape("icon-192.png has the dumbbell reaching")), None),
-    ("G3b ... (the served logo)", ICONS, LOGO_FULL, LOGO_SHRUNK,
-     command(E2E_ICON, failing_line("expect(header.reach).toBeGreaterThanOrEqual(1.2);"),
+    ("G3b ... (the served logo)", ICONS, LOGO, LOGO_SMALLER,
+     command(E2E_ICON, failing_line("expect(header.reach).toBeGreaterThanOrEqual(1.1);"),
              step=GENERATE), None),
+    # From the review, 2026-10-24: each icon is compared with the artwork itself, not with its own
+    # cut. The artwork drawn mirrored before the cut: the cut is mirrored too, so a comparison with
+    # the cut passes, the dumbbell reaches as far and the edges stay dark. Only this sees it.
+    ("G4 every icon shows the artwork as drawn, compared with the artwork itself (the generator's "
+     "check)", ICONS, ART_DRAWN, ART_MIRRORED,
+     command(GENERATE, re.escape("icon-192.png does not show the artwork")), None),
 
     # A changed icon reaches an installed app: versioned addresses, the manifest from the server.
     ("P1a each icon's address carries its content's hash (verify-build)", CONFIG,

@@ -76,7 +76,7 @@ python3 tools/reverts/mutate-m30.py --repo="$COPY" | tee m30-reverts.log
 
 ## Outside the rounds: `mutate-install-icon.py` (2026-10-24)
 
-Install the app, and the launcher icon (`docs/reports/install-and-launcher-icon.md`): 42 entries.
+Install the app, and the launcher icon (`docs/reports/install-and-launcher-icon.md`): 47 entries.
 Besides Vitest files it runs commands: the icon generator's own checks, the build with
 `verify-build`, and browser tests on a fresh build. Each command entry names the text its failure
 must print, its own assertion's; a command that fails without it (a build error, a busy port)

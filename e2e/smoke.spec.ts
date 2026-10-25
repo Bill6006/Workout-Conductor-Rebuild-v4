@@ -110,10 +110,13 @@ test.describe('app shell', () => {
       expect(size?.join('x'), `${icon.src} should decode at its size`).toBe(icon.sizes);
     }
 
-    // The launcher's icon (2026-10-24): dark and opaque to every edge, and the dumbbell's farthest
-    // point at 65 to 80% of the radius of the narrowest launcher circle seen, a third of the icon's
-    // width (a Pixel launcher showing only the centre 72 of 108 dp), so any mask leaves space all
-    // round. The header's logo stays the artwork full bleed, its dumbbell at 1.25 of that radius.
+    // The launcher's icon (2026-10-24, sized on the owner's phone): dark (luminance 100 at most)
+    // and opaque to every edge, and the angled dumbbell's farthest end at 84 to 92% of the maskable
+    // standard's safe circle (radius 40% of the width), which every launcher that follows it leaves
+    // whole; that fills the owner's tile like the apps beside it. The header's logo is cut closer,
+    // the ends at 1.16 of that radius. The dumbbell is its bright metal and bright green where most
+    // of the pixels around are bright too, which the artwork's textured surface, bright only in
+    // specks, never is.
     const geometry = (src: string) =>
       page.evaluate(async (url) => {
         const image = new Image();
@@ -138,32 +141,40 @@ test.describe('app shell', () => {
             [0, along],
             [size - 1, along],
           ]) {
-            if (data[(y * size + x) * 4 + 3] !== 255 || luminance(x, y) > 40) edgesDark = false;
+            if (data[(y * size + x) * 4 + 3] !== 255 || luminance(x, y) > 100) edgesDark = false;
           }
         }
+        const bright = (x: number, y: number) => {
+          const at = (y * size + x) * 4;
+          const [r, g, b] = [data[at], data[at + 1], data[at + 2]];
+          return luminance(x, y) > 180 || (g > 200 && g > r + 60 && g > b + 100);
+        };
         const centre = (size - 1) / 2;
         let farthest = 0;
-        for (let y = 0; y < size; y += 1) {
-          for (let x = 0; x < size; x += 1) {
-            if (luminance(x, y) > 60) {
-              farthest = Math.max(farthest, Math.hypot(x - centre, y - centre));
+        for (let y = 1; y < size - 1; y += 1) {
+          for (let x = 1; x < size - 1; x += 1) {
+            if (!bright(x, y)) continue;
+            let around = 0;
+            for (let dy = -1; dy <= 1; dy += 1) {
+              for (let dx = -1; dx <= 1; dx += 1) if (bright(x + dx, y + dy)) around += 1;
             }
+            if (around >= 5) farthest = Math.max(farthest, Math.hypot(x - centre, y - centre));
           }
         }
-        return { edgesDark, reach: farthest / (size / 3) };
+        return { edgesDark, reach: farthest / (0.4 * size) };
       }, src);
     const maskable = manifest.icons.find((icon) => icon.purpose === 'maskable');
     expect(maskable, 'the manifest names a maskable icon').toBeDefined();
     const launcher = await geometry(new URL(maskable!.src, manifestUrl).toString());
     expect(launcher.edgesDark, 'the launcher icon is dark to its edge').toBe(true);
-    expect(launcher.reach).toBeGreaterThanOrEqual(0.65);
-    expect(launcher.reach).toBeLessThanOrEqual(0.8);
+    expect(launcher.reach).toBeGreaterThanOrEqual(0.84);
+    expect(launcher.reach).toBeLessThanOrEqual(0.92);
     const header = await geometry(
       new URL((await logo.getAttribute('src')) ?? '', page.url()).toString(),
     );
     expect(header.edgesDark, 'the header logo is dark to its edge').toBe(true);
-    expect(header.reach).toBeGreaterThanOrEqual(1.2);
-    expect(header.reach).toBeLessThanOrEqual(1.3);
+    expect(header.reach).toBeGreaterThanOrEqual(1.1);
+    expect(header.reach).toBeLessThanOrEqual(1.22);
   });
 
   test('PWA manifest, icons, and service worker are served', async ({ page, request }) => {
