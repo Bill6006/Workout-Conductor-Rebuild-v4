@@ -263,10 +263,29 @@ is 59% now, and both are caught on the band.
 
 ## Verification
 
+**After phone review 1: commit `e0883c0`, the angled artwork.**
+
 - `npm run verify` on the final code, run alone: lint, types, unit 2539 passed + 5 skipped by
   design (278 files), the day rules in two more zones, build, privacy scan (819 files, no
   findings), verify-build, browser 431 passed + 14 skipped by design.
-- Commit `719af67`, deployed by Deploy Pages run 40135961082 (success). CI rendered the same icon
+- Deployed by Deploy Pages run 40154530852 (success). CI rendered the same icons, each check's
+  figures as here (the launcher icon: the artwork within 4.2, the dumbbell reaching 0.868); browser
+  431 passed + 14 skipped, none flaky.
+- Live: the bundle's marker `shortCommit` `e0883c0`. The manifest's id, start_url and scope are
+  `/Workout-Conductor-Rebuild-v4/`, and its icons are `?v=c2861ebc`, `?v=19a9f646` and
+  `?v=d9b649cb`, each the hash of the file served. The worker precaches no manifest, reads it
+  network first, and leaves the manifest and the icons out of its page fallback.
+- Live suite: 426 passed + 19 skipped by design (the update tests cannot switch a live site). In
+  the full run two logger tests failed on loading the live page (`net::ERR_TIMED_OUT` before the
+  app ran), and the 10 worker tests that wait on the rest did not start; run again, all 12 behaved
+  as designed (7 passed, 5 skipped).
+
+**The first release: commit `719af67`.**
+
+- `npm run verify` on its code, run alone: lint, types, unit 2539 passed + 5 skipped by design
+  (278 files), the day rules in two more zones, build, privacy scan (819 files, no findings),
+  verify-build, browser 431 passed + 14 skipped by design.
+- Deployed by Deploy Pages run 40135961082 (success). CI rendered the same icon
   bytes (the launcher icon reaches 0.729 there too); browser 430 passed + 1 flaky + 14 skipped. The
   flaky one, `e2e/storage.spec.ts` (the cloud copy's barcode line, a 5-second wait), passed on its
   retry; this change does not touch it.
