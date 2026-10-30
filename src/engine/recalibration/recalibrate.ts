@@ -51,6 +51,7 @@ import {
   mainLiftTarget,
   topSetLoad,
   topSetRead,
+  topSetRir,
   withBackOffs,
 } from '../progression/backOffs';
 import { weightStep } from '../plateMath/plateMath';
@@ -1704,8 +1705,13 @@ function asBackOffs(
 ): SetPrescription[] {
   const after = afterTopSet(request, entry, isDone, hand);
   if (!after) return [...sets];
-  const shape = planTop ?? after.top;
-  const reserve = backOffRir(shape.targetRir, dayReserve(request, workout, entry));
+  // The plan's own top set gives the back-offs their reps: one an ease changed (`planTop`), or the
+  // copy of one the day's floor holds (`floored`); and their reserve is the day's back-off reserve,
+  // never the top set's as it stands (the fresh review before shipping: a head cold's floor, or an
+  // effort change the top set took before it was lifted, reached the back-offs picked up again).
+  const shape = planTop ?? entry.floored?.find((set) => set.tier === 'top') ?? after.top;
+  const day = dayReserve(request, workout, entry);
+  const reserve = backOffRir(topSetRir(day), day);
   const handReps = hand && entry.manual?.reps === true;
   // At the top set's own reps, never a stand-in's (the thirteenth review of round N: a set added
   // took the reps a stand-in for the weights here added); a set added keeps the reps set by hand. A

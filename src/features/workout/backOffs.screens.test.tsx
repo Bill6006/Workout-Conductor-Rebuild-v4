@@ -103,7 +103,7 @@ describe('what the effort and "Why this target" say', () => {
     expect(top.why).toBe('top set: stop 1 clean rep short of failure; the back-offs follow it');
     expect(top.evidence[0]).toBe(EFFORT_EVIDENCE.backOffs);
     const backOff = effortGuidance('working', 2, 'primary-strength', false, false, 'back-off');
-    expect(backOff.why).toBe('back-off: lighter than the top set, stop 2 clean reps short');
+    expect(backOff.why).toBe('back-off: after the top set, stop 2 clean reps short');
     // A straight set says what it said.
     expect(effortGuidance('working', 2, 'primary-strength').why).toContain(
       'short of failure on every working set',

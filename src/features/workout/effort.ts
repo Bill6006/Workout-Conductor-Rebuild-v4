@@ -87,7 +87,9 @@ export function effortGuidance(
       why:
         tier === 'top'
           ? `top set: stop ${targetRir} clean ${targetRir === 1 ? 'rep' : 'reps'} short of failure; the back-offs follow it`
-          : `back-off: lighter than the top set, stop ${targetRir} clean ${targetRir === 1 ? 'rep' : 'reps'} short`,
+          : // After the top set, never "lighter": a drop narrowed to nothing puts a back-off at the
+            // top set's load (the fresh review before shipping); "Why this target" gives the load.
+            `back-off: after the top set, stop ${targetRir} clean ${targetRir === 1 ? 'rep' : 'reps'} short`,
       evidence: [EFFORT_EVIDENCE.backOffs, EFFORT_EVIDENCE.strength, EFFORT_EVIDENCE.scale],
     };
   }
@@ -151,5 +153,10 @@ export function backOffNote(entry: WorkoutEntry, units: 'lb' | 'kg'): string | n
   if (!top || !first || entry.backOffDrop === undefined) return null;
   const load = first.targetWeight === null ? '' : ` at ${first.targetWeight} ${units}`;
   const drop = Math.round(entry.backOffDrop * 100);
-  return `Top set, then ${backOffs.length} ${backOffs.length === 1 ? 'back-off' : 'back-offs'}${load}, ${drop}% lighter at ${first.targetRir} in reserve: they follow the top set as you lift it, and back-offs missed never hold back the top set's next step: they widen the drop.`;
+  // A drop narrowed to nothing, or one the place's weights round back up, is the top set's load,
+  // never "0% lighter" (the fresh review before shipping).
+  const atTop =
+    drop === 0 || (first.targetWeight !== null && first.targetWeight === top.targetWeight);
+  const lighter = atTop ? ", the top set's load," : `, ${drop}% lighter`;
+  return `Top set, then ${backOffs.length} ${backOffs.length === 1 ? 'back-off' : 'back-offs'}${load}${lighter} at ${first.targetRir} in reserve: they follow the top set as you lift it, and back-offs missed never hold back the top set's next step: they widen the drop.`;
 }

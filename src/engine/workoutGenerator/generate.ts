@@ -90,6 +90,7 @@ import {
   backOffsSuit,
   mainLiftTarget,
   ownRepsOf,
+  topSetRir,
   withBackOffs,
 } from '../progression/backOffs';
 import type { StrengthMaxes } from '../progression/maxes';
@@ -2165,15 +2166,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
                     ),
             },
           );
-    // At the top set's own reps, never a stand-in's (the thirteenth review of round N).
+    // At the top set's own reps, never a stand-in's (the thirteenth review of round N): the plan's
+    // own top set, the copy of one the day's floor holds (`floored`) where it holds one, at the day's
+    // back-off reserve, never the top set's as it stands (the fresh review before shipping, as
+    // `asBackOffs`: a head cold's floor, or an effort change, reached the back-offs picked up again).
+    const planTop = target.floored?.find((set) => set.tier === 'top') ?? top;
     const backOff =
-      top && owedWeight !== null
+      top && planTop && owedWeight !== null
         ? {
             tier: 'back-off' as const,
             // Picked up again, the reps set by hand go (`withoutHandTargets`): the top set's as
             // the plan has them (the fourteenth review of round N).
-            targetReps: ownRepsOf(top, false),
-            targetRir: backOffRir(top.targetRir, adjusted.rir),
+            targetReps: ownRepsOf(planTop, false),
+            targetRir: backOffRir(topSetRir(adjusted.rir), adjusted.rir),
             targetWeight: owedWeight,
           }
         : null;
