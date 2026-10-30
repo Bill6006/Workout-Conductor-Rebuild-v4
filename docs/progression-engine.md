@@ -34,6 +34,58 @@ value the user set by hand (`entry.manual`) untouched. Its `floor` argument is t
 bar lifts: no ramp, drop, or working load goes under it. The generator and every substitution
 call it, so every card shows a load and a "Why this target".
 
+## Top set plus back-offs (`src/engine/progression/backOffs.ts`, Maintenance 32)
+
+A main lift (primary strength) under Hybrid, Strength focus and Lean-down is a top set and back-offs
+(item 11, `docs/research/top-set-back-offs.md`): its target is read at the top set's reserve
+(`topSetRir`, one under the day's), and `withBackOffs` makes its first working set the top set and
+the rest back-offs, the drop off the top set's load (`backOffLoad`: to the nearest weight the place
+has, a half step up, as the research rounds it; never under the bar, never over the top set, and
+under it while a drop is in force), at its reps and the day's
+reserve (`backOffRir`: one rep more than the top set on a plain day; "harder" takes the back-offs to
+1, the top set staying at 1). A lift cut to one working set keeps it as its top set. Each set
+carries its `tier`; the day's effort reads on a back-off (`effortRir`), and a top set alone carries
+the day's reserve as its own (`carriesDayRir`).
+
+- Straight sets where `backOffsSuit` or `targetTakesBackOffs` says no: another role or style, a hold
+  or a lift with no weight to take off, a load that is a guess or eased (`STRAIGHT_MODES`), one the
+  place cannot make as asked; and, by the caller, fatigue high, a deload week, a catch-up or second
+  workout, the lift to push and its extra, a lift standing in for another, the coach's deload.
+- `mainLiftTarget` builds a strength lift's target as the plan does, everywhere a plan or a change
+  to it builds one (a max entered too): on a day that leaves it the structure, at the top set's
+  reserve; on a day that runs it straight after a session on the structure, a day it is secondary
+  included (`ranOnTopSet`), at its
+  back-offs' load, the drop off the load the top set would carry (as asked, at the reps asked, where
+  the place cannot make it), at the day's reserve, the session read the one its target is read from
+  (`straightAfterTop`); such a day is saved as one (`atBackOffs`), the lift to push's extra and a
+  lift swapped in after its place was begun included, and the top set reads past it, as past its
+  back-offs, back to the lift's last session of its own (`pastBackOffDays`), through two such days
+  running at most: past them the lift has left the structure and its straight sessions are its own.
+  Such days are passed over wherever they fall, so the progression's rules over sessions (a run of
+  misses, clean sessions in a row) read the top sets alone, and so does the lift's own straight
+  target. A break is measured from the lift's newest session, whatever the read passes over
+  (`topSetRead`, `trainedAt`). A load set by hand there, or the coach's deload, makes the day the
+  lifter's own, no such day. The completion's "Next time" reads it the same way, the lift to push on its own
+  straight sets.
+- In the workout the back-offs follow the top set as lifted, a step up after one clearly easy and
+  down after a grind, never over it nor under the bar (`backOffLoadAfter`); a back-off clearly easy
+  takes the ones after it up a step, never over the top set either. A lift picked up again after its
+  top set carries them on so, with its top set's lines; a top set skipped is no top set lifted. The
+  top set's log taken back puts them back where the plan has them, a correction of it where the
+  top set as corrected puts them; a back-off's, where the top set as it stands puts them; each way,
+  each back-off still logged moves the ones after it as its log did (`backOffsReplayed`).
+- The progression reads a session's top set alone (`completedWorking` passes over its back-offs):
+  the strength rule, the estimated max, stalls and every line on the last session read it. What
+  reads a lift's sessions over weeks reads its top sets alone, past its straight days at the
+  back-offs' load (`withoutBackOffDays`): the coach's stalls, the strategy's insights on the lift,
+  the fatigue's drift in estimated maxes, the Progress trend, and the session's feedback, which grades
+  a top set against the session its target read. Progress lists every session and every working set
+  (`performanceHistory(..., everySet)`). A session logged before has no tier and reads every set.
+- `backOffDropFor`: the last session's drop on the structure (5% before any), moved 4% for each rep
+  of reserve the back-offs missed on average when the last two sessions at that drop both missed by
+  a rep or more the same way, within 0 to 20%. A saved workout loaded takes each lift's drop in
+  force (`withDropsToday`).
+
 ## Fatigue (`src/engine/recovery/fatigue.ts`)
 
 Sessions in the last 7 days, consecutive training days, how far logged reps in reserve drifted

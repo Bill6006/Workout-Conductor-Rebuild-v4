@@ -89,6 +89,14 @@ function setsLabel(entry: WorkoutEntry): string {
   const rir = first && !hold ? ` @ RIR ${first.targetRir}` : '';
   const warm = entry.warmupSets > 0 ? ` · ${entry.warmupSets} warm-up` : '';
   const load = first && first.targetWeight !== null ? `${first.targetWeight} × ` : '';
+  // A top set and its back-offs (Maintenance 32, item 11): "1 × 190 × 4-6 @ RIR 1, then 3 × 180
+  // @ RIR 2".
+  const backOffs = working.filter((set) => set.tier === 'back-off');
+  const backOff = backOffs[0];
+  if (first?.tier === 'top' && backOff) {
+    const then = `${backOffs.length} × ${backOff.targetWeight !== null ? `${backOff.targetWeight} ` : ''}@ RIR ${backOff.targetRir}`;
+    return `${working.length - backOffs.length} × ${load}${reps}${rir}, then ${then}${warm}`;
+  }
   return `${working.length} × ${load}${reps}${rir}${warm}`;
 }
 

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TRAINING_ROLES } from '../../catalog/exercises/exerciseSchema';
 import { MOVEMENT_PATTERN_IDS } from '../../catalog/movementPatterns/movementPatterns';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
-import { PROGRESSION_MODES, type GeneratedWorkout } from './types';
+import { MAX_BACK_OFF_DROP, PROGRESSION_MODES, SET_TIERS, type GeneratedWorkout } from './types';
 
 /**
  * Zod schemas for the generated workout, used only where a workout crosses a
@@ -27,6 +27,8 @@ export const SetPrescriptionSchema = z.looseObject({
     })
     .optional()
     .catch(undefined),
+  // Maintenance 32, item 11: the top set or a back-off; optional, and dropped rather than refused.
+  tier: z.enum(SET_TIERS).optional().catch(undefined),
 });
 
 // Why a target is what it is: advisory. A note this copy of the app cannot read (one written
@@ -87,10 +89,22 @@ export const WorkoutEntrySchema = z.looseObject({
   // The lift to push (Maintenance 27, item 44): in its own place in the plan, or the week's extra
   // exposure. An unreadable mark is dropped, never the entry.
   push: z.enum(['natural', 'extra']).optional().catch(undefined),
+  // Maintenance 32, item 11: the back-offs' drop; optional, and dropped rather than refused.
+  backOffDrop: z.number().min(0).max(MAX_BACK_OFF_DROP).optional().catch(undefined),
+  // The load the drop gave the back-offs off the top set as lifted (the eleventh review of round
+  // N); optional, and dropped rather than refused (the twelfth: one this copy could not read went
+  // into the saved workout, and its feedback passed over every back-off).
+  backOffAt: z.number().min(0).optional().catch(undefined),
+  // Straight at the back-offs' load after a session on the structure (the fourth review of round
+  // N); optional, and dropped rather than refused.
+  atBackOffs: z.literal(true).optional().catch(undefined),
   progression: EntryProgressionSchema.optional().catch(undefined),
   manual: z
     .looseObject({
       weight: z.boolean().optional(),
+      // The ninth review of round N: dropped alone when unreadable, the back-offs then following
+      // the top set.
+      backOffs: z.number().min(0).optional().catch(undefined),
       reps: z.boolean().optional(),
       sets: z.boolean().optional(),
       rest: z.boolean().optional(),
@@ -123,6 +137,7 @@ export const WorkoutEntrySchema = z.looseObject({
           manual: z
             .looseObject({
               weight: z.boolean().optional(),
+              backOffs: z.number().min(0).optional().catch(undefined),
               reps: z.boolean().optional(),
               sets: z.boolean().optional(),
               rest: z.boolean().optional(),

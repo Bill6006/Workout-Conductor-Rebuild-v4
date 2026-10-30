@@ -184,11 +184,18 @@ export function interpretFatigue(
   const maxes = new Map<string, number[]>();
   for (const record of qualifying.slice(0, 4)) {
     for (const entry of record.entries) {
-      // A hold's seconds are not reps, so they carry no estimated max to drift.
-      if (holdById(entry.exerciseId)) continue;
+      // A hold's seconds are not reps, so they carry no estimated max to drift; a straight day at
+      // the back-offs' load is lighter by design, no fall (the fifth review of round N), nor are its
+      // back-offs: a session with its top set skipped reads nothing (the seventh).
+      if (holdById(entry.exerciseId) || entry.atBackOffs === true) continue;
       let best = 0;
       for (const set of entry.sets) {
-        if (set.kind === 'working' && set.completed && set.weight !== null) {
+        if (
+          set.kind === 'working' &&
+          set.completed &&
+          set.weight !== null &&
+          set.tier !== 'back-off'
+        ) {
           best = Math.max(best, set.weight * (1 + Math.min(set.reps, 12) / 30));
         }
       }

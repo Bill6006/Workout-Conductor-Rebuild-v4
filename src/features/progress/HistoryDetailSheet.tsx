@@ -90,7 +90,7 @@ export function HistoryDetailSheet({ record, units, notesFor, onClose }: History
                       : entry.sets
                           .map(
                             (set) =>
-                              `${set.kind === 'warmup' ? 'warm-up ' : set.kind === 'drop' ? 'drop ' : ''}${set.weight ?? 'bw'} × ${amountText(set.reps, exercise.measure === 'seconds')}${set.rir !== null && exercise.measure !== 'seconds' ? ` @ RIR ${set.rir}` : ''}${set.completed ? '' : ' (not done)'}`,
+                              `${set.kind === 'warmup' ? 'warm-up ' : set.kind === 'drop' ? 'drop ' : set.tier === 'top' ? 'top ' : set.tier === 'back-off' ? 'back-off ' : ''}${set.weight ?? 'bw'} × ${amountText(set.reps, exercise.measure === 'seconds')}${set.rir !== null && exercise.measure !== 'seconds' ? ` @ RIR ${set.rir}` : ''}${set.completed ? '' : ' (not done)'}`,
                           )
                           .join(' · ')}
                     {units ? '' : ''}

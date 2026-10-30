@@ -125,6 +125,15 @@ That is what lets a backup written by a newer app version pass through an older 
     for a muscle a lift misses, `after`, the slot it follows in the plan's order), which a rebuild
     around what the plan keeps fills again. A plan without them, or with ones it cannot read, lays
     its catch-up out again at its next rebuild; an `after` it cannot read is dropped alone.
+- Maintenance 32 (round N) added only optional fields, each dropped when unreadable, never the set,
+  the exercise or the plan around it, and extended no stored enum:
+  - A planned set's and a logged set's `tier` (item 11): `top` or `back-off`, for a main lift on top
+    set plus back-offs, read through the engine's own list (`SET_TIERS`). Both stay `working` sets,
+    so every count of working sets reads them as before. The progression reads a logged session's
+    top set alone; a session logged before has no tier, and every set is read, as before.
+  - A planned entry's and a logged exercise's `backOffDrop`: the back-offs' drop from the top set's
+    load (0 to 0.2, `MAX_BACK_OFF_DROP`), which the next session's drop starts from. An older copy
+    shows the sets as they are and plans its own straight sets.
 
 ## Save safety
 

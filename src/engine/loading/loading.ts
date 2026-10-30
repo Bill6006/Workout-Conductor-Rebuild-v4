@@ -133,6 +133,20 @@ export function nudge(
   return previous ?? (available[0] as number);
 }
 
+/**
+ * The least load a step down lands on: the bar, and where the place's weights are unknown one step
+ * too, since a weight rounded to the step makes none under it. Where they are known the step lands
+ * on one of them (`nudge`), so nothing more (the fifteenth review of round N: held at one step, a
+ * back-off on a rack whose 25s step 50 lb on a 45 lb bar went to 50, a load no plate on it makes).
+ */
+export function stepFloor(
+  step: number,
+  floor: number | null,
+  available: readonly number[] | null,
+): number {
+  return Math.max(floor ?? 0, available !== null && available.length > 0 ? 0 : step);
+}
+
 /** The heaviest one side of a bar is ever taken to: far past any lift the app will plan. */
 const MAX_SIDE: Record<UnitSystem, number> = { lb: 600, kg: 300 };
 const totalsSeen = new Map<string, number[]>();

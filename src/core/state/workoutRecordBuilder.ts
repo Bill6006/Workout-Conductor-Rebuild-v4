@@ -9,11 +9,14 @@ import {
   pushMarkOf,
   workingSets,
   type WorkoutBlock,
+  type WorkoutEntry,
 } from '../../engine/workout/types';
 import { holdById } from '../../engine/workout/setText';
-import { hasNoLoad } from '../../engine/progression/startingLoad';
+import { barWeightFor, hasNoLoad } from '../../engine/progression/startingLoad';
+import { weightStep } from '../../engine/plateMath/plateMath';
 import type { UserProfile } from '../validation/profile';
 import type { TrainingRole } from '../../catalog/exercises/exerciseSchema';
+import { backOffsSuit, mainLiftTarget, topSetLoad } from '../../engine/progression/backOffs';
 import { recommendNextTarget } from '../../engine/progression/progression';
 import { prescribeFor } from '../../engine/progression/roles';
 import { sessionFeedback } from '../../engine/strategy/strategy';
@@ -42,6 +45,8 @@ export interface RecordOptions {
   elapsedSeconds: number;
   rating: SessionRating | null;
   endedEarly: boolean;
+  /** The load the drop in force gives a lift's back-offs off its top set as lifted, at the place. */
+  backOffAt?: (entry: WorkoutEntry, top: number) => number | null;
 }
 
 function loggedFor(session: WorkoutSession, entryId: string): Map<number, CompletedSet> {
@@ -65,6 +70,25 @@ function handedOverIds(blocks: readonly WorkoutBlock[]): Set<string> {
   );
 }
 
+/**
+ * The load the drop gave a lift's back-offs off its top set as lifted (the ninth review of round N),
+ * for the drop's correction to read only back-offs lifted at it.
+ */
+function backOffAtOf(
+  entry: WorkoutEntry,
+  logged: Map<number, CompletedSet>,
+  options: RecordOptions,
+): { backOffAt?: number } {
+  const top = entry.sets.find((set) => set.tier === 'top');
+  const lifted = top ? logged.get(top.index) : undefined;
+  // With no weight logged, at the load the top set asks, as every reading of it has it (the
+  // sixteenth review of round N: none was recorded, and the drop's correction read every back-off).
+  const weight = top && lifted && !lifted.skipped ? (lifted.weight ?? topSetLoad(top)) : null;
+  if (entry.backOffDrop === undefined || weight === null) return {};
+  const at = options.backOffAt?.(entry, weight) ?? null;
+  return at === null ? {} : { backOffAt: at };
+}
+
 export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptions): WorkoutRecord {
   const { workout } = session;
   const entries: LoggedExercise[] = workout.blocks.flatMap((block) =>
@@ -79,6 +103,9 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
         plannedSets: workingSets(entry).filter((set) => set.kind === 'working').length,
         replacedFrom: entry.replacedFrom,
         ...(pushMarkOf(entry) ? { push: pushMarkOf(entry) } : {}),
+        ...(entry.backOffDrop !== undefined ? { backOffDrop: entry.backOffDrop } : {}),
+        ...backOffAtOf(entry, logged, options),
+        ...(entry.atBackOffs ? { atBackOffs: true as const } : {}),
         sets: entry.sets
           .filter((set) => logged.has(set.index))
           .map((set) => {
@@ -95,6 +122,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
               targetRir: set.targetRir,
               loggedAt: done.completedAt,
               ...(done.reserveCheck ? { reserveCheck: { ...done.reserveCheck } } : {}),
+              ...(set.tier ? { tier: set.tier } : {}),
               ...(set.asked
                 ? {
                     asked: {
@@ -264,8 +292,10 @@ export function buildCompletion(
   let best: { name: string; weight: number; reps: number } | null = null;
   for (const entry of record.entries) {
     if (holdById(entry.exerciseId)) continue;
+    // A lift's top set done, its back-offs are no best set (Maintenance 32, item 11).
+    const topDone = completedWorking(entry).some((set) => set.tier === 'top');
     for (const set of completedWorking(entry)) {
-      if (set.weight === null) continue;
+      if (set.weight === null || (topDone && set.tier === 'back-off')) continue;
       if (!best || set.weight * set.reps > best.weight * best.reps) {
         best = { name: requireExercise(entry.exerciseId).name, weight: set.weight, reps: set.reps };
       }
@@ -284,15 +314,37 @@ export function buildCompletion(
   const nextTargets = trained.slice(0, 6).map((entry) => {
     const exercise = requireExercise(entry.exerciseId);
     const role = (entry.role as TrainingRole | undefined) ?? exercise.defaultRole;
-    const target = recommendNextTarget({
-      exercise,
-      role,
+    // Read as the next plan reads it: a main lift on top set plus back-offs at the top set's
+    // reserve (the second review of round N: "(hold)" after every session lifted as asked).
+    const { target } = mainLiftTarget({
+      read: (asked, history, sessionsAt) =>
+        recommendNextTarget({
+          exercise,
+          role,
+          prescription: asked,
+          history,
+          profile,
+          // A clock, so a lift's own curve (item 41) speaks here as in the next plan.
+          now: completedAtIso,
+          resets,
+          ...(sessionsAt ? { sessionsAt } : {}),
+        }),
       prescription: prescribeFor(exercise, role, profile, after),
-      history: after,
+      suits: backOffsSuit(exercise, role, profile),
       profile,
-      // A clock, so a lift's own curve (item 41) speaks here as in the next plan.
-      now: completedAtIso,
-      resets,
+      // A plain day: the next plan's own, which runs the lift to push on its own straight sets
+      // (the third review of round N).
+      day: profile.pushLift?.exerciseId !== exercise.id,
+      exerciseId: exercise.id,
+      history: after,
+      // On the lift's own steps from the bar, as the next plan's load lands (the sixth review of
+      // round N: "162 lb" where the plan asks 160).
+      load: {
+        step: weightStep(exercise, profile.units),
+        floor: barWeightFor(exercise, profile.units),
+        loading: null,
+      },
+      units: profile.units,
     });
     if (target.hold) {
       return target.weight === null

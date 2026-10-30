@@ -154,7 +154,9 @@ describe('a recent set or a max at dumbbells to 20 lb', () => {
     const bench = (input: MaxInput) =>
       afterMax(gym, 'push-arms', 'barbell-bench-press', input, history).weight;
     expect(bench({ kind: 'max', e1rm: 150 })).toBe(160);
-    expect(bench({ kind: 'max', e1rm: 220 })).toBe(165);
+    // The bench press is a main lift on top set plus back-offs (Maintenance 32, item 11): its top
+    // set reads the max at 1 in reserve, where straight sets at 2 took 220 for 165.
+    expect(bench({ kind: 'max', e1rm: 215 })).toBe(165);
     expect(bench({ kind: 'max', e1rm: 260 })).toBe(170);
   });
 });

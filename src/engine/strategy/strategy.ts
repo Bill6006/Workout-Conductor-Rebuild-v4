@@ -9,7 +9,16 @@ import {
   performanceHistory,
   type PerformancePoint,
 } from '../progression/progression';
+import {
+  BACK_OFF,
+  backOffDropFor,
+  backOffMiss,
+  pastBackOffDays,
+  withoutBackOffDays,
+  structureRuns,
+} from '../progression/backOffs';
 import { amountText, holdById } from '../workout/setText';
+import { MAX_BACK_OFF_DROP } from '../workout/types';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { computeWeeklyVolume, goalWeights, weeklyTargets } from '../volume/weeklyVolume';
 
@@ -108,8 +117,12 @@ function exerciseInsights(
     const exercise = getExercise(exerciseId);
     // Load, fade and flat-rep insights read reps; a hold's seconds have their own progression.
     if (!exercise || exercise.measure === 'seconds') continue;
+    // The top sets alone, past the lift's straight days at the back-offs' load (the fifth review
+    // of round N).
     const points = sinceLastBreak(
-      performanceHistory(sessions, exercise, 4).filter((point) => !point.viaFamily),
+      performanceHistory(withoutBackOffDays(exerciseId, sessions), exercise, 4).filter(
+        (point) => !point.viaFamily,
+      ),
     );
     if (points.length < 3) continue;
     const [a, b, c] = points as [PerformancePoint, PerformancePoint, PerformancePoint];
@@ -384,15 +397,52 @@ export function sessionFeedback(
     const sets = entry.sets.filter((set) => set.kind === 'working' && set.completed);
     if (sets.length === 0) continue;
     const exercise = requireExercise(entry.exerciseId);
-    const previous = performanceHistory(before, exercise, 1).find((point) => !point.viaFamily);
-    const best = [...sets].sort(
-      (a, b) => (b.weight ?? 0) * b.reps - (a.weight ?? 0) * a.reps || b.reps - a.reps,
-    )[0] as (typeof sets)[number];
+    // On top set plus back-offs, the top set is graded, as the rules read it; back-offs short never
+    // hold its load (Maintenance 32, item 11). It is graded against the session its target read,
+    // past the lift's straight days at the back-offs' load (the fifth review of round N).
+    const top = sets.find((set) => set.tier === 'top');
+    const previous = performanceHistory(
+      top ? pastBackOffDays(entry.exerciseId, before, structureRuns(profile)) : before,
+      exercise,
+      1,
+    ).find((point) => !point.viaFamily);
+    const best =
+      top ??
+      ([...sets].sort(
+        (a, b) => (b.weight ?? 0) * b.reps - (a.weight ?? 0) * a.reps || b.reps - a.reps,
+      )[0] as (typeof sets)[number]);
     // Graded as the rules read each set: a pushed set answers to what it showed (Maintenance 23).
-    const floor = sets.every((set) => {
+    const floorMet = (set: (typeof sets)[number]) => {
       const judged = judgedSet(set);
       return !judged.targetReps || judged.reps >= judged.targetReps[0];
-    });
+    };
+    const floor = top ? floorMet(top) : sets.every(floorMet);
+    const backOffs = sets.filter((set) => set.tier === 'back-off');
+    const backOffsPlanned = Math.max(0, (entry.plannedSets ?? sets.length) - 1);
+    // The drop widens only after back-offs a rep or more harder than asked on average, two
+    // sessions running (the third review of round N), and the line says when it has (the fourth).
+    // It reads only back-offs lifted at the drop's load, as the drop's correction does (the tenth
+    // review: back-offs at the follow's step were promised a wider drop that never came).
+    const miss = top === undefined ? null : backOffMiss(entry.sets, entry.backOffAt);
+    const drop = entry.backOffDrop;
+    const next =
+      drop === undefined ? undefined : backOffDropFor(entry.exerciseId, [...before, record]);
+    const widens =
+      drop !== undefined && next !== undefined && next > drop
+        ? `, two sessions running: their drop widens to ${Math.round(next * 100)}%`
+        : drop !== undefined && drop >= MAX_BACK_OFF_DROP
+          ? ''
+          : ', and a second session like it widens their drop';
+    const backOffNote =
+      top === undefined
+        ? ''
+        : miss !== null && miss <= -BACK_OFF.MISS_REPS
+          ? `; the back-offs ran a rep or more harder than asked${widens}`
+          : !backOffs.every(floorMet)
+            ? '; a back-off fell under its reps'
+            : backOffs.length < backOffsPlanned
+              ? `; ${backOffs.length} of ${backOffsPlanned} back-offs`
+              : '';
     const planned = entry.plannedSets ?? sets.length;
     const hold = exercise.measure === 'seconds';
     const bestLine =
@@ -415,9 +465,9 @@ export function sessionFeedback(
     } else if (!hold && previous && beaten(best, previous.asked?.e1rm ?? previous.e1rm)) {
       progressed += 1;
       lines.push(
-        `${exercise.name}: progressed, ${previous.bestWeight ?? 'bodyweight'} × ${previous.bestReps} became ${bestLine}.`,
+        `${exercise.name}: progressed, ${previous.bestWeight ?? 'bodyweight'} × ${previous.bestReps} became ${bestLine}${backOffNote}.`,
       );
-    } else if (sets.length < planned || !floor) {
+    } else if ((!top && sets.length < planned) || !floor) {
       short += 1;
       lines.push(
         hold
@@ -426,7 +476,7 @@ export function sessionFeedback(
       );
     } else {
       onTarget += 1;
-      lines.push(`${exercise.name}: on target at ${bestLine}.`);
+      lines.push(`${exercise.name}: on target at ${bestLine}${backOffNote}.`);
     }
   }
   if (lines.length === 0) return ['Nothing logged this session, so there is nothing to grade.'];

@@ -19,7 +19,7 @@ import {
 import { HowToSheet } from '../../components/ExerciseDetail/HowToSheet';
 import { PlateLine } from '../../components/PlateStack/PlateStack';
 import { isCoreStability } from '../../catalog/movementPatterns/movementPatterns';
-import { effortGuidance, restGuidance } from './effort';
+import { backOffNote, effortGuidance, restGuidance } from './effort';
 import { ProgressBar } from '../../components/ProgressBar/ProgressBar';
 import { RestTimer } from '../../components/RestTimer/RestTimer';
 import { ScreenHeader } from '../../components/Screen/Screen';
@@ -149,11 +149,19 @@ function initialFor(
       rir,
     };
   }
-  const base = draft?.weight ?? set.targetWeight ?? previousWeight;
+  // A top set or a back-off starts from its own target when the set logged last on the lift was of
+  // the other kind (Maintenance 32, item 11): the first back-off is lighter than the top set just
+  // logged, and the top set heavier than a back-off.
+  const last = [...session.completed.sets]
+    .reverse()
+    .find((done) => done.entryId === entry.id && done.kind === 'working' && !done.skipped);
+  const lastTier = entry.sets.find((planned) => planned.index === last?.setIndex)?.tier;
+  const from = set.tier !== undefined && lastTier !== set.tier ? undefined : draft;
+  const base = from?.weight ?? set.targetWeight ?? previousWeight;
   return {
     weight: base ?? null,
-    reps: hold ? firstReps : (draft?.reps ?? firstReps),
-    rir: hold ? null : (draft?.rir ?? set.targetRir),
+    reps: hold ? firstReps : (from?.reps ?? firstReps),
+    rir: hold ? null : (from?.rir ?? set.targetRir),
   };
 }
 
@@ -877,12 +885,14 @@ export function ActiveWorkoutScreen() {
         ...(entry.manual?.weight || entry.manual?.reps
           ? ['You set this by hand; the engines keep your values.']
           : []),
+        ...(backOffNote(entry, units) ? [backOffNote(entry, units) as string] : []),
         ...effortGuidance(
           'working',
           entry.sets.find((set) => set.kind === 'working')?.targetRir ?? 2,
           entry.role,
           exercise.measure === 'seconds',
           isCoreStability(exercise.movementPattern),
+          entry.sets.find((set) => set.kind === 'working')?.tier,
         ).evidence,
         ...restGuidance(entry.role, entry.restSeconds).evidence,
       ],

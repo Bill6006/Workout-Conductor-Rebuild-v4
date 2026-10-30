@@ -48,14 +48,34 @@ function adjustmentDetail(previous: WorkoutEntry, next: WorkoutEntry): string | 
     !holdById(next.exerciseId)
   )
     changes.push(`RIR ${firstAfter.targetRir}`);
-  const lastBefore = [...previous.sets].reverse().find((set) => set.kind === 'working');
-  const lastAfter = [...next.sets].reverse().find((set) => set.kind === 'working');
+  // On top set plus back-offs, the top set's load (Maintenance 32, item 11): the back-offs follow it.
+  const topAfter = next.sets.find((set) => set.tier === 'top');
+  // A lift coming back onto it reads against its straight sets (the second review of round N).
+  const lastBefore = topAfter
+    ? (previous.sets.find((set) => set.tier === 'top') ??
+      [...previous.sets].reverse().find((set) => set.kind === 'working'))
+    : [...previous.sets].reverse().find((set) => set.kind === 'working');
+  const lastAfter = topAfter ?? [...next.sets].reverse().find((set) => set.kind === 'working');
   if (lastBefore && lastAfter && lastBefore.targetWeight !== lastAfter.targetWeight)
     changes.push(
       lastAfter.targetWeight === null
         ? 'target weight cleared'
-        : `target ${lastAfter.targetWeight}`,
+        : `${topAfter ? 'top set' : 'target'} ${lastAfter.targetWeight}`,
     );
+  // ... and the back-offs' when it alone moves (the first review of round N), or when they come
+  // back with it (the second).
+  const backOffBefore = [...previous.sets].reverse().find((set) => set.tier === 'back-off');
+  const backOffAfter = [...next.sets].reverse().find((set) => set.tier === 'back-off');
+  if (
+    topAfter &&
+    backOffAfter &&
+    backOffAfter.targetWeight !== null &&
+    (backOffBefore === undefined ||
+      (backOffBefore.targetWeight !== backOffAfter.targetWeight &&
+        lastBefore?.targetWeight === lastAfter?.targetWeight))
+  ) {
+    changes.push(`back-offs ${backOffAfter.targetWeight}`);
+  }
   if (next.pinned !== previous.pinned) changes.push(next.pinned ? 'pinned' : 'unpinned');
   return changes.length > 0 ? changes.join(', ') : null;
 }

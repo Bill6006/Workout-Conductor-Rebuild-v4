@@ -91,6 +91,8 @@ export interface PerformancePoint {
   asked?: PerformancePoint;
   /** In `asked`: a push stopped short of the effort asked, so it cannot show the load was beaten. */
   pushedShort?: boolean;
+  /** Read from a session's top set alone, its back-offs passed over (Maintenance 32, item 11). */
+  topSet?: boolean;
   /** Some set was lifted under the load asked: a session the weights at a place pushed. */
   light?: boolean;
 }
@@ -151,13 +153,20 @@ export function estimateOneRepMax(weight: number, reps: number): number {
   return Math.round(weight * (1 + Math.min(reps, 12) / 30) * 10) / 10;
 }
 
-function completedWorking(record: WorkoutRecord, exerciseId: string) {
+/**
+ * A session's completed working sets of an exercise, as the rules read them: of a lift on top set
+ * plus back-offs, the top set alone (Maintenance 32, item 11): the back-offs follow it, and one
+ * missed never holds it back nor pulls its estimate down. A session logged before, every set.
+ */
+function completedWorking(record: WorkoutRecord, exerciseId: string, everySet = false) {
   const exercise = getExercise(exerciseId);
   return record.entries
     .filter((entry) => entry.exerciseId === exerciseId)
     .flatMap((entry) =>
       entry.sets
-        .filter((set) => set.kind === 'working' && set.completed)
+        .filter(
+          (set) => set.kind === 'working' && set.completed && (everySet || set.tier !== 'back-off'),
+        )
         .map((set) => ({
           reps: set.reps,
           weight: loggedLoad(exercise, set.weight),
@@ -167,6 +176,7 @@ function completedWorking(record: WorkoutRecord, exerciseId: string) {
           targetRir: typeof set.targetRir === 'number' ? set.targetRir : null,
           ...(set.asked ? { asked: set.asked, shownWeight: set.targetWeight ?? null } : {}),
           planned: entry.plannedSets ?? 0,
+          tier: set.tier,
         })),
     );
 }
@@ -306,15 +316,16 @@ function pushedMax(sets: readonly PerformanceSet[], exerciseId: string): number 
 
 type PointMeta = Pick<
   PerformancePoint,
-  'date' | 'recordId' | 'exerciseId' | 'viaFamily' | 'plannedSets'
+  'date' | 'recordId' | 'exerciseId' | 'viaFamily' | 'plannedSets' | 'topSet'
 >;
 
 function toPoint(
   record: WorkoutRecord,
   exerciseId: string,
   viaFamily: boolean,
+  everySet = false,
 ): PerformancePoint | null {
-  const logged = completedWorking(record, exerciseId);
+  const logged = completedWorking(record, exerciseId, everySet);
   if (logged.length === 0) return null;
   const meta: PointMeta = {
     date: record.completedAt ?? record.startedAt,
@@ -322,6 +333,7 @@ function toPoint(
     exerciseId,
     viaFamily,
     plannedSets: logged[0]?.planned ?? 0,
+    ...(!everySet && logged.some((set) => set.tier === 'top') ? { topSet: true } : {}),
   };
   const sets: PerformanceSet[] = logged.map(
     ({ reps, weight, rir, loggedRir, targetReps, targetRir, asked, shownWeight }) => ({
@@ -395,6 +407,7 @@ function summarize(meta: PointMeta, sets: PerformanceSet[]): PerformancePoint {
         ? estimateOneRepMax(best.weight, best.reps)
         : null,
     plannedSets: meta.plannedSets,
+    ...(meta.topSet ? { topSet: true } : {}),
   };
 }
 
@@ -407,13 +420,15 @@ export function performanceHistory(
   exercise: Pick<CatalogExercise, 'id' | 'progressionFamily'> &
     Partial<Pick<CatalogExercise, 'measure'>>,
   limit = 6,
+  /** Every working set, back-offs too, as the Progress tab shows a session (Maintenance 32). */
+  everySet = false,
 ): PerformancePoint[] {
   const newestFirst = [...history].sort((a, b) =>
     (b.completedAt ?? b.startedAt).localeCompare(a.completedAt ?? a.startedAt),
   );
   const exact: PerformancePoint[] = [];
   for (const record of newestFirst) {
-    const point = toPoint(record, exercise.id, false);
+    const point = toPoint(record, exercise.id, false, everySet);
     if (point) exact.push(point);
     if (exact.length >= limit) break;
   }
@@ -426,7 +441,7 @@ export function performanceHistory(
       if (!other || other.progressionFamily !== exercise.progressionFamily) continue;
       // A hold's seconds never stand in for a lift's reps, nor reps for seconds.
       if (other.measure !== (exercise.measure ?? 'reps')) continue;
-      const point = toPoint(record, entry.exerciseId, true);
+      const point = toPoint(record, entry.exerciseId, true, everySet);
       if (point) family.push(point);
     }
     if (family.length >= limit) break;
@@ -480,6 +495,13 @@ export interface NextTargetInput {
    * (Maintenance 27, item 47): each reads only what was logged after.
    */
   resets?: Pick<LearnedResets, 'curves' | 'habit'> | null;
+  /**
+   * Every session of the lift, where the history given passes over some (a top set reading past
+   * straight days at the back-offs' load, Maintenance 32): a break is measured from them, since the
+   * lift had none (the fifth review of round N: from its newest session; the seventh: between two
+   * top sets too).
+   */
+  sessionsAt?: readonly string[];
 }
 
 const DAY_MS = 86_400_000;
@@ -495,15 +517,12 @@ export const LONG_BREAK_DAYS = 42;
 function breakBetween(
   newer: PerformancePoint,
   older: PerformancePoint | undefined,
-  sessions: readonly PerformancePoint[],
+  sessions: readonly number[],
 ): boolean {
   if (!older) return false;
   const from = Date.parse(older.date);
   const to = Date.parse(newer.date);
-  const dates = sessions
-    .map((session) => Date.parse(session.date))
-    .filter((date) => date >= from && date <= to)
-    .sort((a, b) => b - a);
+  const dates = sessions.filter((date) => date >= from && date <= to).sort((a, b) => b - a);
   return dates.some(
     (date, at) =>
       at + 1 < dates.length && date - (dates[at + 1] as number) >= RETURN_AFTER_DAYS * DAY_MS,
@@ -912,6 +931,12 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   // "Last:" line still shows what was lifted.
   const logged = performanceHistory(history, exercise, 12);
   const recent = logged.map((point) => point.asked ?? point);
+  // A break is measured from every session of the lift, those the read passes over too (the
+  // seventh review of round N: a straight day at the back-offs' load between two top sets).
+  const sessionDates = [
+    ...recent.map((point) => Date.parse(point.date)),
+    ...(input.sessionsAt ?? []).map((at) => Date.parse(at)),
+  ];
   const latest = recent[0];
   const zoned = latest && !latest.viaFamily;
   const noLoad = hasNoLoad(exercise);
@@ -1079,12 +1104,12 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
   let consecutiveUnder = 0;
   for (const [at, point] of points.entries()) {
     if (point.pushedShort && !point.under) {
-      if (!passesOver(at) || breakBetween(point, points[at + 1], recent)) break;
+      if (!passesOver(at) || breakBetween(point, points[at + 1], sessionDates)) break;
       continue;
     }
     if (!point.under) break;
     consecutiveUnder += 1;
-    if (breakBetween(point, points[at + 1], recent)) break;
+    if (breakBetween(point, points[at + 1], sessionDates)) break;
   }
   // A push short of the effort says nothing either way about the load asked, so the runs that
   // move the load pass over it rather than end at it (Maintenance 23).
@@ -1193,9 +1218,8 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
       estimate ? { exact: estimate.exact } : {},
     );
   }
-  const daysSince = input.now
-    ? Math.floor((Date.parse(input.now) - Date.parse((latest ?? last).date)) / DAY_MS)
-    : 0;
+  const lastTrained = Math.max(Date.parse((latest ?? last).date), ...sessionDates);
+  const daysSince = input.now ? Math.floor((Date.parse(input.now) - lastTrained) / DAY_MS) : 0;
   const enteredRecord = maxes?.maxes[exercise.id];
   if (
     daysSince >= RETURN_AFTER_DAYS &&
@@ -1317,7 +1341,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
     for (const [at, point] of points.entries()) {
       if (!point.sets.some((set) => set.reps < floor)) break;
       sessions += 1;
-      if (breakBetween(point, points[at + 1], recent)) break;
+      if (breakBetween(point, points[at + 1], sessionDates)) break;
     }
     if (sessions >= 2) {
       const short: ShortRun = { sessions, floor };
@@ -1404,8 +1428,8 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
           'weight',
           stepUp(weight, step),
           policy.cleanSessionsToProgress > 1
-            ? `${consecutiveClean} clean sessions in a row, every set past the floor with reps in reserve: add ${step} ${units}.`
-            : `Every set cleared the floor with reps in reserve: add ${step} ${units}.`,
+            ? `${consecutiveClean} clean sessions in a row, ${last.topSet ? 'the top set' : 'every set'} past the floor with reps in reserve: add ${step} ${units}.`
+            : `${last.topSet ? 'The top set' : 'Every set'} cleared the floor with reps in reserve: add ${step} ${units}.`,
           { setsAdvice, evidence: setsLine },
         );
       }
@@ -1423,7 +1447,7 @@ function recommendBaseTarget(input: NextTargetInput): NextTarget {
         ? policy.reserveTolerance === 0
           ? 'Hit the reps but under the prescribed reserve: hold the load and bank a cleaner session.'
           : 'Hit the reps with little in reserve: hold the load and bank a cleaner session.'
-        : 'Hold the load until every set clears the floor.',
+        : `Hold the load until ${last.topSet ? 'the top set clears' : 'every set clears'} the floor.`,
     );
   }
 
@@ -1720,6 +1744,9 @@ export function rackFit(
   };
 }
 
+/** How the line on a target held at the heaviest weight here begins. */
+export const HELD_AT_CAP = 'Held at the heaviest weight here';
+
 /**
  * Holds a target at the heaviest weight the place has and pushes the reps
  * instead, saying so. The next levers, a harder variation and an extra set,
@@ -1812,14 +1839,14 @@ function fitToPlace(
       ...holdAndPushReps(
         loading.cap,
         target.hold
-          ? `Held at the heaviest weight here (${loading.cap} ${units}).`
+          ? `${HELD_AT_CAP} (${loading.cap} ${units}).`
           : capShort && reserve !== null
-            ? `Held at the heaviest weight here (${loading.cap} ${units}): ${reserveWords(
+            ? `${HELD_AT_CAP} (${loading.cap} ${units}): ${reserveWords(
                 shift,
                 reserve,
                 pastCeiling(target.weight, loading.cap, target.reps, reserve),
               )}.`
-            : `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
+            : `${HELD_AT_CAP} (${loading.cap} ${units}): the reps go up instead${
                 shift === 0 ? ', and they are already at the top' : ''
               }.`,
         { at: loading.cap },
@@ -1833,7 +1860,7 @@ function fitToPlace(
   if (loading.cap !== null && roundedOntoCap(target, loading.cap)) {
     return holdAndPushReps(
       loading.cap,
-      `Held at the heaviest weight here (${loading.cap} ${units}): the reps go up instead${
+      `${HELD_AT_CAP} (${loading.cap} ${units}): the reps go up instead${
         shift === 0 ? ', and they are already at the top' : ''
       }.`,
       { at: loading.cap },

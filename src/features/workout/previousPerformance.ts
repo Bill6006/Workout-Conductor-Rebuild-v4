@@ -8,7 +8,10 @@ export interface PreviousPerformance {
   sets: number;
 }
 
-/** The best completed working set of the most recent session that included the exercise. */
+/**
+ * The best completed working set of the most recent session that included the exercise: on top set
+ * plus back-offs, its top set (Maintenance 32, item 11).
+ */
 export function previousPerformance(
   history: readonly WorkoutRecord[],
   exerciseId: string,
@@ -20,9 +23,11 @@ export function previousPerformance(
     if (!entry) continue;
     const working = entry.sets.filter((set) => set.kind === 'working' && set.completed);
     if (working.length === 0) continue;
-    const best = [...working].sort(
-      (a, b) => (b.weight ?? 0) * b.reps - (a.weight ?? 0) * a.reps || b.reps - a.reps,
-    )[0];
+    const best =
+      working.find((set) => set.tier === 'top') ??
+      [...working].sort(
+        (a, b) => (b.weight ?? 0) * b.reps - (a.weight ?? 0) * a.reps || b.reps - a.reps,
+      )[0];
     if (!best) continue;
     return {
       date: record.completedAt ?? record.startedAt,

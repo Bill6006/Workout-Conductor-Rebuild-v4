@@ -37,11 +37,14 @@ function describeUpcoming(
   const drops = sets.filter((set) => set.kind === 'drop').length;
   const parts: string[] = [`${sets.length} more ${sets.length === 1 ? 'set' : 'sets'}`];
   const first = working[0];
+  // A top set and its back-offs (Maintenance 32, item 11): each with its own reserve.
+  const backOff =
+    first?.tier === 'top' ? working.find((set) => set.tier === 'back-off') : undefined;
   if (first) {
     parts.push(
       hold
         ? targetText(first.targetReps, true)
-        : `${targetText(first.targetReps, false)} @ RIR ${first.targetRir}`,
+        : `${targetText(first.targetReps, false)} @ RIR ${first.targetRir}${backOff ? `, back-offs @ RIR ${backOff.targetRir}` : ''}`,
     );
   }
   if (ramps > 0) parts.push(`${ramps} warm-up`);
@@ -71,6 +74,7 @@ function groupUpcoming(
       set.index !== checkSetIndex &&
       open.last.index !== checkSetIndex &&
       open.last.kind === set.kind &&
+      open.last.tier === set.tier &&
       set.kind !== 'drop' &&
       open.last.targetReps[0] === set.targetReps[0] &&
       open.last.targetReps[1] === set.targetReps[1] &&

@@ -1,0 +1,1220 @@
+"""Maintenance 32 mutation checks: revert each round N rule alone, run its tests, expect a failure,
+restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
+
+  python mutate-m32.py --repo=PATH            run every M32 entry in a copy of the repository
+  python mutate-m32.py --repo=PATH 6a 31b     run the entries whose names start with these
+  python mutate-m32.py --repo=PATH --check    only check that every anchor is found once
+  python mutate-m32.py --repo=PATH --utc ...  as the CI runner: the tests in UTC, then the day
+                                              rules' tests in two zones (scripts/test-zones.mjs)
+
+The table below is data: nothing in it runs.
+"""
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+# The repository this runner sits in (tools/reverts/ -> the root). Run it in a copy instead:
+# from M26 on, --repo=PATH; see tools/reverts/README.md.
+ROOT = pathlib.Path(__file__).resolve().parents[2] if "__file__" in globals() else pathlib.Path.cwd()
+for _flag in sys.argv[1:]:
+    if _flag.startswith("--repo="):
+        ROOT = pathlib.Path(_flag.split("=", 1)[1])
+
+BACKOFFS = "src/engine/progression/backOffs.ts"
+PROGRESSION = "src/engine/progression/progression.ts"
+GENERATE = "src/engine/workoutGenerator/generate.ts"
+ENGINE = "src/engine/recalibration/recalibrate.ts"
+STORE = "src/core/state/appStore.ts"
+BUILDER = "src/core/state/workoutRecordBuilder.ts"
+TYPES = "src/engine/workout/types.ts"
+SCHEMA = "src/engine/workout/workoutSchema.ts"
+RECORD = "src/core/validation/workoutRecord.ts"
+STRATEGY = "src/engine/strategy/strategy.ts"
+PREVIOUS = "src/features/workout/previousPerformance.ts"
+SETFORMAT = "src/features/workout/setFormat.ts"
+EFFORT = "src/features/workout/effort.ts"
+CARD = "src/features/today/WorkoutPreviewCard.tsx"
+DIFF = "src/engine/recalibration/diff.ts"
+LOGGED = "src/features/workout/LoggedSets.tsx"
+SCREEN = "src/features/workout/ActiveWorkoutScreen.tsx"
+CARDVIEW = "src/components/ExerciseCard/ExerciseCard.tsx"
+HISTORY = "src/features/progress/HistoryDetailSheet.tsx"
+ANALYTICS = "src/engine/scoring/analytics.ts"
+LOADING = "src/engine/loading/loading.ts"
+COACH = "src/engine/coach/coachConductor.ts"
+PLATEAU = "src/engine/strategy/plateau.ts"
+FATIGUE = "src/engine/recovery/fatigue.ts"
+
+T_MODULE = "src/engine/progression/backOffs.test.ts"
+T_PLAN = "src/engine/workoutGenerator/backOffs.plan.test.ts"
+T_SCREENS = "src/features/workout/backOffs.screens.test.tsx"
+T_STORE = "src/core/state/backOffs.store.test.ts"
+T_BADSTART = "src/core/state/badStart.store.test.ts"
+T_WORKOUT = "src/features/workout/backOffs.workout.screens.test.tsx"
+# The first review of round N.
+T_CHANGES = "src/engine/recalibration/backOffs.changes.test.ts"
+T_COACH = "src/engine/coach/coachConductor.backOffs.test.ts"
+T_HARDER = "src/engine/recalibration/backOffs.harder.test.ts"
+T_PICKUP = "src/engine/workoutGenerator/backOffs.pickUp.test.ts"
+T_STANDIN = "src/engine/recalibration/backOffs.standIn.test.ts"
+T_EXTRA = "src/engine/recalibration/backOffs.swappedExtra.test.ts"
+T_ALONE = "src/engine/recalibration/backOffs.topAlone.test.ts"
+T_FOLLOW = "src/core/state/backOffs.follow.store.test.ts"
+T_SAVED = "src/core/state/backOffs.savedCopy.store.test.ts"
+T_CORRECT = "src/core/state/backOffs.correction.store.test.ts"
+T_DIAL = "src/features/workout/backOffs.dial.workout.screens.test.tsx"
+T_PROGRESS = "src/features/progress/progressSets.screens.test.tsx"
+# The second review of round N.
+T_STRAIGHT = "src/engine/workoutGenerator/backOffs.straightDays.test.ts"
+T_UNDO = "src/core/state/backOffs.undo.store.test.ts"
+T_COMPLETION = "src/core/state/backOffs.completion.store.test.ts"
+T_PICKUP_LIFTED = "src/engine/workoutGenerator/backOffs.pickUpLifted.test.ts"
+T_STANDIN_REFIT = "src/engine/recalibration/backOffs.standInRefit.test.ts"
+T_CORRECTION_STEP = "src/core/state/backOffs.correctionStep.store.test.ts"
+T_DIAL_CORRECTION = "src/features/workout/backOffs.dialCorrection.workout.screens.test.tsx"
+T_CHANGES_BACK = "src/engine/recalibration/backOffs.changesBack.test.ts"
+T_WORDS = "src/engine/progression/backOffs.words.test.ts"
+T_OVER_TOP = "src/engine/recalibration/backOffs.overTop.test.ts"
+# The third review of round N.
+T_SECONDARY = "src/engine/workoutGenerator/backOffs.secondaryDay.test.ts"
+T_CAPPED = "src/engine/workoutGenerator/backOffs.cappedStraight.test.ts"
+T_SKIPPED_STRAIGHT = "src/engine/workoutGenerator/backOffs.skippedTopStraight.test.ts"
+T_SKIPPED_SWAP = "src/engine/recalibration/backOffs.skippedTopSwapBack.test.ts"
+T_BACKOFF_TAKEN = "src/core/state/backOffs.backOffTaken.store.test.ts"
+T_EASY_BACKOFF = "src/core/state/backOffs.easyBackOff.store.test.ts"
+T_PUSH_COMPLETION = "src/core/state/backOffs.pushCompletion.test.ts"
+T_PICKUP_WORDS = "src/engine/workoutGenerator/backOffs.pickUpWords.test.ts"
+T_UNDER_BAR = "src/engine/recalibration/backOffs.underBar.test.ts"
+T_FEEDBACK_WORDS = "src/engine/strategy/backOffs.feedbackWords.test.ts"
+T_GROUPED = "src/features/workout/backOffs.groupedTop.screens.test.tsx"
+# The fourth review of round N.
+T_STALL = "src/engine/workoutGenerator/backOffs.secondaryStall.test.ts"
+T_AT_BACKOFFS = "src/engine/progression/backOffs.atBackOffs.test.ts"
+T_MAX_STRAIGHT = "src/engine/recalibration/backOffs.maxStraight.test.ts"
+T_CAPPED_REPS = "src/engine/workoutGenerator/backOffs.cappedReps.test.ts"
+T_UNDO_FOLLOWERS = "src/core/state/backOffs.undoFollowers.store.test.ts"
+T_SAVED_HAND = "src/engine/progression/backOffs.savedHandWeight.test.ts"
+T_FEEDBACK_WIDEN = "src/engine/strategy/backOffs.feedbackWiden.test.ts"
+# The fifth review's.
+T_HELD = "src/engine/workoutGenerator/backOffs.heldStraight.test.ts"
+T_MARKED = "src/engine/workoutGenerator/backOffs.marked.test.ts"
+T_STALLS = "src/engine/strategy/backOffs.stalls.test.ts"
+T_RETURN_PAST = "src/engine/workoutGenerator/backOffs.returnPastMarked.test.ts"
+T_RETURN_ENGINE = "src/engine/recalibration/backOffs.returnPastMarked.test.ts"
+T_FEEDBACK_PAST = "src/engine/strategy/backOffs.feedbackPastMarked.test.ts"
+T_SKIPPED_SECONDARY = "src/engine/workoutGenerator/backOffs.skippedTopSecondary.test.ts"
+T_UNDULATING = "src/engine/workoutGenerator/backOffs.undulatingAfterTop.test.ts"
+T_ROUNDING = "src/engine/workoutGenerator/backOffs.rounding.test.ts"
+T_TRENDS = "src/engine/strategy/backOffs.trends.test.ts"
+# The sixth review's.
+T_PROGRESSION_RUNS = "src/engine/workoutGenerator/backOffs.progressionRuns.test.ts"
+T_DELOAD_STRAIGHT = "src/engine/recalibration/backOffs.deloadOnStraightDay.test.ts"
+T_TOP_CORRECTED = "src/core/state/backOffs.topCorrectedAfter.store.test.ts"
+T_COMPLETION_STEP = "src/core/state/backOffs.completionStep.test.ts"
+T_BREAK_SKIPPED = "src/engine/workoutGenerator/backOffs.breakAfterSkippedTop.test.ts"
+T_COACH_STEP = "src/engine/coach/coachConductor.backOffsStep.test.ts"
+T_LEFT_STRUCTURE = "src/engine/workoutGenerator/backOffs.leftStructure.test.ts"
+T_MAX_PAST_MARKED = "src/engine/recalibration/backOffs.maxPastMarked.test.ts"
+T_BACK_OFF_CORRECTED = "src/core/state/backOffs.backOffCorrected.store.test.ts"
+T_PICK_UP = "src/engine/recalibration/backOffs.pickUpAfterBackOff.test.ts"
+T_BREAK_PAST_MARKED = "src/engine/workoutGenerator/backOffs.breakPastMarked.test.ts"
+T_SKIPPED_TOP_DRIFT = "src/engine/recovery/backOffs.skippedTopDrift.test.ts"
+T_AT_BACK_OFFS = "src/engine/progression/backOffs.atBackOffs.test.ts"
+
+# The eighth review of round N.
+T_MAIN_ONCE = "src/engine/progression/backOffs.mainOnceAWeek.test.ts"
+T_DELOAD_WEEK = "src/engine/progression/backOffs.deloadWeek.test.ts"
+T_HAND_WEIGHT = "src/core/state/backOffs.handWeight.store.test.ts"
+T_MAX_HAND_REPS = "src/engine/recalibration/backOffs.maxHandReps.test.ts"
+T_REFIT_FATIGUE = "src/engine/recalibration/backOffs.refitFatigue.test.ts"
+T_REPLAY_LOG = "src/core/state/backOffs.replayLog.store.test.ts"
+T_TAKEN_BACK = "src/core/state/backOffs.handWeightTakenBack.store.test.ts"
+T_HAND_TOP_CORRECTED = "src/core/state/backOffs.handWeightTopCorrected.store.test.ts"
+T_MAX_OTHER_RANGE = "src/engine/recalibration/backOffs.maxOtherRange.test.ts"
+T_DROP_OFF_LOAD = "src/engine/progression/backOffs.dropOffLoad.test.ts"
+T_STYLE_HOLD = "src/engine/progression/backOffs.styleChangeHold.test.ts"
+T_MAX_MARK = "src/engine/recalibration/backOffs.maxOtherRangeMark.test.ts"
+T_MAX_TOP_RESERVE = "src/engine/recalibration/backOffs.maxOtherRangeTopReserve.test.ts"
+T_REPLAY_CAP = "src/core/state/backOffs.handWeightReplayCap.store.test.ts"
+T_FEEDBACK_AT = "src/engine/strategy/backOffs.feedbackAtOtherLoad.test.ts"
+T_PICK_UP_HAND = "src/engine/recalibration/backOffs.handWeightPlacePickUp.test.ts"
+T_SKIPPED_TOP_CAP = "src/core/state/backOffs.handWeightSkippedTopCap.store.test.ts"
+T_TOP_TAKEN_BACK_CAP = "src/core/state/backOffs.topTakenBackCap.store.test.ts"
+T_SKIPPED_PICK_UP = "src/core/state/backOffs.skippedTopPickUpCap.store.test.ts"
+T_TOP_LOGGED_AGAIN = "src/core/state/backOffs.topLoggedAgain.store.test.ts"
+T_SET_ADDED = "src/core/state/backOffs.setAddedAfterStep.store.test.ts"
+T_EASY_UNDER_HAND = "src/core/state/backOffs.easyUnderHandWeight.store.test.ts"
+T_PICK_UP_FLAG = "src/core/state/backOffs.pickUpHandFlag.store.test.ts"
+T_AT_PLATE_MISSING = "src/core/state/backOffs.backOffAtPlateMissing.store.test.ts"
+# The twelfth review of round N.
+T_DELOAD_SKIPPED = "src/core/state/backOffs.deloadSkippedTop.store.test.ts"
+T_LOGGED_OVER_TOP = "src/core/state/backOffs.loggedOverTop.store.test.ts"
+T_SET_ADDED_HAND = "src/core/state/backOffs.setAddedHandWeight.store.test.ts"
+T_TOP_SKIP_CAP = "src/core/state/backOffs.topCorrectedToSkipCap.store.test.ts"
+T_FOLLOW_WORDS = "src/core/state/backOffs.followWordsReplay.store.test.ts"
+T_AT_CORRECTED = "src/core/state/backOffs.backOffAtCorrected.store.test.ts"
+T_AT_STORED = "src/core/state/backOffs.backOffAtStored.store.test.ts"
+T_HAND_TOP_PLATE = "src/core/state/backOffs.handTopPlateMissing.store.test.ts"
+T_PICK_UP_ASKED = "src/core/state/backOffs.pickUpAsked.store.test.ts"
+T_CAP_UNLOADABLE = "src/core/state/backOffs.capUnloadable.store.test.ts"
+T_DROP_RULE = "src/core/state/backOffs.dropRuleEverywhere.store.test.ts"
+# The thirteenth review of round N.
+T_REP_RANGE_STAND_IN = "src/core/state/backOffs.repRangeStandIn.store.test.ts"
+T_FOLLOW_DIRECTION = "src/core/state/backOffs.followWordsDirection.store.test.ts"
+T_REFIT_ONE_LOAD = "src/core/state/backOffs.refitOneLoad.store.test.ts"
+T_SECOND_REFIT = "src/core/state/backOffs.secondRefitTopLoad.store.test.ts"
+T_STAND_IN_REPS = "src/core/state/backOffs.standInTopReps.store.test.ts"
+T_DELOAD_UNDONE = "src/core/state/backOffs.deloadSkipUndone.store.test.ts"
+T_UNDO_LOG = "src/core/state/backOffs.undoDeloadAfterLog.store.test.ts"
+T_STAND_IN_SHOWN = "src/core/state/backOffs.standInTopAsShown.store.test.ts"
+T_HAND_REPS_ASKED = "src/engine/recalibration/backOffs.handRepsAsked.test.ts"
+T_LONE_TOP_ADD = "src/engine/recalibration/backOffs.repRangeAddLoneTop.test.ts"
+T_TOP_SET_LOAD = "src/engine/progression/backOffs.topSetLoad.test.ts"
+# The fourteenth review of round N.
+T_REFIT_TOP_TAKEN_BACK = "src/core/state/backOffs.refitTopTakenBack.store.test.ts"
+T_FOLLOW_GAP = "src/core/state/backOffs.followWordsGap.store.test.ts"
+T_EASE_RECORD = "src/engine/recalibration/backOffs.easeRecordRefit.test.ts"
+T_EASE_RECORD_ITEM42 = "src/engine/recalibration/recalibrate.easeLayer.test.ts"
+T_STAND_IN_READ = "src/core/state/backOffs.standInTopReadAsAsked.store.test.ts"
+T_PICK_UP_HAND_REPS = "src/core/state/backOffs.pickUpHandRepsStandIn.store.test.ts"
+T_UNDO_SKIP = "src/core/state/backOffs.undoAfterSkipTakenBack.store.test.ts"
+# The fifteenth review of round N.
+T_PICK_UP_STRAIGHT = "src/core/state/backOffs.pickUpStraightMarked.store.test.ts"
+T_UNDO_EASED = "src/core/state/backOffs.undoEased.store.test.ts"
+T_HELD_STEP = "src/core/state/backOffs.heldStepReps.store.test.ts"
+T_LOGGED_AGAIN = "src/core/state/backOffs.loggedAgainAsAsked.store.test.ts"
+T_NO_WEIGHT = "src/core/state/backOffs.standInNoWeight.store.test.ts"
+T_STEP_ON_RACK = "src/core/state/backOffs.stepOnRack.store.test.ts"
+T_STORED_STAND_INS = "src/engine/recalibration/backOffs.storedStandIns.test.ts"
+# The sixteenth review of round N.
+T_DELOAD_PICKUP = "src/core/state/backOffs.deloadPickUpUnmarked.store.test.ts"
+T_EASED_REPS = "src/core/state/backOffs.easedBackOffReps.store.test.ts"
+T_REGAINS = "src/core/state/backOffs.pickUpRegainsStructure.store.test.ts"
+T_NO_WEIGHT_READ = "src/core/state/backOffs.noWeightRead.store.test.ts"
+
+# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
+MUTATIONS = [
+    # Where it runs.
+    ("N1 Lean-down takes it", BACKOFFS,
+     "['hybrid', 'strength-focus', 'lean-down']", "['hybrid', 'strength-focus']",
+     [T_MODULE, T_PLAN], None),
+    ("N2 Hybrid takes it", BACKOFFS,
+     "['hybrid', 'strength-focus', 'lean-down']", "['strength-focus', 'lean-down']",
+     [T_MODULE, T_PLAN], None),
+    ("N3 Strength focus takes it", BACKOFFS,
+     "['hybrid', 'strength-focus', 'lean-down']", "['hybrid', 'lean-down']",
+     [T_MODULE, T_PLAN], None),
+    ("N4 a main lift only", BACKOFFS,
+     "  return role === MAIN_ROLE && structureRuns(profile) && !isHold(exercise) && !hasNoLoad(exercise);",
+     "  return structureRuns(profile) && !isHold(exercise) && !hasNoLoad(exercise);", [T_MODULE], None),
+    ("N5 never a hold", BACKOFFS,
+     "  return role === MAIN_ROLE && structureRuns(profile) && !isHold(exercise) && !hasNoLoad(exercise);",
+     "  return role === MAIN_ROLE && structureRuns(profile) && !hasNoLoad(exercise);", [T_MODULE], None),
+    ("N6 never a lift with no weight to take off", BACKOFFS,
+     "  return role === MAIN_ROLE && structureRuns(profile) && !isHold(exercise) && !hasNoLoad(exercise);",
+     "  return role === MAIN_ROLE && structureRuns(profile) && !isHold(exercise) && true;", [T_MODULE], None),
+    ("N7 straight on a first target", BACKOFFS, "  'start',\n", "", [T_MODULE, T_PLAN], None),
+    ("N8 ... an estimate", BACKOFFS, "  'estimate',\n", "", [T_MODULE, T_PLAN], None),
+    ("N9 ... a return", BACKOFFS, "  'return',\n", "", [T_MODULE], None),
+    ("N10 ... a micro-deload", BACKOFFS, "  'deload',\n", "", [T_MODULE], None),
+    ("N11 ... a reset", BACKOFFS, "  'regress',\n", "", [T_MODULE], None),
+    ("N12 ... a load the place cannot make as asked", BACKOFFS, " && !target.asked;", ";",
+     [T_MODULE], None),
+
+    # The sets.
+    ("N13 the drop 5%", BACKOFFS, "  DROP: 0.05,", "  DROP: 0.1,", [T_MODULE, T_PLAN], None),
+    ("N14 the top set a rep under the day's reserve", BACKOFFS,
+     "  return Math.max(BACK_OFF.TOP_RIR, dayRir - (BACK_OFF.BACK_OFF_RIR - BACK_OFF.TOP_RIR));",
+     "  return dayRir;", [T_MODULE, T_PLAN], None),
+    ("N15 ... never under 1", BACKOFFS,
+     "  return Math.max(BACK_OFF.TOP_RIR, dayRir - (BACK_OFF.BACK_OFF_RIR - BACK_OFF.TOP_RIR));",
+     "  return dayRir - (BACK_OFF.BACK_OFF_RIR - BACK_OFF.TOP_RIR);", [T_MODULE], None),
+    ("N16 the back-offs a rep more in reserve", BACKOFFS,
+     "            targetRir: backOffRir(top.targetRir, options.dayRir ?? BACK_OFF.BACK_OFF_RIR),",
+     "            targetRir: top.targetRir,", [T_MODULE, T_PLAN], None),
+    ("N18 a load set by hand stays", BACKOFFS,
+     "      ...(manual.weight ? {} : { targetWeight: backOff }),", "      targetWeight: backOff,",
+     [T_MODULE], None),
+    ("N19 one working set is its top set", BACKOFFS,
+     "  if (!top || top.targetWeight === null) return [...sets];",
+     "  if (!top || top.targetWeight === null || working.length < 2) return [...sets];",
+     [T_MODULE, T_ALONE], None),
+    ("N20 the day's effort read on a back-off", BACKOFFS,
+     "  return (sets.find((set) => set.tier === 'back-off') ?? sets[0])?.targetRir;",
+     "  return sets[0]?.targetRir;", [T_MODULE, T_PLAN, T_HARDER], None),
+
+    # The drop.
+    ("N21 two sessions running", BACKOFFS, "  SESSIONS: 2,", "  SESSIONS: 1,", [T_MODULE], None),
+    ("N22 ... at the drop in force", BACKOFFS,
+     "  const read = sessions.filter((session) => session.drop === last.drop);",
+     "  const read = sessions;", [T_MODULE], None),
+    ("N23 ... a rep or more off", BACKOFFS, "Math.abs(miss) < BACK_OFF.MISS_REPS",
+     "Math.abs(miss) < 0", [T_MODULE], None),
+    ("N24 ... the same way", BACKOFFS,
+     "  if (rest.some((miss) => Math.sign(miss) !== Math.sign(first as number))) return last.drop;\n",
+     "", [T_MODULE], None),
+    ("N25 4% a rep", BACKOFFS, "  SHIFT_PER_REP: 0.04,", "  SHIFT_PER_REP: 0.02,", [T_MODULE], None),
+    ("N26 harder widens, easier narrows", BACKOFFS,
+     "  const moved = last.drop - mean * BACK_OFF.SHIFT_PER_REP;",
+     "  const moved = last.drop + mean * BACK_OFF.SHIFT_PER_REP;", [T_MODULE], None),
+    ("N27 never past 20%", BACKOFFS, "Math.min(MAX_BACK_OFF_DROP, Math.max(0, moved))",
+     "Math.max(0, moved)", [T_MODULE], None),
+    ("N28 never under nothing", BACKOFFS, "Math.min(MAX_BACK_OFF_DROP, Math.max(0, moved))",
+     "Math.min(MAX_BACK_OFF_DROP, moved)", [T_MODULE], None),
+    ("N29 reps under the floor count as reserve under none", BACKOFFS,
+     "    const short = set.targetReps ? Math.max(0, set.targetReps[0] - set.reps) : 0;",
+     "    const short = 0;", [T_MODULE], None),
+    ("N30 the lift's own sessions on the structure only", BACKOFFS,
+     "          candidate.backOffDrop !== undefined &&\n", "", [T_MODULE], None),
+
+    # The progression.
+    ("N31 the top set alone", PROGRESSION, " && (everySet || set.tier !== 'back-off'),", ",",
+     [T_PLAN, T_SCREENS], None),
+
+    # The plan.
+    ("N32 straight off the plan", GENERATE,
+     "      !offPlan && deload === null && !pushPick && owed === undefined,",
+     "      deload === null && !pushPick && owed === undefined,", [T_PLAN], None),
+    ("N33 ... in a deload week", GENERATE,
+     "      !offPlan && deload === null && !pushPick && owed === undefined,",
+     "      !offPlan && !pushPick && owed === undefined,", [T_PLAN], None),
+    ("N34 ... on the lift to push", GENERATE,
+     "      !offPlan && deload === null && !pushPick && owed === undefined,",
+     "      !offPlan && deload === null && owed === undefined,", [T_PLAN], None),
+    ("N35 ... with fatigue high", GENERATE,
+     "      day: backOffDay && fatigue.level !== 'high',", "      day: backOffDay,", [T_PLAN], None),
+    ("N36 the target read at the top set's reserve", BACKOFFS,
+     "    const asked = { ...prescription, rir: topSetRir(prescription.rir) };",
+     "    const asked = prescription;", [T_PLAN], None),
+    ("N37 the drop the log's", BACKOFFS,
+     "      return { target: top, asked, drop: backOffDropFor(input.exerciseId, input.history) };",
+     "      return { target: top, asked, drop: 0.05 };", [T_PLAN], None),
+    ("N38 the drop kept with the entry", GENERATE,
+     "      ...(built.backOffDrop !== undefined ? { backOffDrop: built.backOffDrop } : {}),\n", "",
+     [T_PLAN, T_STORE], None),
+    ("N39 picked up again after its top set: its back-offs", GENERATE,
+     "      top && target.backOffDrop !== undefined && topDone\n", "      false\n", [T_PLAN], None),
+
+    # Through a change to the plan.
+    ("N40 a refit keeps it", ENGINE, "    backOffDay(request, workout, entry),\n", "    false,\n",
+     [T_PLAN], None),
+    ("N41 the day decides in a rebuild", ENGINE,
+     "  return request.constraints.deload === null && !offPlan && entry.push === undefined && !standsIn;",
+     "  return true;", [T_PLAN], None),
+    ("N42 high fatigue in a refit", ENGINE, "    day: backOffs && !fatigueHigh(request),",
+     "    day: backOffs,", [T_PLAN], None),
+    ("N43 high fatigue in a swap", ENGINE,
+     "    day: options.backOffs === true && !fatigueHigh(request),",
+     "    day: options.backOffs === true,", [T_PLAN], None),
+    ("N44 a swap before a set takes it", ENGINE,
+     "    { shift, backOffs: backOffDay(request, workout, entry) },", "    { shift },",
+     [T_PLAN], None),
+    ("N45 a kept lift through the day's change keeps it", ENGINE,
+     "        backOffs: backOffDay(next, workout, entry),\n", "", [T_PLAN], None),
+    ("N46 an entered max keeps it", ENGINE,
+     "              day: backOffDay(from, workout, entry) && !fatigueHigh(from),",
+     "              day: false,", [T_PLAN], None),
+    ("N47 swapped back after its top set: its back-offs", ENGINE,
+     "asBackOffs(request, workout, stopped, built.sets, isDone)", "built.sets", [T_PLAN], None),
+    ("N48 a top set logged moves its back-offs", ENGINE, "        logged.tier === 'top' &&",
+     "        false &&", [T_PLAN, T_STORE], None),
+    ("N49 a weight set before the top set: the back-offs follow", ENGINE,
+     "          const weight = followed !== null && set.tier === 'back-off' ? followed : trigger.weight;",
+     "          const weight = trigger.weight;", [T_PLAN], None),
+    ("N50 a set added is a back-off", ENGINE,
+     "        const [backOff] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)\n            : last?.tier\n              ? asBackOffs(\n                  request,\n                  workout,\n                  entry,\n                  [{ ...added, tier: 'back-off' as const }],\n                  isDone,\n                  true,\n                )\n              : [added];",
+     "        const [backOff] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)\n            : [added];",
+     [T_PLAN], None),
+    ("N51 ... after a top set alone, at the drop", ENGINE,
+     "        const [backOff] =\n          last?.tier === 'top'", "        const [backOff] =\n          false",
+     [T_PLAN], None),
+    ("N52 ... and for fewer reps over more sets", ENGINE,
+     "        const [made] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)\n            : last?.tier\n              ? asBackOffs(\n                  request,\n                  workout,\n                  entry,\n                  [{ ...added, tier: 'back-off' as const }],\n                  isDone,\n                  true,\n                )\n              : [added];",
+     "        const [made] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)\n            : [added];",
+     [T_PLAN], None),
+    ("N53 the day's effort through a refit", ENGINE,
+     "    if (carriesDayRir(sets, Math.min(4, Math.max(floor, plainRir + shift)))) return shift;",
+     "    if (sets[0]?.targetRir === Math.min(4, Math.max(floor, plainRir + shift))) return shift;",
+     [T_PLAN, T_HARDER, T_ALONE], None),
+
+    # The store and the record.
+    ("N54 a top set lifted off plan moves its back-offs", STORE,
+     "          values.weight !== topSetLoad(set);", "          false;", [T_STORE], None),
+    ("N55 a top set read at its own reserve in the hard start", STORE,
+     "    return set.tier === 'top' ? topSetRir(rir) : rir;", "    return rir;", [T_BADSTART], None),
+    ("N56 the tier saved", BUILDER, "              ...(set.tier ? { tier: set.tier } : {}),\n", "",
+     [T_PLAN, T_STORE], None),
+    ("N57 the drop saved", BUILDER,
+     "        ...(entry.backOffDrop !== undefined ? { backOffDrop: entry.backOffDrop } : {}),\n", "",
+     [T_PLAN, T_STORE], None),
+    ("N58 the best set the top set", BUILDER, " || (topDone && set.tier === 'back-off')", "",
+     [T_STORE], None),
+    ("N59 an unreadable tier in a plan dropped alone", SCHEMA,
+     "  tier: z.enum(SET_TIERS).optional().catch(undefined),", "  tier: z.enum(SET_TIERS).optional(),",
+     [T_PLAN], None),
+    ("N60 ... in a record", RECORD,
+     "  tier: z.enum(SET_TIERS).optional().catch(undefined),", "  tier: z.enum(SET_TIERS).optional(),",
+     [T_PLAN], None),
+    ("N61 an unreadable drop in a record dropped alone", RECORD,
+     "  backOffDrop: z.number().min(0).max(MAX_BACK_OFF_DROP).optional().catch(undefined),",
+     "  backOffDrop: z.number().min(0).max(MAX_BACK_OFF_DROP).optional(),", [T_PLAN], None),
+    ("N62 ... in a plan", SCHEMA,
+     "  backOffDrop: z.number().min(0).max(MAX_BACK_OFF_DROP).optional().catch(undefined),",
+     "  backOffDrop: z.number().min(0).max(MAX_BACK_OFF_DROP).optional(),", [T_PLAN], None),
+
+    # The screens.
+    ("N63 \"Top set\"", SETFORMAT, "  if (set.tier === 'top') return 'Top set';\n", "",
+     [T_SCREENS], 0),
+    ("N64 \"Back-off 1\"", SETFORMAT,
+     "  if (set.tier === 'back-off') return `Back-off ${backOffsOf(entry).indexOf(set) + 1}`;\n", "",
+     [T_SCREENS], None),
+    ("N65 \"Back-offs 1-3\"", SETFORMAT, "  if (first.tier === 'back-off') {", "  if (false) {",
+     [T_SCREENS], None),
+    ("N66 \"Top set\" in front", SETFORMAT, "  if (set.tier === 'top') return 'Top set';\n", "",
+     [T_SCREENS, T_WORKOUT], 1),
+    ("N67 \"Back-off 2 of 3\"", SETFORMAT, "  if (set.tier === 'back-off') {", "  if (false) {",
+     [T_SCREENS, T_WORKOUT], None),
+    ("N68 Today: the top set, then the back-offs", CARD,
+     "  if (first?.tier === 'top' && backOff) {", "  if (false) {", [T_SCREENS], None),
+    ("N69 the collapsed row: the back-offs' reserve", LOGGED,
+     "${backOff ? `, back-offs @ RIR ${backOff.targetRir}` : ''}", "", [T_WORKOUT], None),
+    ("N70 the effort of a top set and a back-off", EFFORT, "  if (tier) {", "  if (false) {",
+     [T_SCREENS], None),
+    ("N71 ... on the card", CARDVIEW, "    target?.tier,\n", "", [T_WORKOUT], None),
+    ("N72 the line on the structure", EFFORT,
+     "  if (!top || !first || entry.backOffDrop === undefined) return null;", "  return null;",
+     [T_SCREENS, T_WORKOUT], None),
+    ("N73 ... in \"Why this target\"", SCREEN,
+     "        ...(backOffNote(entry, units) ? [backOffNote(entry, units) as string] : []),\n", "",
+     [T_WORKOUT], None),
+    ("N74 ... with its evidence", SCREEN,
+     "          entry.sets.find((set) => set.kind === 'working')?.tier,\n", "", [T_WORKOUT], None),
+    ("N75 the first back-off from its own target", SCREEN,
+     "  const from = set.tier !== undefined && lastTier !== set.tier ? undefined : draft;",
+     "  const from = draft;", [T_WORKOUT, T_DIAL], None),
+    ("N76 \"Last time\": the top set", PREVIOUS,
+     "      working.find((set) => set.tier === 'top') ??\n", "", [T_SCREENS], None),
+    ("N77 the feedback grades the top set", STRATEGY,
+     "    const floor = top ? floorMet(top) : sets.every(floorMet);",
+     "    const floor = sets.every(floorMet);", [T_SCREENS], None),
+    ("N78 ... and says the back-offs", STRATEGY,
+     "`${exercise.name}: on target at ${bestLine}${backOffNote}.`",
+     "`${exercise.name}: on target at ${bestLine}.`", [T_SCREENS], None),
+    ("N79 the change list names the top set", DIFF,
+     "  const topAfter = next.sets.find((set) => set.tier === 'top');",
+     "  const topAfter = undefined;", [T_PLAN], None),
+    ("N80 the history names the top set and the back-offs", HISTORY,
+     " : set.tier === 'top' ? 'top ' : set.tier === 'back-off' ? 'back-off ' : ''", " : ''",
+     [T_SCREENS], None),
+
+    # The first review of round N.
+    ("N81 \"Make it harder\" takes the back-offs to 1, the top set staying at 1", BACKOFFS,
+     "  return topRir + (dayRir - topSetRir(dayRir));",
+     "  return topRir + (BACK_OFF.BACK_OFF_RIR - BACK_OFF.TOP_RIR);", [T_MODULE, T_HARDER], None),
+    ("N82 a top set alone carries the day's reserve as its own", BACKOFFS,
+     "    return first.targetRir === topSetRir(dayRir);", "    return first.targetRir === dayRir;",
+     [T_MODULE, T_ALONE, T_HARDER], None),
+    ("N83 Progress lists every working set", ANALYTICS,
+     "performanceHistory(history, exercise, Number.POSITIVE_INFINITY, true)",
+     "performanceHistory(history, exercise, Number.POSITIVE_INFINITY)", [T_PROGRESS], None),
+    ("N84 a stand-in for a lift's sets to come goes straight", GENERATE,
+     "      !offPlan && deload === null && !pushPick && owed === undefined,",
+     "      !offPlan && deload === null && !pushPick,", [T_STANDIN], None),
+    ("N85 picked up again before its top set: a top set and back-offs", GENERATE,
+     "      !topDone &&\n        (target.backOffDrop !== undefined || !workingDone) &&\n", "      false &&\n",
+     [T_PICKUP], None),
+    ("N86 ... swapped back to", ENGINE,
+     "      backOffs:\n        (stopped.backOffDrop !== undefined || !workingDone) &&\n        !topDone &&",
+     "      backOffs:\n        false &&\n        !topDone &&", [T_PICKUP], None),
+    ("N87 a swapped extra keeps the push's straight sets", ENGINE,
+     "  return request.constraints.deload === null && !offPlan && entry.push === undefined && !standsIn;",
+     "  return request.constraints.deload === null && !offPlan && pushMarkOf(entry) === undefined && !standsIn;",
+     [T_EXTRA], None),
+    ("N88 the top set from its own target after a back-off", SCREEN,
+     "  const from = set.tier !== undefined && lastTier !== set.tier ? undefined : draft;",
+     "  const from = set.tier === 'back-off' && lastTier !== set.tier ? undefined : draft;",
+     [T_DIAL], None),
+    ("N89 the change list names the back-offs' load", DIFF,
+     "    changes.push(`back-offs ${backOffAfter.targetWeight}`);\n", "", [T_CHANGES], None),
+    ("N90 the coach's deload of a stalled lift says it is one", COACH,
+     "                  weight: lighter.weight,\n                  deload: true,\n",
+     "                  weight: lighter.weight,\n", [T_COACH], None),
+    ("N91 ... and runs on straight sets", ENGINE,
+     "      if (straight && topSet) {", "      if (false) {", [T_COACH], None),
+    ("N92 the follow says where the back-offs went", ENGINE,
+     "          headline: `${name}: back-offs at ${standing} ${units}, from the top set at ${lifted} ${units}${step}.`,",
+     "          headline:\n            plan && plan.kind !== 'none'\n              ? `${name}: ${plan.reason} Back-offs at ${standing} ${units}.`\n              : `${name}: back-offs at ${standing} ${units}, from the top set at ${lifted} ${units}${step}.`,",
+     [T_FOLLOW], None),
+    ("N93 a correction to the top set moves its back-offs", STORE,
+     "      isEdit &&\n      !skipped &&\n      !held &&\n      set.tier === 'top' &&\n", "      false &&\n",
+     [T_CORRECT], None),
+    ("N94 a saved copy takes the drop in force", BACKOFFS,
+     "        const drop = backOffDropFor(entry.exerciseId, history);",
+     "        const drop = entry.backOffDrop;", [T_SAVED], None),
+    ("N95 ... its back-offs dropped off its top set", BACKOFFS,
+     "            set.tier === 'back-off' ? { ...set, targetWeight: load } : set,", "            set,",
+     [T_SAVED], None),
+    ("N96 a refit of a top set alone keeps the drop", ENGINE,
+     "  if (built.drop !== undefined) entry.backOffDrop = built.drop;",
+     "  if (built.drop !== undefined && working > 1) entry.backOffDrop = built.drop;", [T_ALONE],
+     None),
+    ("N97 ... a swap's", ENGINE,
+     "  const drop = built.drop;", "  const drop = count > 1 ? built.drop : undefined;", [T_ALONE],
+     None),
+    ("N98 ... a max's", ENGINE,
+     "        if (drop !== undefined) {\n          entry.sets = withBackOffs(entry.sets, drop, {",
+     "        if (drop !== undefined && working > 1) {\n          entry.sets = withBackOffs(entry.sets, drop, {",
+     [T_ALONE], None),
+    ("N99 a refit's back-offs at the day's reserve", ENGINE, "          dayRir: prescription.rir,\n",
+     "", [T_HARDER, T_ALONE], 0),
+    ("N100 a swap's ...", ENGINE, "            dayRir: prescription.rir,\n", "", [T_HARDER, T_ALONE],
+     None),
+    ("N101 a max's ...", ENGINE, "            dayRir: day,\n", "", [T_HARDER, T_ALONE], None),
+    ("N102 the plan's ...", GENERATE, "              dayRir: prescription.rir,\n", "", [T_HARDER],
+     None),
+    ("N103 back-offs after a top set done at the day's reserve", ENGINE,
+     "  const reserve = backOffRir(after.top.targetRir, dayReserve(request, workout, entry));",
+     "  const reserve = after.top.targetRir + (BACK_OFF.BACK_OFF_RIR - BACK_OFF.TOP_RIR);",
+     [T_HARDER, T_PLAN], None),
+    ("N104 ... picked up again", GENERATE, "            targetRir: backOffRir(top.targetRir, adjusted.rir),",
+     "            targetRir: top.targetRir + 1,", [T_HARDER, T_PLAN], None),
+    ("N106 the coach's micro-deload says it is one", COACH,
+     "trigger: { type: 'target-weight', entryId: entry.id, weight, deload: true },",
+     "trigger: { type: 'target-weight', entryId: entry.id, weight },", [T_COACH], None),
+
+    # The second review of round N.
+    ("N107 a straight day after the structure takes the back-offs' load", BACKOFFS,
+     "    weight: backOffLoad(from, drop, input.load),", "    weight: from,",
+     [T_STRAIGHT], None),
+    ("N108 ... only after a session on it", BACKOFFS,
+     "  if (from === null || !ran) return null;", "  if (from === null) return null;",
+     [T_STRAIGHT, T_PLAN], None),
+    ("N109 ... in the plan", GENERATE, "      exerciseId: exercise.id,\n      history,\n",
+     "      exerciseId: exercise.id,\n      history: [],\n", [T_STRAIGHT], None),
+    ("N110 ... in a refit", ENGINE,
+     "    history: request.history,\n    load: { step: loading.step, floor: barWeightFor(exercise, request.profile.units), loading },",
+     "    history: [],\n    load: { step: loading.step, floor: barWeightFor(exercise, request.profile.units), loading },",
+     [T_STRAIGHT], None),
+    ("N111 ... in a swap", ENGINE,
+     "    history: request.history,\n    load: { step: loading.step, floor, loading },",
+     "    history: [],\n    load: { step: loading.step, floor, loading },", [T_STRAIGHT], None),
+    ("N112 ... a max entered", ENGINE, "            if (built.straight) {", "            if (false) {",
+     [T_STRAIGHT, T_MAX_STRAIGHT], None),
+    ("N113 the completion reads the next top set", BUILDER,
+     "      suits: backOffsSuit(exercise, role, profile),", "      suits: false,",
+     [T_COMPLETION], None),
+    ("N114 \"Why this target\" says the top set", PROGRESSION,
+     "${last.topSet ? 'The top set' : 'Every set'} cleared", "Every set cleared", [T_WORDS], None),
+    ("N115 ... read from a top set alone", PROGRESSION,
+     "    ...(!everySet && logged.some((set) => set.tier === 'top') ? { topSet: true } : {}),\n", "",
+     [T_WORDS], None),
+    ("N116 the change list: a lift back onto it, against its straight sets", DIFF,
+     "    ? (previous.sets.find((set) => set.tier === 'top') ??\n      [...previous.sets].reverse().find((set) => set.kind === 'working'))",
+     "    ? previous.sets.find((set) => set.tier === 'top')", [T_CHANGES_BACK], None),
+    ("N117 ... its back-offs named", DIFF, "    (backOffBefore === undefined ||", "    (false ||",
+     [T_CHANGES_BACK], None),
+    ("N118 a stand-in straight through a refit", ENGINE,
+     "  return request.constraints.deload === null && !offPlan && entry.push === undefined && !standsIn;",
+     "  return request.constraints.deload === null && !offPlan && entry.push === undefined;",
+     [T_STANDIN_REFIT], None),
+    ("N119 the back-offs never over the top set as lifted", BACKOFFS,
+     "  return Math.min(ceiling, Math.max(least, moved));",
+     "  return Math.max(least, moved);", [T_OVER_TOP], None),
+    ("N120 a lift picked up after its top set: the top set as lifted", GENERATE,
+     "              weight: done?.weight ?? null,", "              weight: null,",
+     [T_PICKUP_LIFTED], None),
+    ("N121 ... the step its log gave", BACKOFFS,
+     "  if (plan.kind !== 'weight') return Math.max(floor, Math.min(lifted, fromTop));",
+     "  if (read === undefined || plan.kind !== 'weight') return Math.max(floor, Math.min(lifted, fromTop));",
+     [T_PICKUP_LIFTED], None),
+    ("N122 ... swapped back to", ENGINE, "      rir: done?.rir ?? null,", "      rir: null,",
+     [T_PICKUP_LIFTED], None),
+    ("N123 a top set's log undone: the back-offs as planned", STORE,
+     "      workout: this.backOffsAsPlanned(left, session.completed.sets.at(-1), isDone),\n", "",
+     [T_UNDO], None),
+    ("N124 ... deleted", STORE,
+     "      workout: this.backOffsAsPlanned(left, { entryId, setIndex }, isDone),\n", "",
+     [T_UNDO], None),
+    ("N125 ... corrected to a skip", STORE, "(isEdit && skipped && !earlier?.skipped) || backOffFixed",
+     "(false) || backOffFixed", [T_UNDO], None),
+    ("N126 a correction to the top set takes the step its numbers give", STORE,
+     "        plan: this.planAfter(session, entry, set, reps, values, backOffsLeft),",
+     "        plan: { kind: 'none', reason: 'Corrected.' },", [T_CORRECTION_STEP], None),
+    ("N127 ... whatever of it changed", STORE,
+     "        earlier?.reps !== reps ||\n        earlier?.rir !== values.rir)", "        false)",
+     [T_CORRECTION_STEP], 1),
+    ("N128 a correction to the top set takes the lift's prefill away", STORE,
+     "        isEdit && set.tier === 'top'\n", "        false\n", [T_DIAL_CORRECTION], None),
+    ("N129 a refit takes the target as built", ENGINE, "  const fitted = built.fitted;",
+     "  const fitted =\n    built.drop === undefined && prescription === plain\n      ? fitToday(request, plainTarget, loading, exercise, entry.role)\n      : built.fitted;",
+     [T_STRAIGHT], None),
+
+    # The third review of round N.
+    ("N130 a lift main one day and secondary another: its straight sets at the back-offs' load",
+     BACKOFFS, "  if (input.suits || ranOnTopSet(input.exerciseId, input.history)) {",
+     "  if (input.suits) {", [T_SECONDARY], None),
+    ("N131 a top set the place cannot load as asked: the back-offs' load its asked load gives",
+     BACKOFFS, "  const from = top.asked?.weight ?? top.weight;", "  const from = top.weight;",
+     [T_CAPPED], None),
+    ("N132 ... straight at it", BACKOFFS, "    if (!STRAIGHT_MODES.includes(top.mode)) {",
+     "    if (targetTakesBackOffs(top)) {", [T_CAPPED], None),
+    ("N133 the session the target read, on the structure", BACKOFFS,
+     "  if (from === null || !ran) return null;",
+     "  if (from === null || !ranOnTopSet(input.exerciseId, input.history)) return null;",
+     [T_SKIPPED_STRAIGHT], None),
+    ("N134 a top set skipped is no top set lifted", ENGINE,
+     "    (set) => set.entryId === entry.id && set.setIndex === top.index && !set.skipped,",
+     "    (set) => set.entryId === entry.id && set.setIndex === top.index,", [T_SKIPPED_SWAP], None),
+    ("N135 a back-off's log taken back follows its top set as it stands", STORE,
+     "    if (!entry || (set?.tier !== 'top' && set?.tier !== 'back-off')) return session.workout;",
+     "    if (!entry || set?.tier !== 'top') return session.workout;", [T_BACKOFF_TAKEN], None),
+    ("N136 a back-off logged easy takes the next never over the top set", ENGINE,
+     "              set.tier === 'back-off'\n                ? backOffStepped(", "              false\n                ? backOffStepped(",
+     [T_EASY_BACKOFF], None),
+    ("N137 the completion reads the lift to push on its own straight sets", BUILDER,
+     "      day: profile.pushLift?.exerciseId !== exercise.id,", "      day: true,",
+     [T_PUSH_COMPLETION], None),
+    ("N138 a lift picked up after its top set keeps its lines", GENERATE,
+     "    if (!topDone) target.progression = built.progression;",
+     "    target.progression = built.progression;", [T_PICKUP_WORDS], None),
+    ("N139 ... swapped back to", ENGINE,
+     "  if (!topDone) stopped.progression = built.progression;",
+     "  stopped.progression = built.progression;", [T_PICKUP_WORDS], None),
+    ("N140 the back-offs never under the bar", BACKOFFS,
+     "  if (plan.kind !== 'weight') return Math.max(floor, Math.min(lifted, fromTop));",
+     "  if (plan.kind !== 'weight') return Math.min(lifted, fromTop);", [T_UNDER_BAR], None),
+    ("N141 the feedback says the drop widens only where it does", STRATEGY,
+     "        : miss !== null && miss <= -BACK_OFF.MISS_REPS", "        : !backOffs.every(floorMet)",
+     [T_FEEDBACK_WORDS], None),
+    ("N142 the set list keeps a top set and back-offs apart", LOGGED,
+     "      open.last.tier === set.tier &&\n", "", [T_GROUPED], None),
+    ("N143 a load eased keeps its own read on a straight day", BACKOFFS,
+     "    if (!STRAIGHT_MODES.includes(top.mode)) {", "    if (true) {", [T_MODULE, T_PLAN, T_STRAIGHT], None),
+
+    # The fourth review of round N.
+    ("N146 a lift main one day and secondary another steps its top set from its last top set",
+     BACKOFFS, "    const top = read(asked, past.history, past.sessionsAt);",
+     "    const top = read(asked, input.history);", [T_STALL, T_AT_BACKOFFS], None),
+    ("N147 ... past its straight days at the back-offs' load since one of its own only", BACKOFFS,
+     "    if (own.some((entry) => entry.sets.some((set) => set.tier === 'top' && set.completed))) break;",
+     "    if (own.some((entry) => entry.sets.some((set) => set.tier === 'top' && set.completed))) continue;",
+     [T_AT_BACKOFFS], None),
+    ("N148 ... through two such days running at most, on a day the lift is main too", BACKOFFS,
+     "    if (\n      mains > BACK_OFF.STRAIGHT_RUN ||\n      (since > BACK_OFF.STRAIGHT_RUN && (mains === 0 || !structureOn))\n    ) {\n      return history;\n    }\n", "",
+     [T_AT_BACKOFFS, T_HELD], None),
+    ("N149 ... a straight day after such a day reads the top set too", BACKOFFS,
+     "  return liftSessions(exerciseId, history).some((entry) =>",
+     "  return liftSessions(exerciseId, history).slice(0, 1).some((entry) =>",
+     [T_AT_BACKOFFS, T_SKIPPED_SECONDARY, T_UNDULATING], None),
+    ("N150 the plan marks a straight day at the back-offs' load", GENERATE,
+     "      ...(built.straight ? { atBackOffs: true as const } : {}),\n", "",
+     [T_STALL, T_AT_BACKOFFS], None),
+    ("N151 ... on the lift it plans", GENERATE,
+     "      ...(built.atBackOffs ? { atBackOffs: true as const } : {}),\n", "",
+     [T_STALL, T_AT_BACKOFFS], 1),
+    ("N152 ... and the session saves it", BUILDER,
+     "        ...(entry.atBackOffs ? { atBackOffs: true as const } : {}),\n", "",
+     [T_STALL, T_AT_BACKOFFS], None),
+    ("N153 an unreadable mark is dropped, never the exercise", RECORD,
+     "  atBackOffs: z.literal(true).optional().catch(undefined),",
+     "  atBackOffs: z.literal(true).optional(),", [T_AT_BACKOFFS], None),
+    ("N154 ... never the entry", SCHEMA, "  atBackOffs: z.literal(true).optional().catch(undefined),",
+     "  atBackOffs: z.literal(true).optional(),", [T_AT_BACKOFFS], None),
+    ("N155 a lift swapped in is no day at the back-offs' load", ENGINE,
+     "  if (built.atBackOffs) entry.atBackOffs = true;\n  else delete entry.atBackOffs;\n", "",
+     [T_MAX_STRAIGHT], None),
+    ("N156 a max entered keeps the day at the back-offs' load", ENGINE,
+     "        if (straight) entry.atBackOffs = true;\n        else delete entry.atBackOffs;\n", "",
+     [T_MAX_STRAIGHT], None),
+    ("N157 a saved copy's straight sets are the lifter's own", BACKOFFS,
+     "        delete entry.atBackOffs;\n", "", [T_AT_BACKOFFS], None),
+    ("N158 a max entered reads the target as every plan does", ENGINE,
+     "              day: backOffDay(from, workout, entry) && !fatigueHigh(from),",
+     "              day: false,", [T_MAX_STRAIGHT, T_MAX_HAND_REPS, T_MAX_PAST_MARKED], None),
+    ("N159 straight sets after a capped top set at the back-offs' reps", BACKOFFS,
+     "    reps: top.asked?.reps ?? top.reps,\n", "", [T_CAPPED_REPS], None),
+    ("N160 ... without the place's line", BACKOFFS,
+     "      ...top.evidence.filter((line) => !placeLine(line)),", "      ...top.evidence,",
+     [T_CAPPED_REPS], None),
+    ("N161 a back-off's log taken back: every back-off still to come follows", STORE,
+     "      backOffsReplayed(entry.sets, weight, this.backOffLogOf(session, entry, isDone), options),",
+     "      backOffsReplayed(entry.sets, weight, this.backOffLogOf(session, entry, isDone), options).map((each, at) => at === entry.sets.findIndex((one) => one.tier === 'back-off' && !isDone(entry.id, one.index)) ? each : (entry.sets[at] ?? each)),",
+     [T_UNDO_FOLLOWERS], None),
+    ("N162 ... each still logged moving the ones after it", BACKOFFS,
+     "    if (plan.kind === 'weight') {\n      const from = log.weight ?? current;",
+     "    if (false) {\n      const from = log.weight ?? current;", [T_UNDO_FOLLOWERS], None),
+    ("N163 ... never over the top set as lifted", BACKOFFS,
+     "      current = backOffStepped(moved, {\n        step: options.step,\n        floor,\n        cap: options.top,",
+     "      current = backOffStepped(moved, {\n        step: options.step,\n        floor,\n        cap: null,",
+     [T_UNDO_FOLLOWERS, T_EASY_BACKOFF], None),
+    ("N164 a saved copy's hand-set top weight: its back-offs at the drop in force", BACKOFFS,
+     "        if (entry.manual?.backOffs !== undefined) return { ...entry, backOffDrop: drop };",
+     "        if (entry.manual?.weight) return { ...entry, backOffDrop: drop };", [T_SAVED_HAND],
+     None),
+
+    # The fifth review's.
+    ("N166 the lift to push's extra session at the back-offs' load is saved as one", GENERATE,
+     "      push: 'extra',\n      // A straight day at the back-offs' load, saved as one (the fifth review of round N).\n      ...(built.atBackOffs ? { atBackOffs: true as const } : {}),\n",
+     "      push: 'extra',\n", [T_MARKED], None),
+    ("N167 ... a lift swapped in after the lift in its place was begun", ENGINE,
+     "  if (built.atBackOffs) stand.atBackOffs = true;\n", "", [T_MARKED], None),
+    ("N168 a break measured from the lift's newest session", PROGRESSION,
+     "  const lastTrained = Math.max(Date.parse((latest ?? last).date), ...sessionDates);",
+     "  const lastTrained = Math.max(Date.parse((latest ?? last).date));",
+     [T_RETURN_PAST, T_RETURN_ENGINE], None),
+    ("N169 ... given where the top set's read passes over its sessions", BACKOFFS,
+     "  return times.length === 0 ? { history: read } : { history: read, sessionsAt: times };",
+     "  return { history: read };", [T_RETURN_PAST, T_RETURN_ENGINE], None),
+    ("N170 ... by the plan", GENERATE, "          ...(sessionsAt ? { sessionsAt } : {}),\n", "",
+     [T_RETURN_PAST], None),
+    ("N171 ... by a target read again in a change", ENGINE,
+     "    resets: request.resets ?? null,\n    ...(sessionsAt ? { sessionsAt } : {}),\n",
+     "    resets: request.resets ?? null,\n", [T_RETURN_ENGINE], None),
+    ("N172 ... by a lift kept or swapped in", ENGINE,
+     "        resets: request.resets ?? null,\n        ...(sessionsAt ? { sessionsAt } : {}),\n",
+     "        resets: request.resets ?? null,\n", [T_RETURN_ENGINE], None),
+    ("N173 ... by the completion's Next time", BUILDER,
+     "          ...(sessionsAt ? { sessionsAt } : {}),\n", "", [T_RETURN_ENGINE], None),
+    ("N174 the coach's stalls read the top sets alone", PLATEAU,
+     "  return performanceHistory(withoutBackOffDays(exerciseId, history), exercise, limit)",
+     "  return performanceHistory(history, exercise, limit)", [T_STALLS], None),
+    ("N175 ... past such days wherever they fall", BACKOFFS,
+     "    entry.exerciseId === exerciseId && entry.atBackOffs === true;",
+     "    entry.exerciseId === exerciseId && false;", [T_STALLS, T_TRENDS], None),
+    ("N176 the feedback grades a top set against the session its target read", STRATEGY,
+     "      top ? pastBackOffDays(entry.exerciseId, before, structureRuns(profile)) : before,",
+     "      before,", [T_FEEDBACK_PAST], None),
+    ("N177 the fatigue's drift reads no fall from such a day", FATIGUE,
+     "      if (holdById(entry.exerciseId) || entry.atBackOffs === true) continue;",
+     "      if (holdById(entry.exerciseId)) continue;", [T_TRENDS], None),
+    ("N178 the strategy's insights on a lift read its top sets alone", STRATEGY,
+     "      performanceHistory(withoutBackOffDays(exerciseId, sessions), exercise, 4).filter(",
+     "      performanceHistory(sessions, exercise, 4).filter(", [T_TRENDS], None),
+    ("N179 the Progress trend reads them alone, every session still listed", ANALYTICS,
+     "    const trend = performanceHistory(\n      withoutBackOffDays(exerciseId, history),",
+     "    const trend = performanceHistory(\n      history,", [T_TRENDS], None),
+    ("N180 the back-offs' load to the nearest weight", BACKOFFS,
+     "  const nearest = over > under && over - exact <= exact - under + EPSILON ? over : under;",
+     "  const nearest = under;", [T_ROUNDING, T_PLAN], None),
+    ("N181 ... a half step up", BACKOFFS, "over - exact <= exact - under + EPSILON",
+     "over - exact < exact - under - EPSILON", [T_ROUNDING, T_STORE], None),
+    ("N182 ... under the top set while a drop is in force", BACKOFFS,
+     " || (drop > 0 && nearest >= top - EPSILON)", "", [T_ROUNDING], None),
+    ("N183 ... never over the top set as lifted", BACKOFFS, "nearest > top + EPSILON || ", "",
+     [T_ROUNDING], None),
+
+    # The sixth review's.
+    ("N184 the top set reads past such days wherever they fall", BACKOFFS,
+     "  return withoutBackOffDays(exerciseId, history);\n}",
+     "  return run === 0 ? history : withoutBackOffDays(exerciseId, history);\n}",
+     [T_PROGRESSION_RUNS], None),
+    ("N185 ... and so does the lift's own straight target", BACKOFFS,
+     "      target: read(prescription, past.history, past.sessionsAt),",
+     "      target: read(prescription, input.history),", [T_PROGRESSION_RUNS], None),
+    ("N186 a break from the lift's newest session, its top set skipped too", BACKOFFS,
+     "  const read = pastBackOffDays(exerciseId, history, structureRuns(profile));\n",
+     "  const read = pastBackOffDays(exerciseId, history, structureRuns(profile));\n  if (read === history) return { history };\n",
+     [T_BREAK_SKIPPED], None),
+    ("N187 a load set by hand, or the coach's deload, clears the day's mark", ENGINE,
+     "      delete entry.atBackOffs;\n      return {\n        ...base,\n        workout,\n        headline:\n          trigger.weight === null",
+     "      return {\n        ...base,\n        workout,\n        headline:\n          trigger.weight === null",
+     [T_DELOAD_STRAIGHT], None),
+    ("N188 a top set corrected keeps the steps logged back-offs gave", ENGINE,
+     "        const logs = new Map((trigger.backOffLogs ?? []).map((log) => [log.setIndex, log]));",
+     "        const logs = new Map();", [T_TOP_CORRECTED], None),
+    ("N189 ... the store passing them", STORE,
+     "        plan: this.planAfter(session, entry, set, reps, values, backOffsLeft),\n        ...(backOffLogs.length > 0 ? { backOffLogs } : {}),\n",
+     "        plan: this.planAfter(session, entry, set, reps, values, backOffsLeft),\n", [T_TOP_CORRECTED], None),
+    ("N190 ... and a delete of the top set's log keeps them too", STORE,
+     "      backOffsReplayed(entry.sets, weight, this.backOffLogOf(session, entry, isDone), options),",
+     "      backOffsReplayed(entry.sets, weight, lifted ? this.backOffLogOf(session, entry, isDone) : () => null, options),",
+     [T_TOP_CORRECTED], None),
+    ("N191 the completion's Next time on the lift's own steps", BUILDER,
+     "        step: weightStep(exercise, profile.units),", "        step: 1,", [T_COMPLETION_STEP],
+     None),
+    ("N192 a straight day steps from the back-offs' load", BACKOFFS,
+     "    ...(typeof top.from === 'number' ? { from: backOffLoad(top.from, drop, input.load) } : {}),\n",
+     "", [T_COACH_STEP], None),
+    # The seventh review.
+    ("N193 the lift leaves the structure past two sessions since its last top set, its own among them", BACKOFFS,
+     "    if (own.some((entry) => entry.sets.some((set) => set.tier === 'top' && set.completed))) break;",
+     "    if (!own.every((entry) => entry.atBackOffs === true)) break;",
+     [T_LEFT_STRUCTURE, T_AT_BACK_OFFS], None),
+    ("N194 a break is measured from every session of the lift", PROGRESSION,
+     "    ...(input.sessionsAt ?? []).map((at) => Date.parse(at)),\n", "", [T_BREAK_PAST_MARKED], None),
+    ("N195 ... every one, not the newest alone", BACKOFFS,
+     "{ history: read, sessionsAt: times }", "{ history: read, sessionsAt: times.slice(0, 1) }",
+     [T_BREAK_PAST_MARKED], None),
+    ("N196 a max entered reads the lift's own straight target as every plan does", ENGINE,
+     "              target: targetFor(prescription, past.history, past.sessionsAt),\n              fitted: built.target,",
+     "              target: targetFor(prescription),\n              fitted: fitToday(from, targetFor(prescription), loading, exercise, entry.role),",
+     [T_MAX_PAST_MARKED], None),
+    ("N197 a back-off corrected replays the ones after it", STORE,
+     "      (isEdit && skipped && !earlier?.skipped) || backOffFixed", "      isEdit && skipped && !earlier?.skipped",
+     [T_BACK_OFF_CORRECTED], None),
+    ("N198 ... from the logs as corrected", STORE,
+     "this.backOffsAsPlanned({ ...session, completed }, logged, isDone)", "this.backOffsAsPlanned(session, logged, isDone)",
+     [T_BACK_OFF_CORRECTED], None),
+    ("N199 a lift swapped back carries on its back-offs at a logged back-off's step", ENGINE,
+     "          (set) =>\n            request.completed.sets.find(\n              (log) => log.entryId === entry.id && log.setIndex === set.index && !log.skipped,\n            ) ?? null,\n          {\n            step: loading.step,",
+     "          (set) =>\n            set.tier === 'back-off' ? null : (request.completed.sets.find(\n              (log) => log.entryId === entry.id && log.setIndex === set.index && !log.skipped,\n            ) ?? null),\n          {\n            step: loading.step,",
+     [T_PICK_UP], None),
+    ("N200 ... and one picked up again at the gym", GENERATE,
+     "            targetWeight: owedWeight,", "            targetWeight: backOffWeight,", [T_PICK_UP], None),
+    ("N201 ... each logged back-off's step read from its log", BACKOFFS,
+     "      if (plan.kind === 'weight') {\n        const from = log.weight ?? current;",
+     "      if (false) {\n        const from = log.weight ?? current;", [T_PICK_UP], None),
+    ("N202 the fatigue's drift reads no back-offs", FATIGUE,
+     "          set.weight !== null &&\n          set.tier !== 'back-off'", "          set.weight !== null",
+     [T_SKIPPED_TOP_DRIFT], None),
+    ("N203 the Progress trend reads the top sets alone", ANALYTICS,
+     "      Number.POSITIVE_INFINITY,\n    ).filter((point) => !point.viaFamily);",
+     "      Number.POSITIVE_INFINITY,\n      true,\n    ).filter((point) => !point.viaFamily);",
+     [T_SKIPPED_TOP_DRIFT], None),
+    # The eighth review.
+    ("N204 a lift leaves the structure on its main days run straight, not its secondary ones", BACKOFFS,
+     "    if (own.some((entry) => entry.role === undefined || entry.role === MAIN_ROLE)) mains += 1;\n",
+     "    mains += 1;\n", [T_MAIN_ONCE, T_DELOAD_WEEK], None),
+    ("N205 ... or with none of its main days in three sessions", BACKOFFS,
+     "(since > BACK_OFF.STRAIGHT_RUN && (mains === 0 || !structureOn))", "false", [T_AT_BACK_OFFS],
+     None),
+    ("N206 a weight the back-offs took by hand is where every replay of them starts", STORE,
+     "    const own = entry.manual?.backOffs;\n    if (own !== undefined) {",
+     "    const own = entry.manual?.backOffs;\n    if (false) {", [T_HAND_WEIGHT, T_HAND_TOP_CORRECTED], None),
+    ("N207 a max with reps set by hand at the plan's range reads as the plan does", ENGINE,
+     "            hand !== undefined &&\n            (hand.reps[0] !== prescription.reps[0]",
+     "            hand !== undefined &&\n            (true || hand.reps[0] !== prescription.reps[0]",
+     [T_MAX_HAND_REPS], None),
+    ("N208 a target read past the marked days reads the day's fatigue off the whole log", ENGINE,
+     "    fatigueLevel: interpretFatigue(log, request.timestamp, request.constraints.readiness).level,",
+     "    fatigueLevel: interpretFatigue(request.history, request.timestamp, request.constraints.readiness)\n      .level,",
+     [T_REFIT_FATIGUE], None),
+    ("N209 back-offs replayed against the top set as corrected", STORE,
+     "      const backOffLogs = this.backOffLogsOf({ ...session, completed }, entry, isDone);",
+     "      const backOffLogs = this.backOffLogsOf(session, entry, isDone);",
+     [T_REPLAY_LOG], None),
+    # No entry for the undo's logs left standing: an undo takes the newest log back, which no log
+    # still standing reads as an earlier set, so the replay is the same either way.
+    ("N211 ... from the logs left standing after a delete", STORE,
+     "      workout: this.backOffsAsPlanned(left, { entryId, setIndex }, isDone),",
+     "      workout: this.backOffsAsPlanned(session, { entryId, setIndex }, isDone),",
+     [T_REPLAY_LOG], None),
+
+    # The ninth review of round N.
+    ("N212 in a style that runs no structure every straight session counts toward leaving it", BACKOFFS,
+     "(mains === 0 || !structureOn)", "mains === 0", [T_STYLE_HOLD], None),
+    ("N213 ... read by every reader of the top set", BACKOFFS,
+     "  const read = pastBackOffDays(exerciseId, history, structureRuns(profile));",
+     "  const read = pastBackOffDays(exerciseId, history, true);", [T_STYLE_HOLD], None),
+    ("N214 a weight set by hand once the top set is done is the back-offs' own", ENGINE,
+     "        entry.manual.backOffs = trigger.weight;\n", "", [T_HAND_TOP_CORRECTED], None),
+    ("N215 ... one set before it is the top set's", ENGINE,
+     "        isDone(entry.id, topSet.index)\n      ) {\n        entry.manual.backOffs",
+     "        true\n      ) {\n        entry.manual.backOffs", [T_TAKEN_BACK], None),
+    ("N216 ... a weight set later on the top set ends it", ENGINE,
+     "      } else delete entry.manual.backOffs;", "      }", [T_HAND_TOP_CORRECTED], None),
+    ("N217 ... a swap gives the new lift none of it", TYPES, "  delete manual.backOffs;\n", "",
+     [T_HAND_TOP_CORRECTED], None),
+    ("N218 a top set corrected leaves the back-offs at the weight they took by hand", ENGINE,
+     "        const own = entry.manual?.backOffs;", "        const own = undefined;",
+     [T_HAND_TOP_CORRECTED], 0),
+    ("N219 ... and says so", ENGINE, "        if (own !== undefined) {\n          return {",
+     "        if (false) {\n          return {", [T_HAND_TOP_CORRECTED], None),
+    ("N220 the drop's correction reads only back-offs lifted at its load", BACKOFFS,
+     "    if (at !== undefined && (set.weight === null || Math.abs(set.weight - at) > EPSILON)) return [];\n",
+     "", [T_DROP_OFF_LOAD], None),
+    ("N221 ... the load the session saved", BACKOFFS, "backOffMiss(entry.sets, entry.backOffAt)",
+     "backOffMiss(entry.sets)", [T_DROP_OFF_LOAD], None),
+    ("N222 a session saves the load the drop gave its back-offs", BUILDER,
+     "        ...backOffAtOf(entry, logged, options),\n", "", [T_TAKEN_BACK], None),
+    ("N223 ... off the top set as lifted, at the place", STORE,
+     "    return backOffLoad(top, entry.backOffDrop, {", "    return backOffLoad(top * 2, entry.backOffDrop, {",
+     [T_TAKEN_BACK], None),
+    ("N224 an unreadable saved load dropped alone", RECORD,
+     "  backOffAt: z.number().min(0).optional().catch(undefined),",
+     "  backOffAt: z.number().min(0).optional(),", [T_PLAN], None),
+    ("N225 an unreadable hand weight of the back-offs dropped alone", SCHEMA,
+     "      backOffs: z.number().min(0).optional().catch(undefined),",
+     "      backOffs: z.number().min(0).optional(),", [T_PLAN], 0),
+    ("N226 a max with reps set by hand at another range reads a straight day as every plan does", ENGINE,
+     [("            const main = mainLiftTarget({",
+       "            const main = {\n              target: targetFor(prescription, topSetRead(exercise.id, from.history, from.profile).history),\n              straight: undefined,\n            };\n            const unused = ({"),
+      ("              units: from.profile.units,\n            });\n            let target = main.target;",
+       "              units: from.profile.units,\n            });\n            void unused;\n            let target = main.target;")],
+     None, [T_MAX_OTHER_RANGE], None),
+    # The tenth review of round N.
+    ("N227 ... and keeps the day's mark at the back-offs' load", ENGINE,
+     "              straight: main.straight === true && target === main.target,",
+     "              straight: false,", [T_MAX_MARK], None),
+    ("N228 a weight the back-offs took by hand replays never over the top set as lifted", STORE,
+     "        backOffsReplayed(entry.sets, own, this.backOffLogOf(session, entry, isDone), {\n          ...options,\n          own,\n        }),",
+     "        backOffsReplayed(entry.sets, own, this.backOffLogOf(session, entry, isDone), {\n          ...options,\n          top: null,\n          own,\n        }),",
+     [T_REPLAY_CAP], None),
+    ("N229 ... nor over it as planned while it is still to come", BACKOFFS,
+     "  if (!log) return top.targetWeight;", "  if (!log) return null;", [T_REPLAY_CAP, T_TOP_TAKEN_BACK_CAP],
+     None),
+    ("N230 the feedback reads only back-offs lifted at the drop's load", STRATEGY,
+     "backOffMiss(entry.sets, entry.backOffAt)",
+     "backOffMiss(entry.sets)", [T_FEEDBACK_AT], None),
+    ("N231 reps set by hand keep their reserve only in the same place on the lift", ENGINE,
+     "          targetRir: kept.tier === set.tier ? kept.rir : set.targetRir,",
+     "          targetRir: kept.rir,", [T_MAX_TOP_RESERVE], None),
+    ("N232 ... the place recorded with them", ENGINE,
+     "      ...(set.tier ? { tier: set.tier } : {}),\n    }));\n}",
+     "    }));\n}", [T_MAX_TOP_RESERVE], None),
+    ("N233 a lift picked up again drops a weight its back-offs took by hand", GENERATE,
+     "    withoutHandTargets(target);\n", "", [T_PICK_UP_HAND, T_PICK_UP_FLAG], None),
+    # The eleventh review of round N.
+    ("N234 a top set skipped caps no back-off", BACKOFFS,
+     "  if (log.skipped) return null;", "  if (log.skipped) return top.targetWeight;",
+     [T_SKIPPED_TOP_CAP, T_SKIPPED_PICK_UP], None),
+    ("N235 ... the store's replay of a back-off taken back reads it so", STORE,
+     "      top: backOffCap(top, topLog),\n      handReps", "      top: topLog?.weight ?? null,\n      handReps",
+     [T_TOP_TAKEN_BACK_CAP], None),
+    ("N236 ... a lift picked up again", GENERATE,
+     "                        (set) => set.entryId === target.id && set.setIndex === top.index,",
+     "                        (set) => set.entryId === target.id && set.setIndex === top.index && !set.skipped,",
+     [T_SKIPPED_PICK_UP], None),
+    ("N237 ... and swapped back", ENGINE,
+     "                (set) => set.entryId === entry.id && set.setIndex === top.index,\n              ),\n            ),\n            ...(own === undefined ? {} : { own }),\n          },",
+     "                (set) => set.entryId === entry.id && set.setIndex === top.index && !set.skipped,\n              ),\n            ),\n            ...(own === undefined ? {} : { own }),\n          },",
+     [T_SKIPPED_PICK_UP], None),
+    ("N238 a weight set by hand over the top set never comes down after an easy back-off", BACKOFFS,
+     "  const cap = Math.max(top, options.own ?? -Infinity);", "  const cap = top;",
+     [T_EASY_UNDER_HAND], None),
+    ("N239 ... and a step the cap holds says so", ENGINE,
+     "        if (!changed && heldAt !== null) {", "        if (false) {", [T_EASY_UNDER_HAND], None),
+    ("N240 a top set logged again keeps the steps its back-offs gave", STORE,
+     "            plan,\n            ...(backOffLogs.length > 0 ? { backOffLogs } : {}),\n",
+     "            plan,\n", [T_TOP_LOGGED_AGAIN], None),
+    ("N241 a set added after a back-off takes the load its logs give it", ENGINE,
+     "        const [backOff] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)\n            : last?.tier\n              ? asBackOffs(\n                  request,\n                  workout,\n                  entry,\n                  [{ ...added, tier: 'back-off' as const }],\n                  isDone,\n                  true,\n                )\n              : [added];",
+     "        const [backOff] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)\n            : last?.tier\n              ? [{ ...added, tier: 'back-off' as const }]\n              : [added];",
+     [T_SET_ADDED], None),
+    ("N242 the saved session keeps the drop's load as the top set was lifted", STORE,
+     "        ? this.withBackOffAt(replanned, entry, skipped ? null : (values.weight ?? topSetLoad(set)))",
+     "        ? replanned", [T_AT_PLATE_MISSING], None),
+    ("N243 ... read at the finish", STORE,
+     "      backOffAt: (entry, top) => entry.backOffAt ?? this.backOffLoadOf(entry, top),",
+     "      backOffAt: (entry, top) => this.backOffLoadOf(entry, top),", [T_AT_PLATE_MISSING], None),
+    # The twelfth review of round N.
+    ("N244 the coach's deload after a top set skipped runs straight", ENGINE,
+     "        topSet !== undefined &&\n        (topLog === undefined || topLog.skipped === true);",
+     "        topSet !== undefined &&\n        topLog === undefined;", [T_DELOAD_SKIPPED], None),
+    ("N245 a back-off lifted over the cap raises it for none after it", ENGINE,
+     "                    loading,\n                    ...(own === undefined ? {} : { own }),\n                  })",
+     "                    loading,\n                    own: own ?? current,\n                  })", [T_LOGGED_OVER_TOP], None),
+    ("N246 ... nor in a replay", BACKOFFS,
+     "      current = backOffStepped(moved, {\n        step: options.step,\n        floor,\n        cap: options.top,\n        loading: options.loading,\n        ...(options.own === undefined ? {} : { own: options.own }),",
+     "      current = backOffStepped(moved, {\n        step: options.step,\n        floor,\n        cap: options.top,\n        loading: options.loading,\n        own: options.own ?? from,",
+     [T_LOGGED_OVER_TOP], None),
+    ("N247 a weight set by hand is the most an easy back-off's step takes them to", ENGINE,
+     "                    loading,\n                    ...(own === undefined ? {} : { own }),\n                  })",
+     "                    loading,\n                  })", [T_LOGGED_OVER_TOP], None),
+    ("N248 ... through a replay too", STORE,
+     "        backOffsReplayed(entry.sets, own, this.backOffLogOf(session, entry, isDone), {\n          ...options,\n          own,\n        }),",
+     "        backOffsReplayed(entry.sets, own, this.backOffLogOf(session, entry, isDone), {\n          ...options,\n        }),",
+     [T_DROP_RULE], None),
+    ("N249 a set added after a back-off takes the weight they took by hand", ENGINE,
+     "  const own = hand ? entry.manual?.backOffs : undefined;", "  const own = undefined;",
+     [T_SET_ADDED_HAND], None),
+    ("N250 ... and their reps set by hand", ENGINE,
+     "  const handReps = hand && entry.manual?.reps === true;", "  const handReps = false;",
+     [T_SET_ADDED_HAND], None),
+    ("N251 ... a set added, not a lift picked up again", ENGINE,
+     "        const [backOff] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)\n            : last?.tier\n              ? asBackOffs(\n                  request,\n                  workout,\n                  entry,\n                  [{ ...added, tier: 'back-off' as const }],\n                  isDone,\n                  true,\n                )\n              : [added];",
+     "        const [backOff] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)\n            : last?.tier\n              ? asBackOffs(\n                  request,\n                  workout,\n                  entry,\n                  [{ ...added, tier: 'back-off' as const }],\n                  isDone,\n                )\n              : [added];",
+     [T_SET_ADDED_HAND], None),
+    ("N252 a top set corrected to a skip caps the back-offs as one skipped from the start", STORE,
+     "      top: backOffCap(top, topLog),\n      handReps", "      top: top.targetWeight,\n      handReps",
+     [T_TOP_SKIP_CAP], None),
+    ("N253 the follow names where the back-offs stand after the replay", ENGINE,
+     "        const standing = next?.targetWeight ?? load;", "        const standing = load;",
+     [T_FOLLOW_WORDS], None),
+    ("N254 ... and says a weight set by hand is kept only where they stand at it", ENGINE,
+     "              byBackOff === null\n", "              true\n", [T_FOLLOW_WORDS], None),
+    ("N255 a correction keeping the top set's weight keeps the drop's load recorded", STORE,
+     "      set.tier === 'top' && set.kind === 'working' && !sameLoad",
+     "      set.tier === 'top' && set.kind === 'working'", [T_AT_CORRECTED], None),
+    ("N256 ... and so does an Undo of an earlier change", STORE,
+     "    const kept = withBackOffAtKept(session.previous.workout, session.workout);",
+     "    const kept = session.previous.workout;", [T_AT_CORRECTED], None),
+    ("N257 the plan's stored drop load is dropped alone when unreadable", SCHEMA,
+     "  backOffAt: z.number().min(0).optional().catch(undefined),\n", "", [T_AT_STORED], None),
+    ("N258 a top set's weight set by hand leaves its back-offs to the refit", ENGINE,
+     "  if ((entry.manual?.weight && !handTop) || isStopped(entry)) return false;",
+     "  if (entry.manual?.weight || isStopped(entry)) return false;", [T_HAND_TOP_PLATE, T_DROP_RULE],
+     None),
+    ("N259 a lift picked up again keeps no load asked on its back-offs", GENERATE,
+     "        delete next.asked;\n        return next;\n      }),", "        return next;\n      }),",
+     [T_PICK_UP_ASKED], None),
+    ("N260 the follow's step held at the top set lands on a weight the place has", BACKOFFS,
+     "  const ceiling = options.loading ? fitWeight(lifted, options.loading, options.floor) : lifted;",
+     "  const ceiling = lifted;", [T_CAP_UNLOADABLE, T_UNDER_BAR], None),
+    ("N261 ... and so does a back-off's step held at it", BACKOFFS,
+     "      : options.loading\n        ? fitWeight(options.cap, options.loading, options.floor)\n        : options.cap;",
+     "      : options.cap;", [T_DROP_RULE], None),
+    ("N262 a refit gives the back-offs the drop's load, not a stand-in's", ENGINE,
+     "    (handTop || isDone(entry.id, top.index) || touched || entry.manual?.reps === true)\n  ) {",
+     "    (handTop || isDone(entry.id, top.index) || touched || entry.manual?.reps === true) &&\n    false\n  ) {",
+     [T_CAP_UNLOADABLE, T_HAND_TOP_PLATE, T_PICK_UP_FLAG, T_SECOND_REFIT], None),
+    ("N263 ... at their own reps, a stand-in's given back", ENGINE,
+     "    if (reps) next.targetReps = [reps[0], reps[1]];\n    else if (set.asked) next.targetReps = ownRepsOf(set, handReps);",
+     "    if (false) next.targetReps = [reps[0], reps[1]];\n    else if (false) next.targetReps = ownRepsOf(set, handReps);",
+     [T_DROP_RULE, T_HAND_REPS_ASKED, T_STORED_STAND_INS], None),
+    ("N264 ... and so does the follow of a top set", BACKOFFS,
+     "      const next: SetPrescription = { ...set, targetWeight: current };\n      if (set.asked) {",
+     "      const next: SetPrescription = { ...set, targetWeight: current };\n      if (false) {",
+     [T_DROP_RULE, T_HAND_REPS_ASKED], None),
+    ("N265 a top set's weight set by hand still to come: the refit keeps it, the back-offs at its drop", ENGINE,
+     "    (handTop || isDone(entry.id, top.index) || touched || entry.manual?.reps === true)\n  ) {",
+     "    (isDone(entry.id, top.index) || touched || entry.manual?.reps === true)\n  ) {",
+     [T_DROP_RULE], None),
+    # The thirteenth review of round N.
+    ("N266 a lift fitted in place gives its back-offs the drop's load, never a stand-in's", ENGINE,
+     "    (handTop || isDone(entry.id, top.index) || touched || entry.manual?.reps === true)\n  ) {",
+     "    (handTop || isDone(entry.id, top.index))\n  ) {",
+     [T_SECOND_REFIT, T_REP_RANGE_STAND_IN, T_DROP_RULE, T_STAND_IN_SHOWN], None),
+    ("N267 ... off the load its top set still to come asks", ENGINE,
+     "  const asks = after ? null : topSetLoad(top);", "  const asks = after ? null : top.targetWeight;",
+     [T_SECOND_REFIT, T_STAND_IN_SHOWN, T_DROP_RULE], None),
+    ("N268 a refit puts each back-off at the load the logs before it give it", ENGINE,
+     "    const weight = (after ? after.owed : planned)?.loads.get(set.index) ?? null;",
+     "    const weight = (after ? after.owed : planned)?.last ?? null;", [T_REFIT_ONE_LOAD], None),
+    ("N269 ... each back-off's load recorded in turn", BACKOFFS,
+     "      if (set.tier === 'back-off') loads.set(set.index, current);\n", "",
+     [T_REFIT_ONE_LOAD, T_DROP_RULE, T_CAP_UNLOADABLE], None),
+    ("N270 reps set by hand stay on a back-off the refit gives the drop's load", ENGINE,
+     "    else if (set.asked) next.targetReps = ownRepsOf(set, handReps);",
+     "    else if (set.asked) next.targetReps = ownRepsOf(set, false);",
+     [T_HAND_REPS_ASKED], None),
+    ("N271 ... and through a replay of the back-offs", BACKOFFS,
+     "        next.targetReps = ownRepsOf(set, options.handReps === true);",
+     "        next.targetReps = ownRepsOf(set, false);", [T_HAND_REPS_ASKED], None),
+    ("N272 ... a set's own reps the lifter's where set by hand", BACKOFFS,
+     "  const reps = !handReps && set.asked ? set.asked.reps : set.targetReps;",
+     "  const reps = set.asked ? set.asked.reps : set.targetReps;", [T_HAND_REPS_ASKED], None),
+    ("N273 the follow names the back-offs' own step by its direction", ENGINE,
+     "          standing === load || stepped === undefined || stepped === 0\n            ? null\n            : stepped > 0",
+     "          standing === load\n            ? null\n            : standing > load", [T_FOLLOW_DIRECTION], None),
+    ("N274 a set added takes the top set's own reps, never a stand-in's", ENGINE,
+     "  const reps = ownRepsOf(after.top, false);",
+     "  const reps = after.top.targetReps;", [T_STAND_IN_REPS], None),
+    ("N275 ... and so do the back-offs picked up again", GENERATE,
+     "            targetReps: ownRepsOf(top, false),",
+     "            targetReps: [top.targetReps[0], top.targetReps[1]] as [number, number],",
+     [T_STAND_IN_REPS], None),
+    ("N276 a deload after a skipped top set reaches the skipped sets", ENGINE,
+     "        !isDone(entry.id, set.index) || (straight && skippedSet(set));",
+     "        !isDone(entry.id, set.index);", [T_DELOAD_UNDONE], None),
+    ("N277 an Undo puts the back-offs where the logs as they stand put them", STORE,
+     "          ? this.backOffsAsLogged({ ...session, workout }, entry, isDone)\n          : workout,",
+     "          ? workout\n          : workout,", [T_UNDO_LOG], None),
+    ("N278 ... every lift on top set plus back-offs, one with no log left too", STORE,
+     "        entry.backOffDrop !== undefined\n          ? this.backOffsAsLogged",
+     "        session.completed.sets.some((set) => set.entryId === entry.id) ||\n        entry.backOffAt !== undefined\n          ? this.backOffsAsLogged",
+     [T_UNDO_LOG, T_UNDO_SKIP], None),
+    ("N279 a top set lifted at another load than it asks moves its back-offs", STORE,
+     "          values.weight !== topSetLoad(set);", "          values.weight !== set.targetWeight;",
+     [T_STAND_IN_SHOWN], None),
+    ("N281 a top set's log taken back puts its back-offs off the load it asks", STORE,
+     "        : backOffLoad(asks, entry.backOffDrop, load);",
+     "        : backOffLoad(top.targetWeight ?? asks, entry.backOffDrop, load);", [T_STAND_IN_SHOWN], None),
+    ("N282 a saved copy's back-offs drop off the load the top set asks", BACKOFFS,
+     "        const from = top ? topSetLoad(top) : null;", "        const from = top?.targetWeight ?? null;",
+     [T_TOP_SET_LOAD], None),
+    ("N283 a rep range's set added after a lone top set is a back-off at the drop", ENGINE,
+     "        const [made] =\n          last?.tier === 'top'\n            ? asBackOffs(request, workout, entry, [added], () => true, true)",
+     "        const [made] =\n          last?.tier === 'top'\n            ? [{ ...added, tier: 'back-off' as const }]", [T_LONE_TOP_ADD], None),
+    ("N284 ... with no weight logged, off the load the top set asks", BACKOFFS,
+     "  const lifted = done.weight ?? topSetLoad(top);", "  const lifted = done.weight ?? top.targetWeight;",
+     [T_TOP_SET_LOAD], None),
+    ("N285 the load a top set standing in asks is the one it stands in for", BACKOFFS,
+     "  return top.asked?.weight ?? top.targetWeight;", "  return top.targetWeight;",
+     [T_TOP_SET_LOAD, T_STAND_IN_SHOWN, T_SECOND_REFIT], None),
+    # The fourteenth review of round N.
+    ("N286 a refit under a top set still to come moves each back-off as the logs before it do", ENGINE,
+     "          (set) =>\n            request.completed.sets.find(\n              (log) => log.entryId === entry.id && log.setIndex === set.index && !log.skipped,\n            ) ?? null,\n          { step: loading.step, floor, loading, top: backOffCap(top, undefined) },",
+     "          () => null,\n          { step: loading.step, floor, loading, top: backOffCap(top, undefined) },",
+     [T_REFIT_TOP_TAKEN_BACK], None),
+    ("N287 ... capped at the top set as planned", ENGINE,
+     "          { step: loading.step, floor, loading, top: backOffCap(top, undefined) },",
+     "          { step: loading.step, floor, loading, top: null },", [T_REFIT_TOP_TAKEN_BACK], None),
+    ("N288 the follow names the step that put the back-off in front where it stands", ENGINE,
+     "              isDone(entry.id, set.index) &&\n              (next === undefined || set.index < next.index),",
+     "              isDone(entry.id, set.index),", [T_FOLLOW_GAP], None),
+    ("N289 a hard start's record fitted on top set plus back-offs too", ENGINE,
+     "    const moved = fit(entry);\n    refitRecord(entry, fit);\n    return moved;\n  }\n  // A lift with any set done or skipped",
+     "    const moved = fit(entry);\n    return moved;\n  }\n  // A lift with any set done or skipped",
+     [T_EASE_RECORD], None),
+    ("N290 ... and on a lift fitted in place, as before", ENGINE,
+     "    const fit = (lift: WorkoutEntry) => refitStarted(lift, loading, request, isDone);\n    const moved = fit(entry);\n    refitRecord(entry, fit);",
+     "    const fit = (lift: WorkoutEntry) => refitStarted(lift, loading, request, isDone);\n    const moved = fit(entry);",
+     [T_EASE_RECORD_ITEM42], None),
+    ("N291 a top set's log read as the workout reads it wherever the back-offs' load is worked out", BACKOFFS,
+     "      set: outcomeFor(top, { reps: done.reps, rir: done.rir, weight: lifted }),",
+     "      set: {\n        reps: done.reps,\n        rir: done.rir,\n        weight: lifted,\n        targetReps: top.targetReps,\n        targetRir: top.targetRir,\n      },",
+     [T_STAND_IN_READ], None),
+    ("N292 a lift picked up again drops the reps set by hand: the top set's as planned", ENGINE,
+     "  const reps = ownRepsOf(after.top, false);",
+     "  const reps = ownRepsOf(after.top, entry.manual?.reps === true);", [T_PICK_UP_HAND_REPS], None),
+    ("N293 ... in the generator's pick-up too", GENERATE,
+     "            targetReps: ownRepsOf(top, false),",
+     "            targetReps: ownRepsOf(top, target.manual?.reps === true),", [T_PICK_UP_HAND_REPS], None),
+    # The fifteenth review of round N.
+    ("N294 a lift picked up again straight at the back-offs' load is saved as such a day", ENGINE,
+     "    if (built.atBackOffs && !own) stopped.atBackOffs = true;\n    else delete stopped.atBackOffs;\n", "",
+     [T_PICK_UP_STRAIGHT], None),
+    ("N296 ... its top set still to come: after it, no such day", ENGINE,
+     "  if (!topDone) {\n    if (built.backOffDrop !== undefined) stopped.backOffDrop",
+     "  if (true) {\n    if (built.backOffDrop !== undefined) stopped.backOffDrop", [T_PICK_UP_STRAIGHT], None),
+    ("N297 ... picked up again at the place too", GENERATE,
+     "      if (built.atBackOffs && !own) target.atBackOffs = true;\n      else delete target.atBackOffs;\n", "",
+     [T_PICK_UP_STRAIGHT], None),
+    ("N299 ... at the place too", GENERATE,
+     "    if (!topDone) {\n      if (built.backOffDrop !== undefined) target.backOffDrop",
+     "    if (true) {\n      if (built.backOffDrop !== undefined) target.backOffDrop", [T_PICK_UP_STRAIGHT], None),
+    ("N300 a step lands on a weight the place has, one step its floor only where its weights are unknown", LOADING,
+     "  return Math.max(floor ?? 0, available !== null && available.length > 0 ? 0 : step);",
+     "  return Math.max(floor ?? 0, step);", [T_STEP_ON_RACK], None),
+    ("N301 ... the back-offs' step off the top set", BACKOFFS,
+     "  return Math.min(ceiling, Math.max(least, moved));",
+     "  return Math.min(ceiling, Math.max(options.step, moved));", [T_STEP_ON_RACK], None),
+    ("N302 ... a back-off's step off another", BACKOFFS,
+     "  return Math.max(options.floor ?? 0, Math.min(cap, Math.max(least, moved)));",
+     "  return Math.max(options.floor ?? 0, Math.min(cap, Math.max(options.step, moved)));",
+     [T_STEP_ON_RACK], None),
+    ("N303 ... a straight set's step", ENGINE,
+     "                : Math.max(stepFloor(stepSize, floor, loading.available), moved);",
+     "                : Math.max(stepSize, floor, moved);", [T_STEP_ON_RACK], None),
+    ("N304 a top set logged with no weight is followed at the load it asks", ENGINE,
+     "        trigger.actualWeight ?? (logged.tier === 'top' ? topSetLoad(logged) : logged.targetWeight);",
+     "        trigger.actualWeight ?? logged.targetWeight;", [T_NO_WEIGHT], None),
+    ("N305 a top set logged again under back-offs logged since follows with their logs", STORE,
+     "        if (plan.kind !== 'none' || movesBackOffs || backOffLogs.length > 0) {",
+     "        if (plan.kind !== 'none' || movesBackOffs) {", [T_LOGGED_AGAIN], None),
+    ("N306 a back-off logged before one logged since puts the ones after it where the logs leave them", STORE,
+     "      (isEdit && skipped && !earlier?.skipped) || backOffFixed || backOffBefore",
+     "      (isEdit && skipped && !earlier?.skipped) || backOffFixed", [T_LOGGED_AGAIN], None),
+    ("N307 ... its own follow no step over them", STORE,
+     "    if (!isEdit && set.kind === 'working' && !skipped && !held && !backOffBefore) {",
+     "    if (!isEdit && set.kind === 'working' && !skipped && !held) {", [T_LOGGED_AGAIN], None),
+    ("N308 ... one logged since after it alone", STORE,
+     "          candidate.index > setIndex &&\n          isDone(entryId, candidate.index),",
+     "          isDone(entryId, candidate.index),",
+     [T_FOLLOW_GAP, T_FOLLOW, T_EASY_BACKOFF, T_LOGGED_AGAIN], None),
+    ("N309 a refit under a top set still to come gives its back-offs its own reps", ENGINE,
+     "    if (reps) next.targetReps = [reps[0], reps[1]];\n    else if (set.asked)",
+     "    if (set.asked)", [T_HELD_STEP], None),
+    ("N310 a lift on top set plus back-offs eased drops its back-offs off the top set as eased", ENGINE,
+     "  if (!top || asks === null || drop === undefined || entry.manual?.backOffs !== undefined) {\n    return eased;\n  }",
+     "  if (true) {\n    return eased;\n  }", [T_UNDO_EASED], None),
+    # The sixteenth review of round N.
+    ("N311 a pick-up never marks a day the lifter made their own: a deload or a load set lifted", ENGINE,
+     "    const own = stopped.manual?.weight === true && workingDone;", "    const own = false;",
+     [T_DELOAD_PICKUP], None),
+    ("N312 ... at the place too", GENERATE,
+     "      const own = target.manual?.weight === true && workingDone;", "      const own = false;",
+     [T_DELOAD_PICKUP], None),
+    ("N313 a lift picked up with no working set done takes the day's structure as it plans it now", ENGINE,
+     "        (stopped.backOffDrop !== undefined || !workingDone) &&",
+     "        stopped.backOffDrop !== undefined &&", [T_REGAINS], None),
+    ("N314 ... at the place too", GENERATE,
+     "        (target.backOffDrop !== undefined || !workingDone) &&",
+     "        target.backOffDrop !== undefined &&", [T_REGAINS], None),
+    ("N315 ... its drop with it", ENGINE,
+     "    if (built.backOffDrop !== undefined) stopped.backOffDrop = built.backOffDrop;\n", "",
+     [T_REGAINS], None),
+    ("N316 ... at the place too", GENERATE,
+     "      if (built.backOffDrop !== undefined) target.backOffDrop = built.backOffDrop;\n", "",
+     [T_REGAINS], None),
+    ("N317 a hard start's back-offs are the plan's own, eased once", ENGINE,
+     "  return plan.map((set, index) => {", "  return eased.map((set, index) => {",
+     [T_EASED_REPS], None),
+    ("N318 ... a rep more in reserve each", ENGINE,
+     "    const rir = Math.min(4, set.targetRir + up);\n    if (", "    const rir = set.targetRir;\n    if (",
+     [T_EASED_REPS], None),
+    ("N319 a set on the structure logged with no weight is read as lifted at the load it asks", STORE,
+     "        weight: asLifted(set, values.weight),", "        weight: values.weight,",
+     [T_NO_WEIGHT_READ], None),
+    ("N320 ... an earlier one too", STORE,
+     "          weight: asLifted(prescribed, candidate.weight ?? null),",
+     "          weight: candidate.weight ?? null,", [T_NO_WEIGHT_READ], None),
+    ("N321 ... and its drop's load recorded off it", STORE,
+     "        ? this.withBackOffAt(replanned, entry, skipped ? null : (values.weight ?? topSetLoad(set)))",
+     "        ? this.withBackOffAt(replanned, entry, skipped ? null : values.weight)", [T_NO_WEIGHT_READ], None),
+    ("N322 ... in the saved session too", BUILDER,
+     "  const weight = top && lifted && !lifted.skipped ? (lifted.weight ?? topSetLoad(top)) : null;",
+     "  const weight = top && lifted && !lifted.skipped ? lifted.weight : null;", [T_NO_WEIGHT_READ], None),
+    ("N323 ... and so read again by a refit, as the workout follows it", BACKOFFS,
+     "      weight: log.weight ?? (set.tier === 'top' ? topSetLoad(set) : current),",
+     "      weight: log.weight,", [T_NO_WEIGHT_READ], None),
+]
+
+
+def apply(original, old, new, nth):
+    pairs = old if isinstance(old, list) else [(old, new)]
+    mutated = original
+    for part_old, part_new in pairs:
+        count = mutated.count(part_old)
+        if (nth is None and count != 1) or (nth is not None and count <= nth):
+            return None, f"ANCHOR x{count}"
+        at = -1
+        for _ in range((nth or 0) + 1):
+            at = mutated.index(part_old, at + 1)
+        mutated = mutated[:at] + part_new + mutated[at + len(part_old):]
+    return mutated, None
+
+
+args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
+check = "--check" in sys.argv
+utc = "--utc" in sys.argv
+results = []
+for name, rel, old, new, tests, nth in MUTATIONS:
+    if args and not any(name.startswith(prefix) for prefix in args):
+        continue
+    path = ROOT / rel
+    original = path.read_bytes().decode("utf-8")
+    mutated, bad = apply(original, old, new, nth)
+    if bad:
+        results.append((name, bad, ""))
+        print(f"{bad:9} {name}", flush=True)
+        continue
+    if check:
+        continue
+    try:
+        path.write_bytes(mutated.encode("utf-8"))
+        env = dict(os.environ, TZ="UTC") if utc else None
+        run = subprocess.run(
+            "npx vitest run " + " ".join(tests),
+            shell=True, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env,
+        )
+        out = run.stdout + run.stderr
+        summary = re.search(r"Tests\s+(.*)", out)
+        line = summary.group(1).strip() if summary else "no summary (compile error?)"
+        killed = "failed" in line or summary is None
+        if utc:
+            # As the CI runner: the tests in UTC, then the day rules' tests in two zones.
+            zones = subprocess.run(
+                "node scripts/test-zones.mjs",
+                shell=True, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", env=env,
+            )
+            line = f"UTC: {line}; zones: {'failed' if zones.returncode != 0 else 'passed'}"
+            killed = killed or run.returncode != 0 or zones.returncode != 0
+        results.append((name, "KILLED" if killed else "SURVIVED", line))
+    finally:
+        path.write_bytes(original.encode("utf-8"))
+    print(f"{results[-1][1]:9} {name}: {results[-1][2]}", flush=True)
+
+if check:
+    print(f"anchors checked: {len(MUTATIONS)} entries, {len(results)} not found")
+    sys.exit(0)
+print("\n==== summary")
+for name, verdict, line in results:
+    print(f"{verdict:9} {name}  [{line}]")
+survived = [r for r in results if r[1] != "KILLED"]
+print(f"\n{len(results) - len(survived)} killed, {len(survived)} not killed")

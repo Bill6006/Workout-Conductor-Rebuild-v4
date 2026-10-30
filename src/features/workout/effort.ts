@@ -1,6 +1,6 @@
 import type { TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import { restCategory } from '../../engine/progression/roles';
-import type { SetKind } from '../../engine/workout/types';
+import type { SetKind, SetTier, WorkoutEntry } from '../../engine/workout/types';
 
 /**
  * Effort (reps in reserve) and rest guidance for the set at hand, each with
@@ -25,6 +25,8 @@ export const EFFORT_EVIDENCE = {
     'Isolation moves cost little fatigue, so they can run to one rep short, or to the last clean rep as a finisher (Refalo et al., 2023).',
   ramp: 'Ramp sets are warm-ups: far from failure so they prepare the movement without tiring you, and they never count as working sets.',
   drop: 'A drop set extends the last set with a lighter load to the last clean rep; it adds volume in little time without extra sets (Iversen et al., 2021, review).',
+  backOffs:
+    "A top set, then lighter sets at the same reps, built strength and size as straight sets did in the closest trials (Fish et al., 2003; Angleri et al., 2017; Lima et al., 2018); the back-offs follow the top set's load, a few percent lighter (Helms et al., 2018).",
 } as const;
 
 export const REST_EVIDENCE = {
@@ -48,6 +50,8 @@ export function effortGuidance(
   hold = false,
   /** A core stability move is never taken to failure (Maintenance 23). */
   coreStability = false,
+  /** The top set or a back-off of a main lift on top set plus back-offs (Maintenance 32, item 11). */
+  tier?: SetTier,
 ): Guidance {
   if (hold) {
     return {
@@ -75,6 +79,16 @@ export function effortGuidance(
       label: `RIR ${targetRir}`,
       why: `stop ${targetRir} clean ${targetRir === 1 ? 'rep' : 'reps'} short, before your form slips`,
       evidence: [EFFORT_EVIDENCE.scale],
+    };
+  }
+  if (tier) {
+    return {
+      label: `RIR ${targetRir}`,
+      why:
+        tier === 'top'
+          ? `top set: stop ${targetRir} clean ${targetRir === 1 ? 'rep' : 'reps'} short of failure; the back-offs follow it`
+          : `back-off: lighter than the top set, stop ${targetRir} clean ${targetRir === 1 ? 'rep' : 'reps'} short`,
+      evidence: [EFFORT_EVIDENCE.backOffs, EFFORT_EVIDENCE.strength, EFFORT_EVIDENCE.scale],
     };
   }
   switch (restCategory(role)) {
@@ -124,4 +138,18 @@ export function restGuidance(role: TrainingRole, restSeconds: number, fitted = f
         ? 'long enough to keep the reps, short enough to keep the session moving'
         : 'short rests suit isolation work and pairings';
   return { label: `Rest ${restLabel(restSeconds)}`, why, evidence };
+}
+
+/**
+ * What "Why this target" says of a main lift on top set plus back-offs (Maintenance 32, item 11):
+ * its back-offs, and that they follow the top set. Null for a lift on straight sets.
+ */
+export function backOffNote(entry: WorkoutEntry, units: 'lb' | 'kg'): string | null {
+  const backOffs = entry.sets.filter((set) => set.tier === 'back-off');
+  const top = entry.sets.find((set) => set.tier === 'top');
+  const first = backOffs[0];
+  if (!top || !first || entry.backOffDrop === undefined) return null;
+  const load = first.targetWeight === null ? '' : ` at ${first.targetWeight} ${units}`;
+  const drop = Math.round(entry.backOffDrop * 100);
+  return `Top set, then ${backOffs.length} ${backOffs.length === 1 ? 'back-off' : 'back-offs'}${load}, ${drop}% lighter at ${first.targetRir} in reserve: they follow the top set as you lift it, and back-offs missed never hold back the top set's next step: they widen the drop.`;
 }

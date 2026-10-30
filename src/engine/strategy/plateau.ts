@@ -2,6 +2,7 @@ import { getExercise } from '../../catalog/exercises/catalog';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { CoachingPolicy } from '../coach/experience';
+import { withoutBackOffDays } from '../progression/backOffs';
 import {
   performanceHistory,
   sameZoneAsLatest,
@@ -125,8 +126,10 @@ export function exactExposures(
   const exercise = getExercise(exerciseId);
   if (!exercise) return [];
   // A session the weights at a place pushed says little about a stall at the load asked, and
-  // the stall's remedies move a load the place cannot make: it is left out (Maintenance 23).
-  return performanceHistory(history, exercise, limit)
+  // the stall's remedies move a load the place cannot make: it is left out (Maintenance 23). So
+  // is a straight day at the back-offs' load: a stall reads the top sets alone (the fifth review of
+  // round N).
+  return performanceHistory(withoutBackOffDays(exerciseId, history), exercise, limit)
     .map((point) => point.asked ?? point)
     .filter((point) => !point.viaFamily && point.e1rm !== null && !point.light);
 }

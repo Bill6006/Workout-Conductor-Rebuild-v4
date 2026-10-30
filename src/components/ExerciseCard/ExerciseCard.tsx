@@ -108,6 +108,7 @@ export function ExerciseCard({
     entry.role,
     hold,
     isCoreStability(exercise.movementPattern),
+    target?.tier,
   );
   const restNote = restGuidance(entry.role, rest);
   const research = evidenceLines(

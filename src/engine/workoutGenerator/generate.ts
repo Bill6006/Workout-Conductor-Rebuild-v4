@@ -81,6 +81,16 @@ import {
 } from './loadedVersions';
 import { styleInfo } from '../planning/styles';
 import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
+import {
+  backOffCap,
+  backOffLoadAfter,
+  owedBackOffLoad,
+  backOffRir,
+  backOffsSuit,
+  mainLiftTarget,
+  ownRepsOf,
+  withBackOffs,
+} from '../progression/backOffs';
 import type { StrengthMaxes } from '../progression/maxes';
 import {
   applyProgression,
@@ -105,6 +115,7 @@ import {
   CATCH_UP_TEMPLATE_IDS,
   allEntries,
   isStopped,
+  withoutHandTargets,
   pushMarkOf,
   roundsOf,
   roundsRun,
@@ -221,6 +232,11 @@ export interface CompletedSetStamp {
   kind: 'warmup' | 'working' | 'drop';
   completedAt: string;
   skipped?: boolean;
+  /** The set's own numbers, where the caller has them: a top set picked up again reads them. */
+  setIndex?: number;
+  reps?: number;
+  rir?: number | null;
+  weight?: number | null;
 }
 
 /**
@@ -1871,23 +1887,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     exercise: CatalogExercise,
     role: TrainingRole,
     prescription: Prescription,
+    /** Whether the day leaves the lift top set plus back-offs (item 11): a slot's own pick. */
+    backOffDay = false,
   ) => {
     // What comes before this exercise today, planned or done, and whether a long break sits
     // between: the target and the ramps both read it.
     const earlier = sessionWork(entries, completedSets, exerciseOf);
     const preceding = precedingWorkToday(exercise, earlier, now);
-    const baseTarget = recommendNextTarget({
-      exercise,
-      role,
-      prescription,
-      history,
-      profile,
-      fatigueLevel: fatigue.level,
-      now,
-      maxes,
-      session: { precedingSets: preceding.sets },
-      resets: input.resets ?? null,
-    });
     const floor = barWeightFor(exercise, profile.units);
     // What this place can load: the target lands on a weight that exists here, or holds at
     // the heaviest one with the reps pushed instead.
@@ -1897,7 +1903,47 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       exercise,
       profile.units,
     );
-    const target = targetAtPlace(baseTarget, adjust, loading, floor, profile.units, role);
+    const targetAt = (
+      asked: Prescription,
+      read: readonly WorkoutRecord[],
+      sessionsAt?: readonly string[],
+    ) =>
+      targetAtPlace(
+        recommendNextTarget({
+          exercise,
+          role,
+          prescription: asked,
+          history: read,
+          profile,
+          fatigueLevel: fatigue.level,
+          now,
+          maxes,
+          session: { precedingSets: preceding.sets },
+          resets: input.resets ?? null,
+          ...(sessionsAt ? { sessionsAt } : {}),
+        }),
+        adjust,
+        loading,
+        floor,
+        profile.units,
+        role,
+      );
+    // A main lift on top set plus back-offs (Maintenance 32, item 11) reads its target at the top
+    // set's reserve; a load that is a guess or eased, high fatigue, or a load the place cannot make
+    // as asked leave it on straight sets at the day's own, after a session on the structure at its
+    // back-offs' load (the second review of round N).
+    const built = mainLiftTarget({
+      read: targetAt,
+      prescription,
+      suits: backOffsSuit(exercise, role, profile),
+      profile,
+      day: backOffDay && fatigue.level !== 'high',
+      exerciseId: exercise.id,
+      history,
+      load: { step: loading.step, floor, loading },
+      units: profile.units,
+    });
+    const target = built.target;
     const warmupSets = rampSetsFor(
       exercise,
       role,
@@ -1905,17 +1951,29 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       rampContextFor(exercise, earlier, preceding.afterBreak),
       { weight: target.weight, step: loading.step, floor },
     );
+    const sets = applyProgression(
+      buildSets(built.asked, warmupSets, exercise),
+      target,
+      loading.step,
+      {},
+      floor,
+      loading,
+    );
+    const drop = built.drop;
     return {
-      sets: applyProgression(
-        buildSets(prescription, warmupSets, exercise),
-        target,
-        loading.step,
-        {},
-        floor,
-        loading,
-      ),
+      sets:
+        drop === undefined
+          ? sets
+          : withBackOffs(sets, drop, {
+              step: loading.step,
+              floor,
+              loading,
+              dayRir: prescription.rir,
+            }),
       warmupSets,
       progression: summarizeProgression(target),
+      ...(drop !== undefined ? { backOffDrop: drop } : {}),
+      ...(built.straight ? { atBackOffs: true as const } : {}),
     };
   };
 
@@ -1997,19 +2055,133 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       if (at >= 0) chosenExercises.splice(at, 1);
     }
     entries.push(...kept.filter(isStopped));
-    const built = targetedFor(exercise, target.role, {
-      ...adjusted,
-      sets,
-      restSeconds: target.restSeconds,
-    });
+    // On top set plus back-offs (Maintenance 32, item 11), its top set done, what it picks up again
+    // are its back-offs, the drop off the top set's load; not yet done, a top set and back-offs, as
+    // the day plans them (the first review of round N).
+    const top = target.sets.find((set) => set.tier === 'top');
+    const topDone = top !== undefined && isDone(target.id, top.index);
+    // Begun on working sets straight, it stays straight; with none of them done, it is the day's as
+    // the day plans it now (the sixteenth review of round N: begun straight on a day of high
+    // fatigue, it came back straight once the day planned its top set again).
+    const workingDone = target.sets.some(
+      (set) => set.kind === 'working' && isDone(target.id, set.index),
+    );
+    const built = targetedFor(
+      exercise,
+      target.role,
+      { ...adjusted, sets, restSeconds: target.restSeconds },
+      !topDone &&
+        (target.backOffDrop !== undefined || !workingDone) &&
+        !offPlan &&
+        deload === null &&
+        target.push === undefined,
+    );
     const from = Math.max(-1, ...target.sets.map((set) => set.index)) + 1;
+    // The back-offs follow the top set as it was lifted, the step its log gave them kept (the
+    // second review of round N).
+    const done = completedSets.find(
+      (set) => set.entryId === target.id && set.setIndex === top?.index && !set.skipped,
+    );
+    const placeLoading = loadingFor(
+      location?.loading,
+      constraints.sessionLoading,
+      exercise,
+      profile.units,
+    );
+    const backOffWeight =
+      top && target.backOffDrop !== undefined && topDone
+        ? backOffLoadAfter(
+            top,
+            {
+              reps: done?.reps ?? top.targetReps[0],
+              rir: done?.rir ?? null,
+              weight: done?.weight ?? null,
+            },
+            target.backOffDrop,
+            {
+              step: placeLoading.step,
+              floor: barWeightFor(exercise, profile.units),
+              loading: placeLoading,
+            },
+          )
+        : null;
+    // Each back-off it logged moves the ones it still owes as its log did (the seventh review of
+    // round N: home and back, they lost the step an easy back-off gave them).
+    const owedWeight =
+      backOffWeight === null
+        ? null
+        : owedBackOffLoad(
+            target.sets,
+            backOffWeight,
+            (set) => {
+              const log = completedSets.find(
+                (each) =>
+                  each.entryId === target.id && each.setIndex === set.index && !each.skipped,
+              );
+              return log && typeof log.reps === 'number'
+                ? { reps: log.reps, rir: log.rir ?? null, weight: log.weight ?? null }
+                : null;
+            },
+            {
+              step: placeLoading.step,
+              floor: barWeightFor(exercise, profile.units),
+              loading: placeLoading,
+              // Capped as every replay of them is (`backOffCap`, the eleventh review of round N:
+              // a top set skipped capped them at its plan, under the step a back-off gave them).
+              top:
+                top === undefined
+                  ? null
+                  : backOffCap(
+                      top,
+                      completedSets.find(
+                        (set) => set.entryId === target.id && set.setIndex === top.index,
+                      ),
+                    ),
+            },
+          );
+    // At the top set's own reps, never a stand-in's (the thirteenth review of round N).
+    const backOff =
+      top && owedWeight !== null
+        ? {
+            tier: 'back-off' as const,
+            // Picked up again, the reps set by hand go (`withoutHandTargets`): the top set's as
+            // the plan has them (the fourteenth review of round N).
+            targetReps: ownRepsOf(top, false),
+            targetRir: backOffRir(top.targetRir, adjusted.rir),
+            targetWeight: owedWeight,
+          }
+        : null;
     target.sets = [
       ...target.sets,
-      ...built.sets.map((set) => ({ ...set, index: set.index + from })),
+      ...built.sets.map((set) => {
+        if (!backOff || set.kind !== 'working') return { ...set, index: set.index + from };
+        // A back-off's load is its top set's drop: the fresh straight target's load asked goes, as
+        // `asBackOffs` and `withBackOffs` take it off (the twelfth review of round N: the plates
+        // found again took the back-offs to the top set's plan, over the load it was lifted at).
+        const next: SetPrescription = { ...set, index: set.index + from, ...backOff };
+        delete next.asked;
+        return next;
+      }),
     ];
     target.warmupSets = target.sets.filter((set) => set.kind === 'warmup').length;
     target.dropSet = target.sets.some((set) => set.kind === 'drop');
-    target.progression = built.progression;
+    // Its top set done, the lines are its top set's, not a straight day's (the third review).
+    if (!topDone) target.progression = built.progression;
+    // Its top set still to come, it is the day's as built, as a swap back takes it: on top set plus
+    // back-offs with their drop, or straight at the back-offs' load, saved as such a day (the
+    // fifteenth review of round N: back at the gym on a day of high fatigue, it was saved unmarked),
+    // unless a load the lifter set, or the coach's deload, made the day the lifter's own (the
+    // sixteenth: a deload lifted was passed over).
+    if (!topDone) {
+      if (built.backOffDrop !== undefined) target.backOffDrop = built.backOffDrop;
+      const own = target.manual?.weight === true && workingDone;
+      if (built.atBackOffs && !own) target.atBackOffs = true;
+      else delete target.atBackOffs;
+    }
+    // Picked up again, its sets to come are built afresh, as a swap back's are: a weight or reps
+    // set by hand where it stopped go (the tenth and eleventh reviews of round N: the weight its
+    // back-offs took, and the mark that kept them unfitted to the plates).
+    withoutHandTargets(target);
     delete target.stopped;
     return true;
   };
@@ -2123,6 +2295,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       locked: false,
       pinned: false,
       push: 'extra',
+      // A straight day at the back-offs' load, saved as one (the fifth review of round N).
+      ...(built.atBackOffs ? { atBackOffs: true as const } : {}),
     });
     extraId = id;
   }
@@ -2324,7 +2498,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
         owed === undefined ? basePrescription.sets : Math.min(basePrescription.sets, owed),
       );
     }
-    const built = targetedFor(pick, slotSpec.role, prescription);
+    // A main lift picked here takes top set plus back-offs (item 11), off the plan and in a deload
+    // week aside, where the day shapes every set; the lift to push keeps the push's sets.
+    const built = targetedFor(
+      pick,
+      slotSpec.role,
+      prescription,
+      !offPlan && deload === null && !pushPick && owed === undefined,
+    );
     // In a catch-up, a lift goes in for every one of the day's muscles it works directly, as the
     // budget counts it: the bench press for what is left of the triceps (the third review of round M).
     const serves = [
@@ -2347,6 +2528,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       slot: index,
       ...(natural && pick !== natural ? { standsFor: natural.id } : {}),
       ...(pushPick ? { push: 'natural' as const } : {}),
+      ...(built.backOffDrop !== undefined ? { backOffDrop: built.backOffDrop } : {}),
+      ...(built.atBackOffs ? { atBackOffs: true as const } : {}),
     });
   };
   // The slots filled in the plan's order: a slot added for a muscle a lift misses right after the

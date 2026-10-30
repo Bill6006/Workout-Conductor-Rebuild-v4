@@ -5,6 +5,7 @@ import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { addLocalDays, startOfLocalDay } from '../../core/time/localDate';
 import { trainingSeconds } from '../duration/trainingTime';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
+import { withoutBackOffDays } from '../progression/backOffs';
 import { maxFromSet } from '../progression/maxes';
 import { performanceHistory, type PerformancePoint } from '../progression/progression';
 import { hasNoLoad } from '../progression/startingLoad';
@@ -350,7 +351,8 @@ export function exerciseProgress(history: readonly WorkoutRecord[]): ExercisePro
     if (!exercise) continue;
     // Every session of the lift, newest first: the best reads them all, the trend the newest four
     // (the third review).
-    const points = performanceHistory(history, exercise, Number.POSITIVE_INFINITY).filter(
+    // Every working set: a session of a top set and back-offs is all of them (Maintenance 32).
+    const points = performanceHistory(history, exercise, Number.POSITIVE_INFINITY, true).filter(
       (point) => !point.viaFamily,
     );
     const max = readsMax(exerciseId);
@@ -368,11 +370,20 @@ export function exerciseProgress(history: readonly WorkoutRecord[]): ExercisePro
       return outranks(candidate, current) ? candidate : current;
     }, null);
     const latest = points[0];
-    const oldest = points[Math.min(3, points.length - 1)];
-    const latestMax = maxOf(latest);
+    // The trend reads the top sets alone, past the lift's straight days at the back-offs' load, as
+    // its target does (the fifth review of round N), and never the back-offs of a session whose top
+    // set was skipped (the seventh): every session is still listed.
+    const trend = performanceHistory(
+      withoutBackOffDays(exerciseId, history),
+      exercise,
+      Number.POSITIVE_INFINITY,
+    ).filter((point) => !point.viaFamily);
+    const newest = trend[0];
+    const oldest = trend[Math.min(3, trend.length - 1)];
+    const latestMax = maxOf(newest);
     const oldestMax = maxOf(oldest);
     const trendPct =
-      latest !== oldest && latestMax !== null && oldestMax !== null && oldestMax > 0
+      newest !== oldest && latestMax !== null && oldestMax !== null && oldestMax > 0
         ? Math.round(((latestMax - oldestMax) / oldestMax) * 1000) / 10
         : null;
     rows.push({

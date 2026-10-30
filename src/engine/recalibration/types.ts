@@ -52,8 +52,20 @@ export type RecalibrationTrigger =
       actualWeight?: number | null;
       /** In-session autoregulation decision; without it only reps far from target move the rep targets. */
       plan?: AutoregulationPlan;
+      /**
+       * A top set corrected after back-offs were logged (Maintenance 32, the sixth review of round
+       * N): each back-off still logged, the weight it was lifted at and the step its log gave the
+       * ones after it, which the correction keeps.
+       */
+      backOffLogs?: { setIndex: number; weight: number | null; plan: AutoregulationPlan }[];
     }
-  | { type: 'target-weight'; entryId: string; weight: number | null }
+  | {
+      type: 'target-weight';
+      entryId: string;
+      weight: number | null;
+      /** A deload the coach offered: a main lift runs it on straight sets (Maintenance 32). */
+      deload?: true;
+    }
   /** A max was entered for a lift: its unlogged sets take their first target from it. */
   | { type: 'max'; exerciseId: string }
   /** The coach's coverage action: a few sets of an accessory for a muscle with nothing today. */

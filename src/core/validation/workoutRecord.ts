@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
+import { MAX_BACK_OFF_DROP, SET_TIERS } from '../../engine/workout/types';
 
 /**
  * A completed (or partially completed) workout as stored in IndexedDB `workouts`.
@@ -53,6 +54,11 @@ export const LoggedSetSchema = z.looseObject({
    * An unreadable one is dropped, never the set.
    */
   reserveCheck: ReserveCheckLogSchema.optional().catch(undefined),
+  /**
+   * The top set or a back-off of a lift on top set plus back-offs (Maintenance 32, item 11): the
+   * progression reads the top set alone. An unreadable one is dropped, never the set.
+   */
+  tier: z.enum(SET_TIERS).optional().catch(undefined),
 });
 
 export const LoggedExerciseSchema = z.looseObject({
@@ -70,6 +76,23 @@ export const LoggedExerciseSchema = z.looseObject({
    * extra exposure, which the next week's counts read. An unreadable mark is dropped.
    */
   push: z.enum(['natural', 'extra']).optional().catch(undefined),
+  /**
+   * The back-offs' drop from the top set's load the plan had (Maintenance 32, item 11), which the
+   * next session's drop starts from. An unreadable one is dropped, never the exercise.
+   */
+  backOffDrop: z.number().min(0).max(MAX_BACK_OFF_DROP).optional().catch(undefined),
+  /**
+   * The load the drop gave the back-offs off the top set as lifted, at the place (the ninth review
+   * of round N): the drop's correction reads only back-offs lifted at it. An unreadable one is
+   * dropped, never the exercise.
+   */
+  backOffAt: z.number().min(0).optional().catch(undefined),
+  /**
+   * Straight at the back-offs' load after a session on the structure (the fourth review of round
+   * N): the lift's next top set reads past it, as past its back-offs. An unreadable mark is
+   * dropped, never the exercise.
+   */
+  atBackOffs: z.literal(true).optional().catch(undefined),
 });
 
 export const SessionRatingSchema = z.looseObject({

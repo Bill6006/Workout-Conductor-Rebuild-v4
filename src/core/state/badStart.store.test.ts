@@ -7,6 +7,7 @@ import {
   recalibrate as runRecalibration,
 } from '../../engine/recalibration/recalibrate';
 import { prescribeFor } from '../../engine/progression/roles';
+import { topSetRir } from '../../engine/progression/backOffs';
 import { setFloor } from '../../engine/workoutGenerator/generate';
 import { allEntries, type WorkoutEntry } from '../../engine/workout/types';
 import { record } from '../../test/records';
@@ -452,10 +453,13 @@ const GOOD = { ...LOW, energy: 4, sleep: 4, motivation: 4 };
 /** An entry as the session has it now. */
 const entryOf = (store: Store, id: string) => entries(store).find((entry) => entry.id === id)!;
 /** The reserve the plan itself asks of a lift, before any of the day's settings. */
+/** The plan's reserve for a lift's first working set: of a top set, the top set's (item 11). */
 function planRir(store: Store, entry: WorkoutEntry): number {
   const exercise = getExercise(entry.exerciseId)!;
   const { profile, history } = store.getSnapshot();
-  return prescribeFor(exercise, entry.role, profile!, history).rir;
+  const rir = prescribeFor(exercise, entry.role, profile!, history).rir;
+  const first = entry.sets.find((set) => set.kind === 'working');
+  return first?.tier === 'top' ? topSetRir(rir) : rir;
 }
 /** Logs a lift's first working set `by` reps of capacity under what the plan asked. */
 async function shortOfPlan(store: Store, entry: WorkoutEntry, by: number) {

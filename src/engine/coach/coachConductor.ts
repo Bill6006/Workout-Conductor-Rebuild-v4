@@ -871,7 +871,7 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
           }
         : {
             kind: 'recalibrate',
-            trigger: { type: 'target-weight', entryId: entry.id, weight },
+            trigger: { type: 'target-weight', entryId: entry.id, weight, deload: true },
             label: `Micro-deload to ${weight} ${units}`,
             major: true,
           };
@@ -1830,7 +1830,12 @@ function routeAction(
           entry && usable && lighter
             ? {
                 kind: 'recalibrate',
-                trigger: { type: 'target-weight', entryId: entry.id, weight: lighter.weight },
+                trigger: {
+                  type: 'target-weight',
+                  entryId: entry.id,
+                  weight: lighter.weight,
+                  deload: true,
+                },
                 label: `Deload to ${lighter.weight} ${units} this week`,
                 major: true,
                 route: ref,

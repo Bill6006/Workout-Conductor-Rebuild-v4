@@ -14,6 +14,7 @@ still pass means the rule has no test that guards it.
 | `mutate-m29.py` | Maintenance 29 (round K) | 32 |
 | `mutate-m30.py` | Maintenance 30 (round L) | 121 |
 | `mutate-m31.py` | Maintenance 31 (round M), with `--utc` | M31_ENTRIES |
+| `mutate-m32.py` | Maintenance 32 (round N) | M32_ENTRIES |
 
 The tables are data: each row is `(name, file, old, new, tests, nth)`. From M30 on, a round's table
 is written from its `table_mNN.txt`: edit the `.txt`, then run `python3 table_mNN.py`. Never write a

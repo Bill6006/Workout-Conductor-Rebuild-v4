@@ -18,7 +18,11 @@ import { holdById } from '../../engine/workout/setText';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import { planLength } from '../../engine/duration/duration';
-import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
+import {
+  autoregulate,
+  outcomeFor,
+  type AutoregulationPlan,
+} from '../../engine/recalibration/autoregulate';
 import { readStart, startKey, type StartReading } from '../../engine/recalibration/badStart';
 import { dropSetWeight, pendingDropSet, withDropWeight } from '../../engine/recalibration/dropSet';
 import {
@@ -84,7 +88,7 @@ import {
   type MaxInput,
   type StrengthMaxes,
 } from '../../engine/progression/maxes';
-import { loggedLoad } from '../../engine/progression/startingLoad';
+import { barWeightFor, loggedLoad } from '../../engine/progression/startingLoad';
 import {
   lowCheckIn,
   planAtPace,
@@ -127,9 +131,19 @@ import {
   type DurationChoice,
   type EmptiedPlan,
   type GeneratedWorkout,
+  type SetPrescription,
   type WorkoutEntry,
 } from '../../engine/workout/types';
 import { prescribeFor } from '../../engine/progression/roles';
+import {
+  backOffLoad,
+  backOffLoadAfter,
+  backOffCap,
+  backOffsReplayed,
+  topSetLoad,
+  topSetRir,
+  withDropsToday,
+} from '../../engine/progression/backOffs';
 import {
   builtCatchUp,
   emptiedLayoutsFor,
@@ -765,6 +779,37 @@ function holdStillFits(
     next?.entryId === hold.entryId &&
     next.setIndex === hold.setIndex;
   return fits ? hold : null;
+}
+
+/**
+ * The plan an Undo puts back, with the drop's load each lift recorded as its top set was logged
+ * since (`backOffAt`): a log is no change to take back (the twelfth review of round N: the plan put
+ * back was from before the top set, and the finish worked the load out again from the weights left).
+ */
+function withBackOffAtKept(
+  restored: GeneratedWorkout,
+  current: GeneratedWorkout,
+): GeneratedWorkout {
+  const recorded = new Map(
+    allEntries(current.blocks)
+      .filter((entry) => entry.backOffAt !== undefined)
+      .map((entry) => [entry.id, entry]),
+  );
+  if (recorded.size === 0) return restored;
+  return {
+    ...restored,
+    blocks: restored.blocks.map((block) => ({
+      ...block,
+      entries: block.entries.map((entry) => {
+        const now = recorded.get(entry.id);
+        return now?.backOffAt !== undefined &&
+          now.exerciseId === entry.exerciseId &&
+          entry.backOffDrop !== undefined
+          ? { ...entry, backOffAt: now.backOffAt }
+          : entry;
+      }),
+    })),
+  };
 }
 
 /** A timer frozen by a pause, running again from now with what it had left. */
@@ -1752,7 +1797,19 @@ export class AppStore {
     const reading = session.log[0]?.trigger === 'bad-start' ? this.readStartOf(session) : null;
     const declined = reading ? startKey(reading) : session.startDeclined;
     const position = currentPosition(session.previous.workout, this.isDoneFor(session));
-    const restored = session.previous.workout;
+    const kept = withBackOffAtKept(session.previous.workout, session.workout);
+    // Each lift's back-offs where its logs as they stand put them: an Undo takes back a change,
+    // never a log made or taken back since (the thirteenth review of round N: the plan put back held
+    // back-offs worked out for the top set's log before it, over the top set as lifted; the
+    // fourteenth: a skip taken back since left its back-off at the load it had while skipped).
+    const isDone = this.isDoneFor(session);
+    const restored = allEntries(kept.blocks).reduce(
+      (workout, entry) =>
+        entry.backOffDrop !== undefined
+          ? this.backOffsAsLogged({ ...session, workout }, entry, isDone)
+          : workout,
+      kept,
+    );
     this.setSession({
       ...session,
       // Its lines about kept swaps say what is true now: a swap stopped since has none.
@@ -1997,7 +2054,7 @@ export class AppStore {
       earlier && !earlier.skipped
         ? earlier.planRir
         : set.kind === 'working' && !skipped
-          ? this.planRirFor(entry)
+          ? this.planRirFor(entry, set)
           : undefined;
     const logged: CompletedSet = {
       entryId,
@@ -2043,8 +2100,54 @@ export class AppStore {
           : null;
     }
     const resuming = session.status === 'paused';
+    // A top set corrected to a skip takes its log's moves off its back-offs (the second review of
+    // round N); a back-off corrected puts the ones after it where the logs now leave them (the
+    // seventh: a slip fixed to what was lifted left its step on them). Read from the logs as
+    // corrected.
+    const backOffFixed =
+      isEdit &&
+      set.tier === 'back-off' &&
+      entry.backOffDrop !== undefined &&
+      (Boolean(earlier?.skipped) !== skipped ||
+        earlier?.weight !== values.weight ||
+        earlier?.reps !== reps ||
+        earlier?.rir !== values.rir);
+    // A back-off logged before one logged since (logged again after its log was taken back, or out
+    // of turn) puts the ones after it where the logs now leave them, as a correction does: a later
+    // one's step reads it (the fifteenth review of round N: its follow moved them by its own log
+    // alone, and the next replay of any kind moved them again).
+    const backOffBefore =
+      !isEdit &&
+      !skipped &&
+      set.tier === 'back-off' &&
+      entry.backOffDrop !== undefined &&
+      entry.sets.some(
+        (candidate) =>
+          candidate.tier === 'back-off' &&
+          candidate.index > setIndex &&
+          isDone(entryId, candidate.index),
+      );
+    const replanned =
+      (isEdit && skipped && !earlier?.skipped) || backOffFixed || backOffBefore
+        ? this.backOffsAsPlanned({ ...session, completed }, logged, isDone)
+        : session.workout;
+    // The drop's load as the top set was lifted, with the weights the place had then: a correction
+    // that keeps its weight keeps it (the twelfth review of round N: a typo in the reps fixed after a
+    // plate was marked missing worked it out again from the weights left).
+    const sameLoad =
+      isEdit &&
+      !skipped &&
+      earlier !== null &&
+      !earlier.skipped &&
+      earlier.weight === values.weight &&
+      entry.backOffAt !== undefined;
+    const workout =
+      set.tier === 'top' && set.kind === 'working' && !sameLoad
+        ? this.withBackOffAt(replanned, entry, skipped ? null : (values.weight ?? topSetLoad(set)))
+        : replanned;
     this.setSession({
       ...session,
+      workout,
       status: 'active',
       activeSince: resuming ? now : session.activeSince,
       pausedAt: null,
@@ -2055,10 +2158,14 @@ export class AppStore {
       hold: isEdit ? (resuming ? rearmed(session.hold, nowMs) : session.hold) : null,
       // A skip carries no numbers, and a warm-up or drop set carries the wrong ones, so only
       // a working set becomes the next set's prefill.
+      // A correction to a top set takes the lift's prefill away: the back-offs after it start
+      // from their own targets, which it may move (the second review of round N).
       drafts:
-        skipped || set.kind !== 'working'
-          ? session.drafts
-          : { ...session.drafts, [entryId]: { weight: values.weight, reps, rir: values.rir } },
+        isEdit && set.tier === 'top'
+          ? Object.fromEntries(Object.entries(session.drafts).filter(([id]) => id !== entryId))
+          : skipped || set.kind !== 'working'
+            ? session.drafts
+            : { ...session.drafts, [entryId]: { weight: values.weight, reps, rir: values.rir } },
     });
 
     // A hold's seconds are not reps: nothing about them moves the load or the target mid-workout.
@@ -2069,7 +2176,7 @@ export class AppStore {
     // The same set's own change failed: its error stays in view, and the start is read on the next
     // set (the third pass of item 42: the hard start's run cleared it).
     let failed = false;
-    if (!isEdit && set.kind === 'working' && !skipped && !held) {
+    if (!isEdit && set.kind === 'working' && !skipped && !held && !backOffBefore) {
       const remaining = entry.sets.filter(
         (candidate) =>
           candidate.kind === 'working' &&
@@ -2077,55 +2184,23 @@ export class AppStore {
           !isDone(entryId, candidate.index),
       ).length;
       if (remaining > 0) {
-        const done = this.requireSession().completed.sets;
-        const earlier = done
-          .filter(
-            (candidate) =>
-              candidate.entryId === entryId &&
-              candidate.kind === 'working' &&
-              !candidate.skipped &&
-              candidate.setIndex < setIndex,
-          )
-          .sort((a, b) => a.setIndex - b.setIndex)
-          .map((candidate) =>
-            outcomeFor(
-              entry.sets.find((prescribed) => prescribed.index === candidate.setIndex) ?? set,
-              {
-                reps: candidate.reps,
-                rir:
-                  measuredReserve(candidate) ??
-                  readReserve(
-                    getExercise(entry.exerciseId),
-                    candidate.reps,
-                    candidate.rir ?? null,
-                    this.reserveReadOf(this.state),
-                  ),
-                weight: candidate.weight ?? null,
-              },
-            ),
-          );
-        const units = this.state.profile?.units ?? 'lb';
-        const exercise = getExercise(entry.exerciseId);
-        // The reserve as the rules read it: through the lifter's checked error where it covers
-        // the set (Maintenance 27, item 43).
-        const estimate = this.reserveReadOf(this.state);
-        const plan = autoregulate({
-          set: outcomeFor(set, {
-            reps,
-            rir:
-              measuredReserve({ reps, reserveCheck: values.reserveCheck }) ??
-              readReserve(exercise, reps, values.rir, estimate),
-            weight: values.weight,
-          }),
-          earlier,
-          step: exercise
-            ? loadingFor(this.currentLocation()?.loading, session.loading, exercise, units).step
-            : 5,
-          remaining,
-          setNumber: earlier.length + 1,
-          units,
-        });
-        if (plan.kind !== 'none') {
+        const plan = this.planAfter(session, entry, set, reps, values, remaining);
+        // A top set lifted at another load than planned moves its back-offs with it, whatever
+        // else it shows (Maintenance 32, item 11): the load it asks, not a stand-in's for the
+        // weights here (`topSetLoad`, the thirteenth review of round N: lifted as shown, its
+        // back-offs stayed at its own load as lifted).
+        const movesBackOffs =
+          set.tier === 'top' &&
+          entry.backOffDrop !== undefined &&
+          values.weight !== null &&
+          values.weight !== topSetLoad(set);
+        // A top set logged again after its log was taken back keeps the steps the back-offs
+        // logged since gave, as a correction does (the eleventh review of round N), and gives
+        // back those that read it, logged again as it was (the fifteenth: with no step of its own
+        // and at the load it asks, it moved nothing).
+        const backOffLogs =
+          set.tier === 'top' ? this.backOffLogsOf({ ...session, completed }, entry, isDone) : [];
+        if (plan.kind !== 'none' || movesBackOffs || backOffLogs.length > 0) {
           const performed = await this.recalibrate({
             type: 'performance',
             entryId,
@@ -2133,11 +2208,46 @@ export class AppStore {
             actualReps: reps,
             actualWeight: values.weight,
             plan,
+            ...(backOffLogs.length > 0 ? { backOffLogs } : {}),
           });
           if (performed?.ok) tapped = this.requireSession();
           else if (performed) failed = true;
         }
       }
+    }
+    // A top set corrected moves its back-offs as the set logged right would have, the step its
+    // numbers give included (Maintenance 32, the first and second reviews of round N: a typo's
+    // back-offs stayed after the correction, and a grind corrected in took no step).
+    const backOffsLeft = entry.sets.filter(
+      (candidate) => candidate.tier === 'back-off' && !isDone(entryId, candidate.index),
+    ).length;
+    if (
+      isEdit &&
+      !skipped &&
+      !held &&
+      set.tier === 'top' &&
+      entry.backOffDrop !== undefined &&
+      backOffsLeft > 0 &&
+      values.weight !== null &&
+      (earlier?.skipped ||
+        earlier?.weight !== values.weight ||
+        earlier?.reps !== reps ||
+        earlier?.rir !== values.rir)
+    ) {
+      // The back-offs logged after it keep the steps their logs gave (the sixth review of round N),
+      // read against the top set as corrected (the eighth: its old reps gave a back-off's step).
+      const backOffLogs = this.backOffLogsOf({ ...session, completed }, entry, isDone);
+      const performed = await this.recalibrate({
+        type: 'performance',
+        entryId,
+        setIndex,
+        actualReps: reps,
+        actualWeight: values.weight,
+        plan: this.planAfter(session, entry, set, reps, values, backOffsLeft),
+        ...(backOffLogs.length > 0 ? { backOffLogs } : {}),
+      });
+      if (performed?.ok) tapped = this.requireSession();
+      else if (performed) failed = true;
     }
     if (set.kind === 'working' && !skipped) this.settleDropSet(entryId);
     if (set.kind === 'working' && !failed) await this.settleStart(tapped);
@@ -2174,12 +2284,16 @@ export class AppStore {
     };
   }
 
-  /** The reserve the plan asks for an entry's lift and role today, before the day's settings. */
-  private planRirFor(entry: WorkoutEntry): number | undefined {
+  /**
+   * The reserve the plan asks for an entry's lift and role today, before the day's settings: of a
+   * top set, the top set's (Maintenance 32, item 11).
+   */
+  private planRirFor(entry: WorkoutEntry, set: SetPrescription): number | undefined {
     const exercise = getExercise(entry.exerciseId);
     const profile = this.state.profile;
     if (!exercise || !profile) return undefined;
-    return prescribeFor(exercise, entry.role, profile, this.state.history).rir;
+    const rir = prescribeFor(exercise, entry.role, profile, this.state.history).rir;
+    return set.tier === 'top' ? topSetRir(rir) : rir;
   }
 
   /**
@@ -2379,9 +2493,13 @@ export class AppStore {
     if (session.completed.sets.length === 0) return;
     const sets = session.completed.sets.slice(0, -1);
     const keys = new Set(sets.map((c) => `${c.entryId}:${c.setIndex}`));
-    const next = currentPosition(session.workout, (id, index) => keys.has(`${id}:${index}`));
+    const isDone = (id: string, index: number) => keys.has(`${id}:${index}`);
+    const next = currentPosition(session.workout, isDone);
+    // The back-offs replayed from the logs left standing (the eighth review of round N).
+    const left = { ...session, completed: { ...session.completed, sets } };
     this.setSession({
       ...session,
+      workout: this.backOffsAsPlanned(left, session.completed.sets.at(-1), isDone),
       completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
       rest: null,
       hold: null,
@@ -2397,15 +2515,279 @@ export class AppStore {
     );
     if (sets.length === session.completed.sets.length) return;
     const keys = new Set(sets.map((c) => `${c.entryId}:${c.setIndex}`));
-    const next = currentPosition(session.workout, (id, index) => keys.has(`${id}:${index}`));
+    const isDone = (id: string, index: number) => keys.has(`${id}:${index}`);
+    const next = currentPosition(session.workout, isDone);
     const hold = session.hold;
+    // The back-offs replayed from the logs left standing (the eighth review of round N).
+    const left = { ...session, completed: { ...session.completed, sets } };
     this.setSession({
       ...session,
+      workout: this.backOffsAsPlanned(left, { entryId, setIndex }, isDone),
       completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
       // A countdown stays only while its set is still the one in front of the lifter.
       hold: hold && next?.entryId === hold.entryId && next.setIndex === hold.setIndex ? hold : null,
     });
     void this.settleStart();
+  }
+
+  /**
+   * What the sets still to come of a lift do after a set logged with these numbers: its reserve as
+   * the rules read it, through the lifter's checked error where it covers the set (Maintenance 27,
+   * item 43), against the lift's earlier sets today.
+   */
+  private planAfter(
+    session: WorkoutSession,
+    entry: WorkoutEntry,
+    set: SetPrescription,
+    reps: number,
+    values: SetValues,
+    remaining: number,
+  ): AutoregulationPlan {
+    const exercise = getExercise(entry.exerciseId);
+    const estimate = this.reserveReadOf(this.state);
+    // On top set plus back-offs a set logged with no weight is read as lifted at the load it asks, as
+    // every replay of the back-offs reads it (`backOffLoadAfter`, `owedBackOffLoads`; the sixteenth
+    // review of round N: read with none, a top set gave no step that a refit then gave, and a
+    // back-off took the back-offs after it off the top set's reps).
+    const asLifted = (prescribed: SetPrescription, weight: number | null) =>
+      weight ??
+      (prescribed.tier === 'top'
+        ? topSetLoad(prescribed)
+        : prescribed.tier === 'back-off'
+          ? prescribed.targetWeight
+          : null);
+    const earlier = session.completed.sets
+      .filter(
+        (candidate) =>
+          candidate.entryId === entry.id &&
+          candidate.kind === 'working' &&
+          !candidate.skipped &&
+          candidate.setIndex < set.index,
+      )
+      .sort((a, b) => a.setIndex - b.setIndex)
+      .map((candidate) => {
+        const prescribed = entry.sets.find((each) => each.index === candidate.setIndex) ?? set;
+        return outcomeFor(prescribed, {
+          reps: candidate.reps,
+          rir:
+            measuredReserve(candidate) ??
+            readReserve(exercise, candidate.reps, candidate.rir ?? null, estimate),
+          weight: asLifted(prescribed, candidate.weight ?? null),
+        });
+      });
+    const units = this.state.profile?.units ?? 'lb';
+    return autoregulate({
+      set: outcomeFor(set, {
+        reps,
+        rir:
+          measuredReserve({ reps, reserveCheck: values.reserveCheck }) ??
+          readReserve(exercise, reps, values.rir, estimate),
+        weight: asLifted(set, values.weight),
+      }),
+      earlier,
+      step: exercise
+        ? loadingFor(this.currentLocation()?.loading, session.loading, exercise, units).step
+        : 5,
+      remaining,
+      setNumber: earlier.length + 1,
+      units,
+    });
+  }
+
+  /**
+   * The workout with a lift's back-offs back where the plan has them, when the log of its top set
+   * is taken back (an undo, a delete, a correction to a skip): nothing of that log stays on them
+   * (Maintenance 32, the second review of round N); or where its top set as it now stands puts them,
+   * when a back-off's log is (the third review). See `backOffsAsLogged`.
+   */
+  private backOffsAsPlanned(
+    session: WorkoutSession,
+    taken: Pick<CompletedSet, 'entryId' | 'setIndex'> | undefined,
+    isDone: (entryId: string, setIndex: number) => boolean,
+  ): GeneratedWorkout {
+    if (!taken) return session.workout;
+    const entry = allEntries(session.workout.blocks).find(
+      (candidate) => candidate.id === taken.entryId,
+    );
+    const set = entry?.sets.find((candidate) => candidate.index === taken.setIndex);
+    if (!entry || (set?.tier !== 'top' && set?.tier !== 'back-off')) return session.workout;
+    return this.backOffsAsLogged(session, entry, isDone);
+  }
+
+  /**
+   * The workout with a lift's back-offs not logged where its logs as they stand put them, one rule
+   * for a log taken back or corrected and for an Undo, which takes back a change and never a log
+   * made since (the thirteenth review of round N: back-offs worked out for an older state of the
+   * top set's log came back over it as lifted). From a weight the back-offs took by hand (the eighth
+   * and ninth reviews: put back at the top set's load, or kept at a slip's step); off the top set as
+   * lifted, the step its log gave them kept (the third review); off the load it asks while it is
+   * still to come, or skipped, which is no top set lifted (`topSetLoad`). Each back-off still logged
+   * moves the ones after it as its log did (the fourth and sixth reviews), capped as every replay of
+   * them is (`backOffCap`, the tenth to twelfth reviews), at their own reps (`ownRepsOf`).
+   */
+  private backOffsAsLogged(
+    session: WorkoutSession,
+    entry: WorkoutEntry,
+    isDone: (entryId: string, setIndex: number) => boolean,
+  ): GeneratedWorkout {
+    const exercise = getExercise(entry.exerciseId);
+    const top = entry.sets.find((candidate) => candidate.tier === 'top');
+    if (!exercise || !top || entry.backOffDrop === undefined) return session.workout;
+    const units = this.state.profile?.units ?? 'lb';
+    const loading = loadingFor(this.currentLocation()?.loading, session.loading, exercise, units);
+    const load = { step: loading.step, floor: barWeightFor(exercise, units), loading };
+    const topLog = this.topLogOf(session, entry, top);
+    const options = {
+      ...load,
+      top: backOffCap(top, topLog),
+      handReps: entry.manual?.reps === true,
+    };
+    const own = entry.manual?.backOffs;
+    if (own !== undefined) {
+      return this.withBackOffSets(
+        session.workout,
+        entry.id,
+        backOffsReplayed(entry.sets, own, this.backOffLogOf(session, entry, isDone), {
+          ...options,
+          own,
+        }),
+      );
+    }
+    const lifted = topLog && !topLog.skipped ? topLog : undefined;
+    const asks = topSetLoad(top);
+    const weight = lifted
+      ? backOffLoadAfter(
+          top,
+          { reps: lifted.reps, rir: lifted.rir, weight: lifted.weight },
+          entry.backOffDrop,
+          load,
+          this.planAfter(
+            session,
+            entry,
+            top,
+            lifted.reps,
+            { weight: lifted.weight, reps: lifted.reps, rir: lifted.rir },
+            1,
+          ),
+        )
+      : asks === null
+        ? null
+        : backOffLoad(asks, entry.backOffDrop, load);
+    if (weight === null) return session.workout;
+    return this.withBackOffSets(
+      session.workout,
+      entry.id,
+      backOffsReplayed(entry.sets, weight, this.backOffLogOf(session, entry, isDone), options),
+    );
+  }
+
+  /** A lift's back-offs still logged, each with the step its log gave the ones after it. */
+  private backOffLogsOf(
+    session: WorkoutSession,
+    entry: WorkoutEntry,
+    isDone: (entryId: string, setIndex: number) => boolean,
+  ): { setIndex: number; weight: number | null; plan: AutoregulationPlan }[] {
+    const logOf = this.backOffLogOf(session, entry, isDone);
+    return entry.sets.flatMap((each) => {
+      const log = each.tier === 'back-off' ? logOf(each) : null;
+      return log ? [{ setIndex: each.index, ...log }] : [];
+    });
+  }
+
+  /** The log of a lift's top set, a skip included; undefined while it is still to come. */
+  private topLogOf(
+    session: WorkoutSession,
+    entry: WorkoutEntry,
+    top: SetPrescription,
+  ): CompletedSet | undefined {
+    return session.completed.sets.find(
+      (candidate) => candidate.entryId === entry.id && candidate.setIndex === top.index,
+    );
+  }
+
+  /**
+   * The load the drop gives a lift's back-offs off its top set as lifted (`backOffAt`), with the
+   * weights the place has now; null for none (a top set skipped, or still to come).
+   */
+  private withBackOffAt(
+    workout: GeneratedWorkout,
+    entry: WorkoutEntry,
+    lifted: number | null,
+  ): GeneratedWorkout {
+    if (entry.backOffDrop === undefined) return workout;
+    const at = lifted === null ? null : this.backOffLoadOf(entry, lifted);
+    return {
+      ...workout,
+      blocks: workout.blocks.map((block) => ({
+        ...block,
+        entries: block.entries.map((candidate) => {
+          if (candidate.id !== entry.id) return candidate;
+          const next = { ...candidate };
+          if (at === null) delete next.backOffAt;
+          else next.backOffAt = at;
+          return next;
+        }),
+      })),
+    };
+  }
+
+  /** The drop's load off a top set lifted at `top`, onto the weights the place has now. */
+  private backOffLoadOf(entry: WorkoutEntry, top: number): number | null {
+    const exercise = getExercise(entry.exerciseId);
+    const units = this.state.profile?.units ?? 'lb';
+    const session = this.state.session;
+    if (!exercise || entry.backOffDrop === undefined || !session) return null;
+    const loading = loadingFor(this.currentLocation()?.loading, session.loading, exercise, units);
+    return backOffLoad(top, entry.backOffDrop, {
+      step: loading.step,
+      floor: barWeightFor(exercise, units),
+      loading,
+    });
+  }
+
+  /** A workout with one lift's sets as given. */
+  private withBackOffSets(
+    workout: GeneratedWorkout,
+    entryId: string,
+    sets: SetPrescription[],
+  ): GeneratedWorkout {
+    return {
+      ...workout,
+      blocks: workout.blocks.map((block) => ({
+        ...block,
+        entries: block.entries.map((candidate) =>
+          candidate.id !== entryId ? candidate : { ...candidate, sets },
+        ),
+      })),
+    };
+  }
+
+  /**
+   * A lift's back-off still logged, as the replay reads it: the weight it was lifted at and the step
+   * its log gave the ones after it (`backOffsReplayed`); null for one not logged.
+   */
+  private backOffLogOf(
+    session: WorkoutSession,
+    entry: WorkoutEntry,
+    isDone: (entryId: string, setIndex: number) => boolean,
+  ): (each: SetPrescription) => { weight: number | null; plan: AutoregulationPlan } | null {
+    return (each) => {
+      if (!isDone(entry.id, each.index)) return null;
+      const log = session.completed.sets.find(
+        (candidate) =>
+          candidate.entryId === entry.id && candidate.setIndex === each.index && !candidate.skipped,
+      );
+      if (!log) return { weight: null, plan: { kind: 'none' as const, reason: '' } };
+      const after = entry.sets.filter(
+        (other) =>
+          other.kind === 'working' && other.index > each.index && !isDone(entry.id, other.index),
+      ).length;
+      const values = { weight: log.weight, reps: log.reps, rir: log.rir };
+      return {
+        weight: log.weight,
+        plan: this.planAfter(session, entry, each, log.reps, values, Math.max(1, after)),
+      };
+    };
   }
 
   setDraft(entryId: string, draft: SetDraft): void {
@@ -2548,6 +2930,9 @@ export class AppStore {
       elapsedSeconds: elapsed,
       rating,
       endedEarly: options.endedEarly ?? false,
+      // As the top set was lifted (the eleventh review of round N); a session saved before it was
+      // kept, at the weights the place has now.
+      backOffAt: (entry, top) => entry.backOffAt ?? this.backOffLoadOf(entry, top),
     });
     record.prs = detectPersonalRecords(record, this.state.history, profile.units);
     const db = await this.getDatabase();
@@ -2636,7 +3021,18 @@ export class AppStore {
     // Timed at the lifter's pace as it reads now, not as it read when saved (Maintenance 28, the
     // review of item 4).
     const fresh = planAtPace(
-      asSaved(explanationOnce(withoutStops(saved.workout))),
+      withDropsToday(
+        asSaved(explanationOnce(withoutStops(saved.workout))),
+        this.state.readHistory,
+        (exercise) =>
+          loadingFor(
+            this.currentLocation()?.loading,
+            session.loading,
+            exercise,
+            this.state.profile?.units ?? 'lb',
+          ),
+        this.state.profile?.units ?? 'lb',
+      ),
       personalPace(this.state.readHistory, this.state.learnedResets.pace ?? null),
     );
     const workout = {

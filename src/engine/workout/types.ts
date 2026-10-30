@@ -14,6 +14,16 @@ export type DurationChoice = 15 | 30 | 45 | 'default';
 export type SetKind = 'warmup' | 'working' | 'drop';
 
 /**
+ * A lift on top set plus back-offs (Maintenance 32, item 11): its first working set is the top set,
+ * the rest are back-offs. Both stay working sets, so every count of working sets reads them alike.
+ */
+export const SET_TIERS = ['top', 'back-off'] as const;
+export type SetTier = (typeof SET_TIERS)[number];
+
+/** The widest drop from the top set's load a back-off ever takes (item 11: the trials' range). */
+export const MAX_BACK_OFF_DROP = 0.2;
+
+/**
  * The template ids a catch-up and a second workout are planned as (Maintenance 31). Neither takes a
  * place in the split's rotation: the day's own sessions keep their order.
  */
@@ -116,6 +126,12 @@ export interface RackNote {
 /** Values the user set by hand this session; the engines never override them. */
 export interface ManualEdits {
   weight?: boolean;
+  /**
+   * The weight the back-offs took by hand once their top set was done (Maintenance 32, the ninth
+   * review of round N): every replay of them starts from it, the top set's log, corrected or taken
+   * back, moving them no more. Absent where the weight set by hand is the top set's.
+   */
+  backOffs?: number;
   reps?: boolean;
   sets?: boolean;
   rest?: boolean;
@@ -134,6 +150,8 @@ export interface SetPrescription {
    * reps: the load and range it stands in for (Maintenance 23). Absent on any other set.
    */
   asked?: { weight: number; reps: [number, number] };
+  /** The top set or a back-off of a lift on top set plus back-offs (item 11); absent otherwise. */
+  tier?: SetTier;
 }
 
 export interface WorkoutEntry {
@@ -163,6 +181,23 @@ export interface WorkoutEntry {
    * as the week's extra exposure the push adds. It leads, and the time fit never leaves it out.
    */
   push?: PushMark;
+  /**
+   * A lift on top set plus back-offs (Maintenance 32, item 11): the back-offs' drop from the top
+   * set's load, as a fraction. Absent on a lift on straight sets.
+   */
+  backOffDrop?: number;
+  /**
+   * The load the drop gave the back-offs off the top set as lifted, with the weights the place had
+   * as it was lifted (the eleventh review of round N: worked out at the finish, a plate marked
+   * missing after moved it), set as the top set is logged. The saved session keeps it while the top
+   * set stands lifted, for the drop's correction to read only back-offs lifted at it.
+   */
+  backOffAt?: number;
+  /**
+   * A lift on straight sets at the back-offs' load, after a session on the structure (the fourth
+   * review of round N): its top set reads past such a day, as past its back-offs.
+   */
+  atBackOffs?: true;
   progression?: EntryProgression;
   manual?: ManualEdits;
   /**
@@ -358,6 +393,20 @@ export function pushMarkOf(
   entry: Pick<WorkoutEntry, 'push' | 'replacedFrom'>,
 ): PushMark | undefined {
   return entry.replacedFrom === undefined ? entry.push : undefined;
+}
+
+/**
+ * An entry whose sets to come are built afresh (a swap, a swap back, a lift picked up again): the
+ * reps or the weight set by hand were for the sets it had, and no longer apply (Maintenance 23; the
+ * eleventh review of round N: picked up again, a weight its back-offs took kept them unfitted).
+ */
+export function withoutHandTargets(entry: WorkoutEntry): void {
+  if (!entry.manual?.reps && !entry.manual?.weight) return;
+  const manual = { ...entry.manual };
+  delete manual.reps;
+  delete manual.weight;
+  delete manual.backOffs;
+  entry.manual = manual;
 }
 
 export function isStopped(entry: WorkoutEntry): boolean {
