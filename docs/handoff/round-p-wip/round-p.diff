@@ -1,0 +1,117 @@
+diff --git a/docs/reports/maintenance-34.md b/docs/reports/maintenance-34.md
+new file mode 100644
+index 0000000..c9bff56
+--- /dev/null
++++ b/docs/reports/maintenance-34.md
+@@ -0,0 +1,111 @@
++# Maintenance 34: time intelligence
++
++Built from 2026-10-30 on the owner's word to build the whole agreed queue, round by round, to live,
++without pausing at review gates, which stay YELLOW. It is part 2 of the approved proposal
++(`docs/proposals/week-model-readiness-time.md`): "the forecast at real lengths, carrying the need
++forward, the 'longer would help' suggestion with cooldowns, and the honest goals-versus-time check".
++It rests on `docs/research/training-dose-and-time.md` and
++`docs/research/coaching-nudges-and-cooldowns.md`. Every number is in the sourced rules table
++(`src/engine/rules/ruleTable.ts`), each marked research or judgement with its source.
++
++_Design, written before the build; each part is kept to as built, and the Review section records
++what the reviews changed._
++
++## The forecast at real lengths
++
++Round M's week model plans each session still to come this week at the Default length. The
++proposal: "Expected lengths forecast the week; today's choice overrides immediately. The forecast
++weighs your last few weeks by weekday, so it adapts within about two weeks if you start training
++longer."
++
++- **Each weekday's expected length** is read from the lifter's own sessions on that weekday in the
++  last four weeks (the dose report's rolling four-week window; judgement): the median of the latest
++  three, the latest of two, or the one. A change of length shows from its second week (judgement:
++  "adapts within about two weeks"). A session with no length kept (one from before the field)
++  reads as the Default.
++- **No session on that weekday** in the window: the Default. Another weekday's length says little
++  about this one (judgement).
++- **Today's own plan** counts at the length it has now: the lifter's choice stands at once.
++- The week model plans each day to come at its expected length, so everything that reads the week
++  reads it so: the catch-up and the second workout (Round M), the carried need and the suggestion
++  below.
++- Lengths are never "the time you have": goals don't bend to them (proposal part 4). They only
++  forecast the week.
++
++## Carrying the need forward
++
++The proposal: "Carry forward the need, not the exercise. What carries: a muscle's missing hard sets,
++filled by whatever exercise fits next time, within a per-session limit (about 11 sets per muscle,
++from one not-yet-peer-reviewed study, so judgement). Expiry: a need ends with the week (judgement).
++One short week costs little (Coleman 2024; Hwang 2017), so the app shouldn't build up a debt."
++
++- **A muscle's need** is what the week, forecast at real lengths, leaves under its weekly target:
++  the sets done this week, today's plan's, and the sessions to come at their expected lengths.
++- **Filled where today's plan already trains it**, by a set more on a lift that works it directly:
++  accessories first (less time and fatigue a set than the main lift; judgement), never more than
++  two over a lift's own sets (judgement: lifts stay within the two to six working sets the roles
++  give), never over 11 sets for the muscle today (the limit above).
++- **Only into room the length leaves**: after the plan is fitted to its length, a set is added only
++  while the plan still fits it. The plan's own sets are never displaced; a length too short for the
++  need is what the suggestion below is for.
++- **Not carried** on a catch-up or a second workout (built from the week already), in a deload
++  week, on a day of high fatigue, on a fever's rest day, nor for a muscle still inside its recovery
++  window (Maintenance 33). A lift set by hand keeps its sets.
++- **Expiry**: the week. A new week starts with no need.
++- The lift's reasons say it: "A set more for the chest, which this week is short of."
++
++## "Longer would help"
++
++The proposal: "an inline suggestion, never a question. It sits next to the length control: '45 min
++would close most of this week's chest gap · Use 45 min'. When it appears: only if a priority muscle
++is projected below your goal's range, today's split trains it, recovery allows, and fatigue isn't
++high. What it teaches: tapping it says you had time; 'Not now' says you chose."
++
++- **A priority muscle** is one the lifter's goals weight up (Bigger chest: the chest and upper
++  chest; Bigger arms: the biceps, triceps and forearms; and so on, as the weekly targets do).
++- **Shown** on Today's plan before it starts when such a muscle ends the week, forecast at real
++  lengths with today's carried sets, under its weekly target; today's plan works it directly; it is
++  outside its recovery window; fatigue is not high; the day is a day of the plan (not a catch-up, a
++  second workout, a deload week or a rest day); and the next longer length offered would give it at
++  least half of what it is short (judgement: "most of").
++- **Its words** name the length and the muscle: "45 min would close most of this week's chest gap",
++  or "would close this week's chest gap" where it closes all of it; with **Use 45 min** and **Not
++  now**.
++- **Cooldowns** (proposal; the research gives the direction, every number is judgement): at most
++  once a day and twice in seven days; gone once the workout starts and at midnight; "Not now" skips
++  that muscle for the rest of the week (decision 5), and two "Not now" in a row pause the suggestion
++  for seven days (the nudges report). It is not a coaching card: it sits at the length control, and
++  the card limits do not count it.
++- **Use 45 min** sets the length, as the control does.
++
++## The honest goals-versus-time check
++
++The proposal's table: "Honest 'too little time' message: Only after 3+ consecutive weeks below your
++goal's floor. Strength holds about 3 weeks (McMaster 2013)." Settled: "The honest goals-versus-time
++card, shown once after 3+ weeks below the floor, again only on a material change."
++
++- **The floor**: about 4 hard sets a week for a muscle (Schoenfeld 2017: under 5 sets a week still
++  grew; Iversen 2021). A muscle is below it in a week with fewer than 4 sets done, a synergist's at
++  half, as the weekly volume counts them.
++- **Read over whole weeks**: the last three completed weeks, Monday to Sunday, each with a session
++  in it (a week away is a break, not a short week: one or two weeks off cost little, Coleman 2024,
++  Hwang 2017). The muscles the goals weight up, or the major muscles where none is.
++- **A coaching card** (Maintenance 33's limits hold: at most one new card a day and three a week),
++  aimed at the training and paired with one step (the nudges report: Kluger 1996, Brehaut 2016):
++  "Chest under 4 sets a week for 3 weeks", why "About 4 hard sets a week is the least that grows a
++  muscle. Your weeks held about N sessions of M min.", with **Adjust time** (the schedule) and
++  **Keep as is**.
++- **Again only on a material change** (Nahum-Shani 2018): Not now keeps it away until the muscles
++  below the floor change or the weeks' time moves by a quarter or more; time alone never brings it
++  back.
++
++## Not taken
++
++- **A planned week below the floor flagged at once** (the dose report's suggestion): the approved
++  proposal flags only after three weeks.
++- **The taps as a record of spare time**: a tap sets today's length, which the forecast then reads
++  like any other length; nothing else learns from it.
++
++## Questions for the owner
++
++None: the approved proposal and its settled questions cover each part.

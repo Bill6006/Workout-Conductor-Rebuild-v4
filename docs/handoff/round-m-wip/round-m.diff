@@ -25,10 +25,10 @@ index 416f674..ec6c1c8 100644
  
 diff --git a/docs/reports/maintenance-31.md b/docs/reports/maintenance-31.md
 new file mode 100644
-index 0000000..4480248
+index 0000000..0f75981
 --- /dev/null
 +++ b/docs/reports/maintenance-31.md
-@@ -0,0 +1,808 @@
+@@ -0,0 +1,826 @@
 +# Maintenance 31: round M, the week as it stands
 +
 +Built on 2026-10-17 on the owner's word to build the whole agreed queue, round by round, to live,
@@ -763,6 +763,24 @@ index 0000000..4480248
 +  the pass's code (E3, H169, H200 to H202, H205) and 4 beside it. The midnight test runs in the
 +  zones run too.
 +
++**The twenty-seventh pass** found three, all LOW, all from the twenty-sixth pass's way back: given
++the day's offer alone, the full session taken from a loaded copy was still read as a copy, the
++day's other choices kept aside. About 4,900 random runs through the store, in three time zones and
++across midnight, and 72 fixed cases of six kinds of copy, found nothing else.
++
++- LOW: a save read the day's offer again only into the choices kept aside, so the way back kept the
++  offer as it stood when the full session was taken: Saturday ticked, the plan stayed "Catch-up"
++  with no line on Today, and a lifter saved as a beginner got a close-grip bench press for muscles
++  trained that morning, where the day's own way back sits them out. The way back laid out whole a
++  catch-up or second workout the lifter had emptied today, the day's mark kept aside where a rebuild
++  never reads it. A full session taken on the day's own plan before the load outlasted "Catch-up
++  instead": the next plan of the day was the full session again.
++- Fixed: the full session taken from a copy that stands for none of the day's offer makes the plan
++  the day's own from then on: the day's offer its way back, the plans the lifter emptied today its
++  own, the copy's with them (`marksOfDay`, the merge every later plan reads), and nothing kept aside.
++- The revert run caught all 7 new and affected entries: 2 new (H212, H213), 2 re-anchored onto
++  the pass's code (H172 onto the shared merge, H208) and 3 beside it.
++
 +## Known limits
 +
 +- **The week is this device's.** Workouts logged on another device, or not logged, are not in it,
@@ -1026,7 +1044,7 @@ index 7c77cb3..3f72f40 100644
  
  for (const { zone, offset } of ZONES) {
 diff --git a/src/core/state/appStore.ts b/src/core/state/appStore.ts
-index e76e5ca..afbdb54 100644
+index e76e5ca..25953c5 100644
 --- a/src/core/state/appStore.ts
 +++ b/src/core/state/appStore.ts
 @@ -17,7 +17,7 @@ import { isHold } from '../../catalog/exercises/exerciseSchema';
@@ -1038,7 +1056,7 @@ index e76e5ca..afbdb54 100644
  import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
  import { readStart, startKey, type StartReading } from '../../engine/recalibration/badStart';
  import { dropSetWeight, pendingDropSet, withDropWeight } from '../../engine/recalibration/dropSet';
-@@ -125,11 +125,30 @@ import {
+@@ -125,11 +125,31 @@ import {
    planOwnExercise,
    withoutStops,
    type DurationChoice,
@@ -1052,6 +1070,7 @@ index e76e5ca..afbdb54 100644
 +  builtCatchUp,
 +  emptiedLayoutsFor,
 +  generateWorkout,
++  marksOfDay,
 +  sessionDose,
 +  firstSessionDose,
 +  offPlanSpec,
@@ -1070,7 +1089,7 @@ index e76e5ca..afbdb54 100644
  import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
  import { normalizeName } from '../backup/legacyImport';
  import {
-@@ -615,6 +634,39 @@ const BARCODE_LOCK = 'workout-conductor-v4-barcodes';
+@@ -615,6 +635,28 @@ const BARCODE_LOCK = 'workout-conductor-v4-barcodes';
  
  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
  
@@ -1088,21 +1107,10 @@ index e76e5ca..afbdb54 100644
 +} {
 +  const kept = constraints.dayChoices;
 +  const own = constraints.emptied ?? [];
-+  const emptied = kept
-+    ? [
-+        ...(kept.emptied ?? []),
-+        ...own.filter(
-+          (plan) =>
-+            !(kept.emptied ?? []).some(
-+              (other) => other.offer === plan.offer && other.layout === plan.layout,
-+            ),
-+        ),
-+      ]
-+    : own;
 +  return {
 +    catchUp: (kept ? kept.catchUp : constraints.catchUp) ?? null,
 +    fullSession: constraints.fullSession === true || kept?.fullSession === true,
-+    emptied: emptied.map((plan) => ({ ...plan })),
++    emptied: marksOfDay(kept?.emptied ?? [], own),
 +    swappedAway: [...(constraints.swappedAway ?? [])],
 +  };
 +}
@@ -1110,7 +1118,7 @@ index e76e5ca..afbdb54 100644
  function sortLocations(locations: LocationProfile[]): LocationProfile[] {
    const order = { home: 0, gym: 1, travel: 2, custom: 3 } as const;
    return [...locations].sort(
-@@ -981,6 +1033,7 @@ export class AppStore {
+@@ -981,6 +1023,7 @@ export class AppStore {
          deload: session.constraints.deload !== null,
          lowCheckIn: lowCheckIn(session.constraints.readiness),
          hardStart: session.constraints.badStart === true,
@@ -1118,7 +1126,7 @@ index e76e5ca..afbdb54 100644
        },
        // A check where it would pair with a recent one for the lift's own curve (item 41): its
        // last working set's top reps plus reserve, about where a set to failure ends.
-@@ -1220,9 +1273,10 @@ export class AppStore {
+@@ -1220,9 +1263,10 @@ export class AppStore {
     * Reuses the persisted session when it was generated from today's inputs;
     * otherwise (first run, a new day, an edited profile, new history) generates
     * a fresh Default session silently. A started or completed workout is never
@@ -1131,7 +1139,7 @@ index e76e5ca..afbdb54 100644
      const key = this.baseKey();
      const { profile } = this.state;
      if (!key || !profile) {
-@@ -1246,23 +1300,175 @@ export class AppStore {
+@@ -1246,23 +1290,175 @@ export class AppStore {
        return;
      }
      const now = this.now();
@@ -1313,7 +1321,7 @@ index e76e5ca..afbdb54 100644
    }
  
    /** Puts the kept-workout notice away; the kept copy itself stays on the device. */
-@@ -1415,6 +1621,16 @@ export class AppStore {
+@@ -1415,6 +1611,16 @@ export class AppStore {
      // The history read before the overlay's pause, as the session and profile are.
      const request = this.calibrationRequest(trigger, session, profile, reason ?? described.title, {
        history,
@@ -1330,7 +1338,7 @@ index e76e5ca..afbdb54 100644
      });
      let result: RecalibrationResult;
      try {
-@@ -1638,7 +1854,12 @@ export class AppStore {
+@@ -1638,7 +1844,12 @@ export class AppStore {
      this.leaveEarlierDay();
      const { session, profile } = this.state;
      if (!session || !profile) return Promise.resolve(null);
@@ -1344,7 +1352,7 @@ index e76e5ca..afbdb54 100644
      const time = on ? new Date(this.nowMs() + minutes * 60_000).toISOString() : null;
      return this.recalibrate({ type: 'end-by', time });
    }
-@@ -2380,6 +2601,7 @@ export class AppStore {
+@@ -2380,6 +2591,7 @@ export class AppStore {
      const session = this.requireSession();
      const trimmed = name.trim();
      if (!trimmed) throw new Error('Give the workout a name.');
@@ -1352,7 +1360,7 @@ index e76e5ca..afbdb54 100644
      const saved: SavedWorkout = {
        id: `saved-${this.now().replace(/\D/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`,
        name: trimmed.slice(0, 60),
-@@ -2389,6 +2611,11 @@ export class AppStore {
+@@ -2389,6 +2601,11 @@ export class AppStore {
        // The plan under a hard start's ease, with no marks: the ease of today is no part of a plan
        // for another day (Maintenance 26, the sixth and seventh passes of item 42).
        workout: planUnderTheEase(session.workout),
@@ -1364,7 +1372,7 @@ index e76e5ca..afbdb54 100644
      };
      const db = await this.getDatabase();
      const receipt = await putVerified(db, 'savedWorkouts', saved, { now: this.now });
-@@ -2405,6 +2632,10 @@ export class AppStore {
+@@ -2405,6 +2622,10 @@ export class AppStore {
    /** Starts a fresh preview session from a saved workout; everything after that recalibrates as usual. */
    loadSavedWorkout(id: string): void {
      const saved = this.state.savedWorkouts.find((item) => item.id === id);
@@ -1375,7 +1383,7 @@ index e76e5ca..afbdb54 100644
      const session = this.state.session;
      if (!saved || !session || session.status !== 'preview') return;
      const now = this.now();
-@@ -2435,8 +2666,56 @@ export class AppStore {
+@@ -2435,8 +2656,56 @@ export class AppStore {
        },
      };
      const headline = `Loaded "${saved.name}".`;
@@ -1433,7 +1441,7 @@ index e76e5ca..afbdb54 100644
        duration: saved.duration,
        lastSummary: {
          headline,
-@@ -2472,7 +2751,11 @@ export class AppStore {
+@@ -2472,7 +2741,11 @@ export class AppStore {
      if (!session || session.status !== 'completed') return;
      clearSession(this.storage);
      this.setState({ session: null });
@@ -1446,7 +1454,7 @@ index e76e5ca..afbdb54 100644
    }
  
    /** Ends the workout without saving anything; a fresh preview is generated as usual. */
-@@ -2481,7 +2764,8 @@ export class AppStore {
+@@ -2481,7 +2754,8 @@ export class AppStore {
      if (!session || session.status === 'preview' || session.status === 'completed') return;
      clearSession(this.storage);
      this.setState({ session: null });
@@ -1456,7 +1464,7 @@ index e76e5ca..afbdb54 100644
    }
  
    // ---------------------------------------------------------------- custom content
-@@ -3568,18 +3852,46 @@ export class AppStore {
+@@ -3568,18 +3842,46 @@ export class AppStore {
     * busy equipment, an end time still ahead) are applied to the new plan by the engine, as every
     * rebuild applies them.
     */
@@ -1509,7 +1517,7 @@ index e76e5ca..afbdb54 100644
      const fresh = this.state.session;
      const { profile, readHistory: history } = this.state;
      if (!fresh || !profile || this.fromEarlierDay(session)) return;
-@@ -3589,7 +3901,30 @@ export class AppStore {
+@@ -3589,7 +3891,30 @@ export class AppStore {
        Date.parse(session.constraints.endBy) > Date.parse(this.now())
          ? session.constraints.endBy
          : null;
@@ -1540,7 +1548,7 @@ index e76e5ca..afbdb54 100644
      const chosen =
        session.duration !== fresh.duration ||
        today.readiness !== null ||
-@@ -4259,7 +4594,9 @@ export class AppStore {
+@@ -4259,7 +4584,9 @@ export class AppStore {
    async stopLastingSwap(from: string): Promise<void> {
      const change = await this.changeSwaps((current) => withoutSwap(current, from));
      if (!change.saved) throw new Error('The swap could not be stopped.');
@@ -3517,6 +3525,605 @@ index 0000000..248a446
 +    expect(rebuilt).toMatch(/^Catch-up muscles are the freshest available/);
 +    // On 1e29f22 and 0a82961: "Second workout muscles are the freshest available; ...".
 +    expect(loaded).toMatch(/^Catch-up muscles are the freshest available/);
++  });
++});
+diff --git a/src/core/state/copyFullSessionChoiceHolds.store.test.ts b/src/core/state/copyFullSessionChoiceHolds.store.test.ts
+new file mode 100644
+index 0000000..c8c16cf
+--- /dev/null
++++ b/src/core/state/copyFullSessionChoiceHolds.store.test.ts
+@@ -0,0 +1,133 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import { allEntries } from '../../engine/workout/types';
++import { dayNoteOf } from '../../features/today/dayNote';
++import { describeWorkout, session as workoutAt } from '../../test/clockDays';
++import { record } from '../../test/records';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * Twenty-seventh review of round M (M31z-C), on the twenty-sixth pass's way back from the full session
++ * taken from a loaded copy (`session-kind` in src/engine/recalibration/recalibrate.ts): the plan is
++ * the day's own from there ("the full session taken from a copy that stands for none of the day's
++ * offer is the day's own, so its way back is the day's offer"), but the full session the lifter took
++ * on the day's own plan before the load stays kept aside (`dayChoices.fullSession`), and every later
++ * plan the same day reads it before the plan's own choice (`dayChoicesOf`: `constraints.fullSession
++ * === true || kept?.fullSession === true`). So "Catch-up instead" holds only until the next plan of
++ * the day, which is the full session again.
++ *
++ * The rules: item 12, "The button beside it, Full session, gives the usual plan; there, Catch-up
++ * instead gives the catch-up back. The choice holds for the day."; the twenty-third pass, "every later
++ * plan the same day reads them with what the lifter chose on the loaded plan"; the twenty-sixth, "its
++ * way back is the day's offer". The day's own path keeps it: the full session, "Catch-up instead",
++ * begun and discarded, gives the catch-up (checked first).
++ *
++ * What happens: on Saturday, a day not ticked, the lifter taps "Full session" (the upper day), then
++ * loads "Nothing more" (Wednesday's second workout with no lift: "Not one of your training days:
++ * nothing more for today.", "Full session"), taps "Full session" and then "Catch-up instead": "Not one
++ * of your training days: a 20-minute catch-up for what is behind this week." (back squat x3, barbell
++ * shrug x2). Begun and discarded, the next plan is the upper day again, "Not one of your training
++ * days." with "Catch-up instead".
++ *
++ * On the previous head (1e29f22) the full session taken from such a copy had no way back (the
++ * twenty-sixth review's M31y-B), so the test fails there at the button: the path is the twenty-sixth
++ * pass's.
++ *
++ * Steps (synthetic data only): Monday's bench press in the log; on Wednesday, a day the schedule does
++ * not tick, at the gym, a long session this morning (another device); the lifter saves today's
++ * workout as "Nothing more". On Saturday the lifter taps "Full session", loads "Nothing more", taps
++ * "Full session", then "Catch-up instead", begins the workout and discards it.
++ *
++ * The fix (the twenty-seventh pass): the full session taken from such a copy makes the plan the
++ * day's own from then on (`session-kind`), and nothing kept aside, so the way back ends the full
++ * session for the day, as on the day's own plan.
++ */
++
++const MONDAY = '2026-08-31T12:00:00.000Z';
++const WEDNESDAY_MORNING = '2026-09-02T08:00:00.000Z';
++const WEDNESDAY = '2026-09-02T12:00:00.000Z';
++const SATURDAY = '2026-09-05T12:00:00.000Z';
++
++const threeSets: [number, number, number][] = [
++  [10, 100, 2],
++  [10, 100, 2],
++  [10, 100, 2],
++];
++
++/** Six working sets each, every muscle trained this morning. */
++const LONG_MORNING = workoutAt(WEDNESDAY_MORNING, [
++  ['barbell-bench-press', 6],
++  ['incline-dumbbell-press', 6],
++  ['lateral-raise', 6],
++  ['rear-delt-fly', 6],
++  ['barbell-shrug', 6],
++  ['pull-up', 6],
++  ['barbell-row', 6],
++  ['ez-bar-curl', 6],
++  ['wrist-curl', 6],
++  ['back-squat', 6],
++  ['romanian-deadlift', 6],
++  ['standing-calf-raise', 6],
++  ['ab-wheel-rollout', 6],
++  ['overhead-press', 6],
++  ['cable-triceps-pushdown', 6],
++]);
++
++async function saturday() {
++  const clock = { now: WEDNESDAY };
++  const handle = createTestStore({ now: () => clock.now });
++  await handle.store.hydrate();
++  await handle.store.completeOnboarding(
++    { ...createDefaultProfile(clock.now), bodyweight: 185 },
++    createDefaultLocations({ gymAccess: true }, clock.now),
++  );
++  const db = await handle.store.getDatabase();
++  await db.put('workouts', {
++    ...record(0, 'barbell-bench-press', threeSets, [8, 12], 2),
++    id: 'w-bench-monday',
++    startedAt: MONDAY,
++    completedAt: MONDAY,
++  });
++  await db.put('workouts', { ...LONG_MORNING, id: 'w-long-morning' });
++  await handle.store.hydrate();
++  const saved = await handle.store.saveCurrentWorkout('Nothing more');
++  clock.now = SATURDAY;
++  handle.store.refreshSession();
++  expect(session(handle).workout.title).toBe('Catch-up');
++  return { handle, saved };
++}
++
++type Handle = Awaited<ReturnType<typeof saturday>>['handle'];
++const session = (handle: Handle) => handle.store.getSnapshot().session!;
++const lifts = (handle: Handle) => describeWorkout(session(handle).workout).join('; ');
++
++describe('"Catch-up instead" on the full session taken from a loaded copy', () => {
++  it('holds for the day after the day’s own full session was taken, as on the day’s own plan', async () => {
++    // The day's own path: full session, "Catch-up instead", begun and discarded: the catch-up.
++    const own = (await saturday()).handle;
++    expect((await own.store.setFullSession(true))?.ok).toBe(true);
++    expect((await own.store.setFullSession(false))?.ok).toBe(true);
++    own.store.startWorkout();
++    own.store.discardWorkout();
++    expect(session(own).workout.title, lifts(own)).toBe('Catch-up');
++
++    const { handle, saved } = await saturday();
++    expect((await handle.store.setFullSession(true))?.ok).toBe(true);
++    handle.store.loadSavedWorkout(saved.id);
++    expect(allEntries(session(handle).workout.blocks)).toEqual([]);
++    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
++    expect((await handle.store.setFullSession(true))?.ok).toBe(true);
++    const there = dayNoteOf(session(handle), false);
++    // On 1e29f22: "Not one of your training days.", no button.
++    expect(there?.action, there?.text).toEqual({ label: 'Catch-up instead', full: false });
++    expect((await handle.store.setFullSession(false))?.ok).toBe(true);
++    expect(session(handle).workout.title).toBe('Catch-up');
++    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
++    handle.store.startWorkout();
++    handle.store.discardWorkout();
++    // On f840d5b: "Upper body", "Not one of your training days." with "Catch-up instead".
++    expect(session(handle).workout.title, lifts(handle)).toBe('Catch-up');
++    expect(session(handle).constraints.fullSession).toBeUndefined();
++  });
++});
+diff --git a/src/core/state/copyFullSessionEmptiedWayBack.store.test.ts b/src/core/state/copyFullSessionEmptiedWayBack.store.test.ts
+new file mode 100644
+index 0000000..36978ec
+--- /dev/null
++++ b/src/core/state/copyFullSessionEmptiedWayBack.store.test.ts
+@@ -0,0 +1,214 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import { allEntries } from '../../engine/workout/types';
++import { dayNoteOf } from '../../features/today/dayNote';
++import { describeWorkout, session as workoutAt } from '../../test/clockDays';
++import { record } from '../../test/records';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * Twenty-seventh review of round M (M31z-A), on the twenty-sixth pass's way back from the full session
++ * taken from a loaded copy (`session-kind` in src/engine/recalibration/recalibrate.ts): "Taken from a
++ * copy loaded that stands for none of the day's offer, the full session is the day's own: its way
++ * back is that offer, kept aside with the day's choices". It puts the day's offer back in the plan
++ * (`constraints.catchUp = cloneSpec(offer)`), but not the day's marks of plans the lifter emptied
++ * for that offer: the load kept them aside (`dayChoices.emptied`, every mark not of the copy's own
++ * offer), and a rebuild reads only the plan's own (`emptiedLayoutsFor(constraints)`). So the way back
++ * lays out whole the catch-up or second workout the lifter emptied today.
++ *
++ * The rules: the seventeenth pass, "the way back to the same offer finds it empty again; a later
++ * plan the same day keeps the mark"; the twentieth, "Every later plan of that offer laid out the same
++ * way takes no lift: every rebuild, the way back from the full session, a later plan the same day";
++ * the twenty-second and twenty-third, a saved workout loaded "keeps the day's offer, the full session
++ * taken, the plans emptied", "every later plan the same day reads them"; the twenty-sixth, "its way
++ * back is the day's offer". The day's own path keeps the rule: its full session and back, and the
++ * next plan of the same day after the copy's full session (begun and discarded), both find the plan
++ * empty.
++ *
++ * What happens: (1) on Saturday, a day not ticked, the lifter skips both lifts of the day's catch-up
++ * (back squat x3, barbell shrug x2): "Not one of your training days: nothing more for today.", with
++ * "Full session". The lifter loads "Nothing more" (Wednesday's second workout with nothing more for
++ * that day: no lift), taps "Full session" (the upper day, "Catch-up instead") and "Catch-up instead":
++ * "Not one of your training days: a 20-minute catch-up for what is behind this week." with the back
++ * squat x3 and the barbell shrug x2, the catch-up the lifter emptied. (2) On Friday, a day ticked, after
++ * a squat this morning (another device), the lifter skips each of the second workout's seven lifts
++ * ("You trained today: nothing more for today."), loads "Empty catch-up" (Wednesday's catch-up the
++ * lifter emptied), taps "Full session" (the pull day, "Go easy instead") and "Go easy instead": "You
++ * trained today: this one leads with what you missed and goes easy on the rest." with the seven lifts
++ * back (barbell row x3, bench press x2, ...).
++ *
++ * On the previous head (1e29f22) the full session taken from such a copy had no way back at all (the
++ * twenty-sixth review's M31y-B: "Not one of your training days." with no button, and no line on a day
++ * trained), so both tests fail there at the button: the way back, and this path, are the twenty-sixth
++ * pass's.
++ *
++ * Steps (synthetic data only): Monday's bench press in the log. (1) On Wednesday, a day the schedule
++ * does not tick, at the gym, a long session this morning (another device); the lifter saves today's
++ * workout as "Nothing more"; on Saturday skips each lift of the catch-up, loads "Nothing more", taps
++ * "Full session", then "Catch-up instead". (2) On Wednesday the lifter skips each lift of the catch-up
++ * and saves it as "Empty catch-up"; on Friday, a squat this morning (another device), skips each lift
++ * of the second workout, loads "Empty catch-up", taps "Full session", then "Go easy instead".
++ *
++ * The fix (the twenty-seventh pass): the full session taken from such a copy makes the plan the
++ * day's own from then on (`session-kind`): the day's offer, with the day's marks and the copy's
++ * together as the plan's own (`marksOfDay`), and nothing kept aside, so the way back reads them.
++ */
++
++const MONDAY = '2026-08-31T12:00:00.000Z';
++const WEDNESDAY_MORNING = '2026-09-02T08:00:00.000Z';
++const WEDNESDAY = '2026-09-02T12:00:00.000Z';
++const FRIDAY_MORNING = '2026-09-04T08:00:00.000Z';
++const FRIDAY = '2026-09-04T18:00:00.000Z';
++const SATURDAY = '2026-09-05T12:00:00.000Z';
++
++const threeSets: [number, number, number][] = [
++  [10, 100, 2],
++  [10, 100, 2],
++  [10, 100, 2],
++];
++
++/** Six working sets each, every muscle trained this morning. */
++const LONG_MORNING = workoutAt(WEDNESDAY_MORNING, [
++  ['barbell-bench-press', 6],
++  ['incline-dumbbell-press', 6],
++  ['lateral-raise', 6],
++  ['rear-delt-fly', 6],
++  ['barbell-shrug', 6],
++  ['pull-up', 6],
++  ['barbell-row', 6],
++  ['ez-bar-curl', 6],
++  ['wrist-curl', 6],
++  ['back-squat', 6],
++  ['romanian-deadlift', 6],
++  ['standing-calf-raise', 6],
++  ['ab-wheel-rollout', 6],
++  ['overhead-press', 6],
++  ['cable-triceps-pushdown', 6],
++]);
++
++async function lifter(clock: { now: string }) {
++  const handle = createTestStore({ now: () => clock.now });
++  await handle.store.hydrate();
++  await handle.store.completeOnboarding(
++    { ...createDefaultProfile(clock.now), bodyweight: 185 },
++    createDefaultLocations({ gymAccess: true }, clock.now),
++  );
++  const db = await handle.store.getDatabase();
++  await db.put('workouts', {
++    ...record(0, 'barbell-bench-press', threeSets, [8, 12], 2),
++    id: 'w-bench-monday',
++    startedAt: MONDAY,
++    completedAt: MONDAY,
++  });
++  await handle.store.hydrate();
++  return handle;
++}
++
++type Handle = Awaited<ReturnType<typeof lifter>>;
++const session = (handle: Handle) => handle.store.getSnapshot().session!;
++const lifts = (handle: Handle) => describeWorkout(session(handle).workout).join('; ');
++const count = (handle: Handle) => allEntries(session(handle).workout.blocks).length;
++
++/** Skips each lift of today's plan, as the lifter does from its sheet. */
++async function skipEach(handle: Handle) {
++  for (const entry of allEntries(session(handle).workout.blocks)) {
++    expect((await handle.store.recalibrate({ type: 'skip', entryId: entry.id }))?.ok).toBe(true);
++  }
++  expect(count(handle)).toBe(0);
++}
++
++/** Saturday: the long Wednesday morning in the log, "Nothing more" saved, the catch-up emptied. */
++async function saturdayEmptied() {
++  const clock = { now: WEDNESDAY };
++  const handle = await lifter(clock);
++  const db = await handle.store.getDatabase();
++  await db.put('workouts', { ...LONG_MORNING, id: 'w-long-morning' });
++  await handle.store.hydrate();
++  const saved = await handle.store.saveCurrentWorkout('Nothing more');
++  clock.now = SATURDAY;
++  handle.store.refreshSession();
++  expect(session(handle).constraints.catchUp?.kind).toBe('catch-up');
++  expect(count(handle)).toBeGreaterThan(0);
++  await skipEach(handle);
++  expect(dayNoteOf(session(handle), false)?.text).toBe(
++    'Not one of your training days: nothing more for today.',
++  );
++  return { handle, saved };
++}
++
++/** Friday: "Empty catch-up" saved on Wednesday, a squat this morning, the second workout emptied. */
++async function fridayEmptied() {
++  const clock = { now: WEDNESDAY };
++  const handle = await lifter(clock);
++  await skipEach(handle);
++  const saved = await handle.store.saveCurrentWorkout('Empty catch-up');
++  clock.now = FRIDAY;
++  const db = await handle.store.getDatabase();
++  await db.put('workouts', {
++    ...record(0, 'back-squat', threeSets, [8, 12], 2),
++    id: 'w-squat-friday',
++    startedAt: FRIDAY_MORNING,
++    completedAt: FRIDAY_MORNING,
++  });
++  await handle.store.hydrate();
++  expect(session(handle).constraints.catchUp?.kind).toBe('second');
++  expect(count(handle)).toBeGreaterThan(0);
++  await skipEach(handle);
++  expect(dayNoteOf(session(handle), true)?.text).toBe('You trained today: nothing more for today.');
++  return { handle, saved };
++}
++
++describe('the way back from the full session taken from a loaded copy, the day’s plan emptied', () => {
++  it('finds the catch-up the lifter emptied empty again, as the day’s own way back does', async () => {
++    // The day's own path: the full session and back finds the catch-up empty (the seventeenth pass).
++    const own = (await saturdayEmptied()).handle;
++    expect((await own.store.setFullSession(true))?.ok).toBe(true);
++    expect((await own.store.setFullSession(false))?.ok).toBe(true);
++    expect(count(own), lifts(own)).toBe(0);
++
++    const { handle, saved } = await saturdayEmptied();
++    handle.store.loadSavedWorkout(saved.id);
++    expect(count(handle)).toBe(0);
++    expect(dayNoteOf(session(handle), false)?.action).toEqual({
++      label: 'Full session',
++      full: true,
++    });
++    expect((await handle.store.setFullSession(true))?.ok).toBe(true);
++    expect(count(handle)).toBeGreaterThan(0);
++    const there = dayNoteOf(session(handle), false);
++    // On 1e29f22: "Not one of your training days.", no button.
++    expect(there?.action, there?.text).toEqual({ label: 'Catch-up instead', full: false });
++    expect((await handle.store.setFullSession(false))?.ok).toBe(true);
++    // On f840d5b: "Not one of your training days: a 20-minute catch-up for what is behind this week."
++    // with "back-squat x3 @RIR 2/2/2; barbell-shrug x2 @RIR 1/1".
++    expect(count(handle), lifts(handle)).toBe(0);
++    expect(dayNoteOf(session(handle), false)?.text).toBe(
++      'Not one of your training days: nothing more for today.',
++    );
++  });
++
++  it('finds the second workout the lifter emptied empty again, as the day’s own way back does', async () => {
++    const own = (await fridayEmptied()).handle;
++    expect((await own.store.setFullSession(true))?.ok).toBe(true);
++    expect((await own.store.setFullSession(false))?.ok).toBe(true);
++    expect(count(own), lifts(own)).toBe(0);
++
++    const { handle, saved } = await fridayEmptied();
++    handle.store.loadSavedWorkout(saved.id);
++    expect(count(handle)).toBe(0);
++    expect(dayNoteOf(session(handle), true)?.action).toEqual({ label: 'Full session', full: true });
++    expect((await handle.store.setFullSession(true))?.ok).toBe(true);
++    expect(count(handle)).toBeGreaterThan(0);
++    const there = dayNoteOf(session(handle), true);
++    // On 1e29f22: no line at all.
++    expect(there?.action, there?.text).toEqual({ label: 'Go easy instead', full: false });
++    expect((await handle.store.setFullSession(false))?.ok).toBe(true);
++    // On f840d5b: "You trained today: this one leads with what you missed and goes easy on the
++    // rest." with seven lifts, "barbell-row x3 @RIR 2/2/2; barbell-bench-press x2 @RIR 2/2; ...".
++    expect(count(handle), lifts(handle)).toBe(0);
++    expect(dayNoteOf(session(handle), true)?.text).toBe(
++      'You trained today: nothing more for today.',
++    );
++  });
++});
+diff --git a/src/core/state/copyFullSessionOfferReadAgain.store.test.ts b/src/core/state/copyFullSessionOfferReadAgain.store.test.ts
+new file mode 100644
+index 0000000..4f8fb65
+--- /dev/null
++++ b/src/core/state/copyFullSessionOfferReadAgain.store.test.ts
+@@ -0,0 +1,234 @@
++import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile, type UserProfile } from '../validation/profile';
++import { allEntries } from '../../engine/workout/types';
++import { dayNoteOf } from '../../features/today/dayNote';
++import { describeWorkout, session as workoutAt } from '../../test/clockDays';
++import { record } from '../../test/records';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * Twenty-seventh review of round M (M31z-B), on the twenty-sixth pass's way back from the full session
++ * taken from a loaded copy (`session-kind` in src/engine/recalibration/recalibrate.ts), which writes
++ * the day's offer into the copy's own (`constraints.catchUp = cloneSpec(offer)`): from there the plan
++ * is the day's offer, and its way back the day's catch-up or second workout. But the store still
++ * holds the plan for a copy, whose offer is its own: a save reads the day's offer again only into the
++ * choices kept aside (`offerReadAgain`: "A saved workout loaded is read as itself: the offer read
++ * again is the day's, kept aside"), never into the plan's. So the plan keeps the offer as it was when
++ * the full session was taken, through a schedule saved and an experience saved.
++ *
++ * The rules: item 12, "A schedule, an experience or a place saved reads the day's offer again for a
++ * plan not yet started: tick today and the catch-up gives way to the usual plan"; item 32, "A
++ * beginner's muscles trained today always sit out (the settled question 5)", and the research's
++ * "Novices: muscles trained today always sit out" (docs/research/catch-up-and-second-workout.md);
++ * the twenty-sixth pass, "the full session taken from a copy that stands for none of the day's offer
++ * is the day's own, so its way back is the day's offer". The day's own catch-up and full session
++ * keep both rules (checked first in each test).
++ *
++ * What happens: (1) on Saturday, a day not ticked, the lifter loads "Nothing more" (Wednesday's second
++ * workout with no lift), taps "Full session" and "Catch-up instead": the day's catch-up, "Not one of
++ * your training days: a 20-minute catch-up for what is behind this week." (back squat x3, barbell
++ * shrug x2). The lifter then ticks Saturday in the schedule: the plan stays "Catch-up", the back squat
++ * and the shrug, and Today says nothing, where the day's own catch-up gives way to the usual plan
++ * (the upper day, "Upper body: 7 exercises in about 60 min"). A place saved takes the same path
++ * (`offerOverrides`), as do a technique and new equipment.
++ * (2) On Friday, a day ticked, after a bench press cut short this morning (one set of four, another
++ * device), the lifter loads "Empty catch-up" (Wednesday's catch-up the lifter emptied) and taps "Full
++ * session", saves the experience as a beginner and taps "Go easy instead": "Triceps and chest take
++ * only what is left of one session, three or more reps short of failure.", a close-grip bench press
++ * x2 for the chest and triceps trained this morning (and the barbell row x3, the intermediate's dose),
++ * where the day's own full session and back gives "Chest and triceps, trained today, sit out."
++ *
++ * On the previous head (1e29f22) the full session taken from such a copy had no way back (the
++ * twenty-sixth review's M31y-B), so both tests fail there at the button: the path is the twenty-sixth
++ * pass's.
++ *
++ * Steps (synthetic data only): Monday's bench press in the log. (1) On Wednesday, a day the schedule
++ * does not tick, at the gym, a long session this morning (another device); the lifter saves today's
++ * workout as "Nothing more"; on Saturday loads it, taps "Full session", then "Catch-up instead", and
++ * saves the schedule with Saturday ticked. (2) On Wednesday the lifter skips each lift of the catch-up
++ * and saves it as "Empty catch-up"; on Friday, a bench press this morning stopped after one of its four
++ * sets (another device), loads "Empty catch-up", taps "Full session", saves the experience as
++ * Beginner, then taps "Go easy instead".
++ *
++ * The fix (the twenty-seventh pass): the full session taken from such a copy makes the plan the
++ * day's own from then on (`session-kind`): the day's offer, the plans the lifter emptied today, and
++ * nothing kept aside, so a save reads the offer again into the plan's own (`offerReadAgain`).
++ */
++
++const MONDAY = '2026-08-31T12:00:00.000Z';
++const WEDNESDAY_MORNING = '2026-09-02T08:00:00.000Z';
++const WEDNESDAY = '2026-09-02T12:00:00.000Z';
++const FRIDAY_MORNING = '2026-09-04T08:00:00.000Z';
++const FRIDAY = '2026-09-04T18:00:00.000Z';
++const SATURDAY = '2026-09-05T12:00:00.000Z';
++
++const threeSets: [number, number, number][] = [
++  [10, 100, 2],
++  [10, 100, 2],
++  [10, 100, 2],
++];
++
++/** Six working sets each, every muscle trained this morning. */
++const LONG_MORNING = workoutAt(WEDNESDAY_MORNING, [
++  ['barbell-bench-press', 6],
++  ['incline-dumbbell-press', 6],
++  ['lateral-raise', 6],
++  ['rear-delt-fly', 6],
++  ['barbell-shrug', 6],
++  ['pull-up', 6],
++  ['barbell-row', 6],
++  ['ez-bar-curl', 6],
++  ['wrist-curl', 6],
++  ['back-squat', 6],
++  ['romanian-deadlift', 6],
++  ['standing-calf-raise', 6],
++  ['ab-wheel-rollout', 6],
++  ['overhead-press', 6],
++  ['cable-triceps-pushdown', 6],
++]);
++
++/** Friday morning's bench press, one working set of the four planned. */
++const CUT_SHORT = {
++  ...workoutAt(FRIDAY_MORNING, [['barbell-bench-press', 1]]),
++  id: 'w-bench-friday',
++  endedEarly: true,
++};
++CUT_SHORT.entries[0]!.plannedSets = 4;
++
++async function lifter(clock: { now: string }) {
++  const handle = createTestStore({ now: () => clock.now });
++  await handle.store.hydrate();
++  await handle.store.completeOnboarding(
++    { ...createDefaultProfile(clock.now), bodyweight: 185 },
++    createDefaultLocations({ gymAccess: true }, clock.now),
++  );
++  const db = await handle.store.getDatabase();
++  await db.put('workouts', {
++    ...record(0, 'barbell-bench-press', threeSets, [8, 12], 2),
++    id: 'w-bench-monday',
++    startedAt: MONDAY,
++    completedAt: MONDAY,
++  });
++  await handle.store.hydrate();
++  return handle;
++}
++
++type Handle = Awaited<ReturnType<typeof lifter>>;
++const session = (handle: Handle) => handle.store.getSnapshot().session!;
++const lifts = (handle: Handle) => describeWorkout(session(handle).workout).join('; ');
++
++async function saveProfile(handle: Handle, change: (profile: UserProfile) => UserProfile) {
++  await handle.store.saveProfile(change(handle.store.getSnapshot().profile!));
++}
++
++const tickSaturday = (profile: UserProfile): UserProfile => ({
++  ...profile,
++  schedule: {
++    ...profile.schedule,
++    weeklyFrequency: 5,
++    availableDays: ['mon', 'tue', 'thu', 'fri', 'sat'],
++  },
++});
++
++/** The lifts that work one of the muscles directly. */
++const working = (handle: Handle, muscles: readonly string[]) =>
++  allEntries(session(handle).workout.blocks)
++    .map((entry) => entry.exerciseId)
++    .filter((id) => requireExercise(id).primaryMuscles.some((muscle) => muscles.includes(muscle)));
++
++/** Saturday: "Nothing more" saved on Wednesday after the long morning. */
++async function saturday(load: boolean) {
++  const clock = { now: WEDNESDAY };
++  const handle = await lifter(clock);
++  const db = await handle.store.getDatabase();
++  await db.put('workouts', { ...LONG_MORNING, id: 'w-long-morning' });
++  await handle.store.hydrate();
++  const saved = await handle.store.saveCurrentWorkout('Nothing more');
++  clock.now = SATURDAY;
++  handle.store.refreshSession();
++  expect(session(handle).constraints.catchUp?.kind).toBe('catch-up');
++  if (load) {
++    handle.store.loadSavedWorkout(saved.id);
++    expect(allEntries(session(handle).workout.blocks)).toEqual([]);
++    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
++  }
++  return handle;
++}
++
++/** Friday: "Empty catch-up" saved on Wednesday, the bench press cut short this morning. */
++async function friday(load: boolean) {
++  const clock = { now: WEDNESDAY };
++  const handle = await lifter(clock);
++  for (const entry of allEntries(session(handle).workout.blocks)) {
++    expect((await handle.store.recalibrate({ type: 'skip', entryId: entry.id }))?.ok).toBe(true);
++  }
++  const saved = await handle.store.saveCurrentWorkout('Empty catch-up');
++  clock.now = FRIDAY;
++  const db = await handle.store.getDatabase();
++  await db.put('workouts', CUT_SHORT);
++  await handle.store.hydrate();
++  // Friday's own plan: a second workout with what is left of the chest and the triceps.
++  expect(session(handle).constraints.catchUp?.kind).toBe('second');
++  expect(
++    session(handle)
++      .constraints.catchUp?.muscles.filter((item) => item.why === 'remainder')
++      .map((item) => item.muscle)
++      .sort(),
++  ).toEqual(['chest', 'triceps']);
++  if (load) {
++    handle.store.loadSavedWorkout(saved.id);
++    expect(allEntries(session(handle).workout.blocks)).toEqual([]);
++    expect(dayNoteOf(session(handle), true)?.action?.label).toBe('Full session');
++  }
++  return handle;
++}
++
++describe('the way back from the full session taken from a loaded copy, read again by a save', () => {
++  it('gives way to the usual plan when today is ticked, as the day’s own catch-up does', async () => {
++    // The day's own catch-up gives way to the usual plan.
++    const own = await saturday(false);
++    await saveProfile(own, tickSaturday);
++    expect(session(own).workout.title, lifts(own)).not.toBe('Catch-up');
++    const usual = session(own).workout.templateId;
++
++    const handle = await saturday(true);
++    expect((await handle.store.setFullSession(true))?.ok).toBe(true);
++    const there = dayNoteOf(session(handle), false);
++    // On 1e29f22: "Not one of your training days.", no button.
++    expect(there?.action, there?.text).toEqual({ label: 'Catch-up instead', full: false });
++    expect((await handle.store.setFullSession(false))?.ok).toBe(true);
++    expect(session(handle).workout.title).toBe('Catch-up');
++    await saveProfile(handle, tickSaturday);
++    // On f840d5b: "Catch-up", "back-squat x3 @RIR 2/2/2; barbell-shrug x2 @RIR 1/1", and no line on
++    // Today.
++    expect(session(handle).workout.title, lifts(handle)).not.toBe('Catch-up');
++    expect(session(handle).workout.templateId).toBe(usual);
++  });
++
++  it('sits a beginner’s muscles trained today out, as the day’s own way back does', async () => {
++    // The day's own full session and back, a beginner saved between: the chest and the triceps sit
++    // out.
++    const own = await friday(false);
++    expect((await own.store.setFullSession(true))?.ok).toBe(true);
++    await saveProfile(own, (profile) => ({ ...profile, experience: 'beginner' }));
++    expect((await own.store.setFullSession(false))?.ok).toBe(true);
++    expect(working(own, ['chest', 'triceps']), lifts(own)).toEqual([]);
++
++    const handle = await friday(true);
++    expect((await handle.store.setFullSession(true))?.ok).toBe(true);
++    const there = dayNoteOf(session(handle), true);
++    // On 1e29f22: no line at all.
++    expect(there?.action, there?.text).toEqual({ label: 'Go easy instead', full: false });
++    await saveProfile(handle, (profile) => ({ ...profile, experience: 'beginner' }));
++    expect((await handle.store.setFullSession(false))?.ok).toBe(true);
++    expect(session(handle).constraints.catchUp?.kind).toBe('second');
++    // On f840d5b: "close-grip-bench-press x2 @RIR 3/3", "Triceps and chest take only what is left of
++    // one session, three or more reps short of failure."
++    expect(
++      working(handle, ['chest', 'triceps']),
++      session(handle).workout.explanation.reasons.join(' / '),
++    ).toEqual([]);
 +  });
 +});
 diff --git a/src/core/state/copyNothingBehindNote.store.test.ts b/src/core/state/copyNothingBehindNote.store.test.ts
@@ -16552,7 +17159,7 @@ index 0000000..6609c9b
 +  });
 +});
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index 551281d..4f18f2e 100644
+index 551281d..12d8792 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
 @@ -1,9 +1,10 @@
@@ -16594,18 +17201,19 @@ index 551281d..4f18f2e 100644
    sessionConflictContext,
    sessionWork,
    targetAtPlace,
-@@ -79,6 +87,10 @@ import {
+@@ -79,6 +87,11 @@ import {
    type GenerationConstraints,
    type KeptEntry,
    type PrescriptionAdjustment,
 +  withCatchUpLines,
 +  offPlanSpec,
 +  emptiedLayoutsFor,
++  marksOfDay,
 +  offerKey,
    withSwapLines,
  } from '../workoutGenerator/generate';
  import {
-@@ -93,6 +105,7 @@ import {
+@@ -93,6 +106,7 @@ import {
    withoutStops,
    workingSets,
    type DurationChoice,
@@ -16613,7 +17221,7 @@ index 551281d..4f18f2e 100644
    type EntryProgression,
    type GeneratedWorkout,
    type ProgressionMode,
-@@ -200,13 +213,39 @@ export function hasStarted(completed: CompletedWork): boolean {
+@@ -200,13 +214,39 @@ export function hasStarted(completed: CompletedWork): boolean {
    return completed.startedAt !== null || completed.elapsedSeconds > 0 || completed.sets.length > 0;
  }
  
@@ -16654,7 +17262,7 @@ index 551281d..4f18f2e 100644
    return hasStarted(request.completed) || anyLocked ? 'partial' : 'full';
  }
  
-@@ -228,6 +267,7 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
+@@ -228,6 +268,7 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
      const outcome = execute(plain, scope, layer);
      const constraints = outcome.constraints;
      const next = layer.finish(outcome.workout, constraints);
@@ -16662,7 +17270,7 @@ index 551281d..4f18f2e 100644
      // The time and the lines say what the plan now holds, eased or given back.
      if (next !== outcome.workout || bare !== shown) {
        refresh(
-@@ -238,7 +278,9 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
+@@ -238,7 +279,9 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult
        );
      }
      const context = contextFor(request, constraints);
@@ -16673,7 +17281,7 @@ index 551281d..4f18f2e 100644
      const changes = diffWorkouts(shown, next);
      const summary = composeSummary({
        prefix: outcome.prefix,
-@@ -347,9 +389,39 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
+@@ -347,9 +390,39 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
      ...(constraints.badStart ? { badStart: true } : {}),
      deload: constraints.deload ? { ...constraints.deload } : null,
      focus: constraints.focus ?? null,
@@ -16713,7 +17321,7 @@ index 551281d..4f18f2e 100644
  function cloneSet(set: SetPrescription): SetPrescription {
    return { ...set, targetReps: [set.targetReps[0], set.targetReps[1]] };
  }
-@@ -390,7 +462,7 @@ function classify(request: RecalibrationRequest): Classified {
+@@ -390,7 +463,7 @@ function classify(request: RecalibrationRequest): Classified {
    const frozenIds = new Set(request.completed.sets.map((set) => set.entryId));
    const lockedIds = new Set<string>(request.lockedEntryIds);
    for (const entry of allEntries(request.workout.blocks)) {
@@ -16722,7 +17330,7 @@ index 551281d..4f18f2e 100644
    }
    if (request.currentEntryId) lockedIds.add(request.currentEntryId);
    return {
-@@ -522,13 +594,47 @@ function minutesLeft(
+@@ -522,13 +595,47 @@ function minutesLeft(
      if (left !== null) return Math.max(MIN_REMAINING_MINUTES, Math.round(left));
    }
    if (!hasStarted(request.completed)) return null;
@@ -16771,7 +17379,7 @@ index 551281d..4f18f2e 100644
  function rebuild(
    request: RecalibrationRequest,
    scope: RecalibrationScope,
-@@ -538,7 +644,21 @@ function rebuild(
+@@ -538,7 +645,21 @@ function rebuild(
    const context = contextFor(request, constraints);
    const classified = classify(request);
    const started = hasStarted(request.completed);
@@ -16794,7 +17402,7 @@ index 551281d..4f18f2e 100644
    let targetMinutesOverride: number | undefined = started
      ? Math.max(
          MIN_REMAINING_MINUTES,
-@@ -553,7 +673,14 @@ function rebuild(
+@@ -553,7 +674,14 @@ function rebuild(
        hardCap = true;
      }
    }
@@ -16810,7 +17418,7 @@ index 551281d..4f18f2e 100644
    const generation: GenerationConstraints = {
      keep,
      keepBlocks: request.workout.blocks,
-@@ -569,6 +696,24 @@ function rebuild(
+@@ -569,6 +697,24 @@ function rebuild(
      readiness: constraints.readiness,
      deload: constraints.deload,
      focusMuscle: constraints.focus,
@@ -16835,7 +17443,7 @@ index 551281d..4f18f2e 100644
      sessionLoading: request.loading,
      swaps: request.swaps,
    };
-@@ -599,6 +744,69 @@ function rebuild(
+@@ -599,6 +745,69 @@ function rebuild(
    return workout;
  }
  
@@ -16905,7 +17513,7 @@ index 551281d..4f18f2e 100644
  /**
   * Each lift moved for busy equipment behind the lifts it gave way to, as the plan now stands
   * (Maintenance 25): the rows put in one order that meets every move, kept as they were wherever no
-@@ -953,6 +1161,242 @@ function prescriptionToday(
+@@ -953,6 +1162,242 @@ function prescriptionToday(
      : base;
  }
  
@@ -17148,7 +17756,7 @@ index 551281d..4f18f2e 100644
  /**
   * How far a lift's effort sits from its plain target (Maintenance 24): "Make it harder" or
   * "easier" and a check-in move its reps in reserve, and a refit, a max or a swap keeps that. It
-@@ -1499,8 +1943,14 @@ function refitEntry(
+@@ -1499,8 +1944,14 @@ function refitEntry(
    const exercise = requireExercise(entry.exerciseId);
    const plain = prescriptionToday(request, exercise, entry.role);
    const plainTarget = targetToday(request, workout, entry.id, exercise, entry.role, plain);
@@ -17165,7 +17773,7 @@ index 551281d..4f18f2e 100644
    const target =
      prescription === plain
        ? plainTarget
-@@ -1675,7 +2125,7 @@ function settleKept(
+@@ -1675,7 +2126,7 @@ function settleKept(
      entries.some((other) => other !== entry && other.slot === entry.slot && isStopped(other));
    const settling = entries.filter(
      (entry) =>
@@ -17174,7 +17782,7 @@ index 551281d..4f18f2e 100644
        // One the coach added sits outside the plan's places, with the sets it offered.
        !(entry.locked && entry.slot === undefined) &&
        !logged.has(entry.id) &&
-@@ -1690,6 +2140,7 @@ function settleKept(
+@@ -1690,6 +2141,7 @@ function settleKept(
    );
    const trimmable = new Set<string>();
    if (settling.length === 0) return { workout: request.workout, trimmable };
@@ -17182,7 +17790,7 @@ index 551281d..4f18f2e 100644
    const workout = cloneWorkout(request.workout);
    const next = { ...request, workout, constraints };
    for (const kept of settling) {
-@@ -1742,9 +2193,16 @@ function settleKept(
+@@ -1742,9 +2194,16 @@ function settleKept(
      // review of item 44): a harder day adds no set to it and takes its reserve no lower than one.
      // By the plan's rule it has its count; without one (the push ended since), it adds none.
      const pushed = mark !== undefined;
@@ -17202,7 +17810,7 @@ index 551281d..4f18f2e 100644
      const built = targetedSets(
        next,
        workout,
-@@ -1988,7 +2446,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
+@@ -1988,7 +2447,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
      }
    }
    const plan = withoutStops(restored);
@@ -17211,7 +17819,7 @@ index 551281d..4f18f2e 100644
    const general = generalWarmupMinutes(target);
    const time = estimateWorkout(
      plan.blocks,
-@@ -2270,8 +2728,11 @@ function dropSetAt(index: number): SetPrescription {
+@@ -2270,8 +2729,11 @@ function dropSetAt(index: number): SetPrescription {
  }
  
  /** An entry id the workout does not use yet. */
@@ -17225,7 +17833,7 @@ index 551281d..4f18f2e 100644
      Number(/^e(\d+)$/.exec(entry.id)?.[1] ?? 0),
    );
    return `e${Math.max(0, ...numbers) + 1}`;
-@@ -2406,20 +2867,34 @@ function applySubstitution(
+@@ -2406,20 +2868,34 @@ function applySubstitution(
    // A count set by hand comes in as set, the ease taking no set from it (the fifteenth pass).
    const planWorking =
      plan && !entry.manual?.sets ? plan.filter((set) => set.kind === 'working') : shownWorking;
@@ -17262,7 +17870,7 @@ index 551281d..4f18f2e 100644
      entry.restSeconds,
      { shift },
    );
-@@ -2480,14 +2955,21 @@ function standIn(
+@@ -2480,14 +2956,21 @@ function standIn(
      (set) => set.kind === 'working' && !isDone(entry.id, set.index),
    ).length;
    const dropOwed = entry.sets.some((set) => set.kind === 'drop' && !isDone(entry.id, set.index));
@@ -17287,7 +17895,7 @@ index 551281d..4f18f2e 100644
      exerciseId: exercise.id,
      role: entry.role,
      sets: [],
-@@ -2503,13 +2985,15 @@ function standIn(
+@@ -2503,13 +2986,15 @@ function standIn(
      ...(entry.push === 'extra' ? { push: 'extra' as const } : {}),
    };
    placeStandIn(workout, entry, block, stand, isDone);
@@ -17304,7 +17912,7 @@ index 551281d..4f18f2e 100644
      entry.restSeconds,
      { shift },
    );
-@@ -2561,15 +3045,28 @@ function swapBack(
+@@ -2561,15 +3046,28 @@ function swapBack(
    }
    if (owed === 0) return;
    const exercise = requireExercise(stopped.exerciseId);
@@ -17335,7 +17943,7 @@ index 551281d..4f18f2e 100644
    );
    stopped.sets = [...stopped.sets, ...built.sets];
    withoutHandTargets(stopped);
-@@ -2589,6 +3086,45 @@ function swapBack(
+@@ -2589,6 +3087,45 @@ function swapBack(
    }
  }
  
@@ -17381,7 +17989,7 @@ index 551281d..4f18f2e 100644
  function removeEntry(workout: GeneratedWorkout, entryId: string): WorkoutEntry {
    const { entry, block } = findEntry(workout, entryId);
    block.entries = block.entries.filter((candidate) => candidate.id !== entryId);
-@@ -2637,7 +3173,7 @@ function bestAlternative(
+@@ -2637,7 +3174,7 @@ function bestAlternative(
    entry: WorkoutEntry,
    block: WorkoutBlock,
    context: ConflictContext,
@@ -17390,7 +17998,7 @@ index 551281d..4f18f2e 100644
  ): CatalogExercise | undefined {
    const current = requireExercise(entry.exerciseId);
    const others = allEntries(workout.blocks)
-@@ -2645,9 +3181,70 @@ function bestAlternative(
+@@ -2645,9 +3182,70 @@ function bestAlternative(
      .map((candidate) => requireExercise(candidate.exerciseId));
    const partner =
      block.kind === 'superset' ? block.entries.find((member) => member.id !== entry.id) : undefined;
@@ -17461,7 +18069,7 @@ index 551281d..4f18f2e 100644
      otherExercises: others,
      supersetPartner: partner ? requireExercise(partner.exerciseId) : undefined,
      dropSetPlanned: entry.dropSet,
-@@ -2720,12 +3317,25 @@ function refresh(
+@@ -2720,12 +3318,25 @@ function refresh(
        )
      : workout.explanation.reasons;
    // The summary says the exercises the plan has and the minutes its timers add up to
@@ -17493,7 +18101,7 @@ index 551281d..4f18f2e 100644
    keepOrderLines(workout);
    workout.duration = {
      ...workout.duration,
-@@ -2770,6 +3380,9 @@ function substituteUnfit(
+@@ -2770,6 +3381,9 @@ function substituteUnfit(
    const notes: string[] = [];
    let replaced = 0;
    let removed = 0;
@@ -17503,7 +18111,7 @@ index 551281d..4f18f2e 100644
    for (const entry of allEntries(workout.blocks)) {
      if (!entry.sets.some((set) => set.kind === 'working' && !isDone(entry.id, set.index))) continue;
      const exercise = requireExercise(entry.exerciseId);
-@@ -2780,15 +3393,38 @@ function substituteUnfit(
+@@ -2780,15 +3394,38 @@ function substituteUnfit(
      const { block } = findEntry(workout, entry.id);
      const alternative = bestAlternative(request, workout, entry, block, context, {
        preferLowStressOn: options.joint,
@@ -17545,7 +18153,7 @@ index 551281d..4f18f2e 100644
      }
    }
    return { replaced, removed, notes };
-@@ -2910,6 +3546,33 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -2910,6 +3547,42 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          workout: rebuild(request, scope, { choice: request.duration, constraints }),
          prefix: 'Rebuilt for your updated profile',
        };
@@ -17556,13 +18164,22 @@ index 551281d..4f18f2e 100644
 +      if (trigger.full) {
 +        constraints.fullSession = true;
 +        // Taken from a copy loaded that stands for none of the day's offer, the full session is the
-+        // day's own: its way back is that offer, kept aside with the day's choices (the twenty-sixth
-+        // review of round M: from a copy with no lift it had no way back, the copy's own offer none).
-+        const offer = constraints.dayChoices?.catchUp;
++        // day's own plan from then on: the day's offer its way back, the plans the lifter emptied
++        // today its own, and nothing kept aside (the twenty-sixth review of round M: from a copy with
++        // no lift it had no way back, the copy's own offer none; the twenty-seventh: given the day's
++        // offer alone, it was still read as a copy, so a save read the offer again only into the
++        // choices kept aside, the way back laid out whole a plan the lifter had emptied, and a full
++        // session taken before the load outlasted the way back).
++        const day = constraints.dayChoices;
++        const offer = day?.catchUp;
 +        const offers =
 +          offer && (offer.kind === 'second' || offer.muscles.length > 0) ? offer.kind : null;
-+        if (offer && offers !== null && constraints.catchUp?.kind !== offers) {
++        if (day && offer && offers !== null && constraints.catchUp?.kind !== offers) {
 +          constraints.catchUp = cloneSpec(offer);
++          const marks = marksOfDay(day.emptied ?? [], constraints.emptied ?? []);
++          if (marks.length > 0) constraints.emptied = marks;
++          else delete constraints.emptied;
++          delete constraints.dayChoices;
 +        }
 +      } else delete constraints.fullSession;
 +      const workout = rebuild(request, scope, { choice: request.duration, constraints });
@@ -17579,7 +18196,7 @@ index 551281d..4f18f2e 100644
  
      case 'replace': {
        const workout = cloneWorkout(request.workout);
-@@ -2927,8 +3590,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -2927,8 +3600,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        ) {
          throw new Error(`${previous.name} is done: nothing is left to swap.`);
        }
@@ -17601,7 +18218,7 @@ index 551281d..4f18f2e 100644
        // A lift a swap brings back (a lift stopped earlier, swapped back) comes to its old row: the
        // moves hold again (the sixth review).
        constraints.postponed = settleMoves(
-@@ -3060,7 +3736,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3060,7 +3746,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const context = contextFor(request, constraints);
        const alternative = bestAlternative(request, workout, entry, block, context);
        if (alternative) {
@@ -17619,7 +18236,7 @@ index 551281d..4f18f2e 100644
          renamePostponed(constraints, previous.id, alternative.id, workout);
          refresh(workout, request, constraints);
          return {
-@@ -3070,14 +3755,22 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3070,14 +3765,22 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
            headline: `${previous.name} replaced by ${alternative.name} for comfort.`,
          };
        }
@@ -17644,7 +18261,7 @@ index 551281d..4f18f2e 100644
        };
      }
  
-@@ -3339,8 +4032,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3339,8 +4042,19 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
              targetToday(from, workout, entry.id, exercise, entry.role, asked);
            const plainTarget = targetFor(plain);
            // The effort the lift carries ("Make it harder" or "easier", a check-in) stays
@@ -17666,7 +18283,7 @@ index 551281d..4f18f2e 100644
            let target = prescription === plain ? plainTarget : targetFor(prescription);
            // A load read from an estimate for a rep range, with reps set by hand: the load for those
            // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
-@@ -3532,8 +4236,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -3532,8 +4246,15 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
          ? readinessAdjustment(request.constraints.readiness)
          : undefined;
        const restored = !adjust && earlier !== undefined;
@@ -17683,7 +18300,7 @@ index 551281d..4f18f2e 100644
        if (
          !adjust &&
          !restored &&
-@@ -4128,7 +4839,10 @@ function validateWorkout(
+@@ -4128,7 +4849,10 @@ function validateWorkout(
    context: ConflictContext,
  ): void {
    const entries = allEntries(workout.blocks);
@@ -22915,7 +23532,7 @@ index 0000000..def2327
 +  });
 +});
 diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
-index 0460d18..4c3b7bc 100644
+index 0460d18..679a8be 100644
 --- a/src/engine/workoutGenerator/generate.ts
 +++ b/src/engine/workoutGenerator/generate.ts
 @@ -38,6 +38,7 @@ import {
@@ -23012,7 +23629,7 @@ index 0460d18..4c3b7bc 100644
  }
  
  interface Template {
-@@ -436,6 +477,414 @@ export function splitFor(profile: UserProfile): readonly Template[] {
+@@ -436,6 +477,429 @@ export function splitFor(profile: UserProfile): readonly Template[] {
        : [PUSH_ARMS, PULL_ARMS, LOWER, UPPER];
  }
  
@@ -23272,6 +23889,21 @@ index 0460d18..4c3b7bc 100644
 +}
 +
 +/**
++ * The plans the lifter emptied today, as the day holds them: its own marks, kept aside while a saved
++ * workout loaded stands in for its plan (`dayChoices`), with those made on the loaded plan for an
++ * offer and layout the day has none of (the twenty-third review of round M).
++ */
++export function marksOfDay(
++  kept: readonly EmptiedPlan[],
++  own: readonly EmptiedPlan[],
++): EmptiedPlan[] {
++  const fresh = own.filter(
++    (plan) => !kept.some((other) => other.offer === plan.offer && other.layout === plan.layout),
++  );
++  return [...kept, ...fresh].map((plan) => ({ ...plan }));
++}
++
++/**
 + * The muscles today's catch-up or second workout leaves alone, as the plan was built from it: none
 + * once the full session is taken. The coach offers no work for one, and a rebuild's swap brings in
 + * no lift for one, as the plan itself has none (the review of round M).
@@ -23427,7 +24059,7 @@ index 0460d18..4c3b7bc 100644
  function chooseTemplate(
    profile: UserProfile,
    priorities: MusclePriority[],
-@@ -522,8 +971,26 @@ export interface Picker {
+@@ -522,8 +986,26 @@ export interface Picker {
     * push while its push runs. The rule never holds one back (the fourth and fifth re-checks).
     */
    chosen?: ReadonlySet<string>;
@@ -23454,7 +24086,7 @@ index 0460d18..4c3b7bc 100644
  /**
   * What the lifter chose beyond the favourites: each kept swap's own exercise, and the lift to push
   * on a day its push runs (a deload week pauses it, the fifth re-check).
-@@ -556,6 +1023,8 @@ function pickForSlot(
+@@ -556,6 +1038,8 @@ function pickForSlot(
      .filter((exercise) => !chosenIds.has(exercise.id))
      .filter((exercise) => (strengthRole ? exercise.compound : true))
      .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
@@ -23463,7 +24095,7 @@ index 0460d18..4c3b7bc 100644
      // A loaded version waits until its bodyweight move loads (item 31).
      .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
      .filter(
-@@ -590,10 +1059,15 @@ function pickForSlot(
+@@ -590,10 +1074,15 @@ function pickForSlot(
    };
  
    // A preferred exercise that fits the slot wins it outright; the score only orders the rest,
@@ -23481,7 +24113,7 @@ index 0460d18..4c3b7bc 100644
    );
    return candidates[0];
  }
-@@ -615,6 +1089,7 @@ export function pickAccessoryFor(
+@@ -615,6 +1104,7 @@ export function pickAccessoryFor(
      .filter((exercise) => exercise.primaryMuscles.includes(muscle))
      .filter((exercise) => !chosenIds.has(exercise.id))
      .filter((exercise) => !isBlocked(checkExerciseFit(exercise, picker.context)))
@@ -23489,7 +24121,7 @@ index 0460d18..4c3b7bc 100644
      .filter((exercise) => !waitsForBodyweight(exercise, outgrown, picker.swappedAway, lifterChose))
      .filter(
        (exercise) =>
-@@ -719,6 +1194,8 @@ export function accessoryPicker(input: {
+@@ -719,6 +1209,8 @@ export function accessoryPicker(input: {
    focus?: MuscleId | null;
    /** The lifter's lasting swaps: an exercise swapped out is never offered. */
    swaps?: readonly LastingSwap[];
@@ -23498,7 +24130,7 @@ index 0460d18..4c3b7bc 100644
  }): Picker {
    const context = sessionConflictContext(input.profile, input.location, input.constraints ?? {});
    const preferredIds = preferredIdsOf(input.profile);
-@@ -734,6 +1211,7 @@ export function accessoryPicker(input: {
+@@ -734,6 +1226,7 @@ export function accessoryPicker(input: {
      swappedAway: swappedOut,
      // The lift to push is never the coach's offer: it adds nothing for the pushed lift's muscles.
      chosen: chosenBy(input.swaps ?? [], null),
@@ -23506,7 +24138,7 @@ index 0460d18..4c3b7bc 100644
    };
  }
  
-@@ -1168,15 +1646,64 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1168,15 +1661,64 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const weightOf = new Map(priorities.map((priority) => [priority.muscle, priority.weight]));
    const loads = muscleLoads(history, profile, now);
    const focus = constraints.focusMuscle ?? null;
@@ -23575,7 +24207,7 @@ index 0460d18..4c3b7bc 100644
    const pushPlace = (slots: readonly Slot[]) =>
      push !== null && slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern);
    // The extra exposure goes on a day with no place for the lift (docs/research/push-lift.md). It
-@@ -1188,14 +1715,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1188,14 +1730,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    // exercise, begun, or stopped and stood in for: the rebuild keeps it and weighs no second one
    // (the review and the re-check of item 44).
    const extraKept = (constraints.keep ?? []).some((item) => item.entry.push === 'extra');
@@ -23591,7 +24223,7 @@ index 0460d18..4c3b7bc 100644
      !extraKept &&
      !pushPlace(template.slots) &&
      // Weighed only where the lift can go in today (the re-check of item 44).
-@@ -1236,8 +1762,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1236,8 +1777,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      }
    }
    const defaultMinutes = profile.schedule.typicalDurationMinutes;
@@ -23606,7 +24238,7 @@ index 0460d18..4c3b7bc 100644
    const hardCap = constraints.hardCap ?? false;
    const isDone: SetDonePredicate = constraints.isSetDone ?? (() => false);
    const completedSets = constraints.completedSets ?? [];
-@@ -1249,13 +1780,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1249,13 +1795,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      exposure,
      loads,
      focus,
@@ -23622,7 +24254,7 @@ index 0460d18..4c3b7bc 100644
    };
    const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
  
-@@ -1297,21 +1829,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1297,21 +1844,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      ...[...keptBySlot.values()].flat(),
      ...keptUnslotted,
    ].map((entry) => exerciseOf(entry.exerciseId));
@@ -23647,7 +24279,7 @@ index 0460d18..4c3b7bc 100644
    const entries: WorkoutEntry[] = [];
    const plannedSets = new Map<string, number>();
    // Stopped entries that do not fit here were ended again by the caller; the others fit now.
-@@ -1390,6 +1910,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1390,6 +1925,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     * under way. A stand-in kept only because it came next, with nothing logged, gives way.
     * True when the slot was filled this way.
     */
@@ -23670,7 +24302,7 @@ index 0460d18..4c3b7bc 100644
    const reopened = (kept: WorkoutEntry[]): boolean => {
      // Only a stop the place made picks up again; one the lifter or a limit made stays.
      const fitting = kept.filter(
-@@ -1401,25 +1937,54 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1401,25 +1952,54 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      const others = kept.filter((entry) => entry !== target);
      if (others.some((entry) => entry.locked || entry.pinned)) return false;
      if (others.some((entry) => !isStopped(entry) && frozenIds.has(entry.id))) return false;
@@ -23736,7 +24368,7 @@ index 0460d18..4c3b7bc 100644
        restSeconds: target.restSeconds,
      });
      const from = Math.max(-1, ...target.sets.map((set) => set.index)) + 1;
-@@ -1434,17 +1999,28 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1434,17 +2014,28 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      return true;
    };
  
@@ -23769,7 +24401,7 @@ index 0460d18..4c3b7bc 100644
        if (isBlocked(checkExerciseFit(next, context))) continue;
        if (blocksCandidate(checkWorkoutConflicts([...chosenExercises, next], context), next.id)) {
          continue;
-@@ -1470,6 +2046,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1470,6 +2061,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const pushFits = (lift: CatalogExercise): boolean =>
      !pushSwappedAway &&
      !swappedOut.has(lift.id) &&
@@ -23777,7 +24409,7 @@ index 0460d18..4c3b7bc 100644
      !isBlocked(checkExerciseFit(lift, context)) &&
      fitsWith(lift);
    // The place the plan has for the lift, unless a kept entry holds it. The lift leads once it is in
-@@ -1481,6 +2058,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1481,6 +2073,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
              slotSpec.pattern === push.exercise.movementPattern && !keptBySlot.has(index),
          )
        : -1;
@@ -23788,7 +24420,7 @@ index 0460d18..4c3b7bc 100644
    // The lift kept from before a rebuild: today has it already. One swapped away today keeps it out
    // (`pushSwappedAway`): a swap keeps the lift it replaced, through every later swap.
    const pushKept = keptAll.some(
-@@ -1494,6 +2075,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1494,6 +2090,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      push &&
      push.extraSets !== null &&
      constraints.pushProbe !== true &&
@@ -23796,7 +24428,7 @@ index 0460d18..4c3b7bc 100644
      !pushKept &&
      !extraKept &&
      !template.slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern) &&
-@@ -1511,7 +2093,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1511,7 +2108,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        rirFloor(lift),
      );
      chosenExercises.push(lift);
@@ -23805,7 +24437,7 @@ index 0460d18..4c3b7bc 100644
      const built = targetedFor(lift, role, prescription);
      entries.push({
        id,
-@@ -1529,15 +2111,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1529,15 +2126,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      });
      extraId = id;
    }
@@ -23871,7 +24503,7 @@ index 0460d18..4c3b7bc 100644
      // The plan's own pick first, judged as if no swap were kept; one swapped out gives way to its
      // swap-in, or to the next best when the swap-in is already in the workout. An own pick a kept
      // swap already put in an earlier slot gives way to the next best too.
-@@ -1547,39 +2176,110 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1547,39 +2191,110 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      const ownPicks = chosenExercises.map((chosen) =>
        mine.has(chosen.id) ? chosen : (ownOf.get(chosen.id) ?? chosen),
      );
@@ -23995,7 +24627,7 @@ index 0460d18..4c3b7bc 100644
      // The lift to push keeps to the push's sets for the week and never goes to failure.
      const basePrescription =
        pushPick && push
-@@ -1596,9 +2296,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1596,9 +2311,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
              rirFloor(pick),
            )
          : adjustPrescription(basePrescription, slotSpec.role, adjust, rirFloor(pick));
@@ -24010,7 +24642,7 @@ index 0460d18..4c3b7bc 100644
      // Asked to make it harder, the time fit may take back an added set, never one the plan had.
      if ((adjust?.sets ?? 0) > 0) {
        plannedSets.set(
-@@ -1607,7 +2310,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1607,7 +2325,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        );
      }
      const built = targetedFor(pick, slotSpec.role, prescription);
@@ -24025,7 +24657,7 @@ index 0460d18..4c3b7bc 100644
      entries.push({
        id,
        exerciseId: pick.id,
-@@ -1624,7 +2333,87 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1624,7 +2348,87 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
        ...(natural && pick !== natural ? { standsFor: natural.id } : {}),
        ...(pushPick ? { push: 'natural' as const } : {}),
      });
@@ -24114,7 +24746,7 @@ index 0460d18..4c3b7bc 100644
    entries.push(...keptUnslotted);
  
    // The lift to push leads (Maintenance 27, item 44), kept from before a rebuild too. The day's
-@@ -1935,9 +2724,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -1935,9 +2739,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      ) {
        return false;
      }
@@ -24136,7 +24768,7 @@ index 0460d18..4c3b7bc 100644
      const planned = hardCap ? 0 : (plannedSets.get(entry.id) ?? 0);
      return remainingWorking(entry).length > Math.max(floor, planned);
    };
-@@ -2007,7 +2806,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2007,7 +2821,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
      for (const set of move.sets) if (set.kind === 'working') set.restSeconds = move.restSeconds;
      const block = straightBlock(move, exerciseOf);
      blocks.push(block);
@@ -24147,7 +24779,7 @@ index 0460d18..4c3b7bc 100644
      for (;;) {
        if (estimate().totalMinutes <= limit) return move;
        const working = move.sets.filter((set) => set.kind === 'working');
-@@ -2098,7 +2899,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2098,7 +2914,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
  
    // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
    // to failure, so a style that takes nothing to failure plans none.
@@ -24157,7 +24789,7 @@ index 0460d18..4c3b7bc 100644
      const deficitMuscles = new Set(
        priorities
          .filter(
-@@ -2168,8 +2970,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2168,8 +2985,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    }
  
    // 5. Week-aware order: after the anchor, accessories for muscles behind their weekly target lead.
@@ -24169,7 +24801,7 @@ index 0460d18..4c3b7bc 100644
      const isBehind = (block: WorkoutBlock) =>
        block.kind === 'straight' &&
        (block.entries[0] as WorkoutEntry).chosenFor.some(
-@@ -2202,13 +3006,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2202,13 +3021,23 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    const anchorExercise = anchor ? exerciseOf(anchor.exerciseId) : undefined;
    const topPriorities = priorities.slice(0, 3);
    const reasons: string[] = [
@@ -24195,7 +24827,7 @@ index 0460d18..4c3b7bc 100644
    const leader = leaderEntry ? exerciseOf(leaderEntry.exerciseId) : undefined;
    if (push && pushEntry) {
      reasons.push(
-@@ -2306,18 +3120,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2306,18 +3135,62 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
    );
  
    const count = allEntries(blocks).length;
@@ -24260,7 +24892,7 @@ index 0460d18..4c3b7bc 100644
      goal: goalLabel(profile.goals.primary),
      generatedAt: now,
      locationId: location?.id ?? null,
-@@ -2347,6 +3205,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+@@ -2347,6 +3220,14 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
            : 'low',
      compromises: [...new Set(compromises)],
      recalibration: { version: 1, lastTrigger: null },
@@ -27710,10 +28342,10 @@ index 4c6bd08..f9e76a4 100644
       "          await store.saveLocation(location);", [T_SCREEN, T_AUTOSAVE], None),
 diff --git a/tools/reverts/mutate-m31.py b/tools/reverts/mutate-m31.py
 new file mode 100644
-index 0000000..97d0558
+index 0000000..93c6c32
 --- /dev/null
 +++ b/tools/reverts/mutate-m31.py
-@@ -0,0 +1,1311 @@
+@@ -0,0 +1,1321 @@
 +"""Maintenance 31 mutation checks: revert each round M rule alone, run its tests, expect a failure,
 +restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -27886,6 +28518,10 @@ index 0000000..97d0558
 +T_EMPTY_SECOND = "src/core/state/emptySecondOnAnotherDay.store.test.ts"
 +# The twenty-sixth review of round M.
 +T_EMPTY_FULL_WAY_BACK = "src/core/state/emptyCopyFullSessionWayBack.store.test.ts"
++# The twenty-seventh review of round M.
++T_COPY_FULL_READ_AGAIN = "src/core/state/copyFullSessionOfferReadAgain.store.test.ts"
++T_COPY_FULL_EMPTIED = "src/core/state/copyFullSessionEmptiedWayBack.store.test.ts"
++T_COPY_FULL_HOLDS = "src/core/state/copyFullSessionChoiceHolds.store.test.ts"
 +T_REBUILT_MIDNIGHT = "src/core/state/secondRebuiltPastMidnight.store.test.ts"
 +T_FRESHEST = "src/core/state/convertedFreshestLine.store.test.ts"
 +
@@ -28836,9 +29472,9 @@ index 0000000..97d0558
 +     "  const kept = constraints.dayChoices;\n  const own = constraints.emptied ?? [];",
 +     "  const kept = undefined as WorkoutSession['constraints']['dayChoices'];\n  const own = constraints.emptied ?? [];",
 +     [T_SAVED_LOADED], None),
-+    ("H172 ... with a plan the lifter emptied on the loaded one", STORE,
-+     "        ...own.filter(\n          (plan) =>\n            !(kept.emptied ?? []).some(\n              (other) => other.offer === plan.offer && other.layout === plan.layout,\n            ),\n        ),\n",
-+     "", [T_SAVED_AFTER_EMPTIED], None),
++    ("H172 ... with a plan the lifter emptied on the loaded one", GENERATE,
++     "  const fresh = own.filter(\n    (plan) => !kept.some((other) => other.offer === plan.offer && other.layout === plan.layout),\n  );",
++     "  const fresh = own.filter(() => false);", [T_SAVED_AFTER_EMPTIED], None),
 +    ("H173 ... and the full session taken from it", STORE,
 +     "    fullSession: constraints.fullSession === true || kept?.fullSession === true,",
 +     "    fullSession: kept ? kept.fullSession === true : constraints.fullSession === true,",
@@ -28948,7 +29584,7 @@ index 0000000..97d0558
 +     "  if (false) {", [T_EMPTY_SECOND], None),
 +    # The twenty-sixth review of round M.
 +    ("H208 the full session from a copy that stands for none of the day's offer is the day's own", ENGINE,
-+     "        if (offer && offers !== null && constraints.catchUp?.kind !== offers) {\n          constraints.catchUp = cloneSpec(offer);\n        }\n",
++     "        if (day && offer && offers !== null && constraints.catchUp?.kind !== offers) {\n          constraints.catchUp = cloneSpec(offer);\n          const marks = marksOfDay(day.emptied ?? [], constraints.emptied ?? []);\n          if (marks.length > 0) constraints.emptied = marks;\n          else delete constraints.emptied;\n          delete constraints.dayChoices;\n        }\n",
 +     "", [T_EMPTY_FULL_WAY_BACK], None),
 +    ("H209 a copy records the day its plan was made", STORE,
 +     "      planDay: localDayKey(session.createdAt),\n", "", [T_REBUILT_MIDNIGHT], None),
@@ -28958,6 +29594,12 @@ index 0000000..97d0558
 +    ("H211 ... read where the copy has it", STORE,
 +     "    const planDay = saved.planDay ?? localDayKey(saved.workout.generatedAt);",
 +     "    const planDay = localDayKey(saved.workout.generatedAt);", [T_REBUILT_MIDNIGHT], None),
++    # The twenty-seventh review of round M.
++    ("H212 the full session from such a copy takes the plans emptied today as its own", ENGINE,
++     "          if (marks.length > 0) constraints.emptied = marks;\n          else delete constraints.emptied;\n",
++     "", [T_COPY_FULL_EMPTIED], None),
++    ("H213 ... and keeps nothing aside: the plan is the day's own", ENGINE,
++     "          delete constraints.dayChoices;\n", "", [T_COPY_FULL_READ_AGAIN, T_COPY_FULL_HOLDS], None),
 +]
 +
 +
@@ -29073,10 +29715,10 @@ index 0000000..2ae6517
 +print("written")
 diff --git a/tools/reverts/table_m31.txt b/tools/reverts/table_m31.txt
 new file mode 100644
-index 0000000..014dedb
+index 0000000..9c34bd9
 --- /dev/null
 +++ b/tools/reverts/table_m31.txt
-@@ -0,0 +1,1070 @@
+@@ -0,0 +1,1076 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The week model.
@@ -30024,9 +30666,9 @@ index 0000000..014dedb
 +     "  const kept = constraints.dayChoices;\n  const own = constraints.emptied ?? [];",
 +     "  const kept = undefined as WorkoutSession['constraints']['dayChoices'];\n  const own = constraints.emptied ?? [];",
 +     [T_SAVED_LOADED], None),
-+    ("H172 ... with a plan the lifter emptied on the loaded one", STORE,
-+     "        ...own.filter(\n          (plan) =>\n            !(kept.emptied ?? []).some(\n              (other) => other.offer === plan.offer && other.layout === plan.layout,\n            ),\n        ),\n",
-+     "", [T_SAVED_AFTER_EMPTIED], None),
++    ("H172 ... with a plan the lifter emptied on the loaded one", GENERATE,
++     "  const fresh = own.filter(\n    (plan) => !kept.some((other) => other.offer === plan.offer && other.layout === plan.layout),\n  );",
++     "  const fresh = own.filter(() => false);", [T_SAVED_AFTER_EMPTIED], None),
 +    ("H173 ... and the full session taken from it", STORE,
 +     "    fullSession: constraints.fullSession === true || kept?.fullSession === true,",
 +     "    fullSession: kept ? kept.fullSession === true : constraints.fullSession === true,",
@@ -30136,7 +30778,7 @@ index 0000000..014dedb
 +     "  if (false) {", [T_EMPTY_SECOND], None),
 +    # The twenty-sixth review of round M.
 +    ("H208 the full session from a copy that stands for none of the day's offer is the day's own", ENGINE,
-+     "        if (offer && offers !== null && constraints.catchUp?.kind !== offers) {\n          constraints.catchUp = cloneSpec(offer);\n        }\n",
++     "        if (day && offer && offers !== null && constraints.catchUp?.kind !== offers) {\n          constraints.catchUp = cloneSpec(offer);\n          const marks = marksOfDay(day.emptied ?? [], constraints.emptied ?? []);\n          if (marks.length > 0) constraints.emptied = marks;\n          else delete constraints.emptied;\n          delete constraints.dayChoices;\n        }\n",
 +     "", [T_EMPTY_FULL_WAY_BACK], None),
 +    ("H209 a copy records the day its plan was made", STORE,
 +     "      planDay: localDayKey(session.createdAt),\n", "", [T_REBUILT_MIDNIGHT], None),
@@ -30146,4 +30788,10 @@ index 0000000..014dedb
 +    ("H211 ... read where the copy has it", STORE,
 +     "    const planDay = saved.planDay ?? localDayKey(saved.workout.generatedAt);",
 +     "    const planDay = localDayKey(saved.workout.generatedAt);", [T_REBUILT_MIDNIGHT], None),
++    # The twenty-seventh review of round M.
++    ("H212 the full session from such a copy takes the plans emptied today as its own", ENGINE,
++     "          if (marks.length > 0) constraints.emptied = marks;\n          else delete constraints.emptied;\n",
++     "", [T_COPY_FULL_EMPTIED], None),
++    ("H213 ... and keeps nothing aside: the plan is the day's own", ENGINE,
++     "          delete constraints.dayChoices;\n", "", [T_COPY_FULL_READ_AGAIN, T_COPY_FULL_HOLDS], None),
 +]

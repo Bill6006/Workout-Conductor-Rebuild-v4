@@ -5,7 +5,52 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
-### Checkpoint, 2026-10-30, evening (supersedes the states below)
+### Checkpoint, 2026-10-30, night (supersedes the states below)
+
+Nothing is merged to `main` or deployed. The stack is Round M on `main`'s `2595631`, Round N on
+Round M's `47e9584`, Maintenance 33 on Round N's `0b971c0`, Maintenance 34 on Maintenance 33's
+`f95e3e4` (`git apply` each diff on its base, in that order).
+
+- **Round M**: local `47e9584` (`round-m-wip/round-m.diff` on `2595631`). The twenty-seventh pass
+  (three LOW, all from the twenty-sixth pass's way back) is complete: the full session taken from a
+  loaded copy that stands for none of the day's offer makes the plan the day's own from then on,
+  the day's offer its way back, the plans the lifter emptied today its own with the copy's
+  (`marksOfDay`, the merge every later plan reads), and nothing kept aside. Suite 3034 passed, 5
+  skipped; the zones run passes; M31 table at 351 entries, all 7 new and affected caught.
+  **Next**: the twenty-eighth review is running (`git diff f840d5b 47e9584` is the
+  twenty-seventh pass; its tests to come in `src/review-m31aa/` of `wc4-m-review`).
+- **Round N**: local `0b971c0` on `47e9584` (`round-n-wip/round-n.diff`). The sixteenth pass (one
+  MEDIUM, three LOW) is complete: a pick-up never marks a day the lifter made their own (a load set
+  by hand or the coach's deload lifted before it stopped); a lift picked up with no working set
+  done is the day's as it plans it now, its drop with it; a hard start's back-offs are the plan's
+  own, eased once; a set logged with no weight on top set plus back-offs is read as lifted at the
+  load it asks by the follow and a refit's replay, and the drop's load is recorded off it. Suite
+  3383 passed, 5 skipped, before the rebase onto `47e9584`, and 3388 passed, 5 skipped after it,
+  with the zones run; M32 table at 314 entries, all 24 new and affected caught. **Next**: the seventeenth review is running (`git diff
+  f21a158 0b971c0`; its tests to come in `src/review-m32q/` of `wc4-n-review`).
+- **Maintenance 33**: local `d91d951` on `0b971c0` (`round-o-wip/round-o.diff`), its history
+  squashed into two commits (the build and its first four passes; the fifth pass) and carried onto
+  Round N's sixteenth pass: "Lighter"'s kept loads go into Round N's single ease of the back-offs,
+  and the second build of what a lift under "Lighter" owes takes the first build's structure.
+  On the rebase the suite passed (3571) but for Round N's new pick-up test, which set its day up
+  with a low check-in this round's fatigue model does not score; a head cold runs the lift straight
+  instead (`f95e3e4`), and the file passes. **Next**: the sixth review is running (`git diff
+  71e275b f95e3e4` is the fifth pass with the rebase's test; the merge itself is in `71e275b`; its
+  tests to come in `src/review-m33f/` of `wc4-o-review`).
+- **Maintenance 34**: local `d0a2f71` on `f95e3e4` (`round-p-wip/round-p.diff`): the design
+  alone, in `docs/reports/maintenance-34.md` (the forecast at real lengths, the need carried into
+  the room a length leaves, the "longer would help" suggestion with its cooldowns, the honest
+  goals-versus-time card). **Next**: the build, while the three reviews run.
+- **Older tables**: on Maintenance 33's code three of the M31 table (V15, H152, H153) and seven of
+  the M32 table (N47, N103, N123, N124, N211, N274, N292) need re-anchoring, with the M23 to M26
+  tables' entries listed below; re-anchor them in each round's own worktree once its reviews are
+  clean.
+- **Then, unchanged**: once each round's review comes back clean, the earlier rounds' tables
+  re-anchored onto Round N's and Maintenance 33's code, the full revert runs, the browser suite,
+  `npm run verify`, and Round M, Round N and Maintenance 33 shipped in turn; then Maintenance 34 to
+  36, the presets question and the consolidated phone review.
+
+### Checkpoint, 2026-10-30, evening (superseded)
 
 Nothing is merged to `main` or deployed. The stack is Round M on `main`'s `2595631`, Round N on
 Round M's `e82c059` (its diff applies on `f840d5b` too, which adds Round M's report line alone),
