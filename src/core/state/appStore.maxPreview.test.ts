@@ -45,6 +45,10 @@ async function seeded(withHistory: boolean): Promise<AppStore> {
     await handle.store.hydrate();
     // Pushing was trained last: a chest focus brings the bench press back today.
     await handle.store.setCoachFocus('chest');
+    // TEST_NOW is a Wednesday, a day not ticked: the day's own plan is a catch-up of the muscles
+    // behind, whose lifts move with the week the coach focus plans (round M's fresh review). The
+    // full session keeps this the day's usual plan, whose work before the bench is the test's.
+    await handle.store.setFullSession(true);
   }
   return handle.store;
 }
