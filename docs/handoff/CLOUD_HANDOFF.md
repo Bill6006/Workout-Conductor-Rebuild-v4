@@ -37,10 +37,17 @@ Round M's `47e9584`, Maintenance 33 on Round N's `0b971c0`, Maintenance 34 on Ma
   instead (`f95e3e4`), and the file passes. **Next**: the sixth review is running (`git diff
   71e275b f95e3e4` is the fifth pass with the rebase's test; the merge itself is in `71e275b`; its
   tests to come in `src/review-m33f/` of `wc4-o-review`).
-- **Maintenance 34**: local `d0a2f71` on `f95e3e4` (`round-p-wip/round-p.diff`): the design
-  alone, in `docs/reports/maintenance-34.md` (the forecast at real lengths, the need carried into
-  the room a length leaves, the "longer would help" suggestion with its cooldowns, the honest
-  goals-versus-time card). **Next**: the build, while the three reviews run.
+- **Maintenance 34**: local `7f06db9` on `f95e3e4` (`round-p-wip/round-p.diff`), **paused on the
+  owner's word** (2026-10-30, usage running out: no further work until the owner says continue).
+  Done: the design (`docs/reports/maintenance-34.md`) and the forecast at real lengths (`0a6eb83`:
+  `expectedLengths.ts`, the week model's `plannedToday` and `todaysNeedOf`, the rules table's new
+  numbers; its tests pass in three zones). Unfinished, committed as it stood (`7f06db9`): the
+  generator's step for the need carried forward (`carry`, the entry's optional `carried`), one of
+  its tests failing (a lift in a pair takes no carried set yet); the store does not pass the need,
+  and the suggestion and the honest card are not built.
+- **The three reviews** (Round M's twenty-eighth, Round N's seventeenth, Maintenance 33's sixth)
+  stopped early at the usage limit, with no findings reported: run them again from the heads above
+  when work resumes.
 - **Older tables**: on Maintenance 33's code three of the M31 table (V15, H152, H153) and seven of
   the M32 table (N47, N103, N123, N124, N211, N274, N292) need re-anchoring, with the M23 to M26
   tables' entries listed below; re-anchor them in each round's own worktree once its reviews are

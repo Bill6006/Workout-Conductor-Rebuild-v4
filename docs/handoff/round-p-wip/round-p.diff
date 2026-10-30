@@ -115,3 +115,808 @@ index 0000000..c9bff56
 +## Questions for the owner
 +
 +None: the approved proposal and its settled questions cover each part.
+diff --git a/scripts/test-zones.mjs b/scripts/test-zones.mjs
+index 3f72f40..aef85ab 100644
+--- a/scripts/test-zones.mjs
++++ b/scripts/test-zones.mjs
+@@ -20,6 +20,8 @@ const FILES = [
+   'src/features/today/useTodayWorkout.localDay.test.tsx',
+   'src/engine/planning/deload.test.ts',
+   'src/engine/planning/weekModel.test.ts',
++  'src/engine/planning/weekModel.realLengths.test.ts',
++  'src/engine/planning/expectedLengths.test.ts',
+   'src/core/state/secondRebuiltPastMidnight.store.test.ts',
+ ];
+ 
+diff --git a/src/engine/planning/expectedLengths.test.ts b/src/engine/planning/expectedLengths.test.ts
+new file mode 100644
+index 0000000..9d414c4
+--- /dev/null
++++ b/src/engine/planning/expectedLengths.test.ts
+@@ -0,0 +1,79 @@
++import { describe, expect, it } from 'vitest';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { record } from '../../test/records';
++import type { DurationChoice } from '../workout/types';
++import { expectedLength } from './expectedLengths';
++
++/**
++ * Maintenance 34, the forecast at real lengths: each weekday's expected length from the lifter's own
++ * sessions on it over the last four weeks. Every time here is a clock time on the device, so the
++ * file runs as written in any zone (scripts/test-zones.mjs runs it in New York and fourteen hours
++ * east of UTC too). Thursday, September 10, 2026 at noon is now: 7, 14, 21 and 28 days before are
++ * Thursdays, 6 days before a Friday. Synthetic data only.
++ */
++
++/** A clock time on this device, as an instant: days before September 10, 2026. */
++const at = (daysAgo: number, hour = 12) => new Date(2026, 8, 10 - daysAgo, hour).toISOString();
++const NOW = at(0);
++const DEFAULT = 60;
++
++function session(daysAgo: number, durationChoice?: DurationChoice, hours = 0): WorkoutRecord {
++  const base = record(0, 'barbell-bench-press', [[8, 100, 2]]);
++  const startedAt = at(daysAgo, 12 + hours);
++  return {
++    ...base,
++    id: `w-${daysAgo}-${hours}`,
++    startedAt,
++    completedAt: startedAt,
++    ...(durationChoice !== undefined ? { durationChoice } : {}),
++  };
++}
++
++const thursday = (history: WorkoutRecord[]) => expectedLength(history, 'thu', NOW, DEFAULT);
++
++describe('a weekday’s expected length', () => {
++  it('is the Default with no session on that weekday', () => {
++    expect(thursday([])).toBe('default');
++    // A Friday's 30 minutes say nothing of Thursdays.
++    expect(thursday([session(6, 30)])).toBe('default');
++    expect(expectedLength([session(6, 30)], 'fri', NOW, DEFAULT)).toBe(30);
++  });
++
++  it('is the one session’s, or the latest of two', () => {
++    expect(thursday([session(7, 45)])).toBe(45);
++    expect(thursday([session(14, 45), session(7, 30)])).toBe(30);
++  });
++
++  it('is the median of the latest three: a change of length shows from its second week', () => {
++    const longer = [session(28, 30), session(21, 30), session(14, 30), session(7, 'default')];
++    // One longer Thursday: the forecast holds at 30.
++    expect(thursday(longer)).toBe(30);
++    // The second: it moves.
++    expect(thursday([...longer.slice(1), session(0, 'default', -4)])).toBe('default');
++  });
++
++  it('reads only the last four weeks', () => {
++    expect(thursday([session(35, 15)])).toBe('default');
++    expect(thursday([session(28, 15)])).toBe(15);
++  });
++
++  it('counts a day once, by its first session trained', () => {
++    // A second workout later that day is the day's extra, not its length.
++    expect(thursday([session(7, 'default'), session(7, 15, 3)])).toBe('default');
++    // A workout with no set done is no session trained.
++    const nothing = { ...session(7, 15, -2), entries: [] };
++    expect(thursday([nothing, session(7, 45)])).toBe(45);
++  });
++
++  it('reads a session from before lengths were kept as the Default', () => {
++    expect(thursday([session(21, 30), session(14, 30), session(7)])).toBe(30);
++    expect(thursday([session(21, 30), session(14), session(7)])).toBe('default');
++  });
++
++  it('orders the Default by the lifter’s own minutes', () => {
++    // A Default of 30 sits below 45.
++    const history = [session(21, 45), session(14, 'default'), session(7, 15)];
++    expect(expectedLength(history, 'thu', NOW, 30)).toBe('default');
++    expect(expectedLength(history, 'thu', NOW, 60)).toBe(45);
++  });
++});
+diff --git a/src/engine/planning/expectedLengths.ts b/src/engine/planning/expectedLengths.ts
+new file mode 100644
+index 0000000..f4ca55b
+--- /dev/null
++++ b/src/engine/planning/expectedLengths.ts
+@@ -0,0 +1,52 @@
++import { localDayKey, localDaysBetween, localWeekday } from '../../core/time/localDate';
++import type { Weekday } from '../../core/validation/profile';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { RULES } from '../rules/ruleTable';
++import type { DurationChoice } from '../workout/types';
++import { trainedIn } from './catchUp';
++
++/**
++ * Each weekday's expected length (Maintenance 34, the approved proposal part 2: "Expected lengths
++ * forecast the week; today's choice overrides immediately. The forecast weighs your last few weeks
++ * by weekday, so it adapts within about two weeks if you start training longer"). Read from the
++ * lifter's own sessions on that weekday over the last four weeks: the median of the latest three,
++ * the latest of two, or the one; the Default with none, since another weekday's length says little
++ * about this one. A day counts once, by its first session trained: a second workout is the day's
++ * extra, not its length. A session from before lengths were kept reads as the Default.
++ *
++ * Lengths forecast the week and nothing more: goals never bend to them (proposal part 4).
++ */
++
++/** A length's minutes: the Default's are the lifter's own. */
++export function choiceMinutes(choice: DurationChoice, defaultMinutes: number): number {
++  return choice === 'default' ? defaultMinutes : choice;
++}
++
++export function expectedLength(
++  history: readonly WorkoutRecord[],
++  weekday: Weekday,
++  now: string,
++  defaultMinutes: number,
++): DurationChoice {
++  const window = RULES.lengthWeeks.value * 7;
++  const firsts = new Map<string, WorkoutRecord>();
++  for (const record of history) {
++    if (record.startedAt > now || !trainedIn(record)) continue;
++    if (localWeekday(record.startedAt) !== weekday) continue;
++    const ago = localDaysBetween(record.startedAt, now);
++    if (ago < 0 || ago > window) continue;
++    const day = localDayKey(record.startedAt);
++    const first = firsts.get(day);
++    if (!first || record.startedAt < first.startedAt) firsts.set(day, record);
++  }
++  const latest = [...firsts.values()]
++    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
++    .slice(0, RULES.lengthSessions.value)
++    .map((record) => record.durationChoice ?? 'default');
++  if (latest.length === 0) return 'default';
++  if (latest.length < RULES.lengthSessions.value) return latest[0] as DurationChoice;
++  const sorted = [...latest].sort(
++    (a, b) => choiceMinutes(a, defaultMinutes) - choiceMinutes(b, defaultMinutes),
++  );
++  return sorted[Math.floor(sorted.length / 2)] as DurationChoice;
++}
+diff --git a/src/engine/planning/weekModel.realLengths.test.ts b/src/engine/planning/weekModel.realLengths.test.ts
+new file mode 100644
+index 0000000..deecc0e
+--- /dev/null
++++ b/src/engine/planning/weekModel.realLengths.test.ts
+@@ -0,0 +1,105 @@
++import { describe, expect, it } from 'vitest';
++import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile, type UserProfile } from '../../core/validation/profile';
++import type { WorkoutRecord } from '../../core/validation/workoutRecord';
++import { record } from '../../test/records';
++import type { DurationChoice } from '../workout/types';
++import { todaysNeedOf, weekModel, type WeekModel } from './weekModel';
++
++/**
++ * Maintenance 34, the forecast at real lengths: the week model plans each session still to come at
++ * the length the lifter trains that weekday, and today's at its own. Every time here is a clock time
++ * on the device. September 2026: the 7th is a Monday. Synthetic data only.
++ *
++ * Steps: Monday, Wednesday and Friday ticked; the last three Wednesdays (August 19 and 26,
++ * September 2) trained at 30 minutes, no Friday trained in the window. On Monday the 7th at 8:00,
++ * before training, the week holds Monday (today), Wednesday and Friday.
++ */
++
++const at = (day: number, hour = 12, month = 8) => new Date(2026, month, day, hour).toISOString();
++const [, gym] = createDefaultLocations({ gymAccess: true }, at(1));
++const profile: UserProfile = {
++  ...createDefaultProfile(at(1), 'gym'),
++  bodyweight: 185,
++  schedule: {
++    ...createDefaultProfile(at(1), 'gym').schedule,
++    availableDays: ['mon', 'wed', 'fri'],
++    weeklyFrequency: 3,
++  },
++};
++
++function wednesday(day: number, month: number, durationChoice?: DurationChoice): WorkoutRecord {
++  const when = at(day, 18, month);
++  return record(
++    0,
++    'back-squat',
++    [
++      [5, 225, 2],
++      [5, 225, 2],
++      [5, 225, 2],
++    ],
++    [4, 6],
++    2,
++    {
++      id: `w-wed-${month}-${day}`,
++      startedAt: when,
++      completedAt: when,
++      ...(durationChoice !== undefined ? { durationChoice } : {}),
++    },
++  );
++}
++
++const wednesdays = (choice?: DurationChoice) => [
++  wednesday(19, 7, choice),
++  wednesday(26, 7, choice),
++  wednesday(2, 8, choice),
++];
++
++const model = (history: WorkoutRecord[], todayLength?: DurationChoice): WeekModel =>
++  weekModel({
++    profile,
++    location: gym!,
++    history,
++    now: at(7, 8),
++    ...(todayLength !== undefined ? { todayLength } : {}),
++  });
++
++const total = (week: WeekModel, field: 'planned' | 'plannedToday') =>
++  MUSCLE_IDS.reduce((sum, muscle) => sum + week.muscles[muscle][field], 0);
++
++describe('the week forecast at real lengths', () => {
++  it('plans Wednesday at the 30 minutes the lifter trains it, the other days at the Default', () => {
++    const real = model(wednesdays(30));
++    const atDefault = model(wednesdays());
++    expect(real.sessionsAhead).toBe(3);
++    // Wednesday at 30 minutes delivers fewer sets than at the Default.
++    expect(total(real, 'planned')).toBeLessThan(total(atDefault, 'planned'));
++    // Today's own plan is the same in both: its length is today's.
++    expect(total(real, 'plannedToday')).toBe(total(atDefault, 'plannedToday'));
++  });
++
++  it('plans today at today’s own length', () => {
++    const atDefault = model(wednesdays(30));
++    const short = model(wednesdays(30), 15);
++    expect(total(short, 'plannedToday')).toBeLessThan(total(atDefault, 'plannedToday'));
++    // The days after it are planned after today's plan, as the lifter will train them: a short
++    // Monday leaves the chest more for Wednesday or Friday.
++    const later = (week: WeekModel) => week.muscles.chest.planned - week.muscles.chest.plannedToday;
++    expect(later(short)).toBeGreaterThanOrEqual(later(atDefault));
++  });
++
++  it('owes today what the week lacks once the days after it are counted', () => {
++    const week = model(wednesdays(30));
++    for (const muscle of MUSCLE_IDS) {
++      const one = week.muscles[muscle];
++      expect(todaysNeedOf(one), muscle).toBeCloseTo(
++        Math.max(0, one.target - one.done - (one.planned - one.plannedToday)),
++        6,
++      );
++    }
++    // Something is owed today: a week of three sessions, one of them short, leaves muscles under
++    // their targets.
++    expect(MUSCLE_IDS.some((muscle) => todaysNeedOf(week.muscles[muscle]) > 0)).toBe(true);
++  });
++});
+diff --git a/src/engine/planning/weekModel.ts b/src/engine/planning/weekModel.ts
+index ff9e518..7509085 100644
+--- a/src/engine/planning/weekModel.ts
++++ b/src/engine/planning/weekModel.ts
+@@ -6,8 +6,9 @@ import type { UserProfile } from '../../core/validation/profile';
+ import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+ import type { LearnedResets } from '../learned/resets';
+ import { INDIRECT_SET_WEIGHT, computeExposure, weeklyTargets } from '../volume/weeklyVolume';
+-import { allEntries, type GeneratedWorkout } from '../workout/types';
++import { allEntries, type DurationChoice, type GeneratedWorkout } from '../workout/types';
+ import { generateWorkout } from '../workoutGenerator/generate';
++import { expectedLength } from './expectedLengths';
+ 
+ /**
+  * The week model (Maintenance 31, docs/proposals/week-model-readiness-time.md part 1): one picture
+@@ -26,8 +27,13 @@ export interface MuscleWeek {
+   today: number;
+   /** Today's direct sets: a muscle with none was not trained today (the review of round M). */
+   todayDirect: number;
+-  /** Sets the week's sessions still to come deliver, at Default length. */
++  /**
++   * Sets the week's sessions still to come deliver, each at its expected length (Maintenance 34:
++   * the forecast at real lengths; Round M planned them at the Default).
++   */
+   planned: number;
++  /** Of those, today's own plan's: what the need carried leaves out (Maintenance 34). */
++  plannedToday: number;
+   /** The goal's weekly sets for the muscle. */
+   target: number;
+   /** Days since the muscle was last trained directly, as elapsed time; null when never. */
+@@ -53,6 +59,15 @@ export const projectedSets = (muscle: MuscleWeek): number => muscle.done + muscl
+ export const shortfallOf = (muscle: MuscleWeek): number =>
+   Math.max(0, muscle.target - projectedSets(muscle));
+ 
++/**
++ * The sets today's plan owes a muscle for the week to reach its target (Maintenance 34, the need
++ * carried forward): its target, less what is done and what the sessions after today deliver at
++ * their expected lengths; never below 0. Today's own plan is left out, so the plan can read it
++ * against what it gives the muscle itself.
++ */
++export const todaysNeedOf = (muscle: MuscleWeek): number =>
++  Math.max(0, muscle.target - muscle.done - (muscle.planned - muscle.plannedToday));
++
+ function emptyWeek(targets: Record<MuscleId, number>): Record<MuscleId, MuscleWeek> {
+   return Object.fromEntries(
+     MUSCLE_IDS.map((muscle) => [
+@@ -62,6 +77,7 @@ function emptyWeek(targets: Record<MuscleId, number>): Record<MuscleId, MuscleWe
+         today: 0,
+         todayDirect: 0,
+         planned: 0,
++        plannedToday: 0,
+         target: targets[muscle],
+         daysSince: null,
+         daysBefore: null,
+@@ -75,7 +91,7 @@ function credit(
+   muscles: Record<MuscleId, MuscleWeek>,
+   exerciseId: string,
+   sets: number,
+-  field: 'done' | 'today' | 'planned',
++  field: 'done' | 'today' | 'planned' | 'plannedToday',
+ ): void {
+   const exercise = getExercise(exerciseId);
+   if (!exercise || sets <= 0) return;
+@@ -144,6 +160,8 @@ export function weekModel(input: {
+   now: string;
+   /** What the lifter reset (Maintenance 27, item 47): the week reads as today's plan does. */
+   resets?: LearnedResets | null;
++  /** Today's plan's own length, which stands at once (Maintenance 34); the Default without one. */
++  todayLength?: DurationChoice;
+ }): WeekModel {
+   const { profile, location, history, now } = input;
+   const week = localWeekKey(now);
+@@ -172,24 +190,25 @@ export function weekModel(input: {
+   }
+   const trainedToday = trained.has(today);
+   const ahead = daysAhead(profile, now, trained.size, trainedToday);
+-  // Each session to come, as the plan would build it after the ones before it.
++  // Each session to come, as the plan would build it after the ones before it, at the length the
++  // lifter trains that weekday (Maintenance 34), today's at its own.
+   let simulated: WorkoutRecord[] = [...history];
+   for (const date of ahead) {
++    const own = localDayKey(date) === today;
+     const workout = generateWorkout({
+       profile,
+       location,
+       history: simulated,
+       now: date,
+-      duration: 'default',
++      duration: own
++        ? (input.todayLength ?? 'default')
++        : expectedLength(history, localWeekday(date), now, profile.schedule.typicalDurationMinutes),
+       resets: input.resets ?? null,
+     });
+     for (const entry of allEntries(workout.blocks)) {
+-      credit(
+-        muscles,
+-        entry.exerciseId,
+-        entry.sets.filter((set) => set.kind === 'working').length,
+-        'planned',
+-      );
++      const sets = entry.sets.filter((set) => set.kind === 'working').length;
++      credit(muscles, entry.exerciseId, sets, 'planned');
++      if (own) credit(muscles, entry.exerciseId, sets, 'plannedToday');
+     }
+     simulated = [...simulated, plannedRecord(date, workout)];
+   }
+diff --git a/src/engine/rules/ruleTable.ts b/src/engine/rules/ruleTable.ts
+index 8f0b036..5ed089b 100644
+--- a/src/engine/rules/ruleTable.ts
++++ b/src/engine/rules/ruleTable.ts
+@@ -2,9 +2,10 @@
+  * Every number the recovery and readiness rules use, in one table with its source and evidence
+  * status (the approved proposal, docs/proposals/week-model-readiness-time.md, part 2: "Every number
+  * lives in one table with its source and evidence status, later tuned from your logs"). The research
+- * is docs/research/recovery-time-course.md and docs/research/readiness-and-soreness.md; each source
+- * below is a PubMed ID from them, or the judgement it rests on. The modules read their numbers from
+- * here, never a copy of their own.
++ * is docs/research/recovery-time-course.md and docs/research/readiness-and-soreness.md, and for time
++ * (Maintenance 34) docs/research/training-dose-and-time.md and
++ * docs/research/coaching-nudges-and-cooldowns.md; each source below is a PubMed ID from them, or the
++ * judgement it rests on. The modules read their numbers from here, never a copy of their own.
+  */
+ 
+ /** How a number is known. */
+@@ -286,6 +287,83 @@ export const RULES = {
+     'direction research, size judgement',
+     "The owner's decision 5: at most three new cards a week (Ancker 2017; Klasnja 2019).",
+   ),
++
++  // The forecast at real lengths (Maintenance 34): each weekday's expected length from the lifter's
++  // own sessions on it.
++  lengthWeeks: rule(
++    4,
++    'weeks',
++    'judgement',
++    "The dose report's rolling four-week window: a weekday's lengths over the last four weeks (training-dose-and-time.md).",
++  ),
++  lengthSessions: rule(
++    3,
++    'sessions',
++    'judgement',
++    'The median of the latest three on a weekday: a change of length shows from its second week (proposal part 2: "adapts within about two weeks").',
++  ),
++
++  // The need carried forward (Maintenance 34): a muscle's missing sets this week, filled where the
++  // next session trains it, within the room its length leaves.
++  carryMuscleSets: rule(
++    11,
++    'sets',
++    'direction research, size judgement',
++    'Per-session gains plateau at about 11 sets per muscle, from one preprint (Remmert 2025, training-dose-and-time.md): the most a muscle takes in one session with the need carried.',
++  ),
++  carryLiftSets: rule(
++    2,
++    'sets',
++    'judgement',
++    'A lift takes at most two sets more than its own, so each stays within the two to six working sets the roles give.',
++  ),
++
++  // "Longer would help" (Maintenance 34): an inline suggestion beside the length control, never a
++  // question (Hussain 2019, 31206159; Kawamoto 2005, 15767266); every number is judgement.
++  longerShare: rule(
++    0.5,
++    'share of the gap',
++    'judgement',
++    'The next length closes "most" of a muscle\'s gap (proposal part 2) when it gives it at least half of what the week is short.',
++  ),
++  longerPerDay: rule(
++    1,
++    'suggestions',
++    'direction research, size judgement',
++    'At most once a day: prompts once a day or less held their effect (Bidargaddi 2018, 30497999; Bell 2023, 37294612).',
++  ),
++  longerPerWeek: rule(
++    2,
++    'suggestions',
++    'direction research, size judgement',
++    "At most twice in seven days (the proposal's cooldowns; the nudges report: it stays noticeable).",
++  ),
++  longerPauseDays: rule(
++    7,
++    'days',
++    'judgement',
++    'Two "Not now" in a row pause the suggestion for a week (the nudges report; repeated dismissals lengthen the wait, Rankin 2009, 18854219).',
++  ),
++
++  // The honest goals-versus-time check (Maintenance 34): shown only after weeks below the floor.
++  floorSets: rule(
++    4,
++    'sets a week',
++    'research',
++    'About 4 hard sets a week for a muscle still grows it (Schoenfeld 2017, 27433992; Iversen 2021, 34125411).',
++  ),
++  shortWeeks: rule(
++    3,
++    'weeks',
++    'direction research, size judgement',
++    'Never one short week: strength holds about 3 weeks (McMaster 2013, 23529287); shown after 3 weeks running below the floor.',
++  ),
++  materialShare: rule(
++    0.25,
++    'share of the weekly minutes',
++    'judgement',
++    "The card comes back only on a material change (Nahum-Shani 2018, 27663578): the weeks' time moved by a quarter or more (the nudges report: above noise).",
++  ),
+ } as const satisfies Record<string, Rule>;
+ 
+ export type RuleId = keyof typeof RULES;
+diff --git a/src/engine/workout/types.ts b/src/engine/workout/types.ts
+index 67ef59f..dd9e740 100644
+--- a/src/engine/workout/types.ts
++++ b/src/engine/workout/types.ts
+@@ -203,6 +203,11 @@ export interface WorkoutEntry {
+    * review of round N): its top set reads past such a day, as past its back-offs.
+    */
+   atBackOffs?: true;
++  /**
++   * The working sets it took for what the week is short of (Maintenance 34, the need carried
++   * forward): at most two over its own.
++   */
++  carried?: number;
+   progression?: EntryProgression;
+   manual?: ManualEdits;
+   /**
+diff --git a/src/engine/workout/workoutSchema.ts b/src/engine/workout/workoutSchema.ts
+index 3e6eb79..cd23676 100644
+--- a/src/engine/workout/workoutSchema.ts
++++ b/src/engine/workout/workoutSchema.ts
+@@ -131,6 +131,8 @@ export const WorkoutEntrySchema = z.looseObject({
+   // Straight at the back-offs' load after a session on the structure (the fourth review of round
+   // N); optional, and dropped rather than refused.
+   atBackOffs: z.literal(true).optional().catch(undefined),
++  // The sets it took for the week's need (Maintenance 34); optional, and dropped rather than refused.
++  carried: z.number().int().min(1).optional().catch(undefined),
+   progression: EntryProgressionSchema.optional().catch(undefined),
+   manual: z
+     .looseObject({
+diff --git a/src/engine/workoutGenerator/carry.test.ts b/src/engine/workoutGenerator/carry.test.ts
+new file mode 100644
+index 0000000..2b4a07f
+--- /dev/null
++++ b/src/engine/workoutGenerator/carry.test.ts
+@@ -0,0 +1,153 @@
++import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import type { MuscleId } from '../../catalog/muscles/muscles';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import { RECORD_NOW } from '../../test/records';
++import { RULES } from '../rules/ruleTable';
++import { allEntries, type DurationChoice, type GeneratedWorkout } from '../workout/types';
++import { generateWorkout, type GenerationConstraints } from './generate';
++import { INDIRECT_SET_WEIGHT } from '../volume/weeklyVolume';
++
++/**
++ * Maintenance 34, the need carried forward: a set more on a lift that works a muscle the week is
++ * short of, where the length leaves room (the approved proposal part 2: "Carry forward the need,
++ * not the exercise ... within a per-session limit"). The default lifter with no history, at the
++ * gym. Synthetic data only.
++ */
++
++const profile = createDefaultProfile(RECORD_NOW);
++const [, gym] = createDefaultLocations({ gymAccess: true }, RECORD_NOW);
++
++function plan(constraints: GenerationConstraints = {}, duration: DurationChoice = 'default') {
++  return generateWorkout({
++    profile,
++    location: gym,
++    history: [],
++    now: RECORD_NOW,
++    duration,
++    constraints,
++  });
++}
++
++/** The working sets today's plan gives a muscle, a synergist's at half, as the week counts them. */
++function setsFor(workout: GeneratedWorkout, muscle: MuscleId): number {
++  return allEntries(workout.blocks).reduce((sum, entry) => {
++    const exercise = requireExercise(entry.exerciseId);
++    const working = entry.sets.filter((set) => set.kind === 'working').length;
++    if (exercise.primaryMuscles.includes(muscle)) return sum + working;
++    if (exercise.secondaryMuscles.includes(muscle)) return sum + working * INDIRECT_SET_WEIGHT;
++    return sum;
++  }, 0);
++}
++
++const working = (workout: GeneratedWorkout, id: string) =>
++  allEntries(workout.blocks)
++    .find((entry) => entry.exerciseId === id)!
++    .sets.filter((set) => set.kind === 'working').length;
++
++/** An accessory in a straight block of the plan, and a muscle it works directly. */
++function accessoryOf(workout: GeneratedWorkout): { id: string; muscle: MuscleId } {
++  for (const block of workout.blocks) {
++    if (block.kind !== 'straight') continue;
++    const entry = block.entries[0]!;
++    if (entry.role === 'primary-strength' || entry.dropSet) continue;
++    return { id: entry.exerciseId, muscle: requireExercise(entry.exerciseId).primaryMuscles[0]! };
++  }
++  throw new Error('no accessory');
++}
++
++describe('the need carried into today’s plan', () => {
++  const base = plan();
++  const { id, muscle } = accessoryOf(base);
++  const own = setsFor(base, muscle);
++
++  it('gives a muscle the week is short of a set more on a lift that works it, in the room left', () => {
++    const carried = plan({ carry: { [muscle]: own + 1 } });
++    expect(setsFor(carried, muscle)).toBe(own + 1);
++    expect(carried.duration.estimatedMinutes).toBeLessThanOrEqual(carried.duration.targetMinutes);
++    const entry = allEntries(carried.blocks).find((one) => one.carried !== undefined)!;
++    expect(entry.carried).toBe(1);
++    expect(requireExercise(entry.exerciseId).primaryMuscles).toContain(muscle);
++    expect(entry.progression?.evidence[0]).toMatch(
++      /^A set more for the .+, which this week is short of\.$/,
++    );
++    expect(carried.explanation.reasons.join(' / ')).toMatch(
++      /This week is short of the .+: a set more for (it|them), in the room \d+ min leaves\./,
++    );
++  });
++
++  it('owes nothing where today’s plan already gives the muscle its need', () => {
++    const carried = plan({ carry: { [muscle]: own } });
++    expect(allEntries(carried.blocks).some((entry) => entry.carried !== undefined)).toBe(false);
++    expect(setsFor(carried, muscle)).toBe(own);
++  });
++
++  it('gives a lift at most two sets over its own', () => {
++    const carried = plan({ carry: { [muscle]: own + 20 } });
++    for (const entry of allEntries(carried.blocks)) {
++      expect(entry.carried ?? 0, entry.exerciseId).toBeLessThanOrEqual(RULES.carryLiftSets.value);
++    }
++    expect(working(carried, id)).toBeLessThanOrEqual(working(base, id) + RULES.carryLiftSets.value);
++  });
++
++  it('never takes a muscle over 11 sets today', () => {
++    const carried = plan({ carry: { [muscle]: 40 } });
++    expect(setsFor(carried, muscle)).toBeLessThanOrEqual(RULES.carryMuscleSets.value);
++  });
++
++  it('never runs the plan over its length, nor takes a set off the plan’s own', () => {
++    const short = plan({}, 30);
++    const carried = plan({ carry: { [muscle]: 40 } }, 30);
++    // The fit leaves a plan up to a minute over its length: a set carried adds none to that.
++    expect(carried.duration.estimatedMinutes).toBeLessThanOrEqual(
++      Math.max(carried.duration.targetMinutes, short.duration.estimatedMinutes),
++    );
++    for (const entry of allEntries(short.blocks)) {
++      expect(working(carried, entry.exerciseId), entry.exerciseId).toBeGreaterThanOrEqual(
++        working(short, entry.exerciseId),
++      );
++    }
++  });
++
++  it('carries nothing in a deload week', () => {
++    const deload = { startsAt: RECORD_NOW, endsAt: '2026-09-17T12:00:00.000Z' };
++    const carried = plan({ carry: { [muscle]: own + 2 }, deload });
++    expect(allEntries(carried.blocks).some((entry) => entry.carried !== undefined)).toBe(false);
++  });
++
++  it('carries nothing into a catch-up', () => {
++    const carried = plan({
++      carry: { [muscle]: 30 },
++      catchUp: {
++        kind: 'catch-up',
++        muscles: [{ muscle, sets: 2, minRir: 2, why: 'behind' }],
++        sitOut: [],
++      },
++    });
++    expect(allEntries(carried.blocks).some((entry) => entry.carried !== undefined)).toBe(false);
++  });
++});
++
++describe('the need carried onto a lift in a pair', () => {
++  it('gives it a set more, a round more for the pair', () => {
++    const base = plan();
++    const pair = base.blocks.find(
++      (block) =>
++        block.kind === 'superset' &&
++        block.entries.some((entry) =>
++          requireExercise(entry.exerciseId).primaryMuscles.includes('biceps'),
++        ),
++    );
++    expect(pair).toBeDefined();
++    const own = setsFor(base, 'biceps');
++    const carried = plan({ carry: { biceps: own + 1 } });
++    expect(setsFor(carried, 'biceps')).toBe(own + 1);
++    const block = carried.blocks.find((one) => one.id === pair!.id)!;
++    expect(block.rounds).toBe(
++      Math.max(
++        ...block.entries.map((entry) => entry.sets.filter((set) => set.kind === 'working').length),
++      ),
++    );
++  });
++});
+diff --git a/src/engine/workoutGenerator/generate.ts b/src/engine/workoutGenerator/generate.ts
+index 6612ca1..f92788c 100644
+--- a/src/engine/workoutGenerator/generate.ts
++++ b/src/engine/workoutGenerator/generate.ts
+@@ -104,6 +104,7 @@ import {
+ import { barWeightFor } from '../progression/startingLoad';
+ import type { Readiness } from '../recalibration/types';
+ import { interpretFatigue } from '../recovery/fatigue';
++import { RULES } from '../rules/ruleTable';
+ import { precedingWorkToday, type EarlierWork } from '../recovery/sessionContext';
+ import {
+   INDIRECT_SET_WEIGHT,
+@@ -329,6 +330,12 @@ export interface GenerationConstraints {
+    * and 32): the session is built from these muscles alone. One with no muscles plans as usual.
+    */
+   catchUp?: CatchUpSpec | null;
++  /**
++   * The sets today's plan owes each muscle for the week (Maintenance 34, the need carried forward:
++   * `todaysNeedOf`), for muscles outside their recovery windows: a set more goes on a lift that works
++   * one, where the length leaves room.
++   */
++  carry?: Partial<Record<MuscleId, number>>;
+   /**
+    * The catch-up's slots as the plan laid them out (the seventh review of round M): a rebuild
+    * around kept lifts fills these, never a layout made again from what the place has.
+@@ -919,6 +926,9 @@ function catchUpLines(spec: CatchUpSpec, blocks: readonly WorkoutBlock[]): strin
+   return lines;
+ }
+ 
++/** A lift's line for the sets the week's need gave it (Maintenance 34). */
++const CARRIED_LINE = /^(?:A set|\d+ sets) more for the .+, which this week is short of\.$/;
++
+ /** A line `catchUpLines` writes. */
+ const CATCH_UP_LINE =
+   /^A catch-up for what this week still lacks: |^A second workout today: | takes? only what is left of one session, three or more reps short of failure\.$|, trained today, sits? out\.$/;
+@@ -2992,6 +3002,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+     if (!lastWorking) return false;
+     trimmed.push({ entry: target, set: lastWorking, at: target.sets.indexOf(lastWorking) });
+     target.sets = target.sets.filter((set) => set !== lastWorking);
++    // A set the week's need gave it goes first (Maintenance 34): its count goes with it.
++    if (target.carried !== undefined) {
++      if (target.carried > 1) target.carried -= 1;
++      else delete target.carried;
++    }
+     syncRoundsOf(target);
+     const trimmedName = exerciseOf(target.exerciseId).name;
+     fitLog.add(`trimmed|${trimmedName}`, trimmedLine(trimmedName));
+@@ -3184,6 +3199,80 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+     }
+   }
+ 
++  // 6. The need carried forward (Maintenance 34, the approved proposal part 2: "Carry forward the
++  // need, not the exercise ... filled by whatever exercise fits next time, within a per-session
++  // limit"): a set more on a lift that works a muscle the week is short of (`carry`, what today owes
++  // it once the sessions after today are counted), accessories first, never over two more than the
++  // lift's own nor the muscle over 11 sets today, and only into the room the length leaves, so the
++  // plan's own sets are never displaced. None on a catch-up or a second workout, in a deload week or
++  // on a day of high fatigue; a lift begun, kept, set by hand, in a circuit or with a drop set takes
++  // none (a pair runs its longer member's rounds, so a set more on one is a round more for it).
++  const carriedFor = new Map<WorkoutEntry, MuscleId[]>();
++  const carry = constraints.carry ?? {};
++  if (!offPlan && deload === null && fatigue.level !== 'high') {
++    const setsToday = (muscle: MuscleId) =>
++      allEntries(blocks).reduce((sum, entry) => {
++        const exercise = exerciseOf(entry.exerciseId);
++        const working = entry.sets.filter((set) => set.kind === 'working').length;
++        if (exercise.primaryMuscles.includes(muscle)) return sum + working;
++        if (exercise.secondaryMuscles.includes(muscle)) return sum + working * INDIRECT_SET_WEIGHT;
++        return sum;
++      }, 0);
++    const owed = (muscle: MuscleId) => (carry[muscle] ?? 0) - setsToday(muscle);
++    const takes = (block: WorkoutBlock, entry: WorkoutEntry, muscle: MuscleId) => {
++      const last = [...entry.sets].reverse().find((set) => set.kind === 'working');
++      return (
++        block.kind !== 'circuit' &&
++        exerciseOf(entry.exerciseId).primaryMuscles.includes(muscle) &&
++        last !== undefined &&
++        last.tier !== 'top' &&
++        !entry.locked &&
++        !entry.pinned &&
++        !keptIds.has(entry.id) &&
++        entry.manual?.sets !== true &&
++        !entry.dropSet &&
++        !entry.sets.some((set) => isDone(entry.id, set.index)) &&
++        (entry.carried ?? 0) < RULES.carryLiftSets.value
++      );
++    };
++    const owing = (Object.keys(carry) as MuscleId[])
++      .filter((muscle) => owed(muscle) >= 1)
++      .sort((a, b) => owed(b) - owed(a));
++    let room = true;
++    for (const muscle of owing) {
++      while (room && owed(muscle) >= 1 && setsToday(muscle) + 1 <= RULES.carryMuscleSets.value) {
++        const lift = blocks
++          .flatMap((block) => block.entries.filter((entry) => takes(block, entry, muscle)))
++          .sort(
++            (a, b) =>
++              Number(a.role === 'primary-strength') - Number(b.role === 'primary-strength') ||
++              (a.carried ?? 0) - (b.carried ?? 0),
++          )[0];
++        const last = lift && [...lift.sets].reverse().find((set) => set.kind === 'working');
++        if (!lift || !last) break;
++        lift.sets.push({ ...last, index: Math.max(...lift.sets.map((set) => set.index)) + 1 });
++        syncRoundsOf(lift);
++        if (estimate().totalMinutes > targetMinutes) {
++          lift.sets.pop();
++          syncRoundsOf(lift);
++          room = false;
++          break;
++        }
++        lift.carried = (lift.carried ?? 0) + 1;
++        carriedFor.set(lift, [...new Set([...(carriedFor.get(lift) ?? []), muscle])]);
++      }
++    }
++    for (const [entry, muscles] of carriedFor) {
++      if (!entry.progression) continue;
++      const count = entry.carried ?? 0;
++      const line = `${count === 1 ? 'A set' : `${count} sets`} more for the ${musclesInWords(muscles)}, which this week is short of.`;
++      entry.progression = {
++        ...entry.progression,
++        evidence: [line, ...entry.progression.evidence.filter((one) => !CARRIED_LINE.test(one))],
++      };
++    }
++  }
++
+   for (const conflict of checkWorkoutConflicts(
+     allEntries(blocks).map((entry) => exerciseOf(entry.exerciseId)),
+     context,
+@@ -3317,6 +3406,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
+       }: ${template.title.toLowerCase()} today.`,
+     );
+   }
++  if (carriedFor.size > 0) {
++    const sets = [...carriedFor.keys()].reduce((sum, entry) => sum + (entry.carried ?? 0), 0);
++    const muscles = [...new Set([...carriedFor.values()].flat())];
++    reasons.push(
++      `This week is short of the ${musclesInWords(muscles)}: ${sets === 1 ? 'a set' : `${sets} sets`} more for ${muscles.length === 1 ? 'it' : 'them'}, in the room ${targetMinutes} min leaves.`,
++    );
++  }
+   if (behindNames.length > 0) {
+     reasons.push(
+       `${behindNames.slice(0, 3).join(', ')} ${behindNames.length === 1 ? 'is' : 'are'} behind this week: the accessories lead with ${behindNames.length === 1 ? 'it' : 'them'}.`,
