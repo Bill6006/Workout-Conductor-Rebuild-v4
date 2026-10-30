@@ -467,7 +467,11 @@ for name, rel, old, new, tests, nth in MUTATIONS:
         out = run.stdout + run.stderr
         summary = re.search(r"Tests\s+(.*)", out)
         line = summary.group(1).strip() if summary else "no summary (compile error?)"
-        killed = "failed" in line or summary is None
+        # A compile error, or a failure that is only a time-out, is no catch (as
+        # mutate-install-icon.py reads it): WRONG FAILURE, to run again alone or mend.
+        asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
+        wrong = summary is None or (re.search(r"Test timed out", out) is not None and not asserted)
+        killed = "failed" in line and not wrong
         if utc:
             # As the CI runner: the tests in UTC, then the day rules' tests in two zones.
             zones = subprocess.run(
@@ -476,8 +480,17 @@ for name, rel, old, new, tests, nth in MUTATIONS:
                 errors="replace", env=env,
             )
             line = f"UTC: {line}; zones: {'failed' if zones.returncode != 0 else 'passed'}"
-            killed = killed or run.returncode != 0 or zones.returncode != 0
-        results.append((name, "KILLED" if killed else "SURVIVED", line))
+            zones_out = zones.stdout + zones.stderr
+            zones_asserted = re.search(
+                r"AssertionError|TestingLibraryElementError|expected .* to ", zones_out
+            )
+            if zones.returncode != 0 and not killed and not wrong:
+                if zones_asserted:
+                    killed = True
+                else:
+                    wrong = True
+        verdict = "WRONG FAILURE" if wrong else "KILLED" if killed else "SURVIVED"
+        results.append((name, verdict, line))
     finally:
         path.write_bytes(original.encode("utf-8"))
     print(f"{results[-1][1]:9} {name}: {results[-1][2]}", flush=True)

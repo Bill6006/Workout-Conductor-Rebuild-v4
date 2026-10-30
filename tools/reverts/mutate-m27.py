@@ -724,8 +724,13 @@ for name, rel, old, new, tests, nth in MUTATIONS:
         out = run.stdout + run.stderr
         summary = re.search(r"Tests\s+(.*)", out)
         line = summary.group(1).strip() if summary else "no summary (compile error?)"
-        killed = "failed" in line or summary is None
-        results.append((name, "KILLED" if killed else "SURVIVED", line))
+        # A compile error, or a failure that is only a time-out, is no catch (as
+        # mutate-install-icon.py reads it): WRONG FAILURE, to run again alone or mend.
+        asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
+        wrong = summary is None or (re.search(r"Test timed out", out) is not None and not asserted)
+        killed = "failed" in line and not wrong
+        verdict = "WRONG FAILURE" if wrong else "KILLED" if killed else "SURVIVED"
+        results.append((name, verdict, line))
     finally:
         path.write_bytes(original.encode("utf-8"))
     print(f"{results[-1][1]:9} {name}: {results[-1][2]}", flush=True)
