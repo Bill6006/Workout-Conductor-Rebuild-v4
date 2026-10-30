@@ -1493,17 +1493,31 @@ function adjustPrescription(
   };
 }
 
-/** The template a day would get from this history (the choice `generateWorkout` makes). */
+/** A catch-up's or a second workout's template takes no place in the split's rotation (round M). */
+const OFF_ROTATION_IDS: ReadonlySet<string> = new Set(Object.values(CATCH_UP_TEMPLATE_IDS));
+
+/** Whether a record is a catch-up or a second workout. */
+const offRotation = (record: WorkoutRecord) =>
+  typeof record.templateId === 'string' && OFF_ROTATION_IDS.has(record.templateId);
+
+/**
+ * The template a day would get from this history (the choice `generateWorkout` makes). The split's
+ * rotation is chosen as if no catch-up or second workout was done: "the next planned day plans as if
+ * the catch-up had held none of the split's sessions" (item 12; the fresh review before shipping:
+ * a catch-up's muscles moved Thursday from pull to upper). Its lifts still read every record, the
+ * 48-hour rule among them.
+ */
 function templateFor(
   profile: UserProfile,
   history: readonly WorkoutRecord[],
   now: string,
   focus: MuscleId | null,
 ): Template {
-  const volume = computeWeeklyVolume(history, now);
-  const exposure = computeExposure(history, now);
+  const rotation = history.filter((record) => !offRotation(record));
+  const volume = computeWeeklyVolume(rotation, now);
+  const exposure = computeExposure(rotation, now);
   const priorities = computeMusclePriorities(profile, volume, exposure);
-  return chooseTemplate(profile, priorities, exposure, muscleLoads(history, profile, now), focus);
+  return chooseTemplate(profile, priorities, exposure, muscleLoads(rotation, profile, now), focus);
 }
 
 /**
@@ -1760,7 +1774,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     (constraints.templateId
       ? TEMPLATES.find((candidate) => candidate.id === constraints.templateId)
       : undefined) ??
-    chooseTemplate(profile, priorities, exposure, loads, focus);
+    // The split's rotation reads no catch-up or second workout (`templateFor`); with none in the
+    // history the choice is the one made from today's own reading.
+    (history.some(offRotation)
+      ? templateFor(profile, history, now, focus)
+      : chooseTemplate(profile, priorities, exposure, loads, focus));
   const pushPlace = (slots: readonly Slot[]) =>
     push !== null && slots.some((slotSpec) => slotSpec.pattern === push.exercise.movementPattern);
   // The extra exposure goes on a day with no place for the lift (docs/research/push-lift.md). It
@@ -2867,6 +2885,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   if (profile.techniques.supersets) {
     let pairs = 0;
     const candidates = isolationEntries();
+    // Off the plan, a pair never moves a lift out of the layout's order (the fresh review before
+    // shipping: a second workout's superset put what was left of today's work before what was
+    // missed, and a catch-up's could put a smaller share first): only lifts side by side pair, and
+    // both for what was missed or both for what is left.
+    const behind = new Set(
+      (catchUp?.muscles ?? []).filter((item) => item.why === 'behind').map((item) => item.muscle),
+    );
+    const missedLift = (entry: WorkoutEntry) =>
+      exerciseOf(entry.exerciseId).primaryMuscles.some((muscle) => behind.has(muscle));
+    const sideBySide = (a: WorkoutEntry, b: WorkoutEntry) => {
+      const at = blocks.findIndex((block) => block.entries[0]?.id === a.id);
+      return at >= 0 && blocks[at + 1]?.entries[0]?.id === b.id;
+    };
     for (let i = 0; i < candidates.length - 1 && pairs < 2; i += 1) {
       const a = candidates[i];
       if (!a || !blocks.some((block) => block.kind === 'straight' && block.entries[0]?.id === a.id))
@@ -2885,6 +2916,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
           exerciseB.primaryMuscles.includes(muscle),
         );
         if (isBlocked(conflicts) || shareMuscle) continue;
+        if (offPlan && (!sideBySide(a, b) || missedLift(a) !== missedLift(b))) continue;
         const rounds = Math.max(roundsOf(a), roundsOf(b));
         const superset: WorkoutBlock = {
           id: `s-${a.id}-${b.id}`,

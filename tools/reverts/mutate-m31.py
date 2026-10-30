@@ -176,6 +176,12 @@ T_COPY_FULL_EMPTIED = "src/core/state/copyFullSessionEmptiedWayBack.store.test.t
 T_COPY_FULL_HOLDS = "src/core/state/copyFullSessionChoiceHolds.store.test.ts"
 T_REBUILT_MIDNIGHT = "src/core/state/secondRebuiltPastMidnight.store.test.ts"
 T_FRESHEST = "src/core/state/convertedFreshestLine.store.test.ts"
+# The fresh review before shipping (2026-10-30), the F entries.
+T_WEEK_FOCUS = "src/core/state/weekModelCoachFocus.store.test.ts"
+T_WEEK_SWAPS = "src/engine/planning/weekModel.swaps.test.ts"
+T_SUPERSET_ORDER = "src/core/state/secondWorkoutSupersetOrder.store.test.ts"
+T_ROTATION = "src/core/state/catchUpRotation.store.test.ts"
+T_EMPTIED_PREVIEW = "src/core/state/catchUpEmptiedPreview.store.test.ts"
 
 # (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 MUTATIONS = [
@@ -1089,7 +1095,7 @@ MUTATIONS = [
      "    if (!current || current.status !== 'preview') return;\n    // A lift the lifter puts back",
      [T_KEPT_STOPPED], None),
     ("H159 ... the workout under way left as it is", STORE,
-     "    if (current.status !== 'preview') {\n      if (session !== current) this.setSession(session);\n      return;\n    }\n",
+     "    if (current.status !== 'preview') {\n      if (listedSession !== current) this.setSession(listedSession);\n      return;\n    }\n",
      "", [T_KEPT_STOPPED], None),
     ("H160 a plan the lifter emptied is built afresh where it is made", STORE,
      "    const workout = generateWorkout({\n      profile,\n      location: this.currentLocation(),",
@@ -1253,6 +1259,32 @@ MUTATIONS = [
      "", [T_COPY_FULL_EMPTIED], None),
     ("H213 ... and keeps nothing aside: the plan is the day's own", ENGINE,
      "          delete constraints.dayChoices;\n", "", [T_COPY_FULL_READ_AGAIN, T_COPY_FULL_HOLDS], None),
+    # The fresh review before shipping (2026-10-30).
+    ("F1 the store's week reads the coach focus and the lasting swaps", STORE,
+     "      focus: this.state.coachFocus,\n      swaps: this.activeSwaps(),\n", "",
+     [T_WEEK_FOCUS], None),
+    ("F2 the week's sessions ahead take the coach focus", WEEK,
+     "        ...(focus ? { focusMuscle: focus.muscle } : {}),\n", "", [T_WEEK_FOCUS], None),
+    ("F3 ... and the lasting swaps", WEEK,
+     "        ...(input.swaps && input.swaps.length > 0 ? { swaps: input.swaps } : {}),\n", "",
+     [T_WEEK_SWAPS], None),
+    ("F4 ... the focus held only until a session trains its muscle", WEEK,
+     "    if (focus && focusSatisfiedBy(focus, planned)) focus = null;\n", "", [T_WEEK_FOCUS], None),
+    ("F5 off the plan, only lifts side by side pair", GENERATE,
+     "        if (offPlan && (!sideBySide(a, b) || missedLift(a) !== missedLift(b))) continue;",
+     "        if (offPlan && missedLift(a) !== missedLift(b)) continue;", [T_SUPERSET_ORDER], None),
+    ("F6 ... both for what was missed or both for what is left", GENERATE,
+     "        if (offPlan && (!sideBySide(a, b) || missedLift(a) !== missedLift(b))) continue;",
+     "        if (offPlan && !sideBySide(a, b)) continue;", [T_SUPERSET_ORDER], None),
+    ("F7 the split's rotation reads no catch-up or second workout", GENERATE,
+     "    (history.some(offRotation)\n      ? templateFor(profile, history, now, focus)\n      : chooseTemplate(profile, priorities, exposure, loads, focus));",
+     "    chooseTemplate(profile, priorities, exposure, loads, focus);", [T_ROTATION], None),
+    ("F8 ... and so the template a day would get", GENERATE,
+     "  const rotation = history.filter((record) => !offRotation(record));",
+     "  const rotation = history;", [T_ROTATION], None),
+    ("F9 a catch-up emptied whole stays so through a rebuild for an offer of its kind", STORE,
+     "    const session = this.emptiedThroughRebuild(listedSession);",
+     "    const session = listedSession;", [T_EMPTIED_PREVIEW], None),
 ]
 
 

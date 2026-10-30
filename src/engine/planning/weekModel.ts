@@ -5,6 +5,8 @@ import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { LearnedResets } from '../learned/resets';
+import { focusSatisfiedBy, type CoachFocus } from './focus';
+import type { LastingSwap } from './lastingSwaps';
 import { INDIRECT_SET_WEIGHT, computeExposure, weeklyTargets } from '../volume/weeklyVolume';
 import { allEntries, type GeneratedWorkout } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
@@ -144,6 +146,14 @@ export function weekModel(input: {
   now: string;
   /** What the lifter reset (Maintenance 27, item 47): the week reads as today's plan does. */
   resets?: LearnedResets | null;
+  /**
+   * What every plan of the days ahead reads, as today's does (the fresh review before shipping: the
+   * week was planned without them, so a catch-up was built for a week that would not happen): the
+   * coach focus, held until a session trains its muscle, as a saved session clears it; and the
+   * lasting swaps.
+   */
+  focus?: CoachFocus | null;
+  swaps?: readonly LastingSwap[];
 }): WeekModel {
   const { profile, location, history, now } = input;
   const week = localWeekKey(now);
@@ -174,6 +184,7 @@ export function weekModel(input: {
   const ahead = daysAhead(profile, now, trained.size, trainedToday);
   // Each session to come, as the plan would build it after the ones before it.
   let simulated: WorkoutRecord[] = [...history];
+  let focus = input.focus ?? null;
   for (const date of ahead) {
     const workout = generateWorkout({
       profile,
@@ -182,6 +193,10 @@ export function weekModel(input: {
       now: date,
       duration: 'default',
       resets: input.resets ?? null,
+      constraints: {
+        ...(input.swaps && input.swaps.length > 0 ? { swaps: input.swaps } : {}),
+        ...(focus ? { focusMuscle: focus.muscle } : {}),
+      },
     });
     for (const entry of allEntries(workout.blocks)) {
       credit(
@@ -191,7 +206,9 @@ export function weekModel(input: {
         'planned',
       );
     }
-    simulated = [...simulated, plannedRecord(date, workout)];
+    const planned = plannedRecord(date, workout);
+    simulated = [...simulated, planned];
+    if (focus && focusSatisfiedBy(focus, planned)) focus = null;
   }
   return { week, sessionsAhead: ahead.length, trainedToday, muscles };
 }

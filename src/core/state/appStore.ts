@@ -1588,12 +1588,16 @@ export class AppStore {
     const history = this.state.readHistory;
     const kind = catchUpKind(profile, history, now);
     if (!kind || (deload && kind === 'catch-up')) return null;
+    // The week's sessions ahead as the store will build them: with the coach focus and the lasting
+    // swaps every plan reads (the fresh review before shipping).
     const week = weekModel({
       profile,
       location: this.currentLocation(),
       history,
       now,
       resets: this.state.learnedResets,
+      focus: this.state.coachFocus,
+      swaps: this.activeSwaps(),
     });
     // What is left of a muscle trained today is read from the day's first workout, one with a set
     // done past the warm-ups (the reviews of round M).
@@ -4483,6 +4487,44 @@ export class AppStore {
     return run;
   }
 
+  /**
+   * A catch-up or second workout the lifter emptied whole stays empty through a preview built again
+   * for an offer of the same kind (the fresh review before shipping): the week is read as the store
+   * builds it, so a coach focus set, a lasting swap stopped or a value reset can move which muscles
+   * are behind, and the offer the lifter had emptied came back for the muscles left, the sixteenth
+   * review of round M's case again. The emptied mark is carried to the new offer. A save of the
+   * profile or the place reads the offer on its own path (`offerReadAgain`), where a new offer is
+   * built whole as before.
+   */
+  private emptiedThroughRebuild(session: WorkoutSession): WorkoutSession {
+    const profile = this.state.profile;
+    const was = session.constraints.catchUp ?? null;
+    const oldOffer = offerKey(session.constraints);
+    const marks = session.constraints.emptied ?? [];
+    const layout = session.workout.templateId;
+    const emptiedWhole =
+      profile !== null &&
+      was !== null &&
+      oldOffer !== '' &&
+      allEntries(session.workout.blocks).length === 0 &&
+      marks.some((plan) => plan.offer === oldOffer && plan.layout === layout);
+    if (!emptiedWhole || layout === null) return session;
+    const now = this.now();
+    const offer = this.catchUpFor(profile, now, this.deloadToday(now) !== null);
+    if (!offer || offer.kind !== was.kind) return session;
+    const newOffer = offerKey({ catchUp: offer });
+    if (newOffer === '' || newOffer === oldOffer || marks.some((plan) => plan.offer === newOffer)) {
+      return session;
+    }
+    return {
+      ...session,
+      constraints: {
+        ...session.constraints,
+        emptied: [...marks.map((plan) => ({ ...plan })), { offer: newOffer, layout }],
+      },
+    };
+  }
+
   /** `putBack`: a lift the lifter puts back today, off the day's list of lifts swapped away. */
   private rebuildPreview(putBack: string | null = null): void {
     const current = this.state.session;
@@ -4506,14 +4548,15 @@ export class AppStore {
       else delete restored.swappedAway;
       previous = { ...earlier, constraints: restored };
     }
-    const session: WorkoutSession =
+    const listedSession: WorkoutSession =
       kept.length === listed.length && previous === current.previous
         ? current
         : { ...current, constraints, previous };
     if (current.status !== 'preview') {
-      if (session !== current) this.setSession(session);
+      if (listedSession !== current) this.setSession(listedSession);
       return;
     }
+    const session = this.emptiedThroughRebuild(listedSession);
     clearSession(this.storage);
     this.setState({ session: null });
     // The day's choices, the check-in among them, are applied to it below.
