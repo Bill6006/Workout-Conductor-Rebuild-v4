@@ -223,9 +223,11 @@ test.describe('a lift done at bodyweight that keeps falling short', () => {
     await expect(card.getByTestId('coach-headline')).toHaveText(
       'Chin-Up: short of 6 reps twice in a row',
     );
-    await expect(card).toContainText(
-      'Do fewer reps over more sets, or swap in Lat Pulldown for a few weeks.',
-    );
+    // The swap it would name is Lat Pulldown, swapped away for Chin-Up today, and no offer brings
+    // back a lift swapped away the same day (round M: the day's swaps away, `dayExclusions`). Where
+    // the swap fits, the coach names it (`coachConductor.bodyweight.test.ts`).
+    await expect(card).toContainText('Do fewer reps over more sets.');
+    await expect(card).not.toContainText('Lat Pulldown');
     await expect(card).not.toContainText(/micro-deload|10%/);
     const action = card.getByTestId('coach-action');
     await expect(action).toHaveText(/^\d sets of 3-5 today$/);

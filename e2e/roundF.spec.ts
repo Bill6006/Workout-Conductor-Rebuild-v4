@@ -5,8 +5,13 @@ import { ensureProfile } from './helpers';
 
 /**
  * Maintenance 24, round F. A short session keeps its main lifts and leaves the isolation moves out
- * first (the owner's item 33), and a low check-in's set fewer and extra rep in reserve hold through
- * a change of length, until a check-in back to fine brings the planned sets back (item 34).
+ * first (the owner's item 33), and what a check-in changes in the plan holds through a change of
+ * length, until a check-in back to fine gives the plan back (item 34).
+ *
+ * Maintenance 33 (the owner's decision 1) changed what a check-in changes: a low answer alone keeps
+ * the full workout (the check-in lowers what the first sets are expected to do, never the plan), and
+ * a head cold keeps every set two or more reps short of failure. So item 34's hold is now the head
+ * cold's floor, and a low answer alone is checked to leave the plan as it was.
  */
 
 const screenshotDir = process.env.SCREENSHOT_DIR;
@@ -36,6 +41,14 @@ async function reserveOf(page: Page): Promise<number> {
   return Number(/@ RIR (\d)/.exec(text)?.[1]);
 }
 
+/** Every reserve the plan's rows show, in order: a top set's and its back-offs' too (round N). */
+async function reservesOf(page: Page): Promise<number[]> {
+  const metas = await page.getByTestId('workout-entry').getByTestId('entry-meta').allTextContents();
+  return metas.flatMap((text) =>
+    [...text.matchAll(/@ RIR (\d)/g)].map((match) => Number(match[1])),
+  );
+}
+
 async function fitTo(page: Page, minutes: '15' | '30' | '45' | 'default'): Promise<void> {
   await page.getByTestId('duration-select').selectOption(minutes);
   await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
@@ -50,12 +63,20 @@ async function fitTo(page: Page, minutes: '15' | '30' | '45' | 'default'): Promi
   }
 }
 
-async function checkIn(page: Page, energy: 'Drained' | 'Good'): Promise<void> {
+async function checkIn(
+  page: Page,
+  energy: 'Drained' | 'Good',
+  unwell: 'No' | 'Head cold' = 'No',
+): Promise<void> {
   await page.getByTestId('readiness-open').click();
   const sheet = page.getByRole('dialog', { name: 'Quick check-in' });
   await sheet
     .getByRole('radiogroup', { name: 'Energy' })
     .getByRole('radio', { name: energy })
+    .click();
+  await sheet
+    .getByRole('radiogroup', { name: 'Unwell' })
+    .getByRole('radio', { name: unwell })
     .click();
   await sheet.getByTestId('readiness-apply').click();
   await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
@@ -75,27 +96,43 @@ test.describe('a short session (Maintenance 24)', () => {
   });
 });
 
-test.describe('a low check-in (Maintenance 24)', () => {
-  test('keeps its extra rep in reserve through a change of length, until it is taken back', async ({
+test.describe('a check-in through a change of length (Maintenance 24, on Maintenance 33 rules)', () => {
+  test('a low answer alone keeps the full workout', async ({ page }) => {
+    await ensureProfile(page);
+    const plain = await reservesOf(page);
+    expect(plain.length).toBeGreaterThan(0);
+
+    await checkIn(page, 'Drained');
+    await expect(page.getByTestId('recalibration-summary')).toContainText(
+      'Checked in: full workout kept.',
+    );
+    expect(await reservesOf(page)).toEqual(plain);
+  });
+
+  test('a head cold keeps every set 2 or more short of failure through a change of length, until it is taken back', async ({
     page,
   }, testInfo) => {
     await ensureProfile(page);
     await fitTo(page, '45');
-    const plain = await reserveOf(page);
-    expect(plain).toBeGreaterThanOrEqual(0);
+    const plain = await reservesOf(page);
+    expect(plain.length).toBeGreaterThan(0);
+    const floored = plain.map((reserve) => Math.max(2, reserve));
+    // Some set at 45 minutes goes nearer failure than 2 in reserve, so the floor shows.
+    expect(floored).not.toEqual(plain);
     await fitTo(page, 'default');
 
-    await checkIn(page, 'Drained');
-    await expect(page.getByTestId('recalibration-summary')).toContainText(/Adjusted for today/);
+    await checkIn(page, 'Good', 'Head cold');
+    await expect(page.getByTestId('recalibration-summary')).toContainText(
+      'every set 2 or more short of failure for the head cold',
+    );
     await fitTo(page, '45');
-    await expect(mainLift(page)).toContainText(`@ RIR ${Math.min(4, plain + 1)}`);
+    expect(await reservesOf(page)).toEqual(floored);
     await capture(page, testInfo, 'today-checkin-kept-at-45', mainLift(page));
 
-    await checkIn(page, 'Good');
-    await expect(page.getByTestId('recalibration-summary')).toContainText(
-      'Planned sets and effort back',
-    );
-    await expect(mainLift(page)).toContainText(`@ RIR ${plain}`);
+    await checkIn(page, 'Good', 'No');
+    await expect(page.getByTestId('recalibration-summary')).toBeVisible();
+    expect(await reservesOf(page)).toEqual(plain);
+    expect(await reserveOf(page)).toBe(plain[0]);
     await capture(page, testInfo, 'today-checkin-back', page.getByTestId('recalibration-summary'));
   });
 });
