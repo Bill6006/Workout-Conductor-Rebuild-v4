@@ -5,7 +5,46 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
-### Checkpoint, 2026-10-30, late afternoon (supersedes the states below)
+### Checkpoint, 2026-10-30, evening (supersedes the states below)
+
+Nothing is merged to `main` or deployed. The stack is Round M on `main`'s `2595631`, Round N on
+Round M's `e82c059` (its diff applies on `f840d5b` too, which adds Round M's report line alone),
+Maintenance 33 on Round N (`git apply` each diff on its base, in that order).
+
+- **Round M**: local `f840d5b` (`round-m-wip/round-m.diff` on `2595631`). The twenty-fifth pass
+  (seven LOW) and the twenty-sixth (three LOW) are complete. The twenty-sixth: the full session
+  taken from a copy that stands for none of the day's offer is the day's own, its way back the
+  day's offer; a copy records the day its plan was made (`planDay`, optional with a catch), which no
+  rebuild under way moves; a converted copy names the catch-up in every line that named the second
+  workout. Suite 3029 passed, 5 skipped; the zones run passes, the midnight test added to it; M31
+  table at 349 entries, all 14 new and affected caught. **Next**: the twenty-seventh review is
+  running (`git diff 1e29f22 f840d5b` is the twenty-sixth pass).
+- **Round N**: local `c4e4bda` on `e82c059` (`round-n-wip/round-n.diff`). The fifteenth pass (one
+  MEDIUM, five LOW) is complete: a lift picked up again before its top set, straight at the
+  back-offs' load where the day runs it so, is saved as such a day; a hard start eases the back-offs
+  off the eased top set; a refit under a top set still to come gives the back-offs its reps; a top
+  set logged again under back-offs logged since follows with their logs, and a back-off logged
+  before one logged since puts the ones after it where the logs leave them; the follow reads a top
+  set logged with no weight at the load it asks; a step's floor is the least load it lands on
+  (`stepFloor`). Suite 3353 passed, 5 skipped on the same pass over Round M's `1e29f22`; M32 table
+  at 301 entries, all 38 new and affected caught. **Next**: the sixteenth review is running on
+  `604fba7`, the same pass before the rebase (`git diff 14d2e62 604fba7`).
+- **Maintenance 33**: local `511feca` on `c4e4bda` (`round-o-wip/round-o.diff`), its fifth pass
+  (eight: two MEDIUM, six LOW) fixed: a log taken back lays the day's floor again; a record keeps
+  when its check-in was told, and the baseline and the deload count one told check-in once;
+  "Lighter" on a lift picked up again is laid once and takes its set where no ease took one; a
+  check-in carried onto a loaded copy says what it changed; "Lighter" takes a set off a stand-in,
+  its floor the slot's, and a stand-in that came in with the ease's count records the plan's; a copy
+  saved on a head-cold preview is the plan without the illness; "Lighter" holds on every plan of
+  the day. Round N's new pick-up test runs on a head cold here (today's check-in scores no fatigue
+  in this round's model). The review's twelve tests and two more pass. **Next**: the full suite and
+  the revert run (M33 table at 162 entries, 21 new), then the sixth review.
+- **Then, unchanged**: once each round's review comes back clean, the earlier rounds' tables
+  re-anchored onto Round N's and Maintenance 33's code, the full revert runs, the browser suite,
+  `npm run verify`, and Round M, Round N and Maintenance 33 shipped in turn; then Maintenance 34 to
+  36, the presets question and the consolidated phone review.
+
+### Checkpoint, 2026-10-30, late afternoon (superseded)
 
 Nothing is merged to `main` or deployed. The three latest review passes are fixed and verified:
 Round M's twenty-fourth, Round N's fourteenth and Maintenance 33's fourth. The stack is Round M on
