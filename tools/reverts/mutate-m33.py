@@ -134,6 +134,7 @@ WORKOUT_SCREEN = "src/features/workout/WorkoutScreen.tsx"
 T_FEVER_WORKOUT_TAB = "src/features/workout/feverRestDay.screens.test.tsx"
 T_LONGEST = "src/engine/recovery/recoveryWindows.longest.test.ts"
 T_TOLD_AT = "src/engine/readiness/checkInPastMidnight.test.ts"
+T_EARLIER = "src/engine/recovery/recoveryWindows.earlier.test.ts"
 
 # (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 MUTATIONS = [
@@ -632,11 +633,11 @@ MUTATIONS = [
     ("Y5 a session inside any earlier window is not rested", RECOVERY,
      "    for (const item of index.windows.get(muscle) ?? []) {\n      if (item.time >= start) break;\n      // Inside any earlier window still running, not only the newest one (the fresh review).\n      if ((start - item.time) / HOUR_MS < item.window.prior) return false;\n    }",
      "    let last: { window: RecoveryWindow; time: number } | null = null;\n    for (const item of index.windows.get(muscle) ?? []) {\n      if (item.time >= start) break;\n      last = item;\n    }\n    if (last && (start - last.time) / HOUR_MS < last.window.prior) return false;",
-     [T_LONGEST, T_RECOVERY, T_LEARNED_W], None),
+     [T_EARLIER, T_LONGEST, T_RECOVERY, T_LEARNED_W], None),
     ("Y6 a re-exposure inside any earlier window is early", RECOVERY,
      "      const inside = earlier.some((last) => (start - Date.parse(last.at)) / HOUR_MS < last.prior);",
      "      const last = earlier[earlier.length - 1] as RecoveryWindow;\n      const inside = (start - Date.parse(last.at)) / HOUR_MS < last.prior;",
-     [T_LONGEST, T_LEARNED_W], None),
+     [T_EARLIER, T_LONGEST, T_LEARNED_W], None),
     ("Y7 a saved check-in is read on the day it was told", CHECKIN,
      "  return record.checkInAt ?? record.startedAt;", "  return record.startedAt;",
      [T_TOLD_AT, T_CHECKIN], None),
