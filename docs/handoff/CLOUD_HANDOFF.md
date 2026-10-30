@@ -5,6 +5,29 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
+### Checkpoint, 2026-10-30 (supersedes the states below)
+
+Resumed on the owner's word. The owner's resume note described the state of 2026-10-24 14:20;
+everything in it was done long since and was checked again: Round M's H18, H75, H76 and H85 are
+caught on `e779122`, and the Friday fatigue finding is fixed in Maintenance 33's shared model
+(`againstAsked.ts`, every set read against what it asked; its entries F1, F2 and V15 to V18 are
+caught). Nothing is merged to `main` or deployed.
+
+- **Round M**: unchanged, local `e779122` (`round-m.diff` on `2595631`). Its twenty-second review is
+  running again on `e779122`, starting from the stopped run's drafts (`review-m31u-drafts.diff`).
+- **Round N**: local `85ee7b6` on `e779122` (`round-n.diff`). **The twelfth pass is complete and
+  verified**: the full suite passes (3222 passed, 5 skipped); M32 table at 259 entries, every new
+  and re-anchored one run caught. N145 is retired (its code is gone: the follow's step is held at a
+  weight the place has, whose least is the bar, so its floor clamp could never act; say so in the
+  report's revert section), and N259 now checks the pick-up itself. The report has the twelfth pass
+  and a `THIRTEENTH_PASS` placeholder. The thirteenth review is running on `85ee7b6` (tests to come
+  in `/home/user/wc4-n-review/src/review-m32m/`).
+- **Maintenance 33**: rebased onto Round N's `85ee7b6`, local `7e3d013` (`round-o.diff` on
+  `85ee7b6`; backup of the old head `backup/round-o-fd01bb6`). One conflict (the coach's imports)
+  and one adaptation (Round M's new coach test reads the fatigue with two arguments). Its full suite
+  is not yet run after the rebase. **Next**: the third review's ten findings
+  (`review-m33c-tests.diff`; the list in the checkpoint below).
+
 ### Checkpoint, 2026-10-25 02:45 UTC: paused at the owner's request (supersedes the states below)
 
 Saved so nothing is lost. **Nothing here is finished or shipped:** no merge to `main`, no deploy.

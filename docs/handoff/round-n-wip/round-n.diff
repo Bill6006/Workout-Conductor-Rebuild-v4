@@ -83,10 +83,10 @@ index aba1037..cdd9c59 100644
  Sessions in the last 7 days, consecutive training days, how far logged reps in reserve drifted
 diff --git a/docs/reports/maintenance-32.md b/docs/reports/maintenance-32.md
 new file mode 100644
-index 0000000..5a137be
+index 0000000..826742d
 --- /dev/null
 +++ b/docs/reports/maintenance-32.md
-@@ -0,0 +1,379 @@
+@@ -0,0 +1,415 @@
 +# Maintenance 32: round N, the main lift's top set and back-offs
 +
 +Built on 2026-10-23 on the owner's word to build the whole agreed queue, round by round, to live,
@@ -417,7 +417,43 @@ index 0000000..5a137be
 +  for both); the session records the drop's load as the top set is logged (`backOffAt` on the
 +  plan's entry), and the saved session keeps it.
 +
-+TWELFTH_PASS
++**The twelfth pass** found ten: one MEDIUM, nine LOW, two of them regressions of the eleventh pass.
++About 3,000 store-driven sequences of logs, skips, undo, deletes, corrections, the coach's weight or
++deload, added and removed sets, effort, missing plates, rep ranges, home and back and swaps, and a
++five-week store-driven simulation, found nothing else.
++
++- MEDIUM: the coach's deload, taken after a skipped top set (the coach offers a weight while no set
++  is lifted, a skip included), kept the structure on and recorded the load as nobody's, so an undo
++  or a correction put the back-offs back at the drop off the top set's plan, and the saved session
++  read as one at the drop for the drop's correction (from the first review's deload).
++- LOW: a back-off lifted over the top set raised the cap for the ones after it, over the top set as
++  lifted (a regression of the eleventh pass), while one lifted lighter under a weight set by hand
++  took the ones after it down; a set added after a back-off came in at the drop's load and the top
++  set's reps, beside back-offs at a weight or reps set by hand (a regression of the eleventh pass);
++  a top set corrected to a skip capped the back-offs at its plan, where one skipped from the start
++  caps none; the follow's words named the load before the replay of the back-offs logged; the
++  saved session's drop load was worked out again on a correction of the top set's reps after a plate
++  was marked missing, and lost on an Undo of a change made before the main lift; the plan's stored
++  drop load had no schema line; a weight set by hand on the top set kept its back-offs out of the
++  refit for a missing plate; a lift picked up again kept a stale load asked on its back-offs; and the
++  refit fitted the back-offs as any set, lighter with reps added, while every replay took the drop
++  onto the weights left, so the two disagreed, and a step held at a top set the place could no
++  longer make asked for a load it could not make.
++- Fixed: a deload after a skipped top set runs straight, as one before it does. Only a weight set
++  by hand raises what caps the back-offs (`backOffStepped`'s `own`), through every step and replay;
++  a back-off lifted over the cap by itself raises nothing. A set added keeps what the back-offs took
++  by hand, their weight and their reps (`asBackOffs`' `hand`). A top set corrected to a skip caps as
++  one skipped from the start (`backOffCap`). The follow names where the back-offs stand after the
++  replay, and says a weight set by hand is kept only where they stand at it. A correction that keeps
++  the top set's weight keeps the drop's load recorded, and so does an Undo of an earlier change;
++  `backOffAt` has its schema line, dropped alone when unreadable. The back-offs take one rule
++  wherever their load is worked out, the refit for the place's weights included: the drop off the
++  top set as lifted, to the nearest weight the place has, at their own reps, never a stand-in's
++  (item 11; the fifth review's nearest weight; the owner's "same reps"); a top set's weight set by
++  hand stays as it is while its back-offs fit; a lift picked up again keeps no load asked on them;
++  and a step held at the top set, or at its cap, lands on a weight the place has.
++
++THIRTEENTH_PASS
 +
 +## Known limits
 +
@@ -4002,10 +4038,10 @@ index 0000000..2e7c5e8
 +});
 diff --git a/src/core/state/backOffs.pickUpAsked.store.test.ts b/src/core/state/backOffs.pickUpAsked.store.test.ts
 new file mode 100644
-index 0000000..82294bb
+index 0000000..5f8e0bd
 --- /dev/null
 +++ b/src/core/state/backOffs.pickUpAsked.store.test.ts
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,97 @@
 +import { describe, expect, it } from 'vitest';
 +import { createDefaultLocations } from '../validation/location';
 +import { createDefaultProfile, type UserProfile } from '../validation/profile';
@@ -4094,6 +4130,8 @@ index 0000000..82294bb
 +    await store.setCurrentLocation('home');
 +    await store.setCurrentLocation('gym');
 +    const asked = toCome().map((set) => set.asked?.weight ?? null);
++    // Picked up again, the back-offs stand at the drop off the top set, no load asked beside it.
++    expect({ asked }).toEqual({ asked: [null, null, null] });
 +    await store.setMissingPlates([]);
 +    // On f858500: asked [140, 140, 140] after the pick-up; [140, 140, 140] with the plates back.
 +    expect({ loads: toCome().map((set) => set.targetWeight) }, `asked ${asked.join(', ')}`).toEqual(
@@ -7258,10 +7296,10 @@ index 0000000..8ad1ad8
 +});
 diff --git a/src/engine/progression/backOffs.ts b/src/engine/progression/backOffs.ts
 new file mode 100644
-index 0000000..a382648
+index 0000000..592ba27
 --- /dev/null
 +++ b/src/engine/progression/backOffs.ts
-@@ -0,0 +1,791 @@
+@@ -0,0 +1,792 @@
 +import { getExercise } from '../../catalog/exercises/catalog';
 +import {
 +  isHold,
@@ -7499,9 +7537,10 @@ index 0000000..a382648
 +      ? nudge(fromTop, plan.delta > 0 ? 1 : -1, options.loading.available, options.step)
 +      : Math.round((fromTop + plan.delta) / options.step) * options.step;
 +  // Never over the top set as lifted, on a weight the place has (the twelfth review of round N: a
-+  // plate marked missing after it, the step held at its load asked for one the place cannot make).
++  // plate marked missing after it, the step held at its load asked for one the place cannot make),
++  // so never under the bar either: the bar is the least weight it has, and the floor of its fit.
 +  const ceiling = options.loading ? fitWeight(lifted, options.loading, options.floor) : lifted;
-+  return Math.max(floor, Math.min(ceiling, Math.max(options.step, moved)));
++  return Math.min(ceiling, Math.max(options.step, moved));
 +}
 +
 +/**
@@ -17373,10 +17412,10 @@ index d2f11e5..efcd4b0 100644
  is written from its `table_mNN.txt`: edit the `.txt`, then run `python3 table_mNN.py`. Never write a
 diff --git a/tools/reverts/mutate-m32.py b/tools/reverts/mutate-m32.py
 new file mode 100644
-index 0000000..bd09925
+index 0000000..fab3cb2
 --- /dev/null
 +++ b/tools/reverts/mutate-m32.py
-@@ -0,0 +1,1001 @@
+@@ -0,0 +1,998 @@
 +"""Maintenance 32 mutation checks: revert each round N rule alone, run its tests, expect a failure,
 +restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -17863,8 +17902,8 @@ index 0000000..bd09925
 +     "  return request.constraints.deload === null && !offPlan && entry.push === undefined;",
 +     [T_STANDIN_REFIT], None),
 +    ("N119 the back-offs never over the top set as lifted", BACKOFFS,
-+     "  return Math.max(floor, Math.min(ceiling, Math.max(options.step, moved)));",
-+     "  return Math.max(floor, Math.max(options.step, moved));", [T_OVER_TOP], None),
++     "  return Math.min(ceiling, Math.max(options.step, moved));",
++     "  return Math.max(options.step, moved);", [T_OVER_TOP], None),
 +    ("N120 a lift picked up after its top set: the top set as lifted", GENERATE,
 +     "              weight: done?.weight ?? null,", "              weight: null,",
 +     [T_PICKUP_LIFTED], None),
@@ -17935,9 +17974,6 @@ index 0000000..bd09925
 +     "      open.last.tier === set.tier &&\n", "", [T_GROUPED], None),
 +    ("N143 a load eased keeps its own read on a straight day", BACKOFFS,
 +     "    if (!STRAIGHT_MODES.includes(top.mode)) {", "    if (true) {", [T_MODULE, T_PLAN, T_STRAIGHT], None),
-+    ("N145 ... nor after a grind under it", BACKOFFS,
-+     "  return Math.max(floor, Math.min(ceiling, Math.max(options.step, moved)));",
-+     "  return Math.min(ceiling, Math.max(options.step, moved));", [T_UNDER_BAR], None),
 +
 +    # The fourth review of round N.
 +    ("N146 a lift main one day and secondary another steps its top set from its last top set",
@@ -18292,7 +18328,7 @@ index 0000000..bd09925
 +     [T_PICK_UP_ASKED], None),
 +    ("N260 the follow's step held at the top set lands on a weight the place has", BACKOFFS,
 +     "  const ceiling = options.loading ? fitWeight(lifted, options.loading, options.floor) : lifted;",
-+     "  const ceiling = lifted;", [T_CAP_UNLOADABLE], None),
++     "  const ceiling = lifted;", [T_CAP_UNLOADABLE, T_UNDER_BAR], None),
 +    ("N261 ... and so does a back-off's step held at it", BACKOFFS,
 +     "      : options.loading\n        ? fitWeight(options.cap, options.loading, options.floor)\n        : options.cap;",
 +     "      : options.cap;", [T_DROP_RULE], None),
@@ -18401,10 +18437,10 @@ index 0000000..1b7cbc9
 +print("written")
 diff --git a/tools/reverts/table_m32.txt b/tools/reverts/table_m32.txt
 new file mode 100644
-index 0000000..d58a112
+index 0000000..3cb9352
 --- /dev/null
 +++ b/tools/reverts/table_m32.txt
-@@ -0,0 +1,773 @@
+@@ -0,0 +1,770 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # Where it runs.
@@ -18729,8 +18765,8 @@ index 0000000..d58a112
 +     "  return request.constraints.deload === null && !offPlan && entry.push === undefined;",
 +     [T_STANDIN_REFIT], None),
 +    ("N119 the back-offs never over the top set as lifted", BACKOFFS,
-+     "  return Math.max(floor, Math.min(ceiling, Math.max(options.step, moved)));",
-+     "  return Math.max(floor, Math.max(options.step, moved));", [T_OVER_TOP], None),
++     "  return Math.min(ceiling, Math.max(options.step, moved));",
++     "  return Math.max(options.step, moved);", [T_OVER_TOP], None),
 +    ("N120 a lift picked up after its top set: the top set as lifted", GENERATE,
 +     "              weight: done?.weight ?? null,", "              weight: null,",
 +     [T_PICKUP_LIFTED], None),
@@ -18801,9 +18837,6 @@ index 0000000..d58a112
 +     "      open.last.tier === set.tier &&\n", "", [T_GROUPED], None),
 +    ("N143 a load eased keeps its own read on a straight day", BACKOFFS,
 +     "    if (!STRAIGHT_MODES.includes(top.mode)) {", "    if (true) {", [T_MODULE, T_PLAN, T_STRAIGHT], None),
-+    ("N145 ... nor after a grind under it", BACKOFFS,
-+     "  return Math.max(floor, Math.min(ceiling, Math.max(options.step, moved)));",
-+     "  return Math.min(ceiling, Math.max(options.step, moved));", [T_UNDER_BAR], None),
 +
 +    # The fourth review of round N.
 +    ("N146 a lift main one day and secondary another steps its top set from its last top set",
@@ -19158,7 +19191,7 @@ index 0000000..d58a112
 +     [T_PICK_UP_ASKED], None),
 +    ("N260 the follow's step held at the top set lands on a weight the place has", BACKOFFS,
 +     "  const ceiling = options.loading ? fitWeight(lifted, options.loading, options.floor) : lifted;",
-+     "  const ceiling = lifted;", [T_CAP_UNLOADABLE], None),
++     "  const ceiling = lifted;", [T_CAP_UNLOADABLE, T_UNDER_BAR], None),
 +    ("N261 ... and so does a back-off's step held at it", BACKOFFS,
 +     "      : options.loading\n        ? fitWeight(options.cap, options.loading, options.floor)\n        : options.cap;",
 +     "      : options.cap;", [T_DROP_RULE], None),
