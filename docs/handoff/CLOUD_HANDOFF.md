@@ -11,6 +11,11 @@ Nothing is merged to `main` or deployed. All three rounds have their latest revi
 verified; their next reviews start from these commits. The stack is Round M on `main`'s `2595631`,
 Round N on Round M, Maintenance 33 on Round N (`git apply` each diff on its base, in that order).
 
+Since: on the rebased stack Round N's suite passed (3283 passed, 5 skipped) and Maintenance 33's
+(3434 passed, 5 skipped), with the zone tests; Round M's twenty-fourth, Round N's fourteenth and
+Maintenance 33's fourth reviews are running, their tests to come in `src/review-m31w/`,
+`src/review-m32n/` and `src/review-m33d/` of the three review worktrees.
+
 - **Round M**: local `ce935fe` (`round-m-wip/round-m.diff` on `2595631`). The twenty-second pass
   (six LOW) and the twenty-third (four: one MEDIUM, three LOW) are complete and written in the
   report. New stored fields, both optional with a catch: a saved workout's own `catchUp` (the
@@ -20,7 +25,7 @@ Round N on Round M, Maintenance 33 on Round N (`git apply` each diff on its base
   one run caught; H61, H69, H98, H116 and H141 retired (reasons in the report's revert section).
   Suite 2989 passed, 5 skipped, before H61's redundant code went (the tests of it pass, and Round
   N's and Maintenance 33's suites hold Round M's tests). **Next**: the twenty-fourth review on
-  `ce935fe` (`git diff 6af588c ce935fe` is the last two passes).
+  `ce935fe` (`git diff 6af588c ce935fe` is the twenty-third pass).
 - **Round N**: local `d06edb5` on `ce935fe` (`round-n-wip/round-n.diff`). The thirteenth pass
   (eight: one MEDIUM, seven LOW) is complete: a top set still to come gives its back-offs the drop
   off the load it asks (`topSetLoad`); once lifted, each logged back-off moves the ones after it in
