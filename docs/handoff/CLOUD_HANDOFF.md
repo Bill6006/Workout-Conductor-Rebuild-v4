@@ -522,7 +522,6 @@ Nothing is merged to `main` or deployed: `main` and the live build are still `db
   in the last 14 days meet the catch-up on a day the default schedule does not tick. Specs that
   finish a workout and come back to Today meet the second workout. Then its revert table, review
   passes, verify and ship, as for every round.
-
 - **Then** sections 3 to 9 as written: Round N (item 11), the readiness core, time intelligence,
   item 48 (switch off), the schedule watch, and the presets question to the owner.
 
@@ -574,12 +573,12 @@ going on: someone else has worked since. The live-build check needs network acce
 `bill6006.github.io` (section 9). If it is blocked, say so, and go on with Round L, which needs no
 live check until it ships.
 
-| What                                                                                                           | Where                                                   | State                                                                                                                                          |
-| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Round K (Maintenance 29: items 7, 8, 10, 14)                                                                   | `main` at `dbd1726`                                     | **Live** (Deploy Pages run 38119197463). The live suite passed 404, with 18 skipped by design. YELLOW until the owner's phone review.          |
-| Round K's live-result docs                                                                                     | in `f490dda` (`maintenance-29.md`, `PROJECT_STATUS.md`) | Written, not shipped. They ship with Round L, as planned.                                                                                      |
-| Round L (Maintenance 30: items 6, 30, 31)                                                                      | branch `cloud/round-l-handoff`, commit `f490dda`        | **Built, not shipped.** Three review passes done and fixed. The fourth pass has **three open findings** (section 2). Not merged, not deployed. |
-| This handoff (`CLAUDE.md`, `docs/handoff/`, `docs/proposals/`, six `docs/research/` reports, `tools/reverts/`) | the commits after `f490dda` on the same branch          | Docs and tools only. No product code.                                                                                                          |
+| What | Where | State |
+|---|---|---|
+| Round K (Maintenance 29: items 7, 8, 10, 14) | `main` at `dbd1726` | **Live** (Deploy Pages run 38119197463). The live suite passed 404, with 18 skipped by design. YELLOW until the owner's phone review. |
+| Round K's live-result docs | in `f490dda` (`maintenance-29.md`, `PROJECT_STATUS.md`) | Written, not shipped. They ship with Round L, as planned. |
+| Round L (Maintenance 30: items 6, 30, 31) | branch `cloud/round-l-handoff`, commit `f490dda` | **Built, not shipped.** Three review passes done and fixed. The fourth pass has **three open findings** (section 2). Not merged, not deployed. |
+| This handoff (`CLAUDE.md`, `docs/handoff/`, `docs/proposals/`, six `docs/research/` reports, `tools/reverts/`) | the commits after `f490dda` on the same branch | Docs and tools only. No product code. |
 
 `f490dda` is the Round L working tree exactly as it stood when work stopped on 2026-10-11, unchanged.
 It holds the code and tests for 6/30/31, `e2e/roundL.spec.ts`,
@@ -675,7 +674,6 @@ Keep the branch `cloud/round-l-handoff` after the merge; it is the record of the
 
 Every item goes through the owner's cycle (2026-10-11), and the work does not pause at review
 gates:
-
 1. research where training is involved;
 2. preserve all approved behaviour;
 3. build;
@@ -687,22 +685,21 @@ gates:
 9. the report and status docs;
 10. the phone-review list kept exact.
 
-| #   | Round                     | What                                                                                                                                                                                       | Spec and evidence                                                                                                                                   |
-| --- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | M (Maintenance 31)        | Items **12** (a catch-up on an unplanned day) and **32** (a second workout the same day), building the **week model** they need                                                            | `docs/handoff/round-m-design-notes.md`; `docs/research/catch-up-and-second-workout.md`; `docs/proposals/week-model-readiness-time.md` parts 1 and 5 |
-| 2   | N (Maintenance 32)        | Item **11**: top set plus back-off sets                                                                                                                                                    | `docs/research/top-set-back-offs.md` (Recommended default design); its seven questions are answered in the cloud prompt                             |
-| 3   | Maintenance 33            | **Recovery and readiness core**: per-muscle recovery estimates, the first-set check, the illness and pain gates, replacing the day-count fatigue rule; the schedule card on the same check | proposal parts 2 and 4; `docs/research/recovery-time-course.md`, `readiness-and-soreness.md`                                                        |
-| 4   | Maintenance 34            | **Time intelligence**: the forecast at real lengths, carrying the need forward, the "longer would help" suggestion with cooldowns, the honest goals-versus-time check                      | proposal part 2; `docs/research/training-dose-and-time.md`, `coaching-nudges-and-cooldowns.md`                                                      |
-| 5   | Maintenance 35            | **Item 48**: Life Mirror's check-in, read-only from the shared database, behind a switch                                                                                                   | proposal part 3; `docs/proposals/item-48-life-mirror-check-in.md`                                                                                   |
-| 6   | Maintenance 36            | **Schedule watch** (it needs 8+ weeks of data after a move, so it switches on last)                                                                                                        | proposal part 2; `docs/research/recovery-time-course.md` (Schedule watch)                                                                           |
-| 7   | where the owner places it | **Custom equipment presets**: newly approved, but **not defined anywhere in this repository** or in any record available here                                                              | The owner's definition in the cloud prompt. Without one, ask the owner about this item alone and carry on with the rest.                            |
+| # | Round | What | Spec and evidence |
+|---|---|---|---|
+| 1 | M (Maintenance 31) | Items **12** (a catch-up on an unplanned day) and **32** (a second workout the same day), building the **week model** they need | `docs/handoff/round-m-design-notes.md`; `docs/research/catch-up-and-second-workout.md`; `docs/proposals/week-model-readiness-time.md` parts 1 and 5 |
+| 2 | N (Maintenance 32) | Item **11**: top set plus back-off sets | `docs/research/top-set-back-offs.md` (Recommended default design); its seven questions are answered in the cloud prompt |
+| 3 | Maintenance 33 | **Recovery and readiness core**: per-muscle recovery estimates, the first-set check, the illness and pain gates, replacing the day-count fatigue rule; the schedule card on the same check | proposal parts 2 and 4; `docs/research/recovery-time-course.md`, `readiness-and-soreness.md` |
+| 4 | Maintenance 34 | **Time intelligence**: the forecast at real lengths, carrying the need forward, the "longer would help" suggestion with cooldowns, the honest goals-versus-time check | proposal part 2; `docs/research/training-dose-and-time.md`, `coaching-nudges-and-cooldowns.md` |
+| 5 | Maintenance 35 | **Item 48**: Life Mirror's check-in, read-only from the shared database, behind a switch | proposal part 3; `docs/proposals/item-48-life-mirror-check-in.md` |
+| 6 | Maintenance 36 | **Schedule watch** (it needs 8+ weeks of data after a move, so it switches on last) | proposal part 2; `docs/research/recovery-time-course.md` (Schedule watch) |
+| 7 | where the owner places it | **Custom equipment presets**: newly approved, but **not defined anywhere in this repository** or in any record available here | The owner's definition in the cloud prompt. Without one, ask the owner about this item alone and carry on with the rest. |
 
 Round numbers after N are a suggestion; keep one maintenance report per round. The proposal's
 numbers live in one sourced table (proposal part 2): add it as a data module with each value's source
 and evidence status, not as scattered constants.
 
 **Not approved, so don't build:**
-
 - the Maintenance 30 Proposed items (a move's load at a place that does it another way; a loaded calf
   raise at home);
 - Maintenance 25's two Proposed storage protections;
@@ -742,7 +739,6 @@ the reason it is not.
 ## 5. Status corrections the next status commit must make
 
 `PROJECT_STATUS.md` (in `f490dda`) predates the owner's 2026-10-11 and 2026-10-17 words:
-
 - **"Not approved (2026-10-09): 48"** is out of date. Item 48 came back in scope on 2026-10-11 and is
   approved for this run. Move it to Agreed.
 - **"Agreed and waiting"** lists only 11, 12 and 32. Add the recovery and readiness core, time
@@ -754,7 +750,6 @@ the reason it is not.
 ## 6. The owner's phone review (all YELLOW; never mark GREEN)
 
 The exact list is `PROJECT_STATUS.md`, "Waiting for the owner's phone acceptance":
-
 - Maintenance 30, 29, 28 and 27;
 - Maintenance 25 (issue #26), which has one decision of the owner's still open: the gym barcode in
   the cloud copy. It is not the cloud session's to decide;
@@ -764,7 +759,6 @@ The exact list is `PROJECT_STATUS.md`, "Waiting for the owner's phone acceptance
 Add every new round as it ships. When the whole approved queue is live, write **one consolidated,
 shortest-possible phone review**. It closes all of these without repeating tests the owner already
 passed (Maintenance 26 is GREEN). Only the owner can check:
-
 - the real phone and the installed app's update;
 - vibration and the screen staying on;
 - the gym barcode;
@@ -788,15 +782,15 @@ passed (Maintenance 26 is GREEN). Only the owner can check:
 
 ## 8. Secrets and connections
 
-| Capability                                                | Needed in the cloud?                                                                                 | Secret or variable                                                                                                                                                                                  | How to tell it is missing                                                                                                                                                                                           |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Install, lint, type check, unit, build, privacy scan, e2e | No secret                                                                                            | none                                                                                                                                                                                                | n/a                                                                                                                                                                                                                 |
-| Push a branch or `main`                                   | The cloud session's GitHub access to this repository                                                 | none in the repo (the session's own connection)                                                                                                                                                     | `git push --dry-run origin HEAD` fails with an auth error or 403: stop and report                                                                                                                                   |
-| Deploy                                                    | No secret: `pages.yml` deploys on a push to `main` with the workflow's own token                     | none                                                                                                                                                                                                | the Deploy Pages run fails: read its log                                                                                                                                                                            |
-| Watch Actions runs                                        | Optional                                                                                             | the session's GitHub connection. In cloud sessions `gh pr` and `gh issue` (GraphQL) are refused; use REST, `gh api repos/Bill6006/Workout-Conductor-Rebuild-v4/actions/runs?branch=main&per_page=3` | the call fails: poll the live marker with `curl` instead                                                                                                                                                            |
-| Live checks (marker, live suite)                          | Network access to `bill6006.github.io`, which the default "Trusted" network level does **not** allow | none                                                                                                                                                                                                | `curl -sI https://bill6006.github.io/Workout-Conductor-Rebuild-v4/` answers 403 with `x-deny-reason: host_not_allowed`: ask the owner to allow the host (section 9). Never report a live check as passed without it |
-| The owner's Turso database (cloud copy, item 48)          | **Never in the cloud.** The token lives only on the owner's phone, in the app's IndexedDB            | **none: never create a `TURSO_*` variable, never ask for the token**                                                                                                                                | n/a: every cloud-copy and item 48 test runs on `src/test/fakeCloud.ts`                                                                                                                                              |
-| PubMed checks for research                                | Optional network access to `eutils.ncbi.nlm.nih.gov`                                                 | none (no API key needed at this rate)                                                                                                                                                               | `curl` fails: use web search if available, or mark the claim unverified                                                                                                                                             |
+| Capability | Needed in the cloud? | Secret or variable | How to tell it is missing |
+|---|---|---|---|
+| Install, lint, type check, unit, build, privacy scan, e2e | No secret | none | n/a |
+| Push a branch or `main` | The cloud session's GitHub access to this repository | none in the repo (the session's own connection) | `git push --dry-run origin HEAD` fails with an auth error or 403: stop and report |
+| Deploy | No secret: `pages.yml` deploys on a push to `main` with the workflow's own token | none | the Deploy Pages run fails: read its log |
+| Watch Actions runs | Optional | the session's GitHub connection. In cloud sessions `gh pr` and `gh issue` (GraphQL) are refused; use REST, `gh api repos/Bill6006/Workout-Conductor-Rebuild-v4/actions/runs?branch=main&per_page=3` | the call fails: poll the live marker with `curl` instead |
+| Live checks (marker, live suite) | Network access to `bill6006.github.io`, which the default "Trusted" network level does **not** allow | none | `curl -sI https://bill6006.github.io/Workout-Conductor-Rebuild-v4/` answers 403 with `x-deny-reason: host_not_allowed`: ask the owner to allow the host (section 9). Never report a live check as passed without it |
+| The owner's Turso database (cloud copy, item 48) | **Never in the cloud.** The token lives only on the owner's phone, in the app's IndexedDB | **none: never create a `TURSO_*` variable, never ask for the token** | n/a: every cloud-copy and item 48 test runs on `src/test/fakeCloud.ts` |
+| PubMed checks for research | Optional network access to `eutils.ncbi.nlm.nih.gov` | none (no API key needed at this rate) | `curl` fails: use web search if available, or mark the claim unverified |
 
 ## 9. The cloud environment
 
@@ -815,7 +809,6 @@ than trusting this list.
   The owner allows them in the environment's settings: Network access → Custom, with those hosts
   listed and "Also include default list of common package managers" ticked. A blocked request
   answers 403 with `x-deny-reason: host_not_allowed`.
-
 - **Playwright.** Run `npx playwright install --with-deps chromium`. If the download stays blocked,
   push to a non-`main` branch: CI runs the whole check, e2e included, without deploying.
 - **Command time limits.** A foreground command times out after 2 minutes by default, 10 at most.
