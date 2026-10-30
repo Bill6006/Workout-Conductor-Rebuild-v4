@@ -5,7 +5,43 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
-### Checkpoint, 2026-10-30, afternoon (supersedes the states below)
+### Checkpoint, 2026-10-30, late afternoon (supersedes the states below)
+
+Nothing is merged to `main` or deployed. The three latest review passes are fixed and verified:
+Round M's twenty-fourth, Round N's fourteenth and Maintenance 33's fourth. The stack is Round M on
+`main`'s `2595631`, Round N on Round M, Maintenance 33 on Round N (`git apply` each diff on its
+base, in that order).
+
+- **Round M**: local `992c87d` (`round-m-wip/round-m.diff` on `2595631`). The twenty-fourth pass
+  (three LOW) is complete: Today tells a loaded copy as the day's offer only where the day offers
+  its kind; a saved second workout loaded on another day is a catch-up of its muscles, or the
+  split's day it was laid out on (`secondOnAnotherDay`); an empty copy takes the day's mark as its
+  own alone; a loaded workout keeps the deload week covering today (`deloadToday`). Not taken, in
+  the report's known limits: the copy stands as saved until its first change (in a deload week too),
+  and is planned without the coach focus. Suite 3008 passed, 5 skipped; M31 table at 337 entries,
+  all 18 new and affected caught. **Next**: the twenty-fifth review (`git diff ce935fe 992c87d` is
+  the twenty-fourth pass).
+- **Round N**: local `1fcd67a` on `992c87d` (`round-n-wip/round-n.diff`). The fourteenth pass (six
+  LOW) is complete: a refit under a top set still to come replays the back-offs logged; the follow
+  names the step that put the back-off in front where it stands; a hard start's record is fitted on
+  top set plus back-offs too (`refitRecord`); a top set's log is read as the workout reads it
+  (`outcomeFor`) wherever the back-offs' load is worked out; a lift picked up again takes the top
+  set's reps as the plan has them; an Undo replays every lift on the structure. Suite 3314 passed, 5
+  skipped; M32 table at 286 entries, all 24 new and affected caught. **Next**: the fifteenth review
+  (`git diff 9e9078e 1fcd67a` is the fourteenth pass).
+- **Maintenance 33**: local `9bc67b7` on `1fcd67a` (`round-o-wip/round-o.diff`), its fourth pass
+  (seven: two MEDIUM, five LOW) fixed: the way out of the workout stays on a rest day; every plan of the day
+  keeps the day's check-in, as told, at the time told (`withDayCheckIn`, `checkInAt`); a saved copy
+  is the plan under the floor; a swap back eases once from the plan's own top set; a lift picked up
+  again under "Lighter" comes back eased with its record; the check-in's words read the plan with
+  the floor laid again. Suite 3481 passed, 5 skipped, with the zone tests; M33 table at 142 entries,
+  the revert run of the new and affected entries under way at this checkpoint. **Next**: the fifth
+  review (`git diff 3d24e37 9bc67b7` is the fourth pass).
+- **Older tables**: Round M's code moved anchors of the M24 to M27 tables (`--check`: 10, 13, 20 and
+  1 more not found than on `main`), and Maintenance 33's `refitRecord` moves M26's 42z22. Re-anchor
+  them in the cross-round run before shipping.
+
+### Checkpoint, 2026-10-30, afternoon (superseded)
 
 Nothing is merged to `main` or deployed. All three rounds have their latest review passes fixed and
 verified; their next reviews start from these commits. The stack is Round M on `main`'s `2595631`,
