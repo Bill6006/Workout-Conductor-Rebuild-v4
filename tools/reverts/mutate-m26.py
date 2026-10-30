@@ -1352,6 +1352,22 @@ SUPERSEDED = {
         "Round M's twenty-fifth pass puts today's plan in place of one from an earlier day before a "
         "copy is loaded (H199 guards it), so the session it replaces has today's key, the same as "
         "the store's own"),
+    # Round N moved withoutHandTargets to src/engine/workout/types.ts; no newer entry reverts its delete of the weight.
+    "BB1 a swap leaves a weight set by hand behind": (
+        "moved, not replaced: the eleventh review of round N made withoutHandTargets one helper for a "
+        "swap, a swap back and a lift picked up again, in src/engine/workout/types.ts, where its "
+        "delete of the weight set by hand still is; no newer entry reverts that line (N217 reverts its "
+        "delete of the back-offs' weight; AA5, BB2 and N233 its calls on a swap, a swap back and a "
+        "pick-up)"),
+    # ... and its delete of the reps set by hand.
+    "BB3 the sets built afresh drop reps set by hand": (
+        "moved, not replaced: the eleventh review of round N made withoutHandTargets one helper for a "
+        "swap, a swap back and a lift picked up again, in src/engine/workout/types.ts, where its "
+        "delete of the reps set by hand still is; no newer entry reverts that line (N217 reverts its "
+        "delete of the back-offs' weight; AA5, BB2 and N233 its calls on a swap, a swap back and a "
+        "pick-up)"),
+    "42x2 a check-in that changed the plan names the hard start with what changed": (
+        "Maintenance 33 carries the rule in its check-in words, where its old store test no longer reaches it: the same revert runs as the M33 table's Y8 with the ease layer's test"),
 }
 
 # Moved by this round's code: the same revert, anchored where the code now is (old, new, nth).
@@ -1669,6 +1685,225 @@ REANCHORED = {
     "35t held back: a drop set": (
         "    trigger?.type === 'rep-range' ||\n    (trigger?.type === 'drop-set' && trigger.on)",
         "    trigger?.type === 'rep-range' ||\n    false", None),
+    # Round N (Maintenance 32) and Maintenance 33 moved these 52; last in the map, so they win over
+    # any above. Where Maintenance 33 shares a line with its lighter option or the day's floor, the
+    # revert takes the hard start's part alone (gated on `hard`, `hardStart` or `keepLoad`).
+    # Round N: the plan reads its target through `targetAt`, which still passes the role.
+    "21f plan passes the role": (
+        "        adjust,\n        loading,\n        floor,\n        profile.units,\n        role,\n      );",
+        "        adjust,\n        loading,\n        floor,\n        profile.units,\n      );", None),
+    # Round N: targetedSets builds its sets from `asked` (the top set's or the day's prescription).
+    "22i swap/weights/max rebuild the warm-up easy": (
+        "      buildSets({ ...asked, sets: count, restSeconds }, weighed, exercise),",
+        "      buildSets({ ...asked, sets: count, restSeconds }, weighed),", None),
+    # Round N: refitEntry builds its sets from `built.asked`.
+    "22j weights changed rebuilds the warm-up easy": (
+        "        { ...built.asked, sets: working, restSeconds: entry.restSeconds },\n        weighed,\n        exercise,\n",
+        "        { ...built.asked, sets: working, restSeconds: entry.restSeconds },\n        weighed,\n", None),
+    # Round N measures a break from every session of the lift (`sessionDates`); the loaded run's line.
+    "24d misses before a break stop counting (loaded)": (
+        "    consecutiveUnder += 1;\n    if (breakBetween(point, points[at + 1], sessionDates)) break;\n",
+        "    consecutiveUnder += 1;\n", None),
+    # ... and the short run's.
+    "24e misses before a break stop counting (short run)": (
+        "      if (breakBetween(point, points[at + 1], sessionDates)) break;\n", "", None),
+    # Round N passes the set's tier after the flag; the flag goes to its default, the tier stays.
+    "S6b the card passes it": (
+        "    hold,\n    isCoreStability(exercise.movementPattern),\n    target?.tier,\n  );",
+        "    hold,\n    undefined,\n    target?.tier,\n  );", None),
+    # Maintenance 33 names the deload's prescription `planned`, a head cold's floor laid after it.
+    "T4a a deload's reserve on every rebuild": (
+        "  const planned =\n    request.constraints.deload !== null\n",
+        "  const planned =\n    false\n", None),
+    # Round N: reps set by hand at another range take their own target here (at the plan's, as the plan reads).
+    "U5d a max claims no reps over reps by hand": (
+        "              fitted: fitToday(from, ownTarget(target), loading, exercise, entry.role),",
+        "              fitted: fitToday(from, target, loading, exercise, entry.role),", None),
+    # Round N measures a break from every session of the lift (`sessionDates`).
+    "X1a the miss run ends at a deload served": (
+        "      if (!passesOver(at) || breakBetween(point, points[at + 1], sessionDates)) break;",
+        "      if (breakBetween(point, points[at + 1], sessionDates)) break;", None),
+    # Round N reads `touched` before the back-offs' refit, which comes first now.
+    "X2 a lift with a set done is fitted in place": (
+        "  const touched =\n    request.completed.sets.some((set) => set.entryId === entry.id) || keepsTheEase(entry);\n  if (\n    top !== undefined &&",
+        "  const touched =\n    request.completed.sets.some(\n      (set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped,\n    ) || keepsTheEase(entry);\n  if (\n    top !== undefined &&",
+        None),
+    # Round N reads the day's fatigue off the whole log (`log`); Maintenance 33 reads no check-in in it.
+    "X3a a refreshed lift reads the day's fatigue": (
+        "    profile: request.profile,\n    fatigueLevel: interpretFatigue(log, request.timestamp).level,\n",
+        "    profile: request.profile,\n", None),
+    # ... the same line, which a max reads its target through (targetToday).
+    "X3b a max refresh reads the day's fatigue": (
+        "    fatigueLevel: interpretFatigue(log, request.timestamp).level,\n", "", None),
+    # Round N builds a lift not fitted in place through targetBuilt; reps by hand take the old path's target, put back.
+    "AA3 reps set by hand are fitted in place on every path": (
+        [("  if (touched || entry.manual?.reps === true) {", "  if (touched) {"),
+         ("  const fitted = built.fitted;\n",
+          "  const byHand = entry.manual?.reps === true;\n  const handReps = ownReps(entry);\n  const target = targetToday(request, workout, entry.id, exercise, entry.role, built.asked);\n  const fitted = byHand\n    ? fitToday(request, ownTarget(target), loading, exercise, entry.role)\n    : built.fitted;\n"),
+         ("\n  // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).\n  entry.dropSet =",
+          "\n  if (byHand) restoreHandReps(entry, handReps, request, target, loading, exercise);\n  // A plan from before an exercise stopped suiting a drop set loses it (Maintenance 23).\n  entry.dropSet =")],
+        None, None),
+    # Round N: the estimate's read for reps set by hand sits in the branch for another range.
+    "BB13 a max sets the load for reps set by hand": (
+        "            if (ESTIMATED_MODES.has(target.mode)) {", "            if (false) {", None),
+    # Maintenance 33 carries a head cold's floor with the sum.
+    "34c a check-in goes on top of the setting": (
+        "  return {\n    sets: harder.sets + felt.sets,\n    rir: harder.rir + felt.rir,\n    restFactor: harder.restFactor * felt.restFactor,\n    ...(felt.rirFloor !== undefined ? { rirFloor: felt.rirFloor } : {}),\n  };",
+        "  return harder;", None),
+    # Maintenance 33 repeats the line for the lighter option's record (`planOwes`); this is the first.
+    "34h a lift picked up again keeps the effort": (
+        "\n      shift: heldShift(request, workout, exercise, stopped.role, shift),",
+        "\n      shift: heldShift(request, workout, exercise, stopped.role, 0),", None),
+    # ... and both read the shift taken before the stand-in stops.
+    "34k2 a lift picked up again reads the effort before the stand-in stops": (
+        [("  const shift = dayShiftOf(request, workout, entry);\n  if (request.completed.sets.some((set) => set.entryId === entry.id)) {",
+          "  if (request.completed.sets.some((set) => set.entryId === entry.id)) {"),
+         ("\n      shift: heldShift(request, workout, exercise, stopped.role, shift),",
+          "\n      shift: heldShift(request, workout, exercise, stopped.role, dayShiftOf(request, workout, entry)),"),
+         ("              shift: heldShift(request, workout, exercise, stopped.role, shift),",
+          "              shift: heldShift(request, workout, exercise, stopped.role, dayShiftOf(request, workout, entry)),")],
+        None, None),
+    # Round N reads the effort off the sets still to come (`sets`, a back-off's on the structure).
+    "34n the effort is read on the set still to come": (
+        "  const sets = toCome.length > 0 ? toCome : working;", "  const sets = working;", None),
+    # Round N compares through carriesDayRir (a top set alone carries the top set's reserve).
+    "34o a reserve at its limit still carries the day's settings": (
+        "  for (let shift = day; shift !== 0; shift -= Math.sign(day)) {\n    if (carriesDayRir(sets, Math.min(4, Math.max(floor, plainRir + shift)))) return shift;\n  }\n",
+        "", None),
+    # Round N passes settleKept's back-offs after the ramps.
+    "34y14 ... keeping the ramps it has": (
+        "        warmups: entry.sets.filter((set) => set.kind === 'warmup').length,\n        backOffs: backOffDay(next, workout, entry),\n",
+        "        backOffs: backOffDay(next, workout, entry),\n", None),
+    # Round N reads every working set of a session (`true`); the trend reads its own call.
+    "5au a lift's best reads every session": (
+        "performanceHistory(history, exercise, Number.POSITIVE_INFINITY, true)",
+        "performanceHistory(history, exercise, 8, true)", None),
+    # Maintenance 33 reads the set as planned before the day's eases (`asked`), a step more on a day expected lower.
+    "42a three reps short, not two": (
+        "  return shortBy(asked.targetReps[0], reserve, first.reps, first.rir) >= SHORT_BY_REPS + step;",
+        "  return shortBy(asked.targetReps[0], reserve, first.reps, first.rir) >= SHORT_BY_REPS - 1 + step;", None),
+    # ... (`asked`).
+    "42r2 sets asked for more than twelve reps to failure are not judged": (
+        "  if (asked.targetReps[0] + reserve > JUDGED_REPS) return null;\n", "", None),
+    # ... (`asked`).
+    "42r4 the plan's reserve, not one the day's settings added": (
+        "  const reserve = Math.min(asked.targetRir, planRir);", "  const reserve = asked.targetRir;", None),
+    # Maintenance 33 words a check-in the plan keeps by what it reads (`checked`, `read.lowered`).
+    "42r14 a check-in that feels good names the hard start": (
+        "            : constraints.badStart\n              ? `${checked}: the rest stays eased for the hard start.`\n              : read.lowered",
+        "            : read.lowered", None),
+    # Maintenance 33 adds the lighter option to the settings that stay; that part is left.
+    "42r15 Back to plan only when no other setting stays": (
+        "      const settings = after !== undefined || (constraints.lighter?.length ?? 0) > 0;",
+        "      const settings = (constraints.lighter?.length ?? 0) > 0;", None),
+    # Maintenance 33 marks a begun block only under a hard start; the lighter option's skip is left.
+    "42v3 a pair or a lift under way keeps its sets": (
+        "    if (block.entries.some((entry) => begun.has(entry.id))) {\n      // Under way before the ease,",
+        "    if (!hardStart && block.entries.some((entry) => begun.has(entry.id))) {\n      // Under way before the ease,",
+        None),
+    # Maintenance 33 takes the day's floor off first (its own Z2); the ease's part goes.
+    "42w2 every change is made to the plan under the ease": (
+        "    const bare = underTheEase(underTheFloor(shown, request.completed), request.completed);",
+        "    const bare = underTheFloor(shown, request.completed);", None),
+    # Maintenance 33 lays the lighter option with the ease: the hard start's ease alone is not laid.
+    "42w3 the ease is laid again over what a change leaves": (
+        "          ? easeTheRest(workout, plain, constraints)\n          : withoutMarks(workout),",
+        "          ? easeTheRest(workout, plain, { ...constraints, badStart: undefined })\n          : withoutMarks(workout),",
+        None),
+    # Maintenance 33 gives a stand-in the slot's floor (a branch the hard start never reaches); the floor goes for it.
+    "42w6 a set comes off only above the floor a check-in keeps": (
+        "      : count - setFloor(entry.role);\n  return kept ? 0 : Math.min(fewer, Math.max(0, room));",
+        "      : count - (hard ? 1 : setFloor(entry.role));\n  return kept ? 0 : Math.min(fewer, Math.max(0, room));",
+        None),
+    # Maintenance 33 splits the count handed on by the ease (`hard`); none is kept from the hard start.
+    "42w7 a count set by hand or offered by the coach stays": (
+        "  const kept =\n    entry.manual?.sets === true ||\n    entry.slot === undefined ||\n    (hard ? handed.length > 0 : handed.some((lift) => lift.stopped?.record?.sets !== undefined));",
+        "  const kept =\n    !hard &&\n    (entry.manual?.sets === true ||\n      entry.slot === undefined ||\n      handed.some((lift) => lift.stopped?.record?.sets !== undefined));",
+        None),
+    # Maintenance 33 says why in the ease's own words (`why`); the hard start's ease says none.
+    "42w11 an eased lift says why": (
+        "  if (entry.progression && what) {\n    entry.progression = {\n      ...entry.progression,\n      evidence: [`${why}: ${what}.`, ...entry.progression.evidence],",
+        "  if (entry.progression && what) {\n    entry.progression = {\n      ...entry.progression,\n      evidence: keepLoad ? [`${why}: ${what}.`, ...entry.progression.evidence] : entry.progression.evidence,",
+        None),
+    # Round N repeats the cap for eased back-offs; easedSet's, for the hard start's ease.
+    "42w17 the reserve stops at four": (
+        "\n  const rir = Math.min(4, set.targetRir + up);\n  const more = rir - set.targetRir;",
+        "\n  const rir = keepLoad ? Math.min(4, set.targetRir + up) : set.targetRir + up;\n  const more = rir - set.targetRir;",
+        None),
+    # Maintenance 33 keeps every load for the lighter option (`keepLoad`), which stays.
+    "42w18 a set pushed past the weights here keeps its load": (
+        "  if (!keepLoad && !manual?.weight && !set.asked && weight !== null && weight > 0) {",
+        "  if (!keepLoad && !manual?.weight && weight !== null && weight > 0) {", None),
+    # ... (`keepLoad`).
+    "42w19 a weight set by hand keeps its load": (
+        "  if (!keepLoad && !manual?.weight && !set.asked && weight !== null && weight > 0) {",
+        "  if (!keepLoad && !set.asked && weight !== null && weight > 0) {", None),
+    # Maintenance 33 lays the day's floor on what the words read (`heldToTheDay`), which stays.
+    "42w25 the check-in's words read the workout as it showed": (
+        "      const change = dayChange(\n        { ...request, workout: layer.shown },\n        heldToTheDay(workout, request, constraints),\n      );",
+        "      const change = dayChange(\n        request,\n        heldToTheDay(workout, request, constraints),\n      );", None),
+    # Maintenance 33 words it by what the check-in reads (`checked`).
+    "42w29 a check-in names a hard start the day still shows": (
+        "        ...(stays ? { headline: `${checked}: the rest stays eased for the hard start.` } : {}),\n",
+        "", None),
+    # Maintenance 33 saves the plan without the day's illness under it.
+    "42w33 a saved copy keeps no marks of the ease": (
+        "      workout: planUnderTheEase(this.planWithoutIllness(session)),",
+        "      workout: this.planWithoutIllness(session),", None),
+    # Maintenance 33 reads the stop's record before the delete; the delete goes.
+    "42x7 a lift closed at its logged sets keeps no record of the ease": (
+        "  delete entry.eased;\n  entry.sets = entry.sets.filter((set) => isDone(entry.id, set.index));",
+        "  entry.sets = entry.sets.filter((set) => isDone(entry.id, set.index));", None),
+    # Maintenance 33 splits the ease (`hard`): the hard start keeps a coach's lift only while pinned.
+    "42x21 the coach's offered sets stay through an unpin": (
+        "    entry.slot === undefined ||\n    (hard ? handed.length > 0 :",
+        "    (entry.slot === undefined && (!hard || entry.locked)) ||\n    (hard ? handed.length > 0 :", None),
+    # Maintenance 33 reads the stop's record after the count; the count owes the plan's sets again.
+    "42z1 a lift stopped at a new place owes what it shows": (
+        "  const owed = entry.sets.filter(\n    (set) => set.kind === 'working' && !isDone(entry.id, set.index),\n  ).length;\n  // The plan its record kept stays with what stopped it",
+        "  const owed = (entry.manual?.sets ? entry.sets : (entry.eased?.sets ?? entry.sets)).filter(\n    (set) => set.kind === 'working' && !isDone(entry.id, set.index),\n  ).length;\n  // The plan its record kept stays with what stopped it",
+        None),
+    # Maintenance 33 splits the count handed on by the ease (`hard`): the hard start's part goes.
+    "42z4 a stand-in keeps the count its lift handed on": (
+        "    (hard ? handed.length > 0 : handed.some(", "    (hard ? false : handed.some(", None),
+    # Maintenance 33 lays the lighter option there too; with neither in force the marks stay.
+    "42z5 with no hard start in force, a mark goes": (
+        "          ? easeTheRest(workout, plain, constraints)\n          : withoutMarks(workout),",
+        "          ? easeTheRest(workout, plain, constraints)\n          : workout,", None),
+    # Round N reads `touched` before the back-offs' refit, which comes first now.
+    "42z7 a lift that was under way is fitted in place": (
+        "    request.completed.sets.some((set) => set.entryId === entry.id) || keepsTheEase(entry);\n  if (\n    top !== undefined &&",
+        "    request.completed.sets.some((set) => set.entryId === entry.id);\n  if (\n    top !== undefined &&",
+        None),
+    # Maintenance 33 gives a copy what the lighter option took (`withLighterTaken`), which stays.
+    "42z14 a copy goes without the day's stops": (
+        "  const plan = withoutStops(withLighterTaken(restored));",
+        "  const plan = withLighterTaken(restored);", None),
+    # Round N moved the record's refit into refitRecord, on top set plus back-offs too.
+    "42z22 new weights fit the record of a lift keeping the ease": (
+        "  if (!keepsTheEase(entry) || !was?.sets) return;", "  if (true) return;", None),
+    # ... (refitRecord).
+    "42z38 a refitted record's settings follow its ramps": (
+        "    ...(was.settings\n      ? {\n          settings: {\n            ...was.settings,\n            warmupSets: record.sets.filter((set) => set.kind === 'warmup').length,\n            dropSet: record.sets.some((set) => set.kind === 'drop'),\n          },\n        }\n      : {}),\n",
+        "", None),
+    # Round N and Maintenance 33 build the workout a Delete leaves; keepUnderWay is unexported, so its keeping is inlined.
+    "42z41 a set removed before any change gives its lift the plan back": (
+        "      workout: this.underDayFloor(\n        left,\n        this.backOffsAsPlanned(left, { entryId, setIndex }, isDone),\n      ),",
+        "      workout: ((plan, begun) => {\n        const held = (lift) => lift.eased !== undefined && !lift.eased.kept;\n        const under = (block) =>\n          block.entries.some((lift) => begun.has(lift.id)) && block.entries.some(held);\n        return plan.blocks.some(under)\n          ? {\n              ...plan,\n              blocks: plan.blocks.map((block) =>\n                under(block)\n                  ? {\n                      ...block,\n                      entries: block.entries.map((lift) =>\n                        held(lift) ? { ...lift, eased: { ...lift.eased, kept: true } } : lift,\n                      ),\n                    }\n                  : block,\n              ),\n            }\n          : plan;\n      })(\n        this.underDayFloor(\n          left,\n          this.backOffsAsPlanned(left, { entryId, setIndex }, isDone),\n        ),\n        new Set(session.completed.sets.map((c) => c.entryId)),\n      ),",
+        None),
+    # ... and the one an Undo leaves.
+    "42z42 a set undone before any change gives its lift the plan back": (
+        "      workout: this.underDayFloor(\n        left,\n        this.backOffsAsPlanned(left, session.completed.sets.at(-1), isDone),\n      ),",
+        "      workout: ((plan, begun) => {\n        const held = (lift) => lift.eased !== undefined && !lift.eased.kept;\n        const under = (block) =>\n          block.entries.some((lift) => begun.has(lift.id)) && block.entries.some(held);\n        return plan.blocks.some(under)\n          ? {\n              ...plan,\n              blocks: plan.blocks.map((block) =>\n                under(block)\n                  ? {\n                      ...block,\n                      entries: block.entries.map((lift) =>\n                        held(lift) ? { ...lift, eased: { ...lift.eased, kept: true } } : lift,\n                      ),\n                    }\n                  : block,\n              ),\n            }\n          : plan;\n      })(\n        this.underDayFloor(\n          left,\n          this.backOffsAsPlanned(left, session.completed.sets.at(-1), isDone),\n        ),\n        new Set(session.completed.sets.map((c) => c.entryId)),\n      ),",
+        None),
+    # Maintenance 33 eases what comes in for the lighter option in a branch of its own, which stays.
+    "42z48 what comes in takes the ease the lift showed": (
+        "      easeEntry(entry, block, taken, ease.reserve, exercise, request, said);\n", "", None),
+    # Maintenance 33 lays the lighter option through the same call (`hard`): the hard start's goes.
+    "42z53 the layer lays the ease on each lift": (
+        "      if (easeEntry(entry, block, take, reserve, exercise, request, take, why, !hard)) {",
+        "      if (!hard && easeEntry(entry, block, take, reserve, exercise, request, take, why, !hard)) {",
+        None),
 }
 
 table = [

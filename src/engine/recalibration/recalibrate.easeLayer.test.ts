@@ -2138,3 +2138,30 @@ describe('a hard start laid over the plan (Maintenance 26, the sixth pass of ite
     expect(back(hardStart(day)).targetRir).toBe(back(day).targetRir);
   });
 });
+
+// Maintenance 26's 42w29 and 42x2, which their old tests stopped reaching once Maintenance 33
+// rewrote the check-in's words (the re-anchoring before shipping M, N and 33).
+describe('a head cold told again under a hard start (42w29, 42x2)', () => {
+  it('nothing changed: the headline names the hard start (42w29)', () => {
+    const started = hardStart(underWay(base, gym, 'default'));
+    expect(started.constraints.badStart).toBe(true);
+    const once = run(started, { type: 'readiness', readiness: cold });
+    const again = run(once, { type: 'readiness', readiness: cold });
+    expect(again.result!.changes).toEqual([]);
+    expect(again.result!.summary.headline).toBe(
+      'Checked in: the rest stays eased for the hard start.',
+    );
+  });
+
+  it('only the time fit changed something: the words name the hard start (42x2)', () => {
+    const started = hardStart(underWay(base, gym, 'default'));
+    const once = run(started, { type: 'readiness', readiness: cold });
+    // Told again forty minutes in: the rebuild fits the time left, which is no part of the check-in.
+    const later = { ...once, completed: { ...once.completed, elapsedSeconds: 40 * 60 } };
+    const again = run(later, { type: 'readiness', readiness: cold });
+    expect(again.result!.changes.length).toBeGreaterThan(0);
+    expect(again.result!.summary.headline).toMatch(
+      /^Checked in \(the rest eased for it and the hard start\)/,
+    );
+  });
+});

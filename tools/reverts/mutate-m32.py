@@ -196,6 +196,9 @@ T_NO_WEIGHT_READ = "src/core/state/backOffs.noWeightRead.store.test.ts"
 # The fresh review before shipping (2026-10-30).
 T_PICKUP_DAY = "src/core/state/backOffsPickUpDayReserve.store.test.ts"
 T_DROP_WORDS = "src/features/workout/backOffsDropNarrowedWords.test.ts"
+T_REVIEW9 = "src/engine/progression/roundE.review9.test.ts"
+T_REVIEW10 = "src/engine/progression/roundE.review10.test.ts"
+T_MAX_OFFER = "src/features/workout/maxOffer.test.tsx"
 
 # (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 MUTATIONS = [
@@ -1174,6 +1177,11 @@ MUTATIONS = [
     ("N329 ... and a back-off's effort line never says lighter", EFFORT,
      "            `back-off: after the top set, stop",
      "            `back-off: lighter than the top set, stop", [T_DROP_WORDS], None),
+    # Maintenance 26's BB1 and BB3, which Round N moved into `withoutHandTargets`.
+    ("N330 a swap leaves a weight set by hand behind (M26's BB1)", TYPES,
+     "  delete manual.weight;\n", "", [T_REVIEW10, T_MAX_OFFER], None),
+    ("N331 the sets built afresh drop reps set by hand (M26's BB3)", TYPES,
+     "  delete manual.reps;\n", "", [T_REVIEW9, T_REVIEW10], None),
 ]
 
 

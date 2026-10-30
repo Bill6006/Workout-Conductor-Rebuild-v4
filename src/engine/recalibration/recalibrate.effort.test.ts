@@ -1261,3 +1261,111 @@ describe('the words of a check-in', () => {
     expect(back.summary.headline).toMatch(/^Adjusted for today \(easier on your lower back\): /);
   });
 });
+
+// Maintenance 26's 34n and 34o, which their old tests stopped reaching once Maintenance 33
+// rewrote them (the re-anchoring before shipping M, N and 33).
+describe('the effort is read on the set still to come (34n)', () => {
+  it('a set planned and done before Make it harder is not read: the stand-in keeps harder', () => {
+    const harder = withIntensity('harder');
+    const lift = entryOf(harder.workout, bench);
+    const first = lift.sets.find((set) => set.kind === 'working');
+    if (!first) throw new Error('no working set');
+    // The first set as planned before Make it harder: a rep more in reserve than the sets to come.
+    const workout: GeneratedWorkout = {
+      ...harder.workout,
+      blocks: harder.workout.blocks.map((block) => ({
+        ...block,
+        entries: block.entries.map((entry) =>
+          entry.id !== lift.id
+            ? entry
+            : {
+                ...entry,
+                sets: entry.sets.map((set) =>
+                  set === first ? { ...set, targetRir: set.targetRir + 1 } : set,
+                ),
+              },
+        ),
+      })),
+    };
+    const completed = logFirstSet(workout, bench);
+    const standIn = run(
+      { type: 'replace', entryId: lift.id, exerciseId: 'dumbbell-bench-press' },
+      { workout, constraints: harder.constraints, completed },
+    );
+    const plain = run({ type: 'replace', entryId: lift.id, exerciseId: 'dumbbell-bench-press' });
+    const plainRir = firstRir(plain.workout, 'dumbbell-bench-press');
+    const stand = rirOf(entryOf(standIn.workout, 'dumbbell-bench-press'));
+    expect(moved('dumbbell-bench-press', plainRir, -1)).not.toBe(plainRir);
+    expect(stand.length).toBeGreaterThan(0);
+    expect(stand).toEqual(stand.map(() => moved('dumbbell-bench-press', plainRir, -1)));
+  });
+});
+
+describe('a reserve at its limit still carries the day setting (34o)', () => {
+  it('Make it easier on a chin-up held at 4 reaches the lat pulldown swapped in', () => {
+    const foundation: UserProfile = { ...profile, programStyle: 'foundation' };
+    const history = [
+      record(
+        45,
+        'chin-up',
+        [
+          [8, null, 2],
+          [8, null, 2],
+          [7, null, 2],
+        ],
+        [6, 12],
+      ),
+    ];
+    const request = (overrides: Partial<RecalibrationRequest>): RecalibrationRequest => {
+      const workout =
+        overrides.workout ??
+        generateWorkout({
+          profile: foundation,
+          location: gym,
+          history,
+          now: RECORD_NOW,
+          duration: 'default',
+          constraints: { templateId: 'pull-arms' },
+        });
+      return {
+        trigger: { type: 'profile' },
+        workout,
+        completed: emptyCompleted(),
+        lockedEntryIds: [],
+        currentEntryId: null,
+        duration: 'default',
+        profile: foundation,
+        location: gym,
+        history,
+        constraints: emptyConstraints(),
+        reason: 'test',
+        timestamp: RECORD_NOW,
+        ...overrides,
+      };
+    };
+    const go = (overrides: Partial<RecalibrationRequest>): RecalibrationSuccess => {
+      const result = recalibrate(request(overrides));
+      if (!result.ok) throw new Error(result.error);
+      return result;
+    };
+    const easier = go({ trigger: { type: 'intensity', direction: 'easier' } });
+    const plainPlan = request({}).workout;
+    expect(firstRir(plainPlan, 'chin-up')).toBe(4);
+    expect(firstRir(easier.workout, 'chin-up')).toBe(4);
+    const swap = (workout: GeneratedWorkout, constraints: SessionConstraints) =>
+      go({
+        trigger: {
+          type: 'replace',
+          entryId: entryOf(workout, 'chin-up').id,
+          exerciseId: 'lat-pulldown',
+        },
+        workout,
+        constraints,
+      });
+    const plain = swap(plainPlan, emptyConstraints());
+    const kept = swap(easier.workout, easier.constraints);
+    const plainRir = firstRir(plain.workout, 'lat-pulldown');
+    expect(moved('lat-pulldown', plainRir, 1)).not.toBe(plainRir);
+    expect(firstRir(kept.workout, 'lat-pulldown')).toBe(moved('lat-pulldown', plainRir, 1));
+  });
+});

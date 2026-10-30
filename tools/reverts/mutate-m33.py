@@ -642,6 +642,9 @@ MUTATIONS = [
     ("Y7 a saved check-in is read on the day it was told", CHECKIN,
      "  return record.checkInAt ?? record.startedAt;", "  return record.startedAt;",
      [T_TOLD_AT, T_CHECKIN], None),
+    ("Y8 a check-in that changed the plan names the hard start with what changed (M26's 42x2)", ENGINE,
+     "              : asShown\n                ? adjust\n                  ? 'Checked in (the rest eased for it and the hard start)'\n                  : 'Feeling good (the rest eased for the hard start)'\n                : 'Checked in',",
+     "              : 'Checked in',", [T_EASE_LAYER], None),
 ]
 
 
