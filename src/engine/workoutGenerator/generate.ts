@@ -2885,19 +2885,15 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   if (profile.techniques.supersets) {
     let pairs = 0;
     const candidates = isolationEntries();
-    // Off the plan, a pair never moves a lift out of the layout's order (the fresh review before
-    // shipping: a second workout's superset put what was left of today's work before what was
-    // missed, and a catch-up's could put a smaller share first): only lifts side by side pair, and
-    // both for what was missed or both for what is left.
+    // Off the plan, a pair never puts what is left of today's work before what was missed (the
+    // fresh review before shipping: a second workout's superset paired a lift for the hamstrings'
+    // remainder with one for the missed rear delts): both its lifts are for what was missed, or
+    // both for what is left.
     const behind = new Set(
       (catchUp?.muscles ?? []).filter((item) => item.why === 'behind').map((item) => item.muscle),
     );
     const missedLift = (entry: WorkoutEntry) =>
       exerciseOf(entry.exerciseId).primaryMuscles.some((muscle) => behind.has(muscle));
-    const sideBySide = (a: WorkoutEntry, b: WorkoutEntry) => {
-      const at = blocks.findIndex((block) => block.entries[0]?.id === a.id);
-      return at >= 0 && blocks[at + 1]?.entries[0]?.id === b.id;
-    };
     for (let i = 0; i < candidates.length - 1 && pairs < 2; i += 1) {
       const a = candidates[i];
       if (!a || !blocks.some((block) => block.kind === 'straight' && block.entries[0]?.id === a.id))
@@ -2916,7 +2912,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
           exerciseB.primaryMuscles.includes(muscle),
         );
         if (isBlocked(conflicts) || shareMuscle) continue;
-        if (offPlan && (!sideBySide(a, b) || missedLift(a) !== missedLift(b))) continue;
+        if (offPlan && missedLift(a) !== missedLift(b)) continue;
         const rounds = Math.max(roundsOf(a), roundsOf(b));
         const superset: WorkoutBlock = {
           id: `s-${a.id}-${b.id}`,
