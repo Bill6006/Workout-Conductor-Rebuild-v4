@@ -3,6 +3,7 @@ import { createDefaultLocations } from '../validation/location';
 import { createDefaultProfile } from '../validation/profile';
 import { illnessOf } from '../../engine/readiness/checkIn';
 import type { Readiness } from '../../engine/recalibration/types';
+import { at } from '../../test/clockDays';
 import { record } from '../../test/records';
 import { createTestStore } from '../../test/testStore';
 
@@ -13,13 +14,15 @@ import { createTestStore } from '../../test/testStore';
  *
  * Steps: a lifter checks in "Head cold" at 9:00, or "Short on time"; at 10:00 loads a saved workout,
  * or begins today's and discards it. Or checks in "Head cold" at 23:50 and opens the app at 0:10.
- * Synthetic data only.
+ * The times are the device's clock, as the day rules read it: written in UTC they were one day only
+ * in UTC (in New York, 23:50 and 0:10 UTC are the same evening), so the test ran only on a UTC
+ * runner. It runs in two more zones (`scripts/test-zones.mjs`). Synthetic data only.
  */
 
-const NINE = '2026-09-02T09:00:00.000Z';
-const TEN = '2026-09-02T10:00:00.000Z';
-const LATE = '2026-09-02T23:50:00.000Z';
-const PAST_MIDNIGHT = '2026-09-03T00:10:00.000Z';
+const NINE = at(2, 9);
+const TEN = at(2, 10);
+const LATE = at(2, 23, 50);
+const PAST_MIDNIGHT = at(3, 0, 10);
 
 const checkIn = (extra: Partial<Readiness> = {}): Readiness => ({
   energy: 3,
