@@ -26083,11 +26083,113 @@ index c5e03cb..d2f11e5 100644
  
  ## Running one on Linux
  
+diff --git a/tools/reverts/mutate-m26.py b/tools/reverts/mutate-m26.py
+index 88c63fa..4660b17 100644
+--- a/tools/reverts/mutate-m26.py
++++ b/tools/reverts/mutate-m26.py
+@@ -1585,6 +1585,84 @@ REANCHORED = {
+          ("      ...session,\n      completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },\n      rest: null,\n      hold: null,\n    });\n    void this.settleStart();",
+           "      ...session,\n      workout: keepUnderWay(session.workout, new Set(session.completed.sets.map((c) => c.entryId))),\n      completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },\n      rest: null,\n      hold: null,\n    });\n    void this.settleStart();")],
+         None, None),
++    # Round M (Maintenance 31) moved these twenty-one; last in the map, so they win over any above.
++    # A lift picked up again is held to the catch-up too; one back on its own keeps two off-plan.
++    "2e harder keeps RIR floor (picked up again)": (
++        "        adjust,\n        rirFloor(exercise),\n      ),",
++        "        adjust,\n      ),", None),
++    "33o ... never under the sets the plan had": (
++        "    const least = hardCap && !offPlan ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);",
++        "    const least = hardCap && !offPlan ? 1 : 2;", None),
++    # The effort a lift carries goes through heldShift (the catch-up's reserve): 0 there, hold kept.
++    "34d a lift refitted to new weights keeps its effort": (
++        "    heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),",
++        "    heldShift(request, workout, exercise, entry.role, 0),", None),
++    "34e a max keeps the effort the lift carries": (
++        "              effortShift(from, entry, plainTarget.rir),", "              0,", None),
++    "34f a swap keeps the effort": (
++        "    dayShiftOf(request, workout, entry),\n  );\n  const taken",
++        "    0,\n  );\n  const taken", None),
++    "42z56 the day's effort read from the day's settings, on a swap in place": (
++        "    dayShiftOf(request, workout, entry),\n  );\n  const taken",
++        "    effortShiftOf(request, workout, entry),\n  );\n  const taken", None),
++    "34g a stand-in keeps the effort": (
++        "    dayShiftOf(request, workout, entry),\n  );\n  closeAtLogged(entry, isDone, 'swap');",
++        "    0,\n  );\n  closeAtLogged(entry, isDone, 'swap');", None),
++    "42z57 ... for a stand-in": (
++        "    dayShiftOf(request, workout, entry),\n  );\n  closeAtLogged(entry, isDone, 'swap');",
++        "    effortShiftOf(request, workout, entry),\n  );\n  closeAtLogged(entry, isDone, 'swap');", None),
++    "34k a stand-in reads the effort before the lift stops": (
++        [("  const shift = heldShift(\n    request,\n    workout,\n    exercise,\n    entry.role,\n    dayShiftOf(request, workout, entry),\n  );\n  closeAtLogged(entry, isDone, 'swap');",
++          "  closeAtLogged(entry, isDone, 'swap');"),
++         ("    Math.max(1, Math.min(owed, room)),\n    entry.restSeconds,\n    { shift },\n  );",
++          "    Math.max(1, Math.min(owed, room)),\n    entry.restSeconds,\n    { shift: heldShift(request, workout, exercise, entry.role, dayShiftOf(request, workout, entry)) },\n  );")],
++        None, None),
++    "34h a lift picked up again keeps the effort": (
++        "      shift: heldShift(request, workout, exercise, stopped.role, shift),",
++        "      shift: heldShift(request, workout, exercise, stopped.role, 0),", None),
++    "34k2 a lift picked up again reads the effort before the stand-in stops": (
++        [("  const shift = dayShiftOf(request, workout, entry);\n  if (request.completed.sets.some((set) => set.entryId === entry.id)) {",
++          "  if (request.completed.sets.some((set) => set.entryId === entry.id)) {"),
++         ("      shift: heldShift(request, workout, exercise, stopped.role, shift),",
++          "      shift: heldShift(request, workout, exercise, stopped.role, dayShiftOf(request, workout, entry)),")],
++        None, None),
++    # settleKept keeps and holds a catch-up's swap too; holdToOffer, before it, repeats its lines.
++    "34y11 ... a lift you pinned or swapped in as well as the one in front": (
++        "      (entry.id === request.currentEntryId || keptAsPicked(entry, request)) &&",
++        "      (entry.id === request.currentEntryId ||\n        (!entry.locked && !entry.pinned && keptAsPicked(entry, request))) &&",
++        None),
++    "34y3 ... and the new settings' effort": (
++        "    const rir = Math.max(hold?.minRir ?? 0, pushed ? pushRir(after.rir) : after.rir);",
++        "    const rir = Math.max(hold?.minRir ?? 0, prescriptionToday(next, exercise, entry.role).rir);",
++        None),
++    "34y14 ... keeping the ramps it has": (
++        "        warmups: entry.sets.filter((set) => set.kind === 'warmup').length,\n      },\n    );\n    entry.sets = entry.dropSet",
++        "      },\n    );\n    entry.sets = entry.dropSet", None),
++    # refresh's summary says "Nothing more for today." for an emptied catch-up, its count in words.
++    "37z the summary's minutes follow the timers": (
++        "      : workout.explanation.summary.replace(\n          /: [0-9]+ exercises? in about [0-9]+ min/,\n          `: ${exercisesCount(count)} in about ${Math.round(time.totalMinutes)} min`,\n        );",
++        "      : workout.explanation.summary;", None),
++    "37aj the summary counts the exercises": (
++        "          `: ${exercisesCount(count)} in about ${Math.round(time.totalMinutes)} min`,",
++        "          `: ${exercisesCount(count + 1)} in about ${Math.round(time.totalMinutes)} min`,", None),
++    # A copy reads its own length through planLength, a catch-up's Default the next length below.
++    "42z15 a copy is timed for its own length": (
++        "  const target = planLength(plan.duration.choice, plan.duration.defaultMinutes, plan.templateId);",
++        "  const target = plan.duration.targetMinutes;", None),
++    # The preview built again takes the lift put back; a saved workout loads as a copy of itself.
++    "34t the plan built again waits its turn": (
++        "    const run = this.calibrationQueue.then(() => this.rebuildPreview(putBack));",
++        "    const run = Promise.resolve(this.rebuildPreview(putBack));", None),
++    "34w5 a saved workout loaded on it is today's plan": (
++        "createSession(this.baseKey() ?? session.baseKey, copy.workout, now)",
++        "createSession(session.baseKey, copy.workout, now)", None),
++    # addsWork, new for a day off the plan, repeats pushesForMore's lines: these stay on its own.
++    "35r held back: an extra set": (
++        "    (trigger?.type === 'sets' && trigger.workingDelta > 0) ||\n    trigger?.type === 'rep-range' ||\n",
++        "    trigger?.type === 'rep-range' ||\n", None),
++    "35t held back: a drop set": (
++        "    trigger?.type === 'rep-range' ||\n    (trigger?.type === 'drop-set' && trigger.on)",
++        "    trigger?.type === 'rep-range' ||\n    false", None),
+ }
+ 
+ table = [
 diff --git a/tools/reverts/mutate-m27.py b/tools/reverts/mutate-m27.py
-index 37aa488..2888bda 100644
+index 37aa488..3d52217 100644
 --- a/tools/reverts/mutate-m27.py
 +++ b/tools/reverts/mutate-m27.py
-@@ -182,11 +182,9 @@ MUTATIONS = [
+@@ -106,8 +106,10 @@ MUTATIONS = [
+      "  const on = input.profile.reserveCheck === true && allowsFailure(style);",
+      "  const on = input.profile.reserveCheck === true;", [T_RC], None),
+     ("43h no check on a deload day, a low check-in or a hard start", RC,
+-     "  if (input.day.deload || input.day.lowCheckIn || input.day.hardStart) return null;", "",
+-     [T_RC], None),
++     # Re-anchored in Maintenance 31 (round M): the line holds a day off the plan too (a catch-up or
++     # a second workout); the revert takes out the three days and leaves that one.
++     "  if (input.day.deload || input.day.lowCheckIn || input.day.hardStart || input.day.offPlan) {",
++     "  if (input.day.offPlan) {", [T_RC], None),
+     ("43i no check the first session back after three weeks", RC,
+      "  if (latest !== null && daysBetween(latest, input.now) >= RESERVE_CHECK.RETURN_DAYS) return null;",
+      "", [T_RC], None),
+@@ -182,11 +184,9 @@ MUTATIONS = [
      ("44i never to failure", PUSH,
       "  return Math.max(PUSH_LIFT.MIN_RIR, rir);", "  return rir;", [T_GEN_PUSH], None),
      ("44j its slot keeps its place, so a stand-in does not lead", GEN,
@@ -26102,7 +26204,7 @@ index 37aa488..2888bda 100644
       [T_GEN_PUSH], None),
      ("44k it leads, kept from before a rebuild too", GEN,
       "  entries.splice(\n    0,\n    entries.length,\n    ...leading,\n    ...entries.filter((entry) => !leading.includes(entry)),\n  );\n",
-@@ -208,7 +206,7 @@ MUTATIONS = [
+@@ -208,7 +208,7 @@ MUTATIONS = [
       "      (entry) => entry.role === 'primary-strength' && !isStopped(entry),",
       [T_GEN_PUSH, T_PUSH_RECHECK], None),
      ("44r a lift with no room gives its place up", GEN,
@@ -26111,7 +26213,7 @@ index 37aa488..2888bda 100644
       "  const givesWay: string[] = [];", [T_GEN_PUSH, T_PUSH_SIM], None),
      ("44s a swap takes no push mark", TYPES,
       "  return entry.replacedFrom === undefined ? entry.push : undefined;", "  return entry.push;",
-@@ -216,7 +214,7 @@ MUTATIONS = [
+@@ -216,7 +216,7 @@ MUTATIONS = [
      ("44t a change to the push rebuilds the plan", STORE,
       "      profile.pushLift ?? null,\n", "", [T_PUSH_STORE], None),
      ("44u its muscles get no added work from the coach", COACH,
@@ -26120,7 +26222,7 @@ index 37aa488..2888bda 100644
      ("44v the coach offers to end a push that falls short twice", COACH,
       "  const falling = shortTwiceRunning(input.history, exercise.id, push.since);",
       "  const falling = null;",
-@@ -416,8 +414,8 @@ MUTATIONS = [
+@@ -416,8 +416,8 @@ MUTATIONS = [
      ("R49-7b the route's offer leaves a painful lift to its own card", COACH,
       "  if (painful) return null;\n", "", [T_VARIETY_COACH], None),
      ("R49-10 the offer fits today's limits", COACH,
@@ -26131,7 +26233,7 @@ index 37aa488..2888bda 100644
      ("R46-10 a four-week swap's step waits for the swap", SCREEN_TODAY,
       "    if (action.kind !== 'lasting-swap') void store.noteCoachAction(action);",
       "    void store.noteCoachAction(action);", [T_TAPS], None),
-@@ -476,13 +474,14 @@ MUTATIONS = [
+@@ -476,13 +476,14 @@ MUTATIONS = [
       "    const mark = undefined as 'extra' | 'natural' | undefined;",
       [T_PUSH_REVIEW, T_PUSH_RECHECK], None),
      ("R44-1b after the push ends, a harder day keeps a rep in reserve on it", RECAL,
@@ -26149,7 +26251,7 @@ index 37aa488..2888bda 100644
      ("R44-1e the rule never takes the extra to failure", GEN,
       "      rir: pushRir(adjusted.rir),", "      rir: adjusted.rir,", [T_PUSH_REVIEW, T_PUSH_RECHECK],
       None),
-@@ -555,8 +554,8 @@ MUTATIONS = [
+@@ -555,8 +556,8 @@ MUTATIONS = [
      # a place where the lift does not fit (a swap of a finished lift is refused), and there no extra
      # is weighed either way.
      ("R44-14 what leads is named first", GEN,

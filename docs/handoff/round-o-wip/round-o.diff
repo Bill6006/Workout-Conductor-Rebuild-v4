@@ -1,9 +1,9 @@
 diff --git a/docs/reports/maintenance-33.md b/docs/reports/maintenance-33.md
 new file mode 100644
-index 0000000..4a6e0c6
+index 0000000..90df81a
 --- /dev/null
 +++ b/docs/reports/maintenance-33.md
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,272 @@
 +# Maintenance 33: the recovery and readiness core
 +
 +Built on 2026-10-23 and 2026-10-24 on the owner's word to build the whole agreed queue, round by
@@ -239,7 +239,10 @@ index 0000000..4a6e0c6
 +  floor as under the ease. A swap back works out what the lift owes from the plan's own top set where
 +  the ease changed the one it shows, and eases it once; a lift picked up again at a place under
 +  "Lighter" comes back eased as it went, with the record of the plan its stop kept. The check-in's
-+  and the hard start's words read the plan with the day's floor laid again.
++  words read the plan with the day's floor laid again.
++- The revert run caught 32 of the 33 new and affected entries, once tests through the store, the
++  coach and the Plan screen caught the readers of the check-in's time (Z41 to Z44); Z32 is retired
++  as equivalent (below), its call removed.
 +
 +## Known limits
 +
@@ -260,7 +263,10 @@ index 0000000..4a6e0c6
 +REVERTS
 +
 +Retired in the reviews: V4 and W6 (the third review: the rest day's early return said what the
-+rest-day filter says, and the filter is Z11's and Z12's now).
++rest-day filter says, and the filter is Z11's and Z12's now); Z32 (the fourth: the hard start's words
++read with the day's floor laid again are the words read without it in every reachable case, a hard
++start taken naming only what it eased and one taken back the eased lifts it gives back, so the call
++went).
 +
 +## Verification
 +
@@ -1519,6 +1525,118 @@ index 0000000..600f503
 +    expect(session.constraints.checkInAt).toBeUndefined();
 +  });
 +});
+diff --git a/src/core/state/checkInPastMidnight.store.test.ts b/src/core/state/checkInPastMidnight.store.test.ts
+new file mode 100644
+index 0000000..09be746
+--- /dev/null
++++ b/src/core/state/checkInPastMidnight.store.test.ts
+@@ -0,0 +1,106 @@
++import { describe, expect, it } from 'vitest';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import type { Readiness } from '../../engine/recalibration/types';
++import { allEntries } from '../../engine/workout/types';
++import { record, type SetSpec } from '../../test/records';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * The fourth review of Maintenance 33, through the store: a check-in told just after midnight, on a
++ * workout made the evening before, is the day's it was told (`checkInAt`), through every change made
++ * after it, and the store's reading of the start reads it so (`readStartOf`).
++ *
++ * Steps: the plan is made at 23:40, its first two lifts the bench press and the incline press (each
++ * with two sessions to read it against), and started at 23:58. At 00:05 the lifter checks in with energy
++ * and sleep low ("today's first sets are judged a step easier"). At 00:10 and 00:20 the first sets
++ * of the bench press and the incline press are logged, each 3 reps short of what it asked: within the step the
++ * check-in takes, so no hard start. Read against the evening the plan was made, the check-in is
++ * none of the new day's, and the two sets read as a hard start. Synthetic data only.
++ */
++
++const MADE = '2026-09-10T23:40:00.000Z';
++const STARTED = '2026-09-10T23:58:00.000Z';
++const TOLD = '2026-09-11T00:05:00.000Z';
++const DAY = 86_400_000;
++
++const low: Readiness = {
++  energy: 2,
++  soreness: 2,
++  sleep: 2,
++  motivation: 3,
++  jointDiscomfort: [],
++  timePressure: false,
++};
++
++async function startedLate(clock: { now: string }) {
++  const { store } = createTestStore({ now: () => clock.now });
++  await store.hydrate();
++  await store.completeOnboarding(
++    { ...createDefaultProfile(clock.now), bodyweight: 185, programStyle: 'hypertrophy-focus' },
++    createDefaultLocations({ gymAccess: true }, clock.now),
++  );
++  const db = await store.getDatabase();
++  const sessions: [string, number, SetSpec, [number, number]][] = [
++    ['barbell-bench-press', 11, [5, 185, 2], [4, 6]],
++    ['barbell-bench-press', 7, [5, 185, 2], [4, 6]],
++    ['incline-dumbbell-press', 11, [8, 60, 2], [6, 10]],
++    ['incline-dumbbell-press', 7, [8, 60, 2], [6, 10]],
++    ['barbell-row', 1, [8, 135, 2], [6, 10]],
++    ['back-squat', 1, [5, 225, 2], [4, 6]],
++  ];
++  for (const [exerciseId, daysAgo, set, target] of sessions) {
++    const when = new Date(Date.parse(MADE) - daysAgo * DAY).toISOString();
++    await db.put('workouts', {
++      ...record(0, exerciseId, [set, set, set], target, 2),
++      id: `w-${exerciseId}-${daysAgo}`,
++      startedAt: when,
++      completedAt: when,
++    });
++  }
++  await store.hydrate();
++  // The first two lifts are the two with sessions to read them against.
++  for (const exerciseId of ['barbell-bench-press', 'incline-dumbbell-press']) {
++    const at = ['barbell-bench-press', 'incline-dumbbell-press'].indexOf(exerciseId);
++    const entry = allEntries(store.getSnapshot().session!.workout.blocks)[at]!;
++    if (entry.exerciseId !== exerciseId) {
++      const swapped = await store.recalibrate({ type: 'replace', entryId: entry.id, exerciseId });
++      expect(swapped?.ok).toBe(true);
++    }
++  }
++  clock.now = STARTED;
++  store.startWorkout();
++  return store;
++}
++
++describe('a check-in told past midnight on a workout made before it', () => {
++  it('keeps the time it was told, and the start is judged a step easier', async () => {
++    const clock = { now: MADE };
++    const store = await startedLate(clock);
++    clock.now = TOLD;
++    await store.recalibrate({ type: 'readiness', readiness: low });
++    expect(store.getSnapshot().session!.constraints.checkInAt).toBe(TOLD);
++    const judged = allEntries(store.getSnapshot().session!.workout.blocks).slice(0, 2);
++    expect(judged.map((entry) => entry.exerciseId)).toEqual([
++      'barbell-bench-press',
++      'incline-dumbbell-press',
++    ]);
++    for (const [entry, at] of [
++      [judged[0]!, '2026-09-11T00:10:00.000Z'],
++      [judged[1]!, '2026-09-11T00:20:00.000Z'],
++    ] as const) {
++      clock.now = at;
++      const set = entry.sets.find((candidate) => candidate.kind === 'working')!;
++      await store.logSet(entry.id, set.index, {
++        reps: set.targetReps[0] - 3,
++        weight: set.targetWeight,
++        rir: set.targetRir,
++      });
++    }
++    const session = store.getSnapshot().session!;
++    // Through every change since, the check-in is the day's it was told.
++    expect(session.constraints.checkInAt).toBe(TOLD);
++    // Three short each, within the step the check-in takes: no hard start.
++    expect(session.constraints.badStart).toBeUndefined();
++  });
++});
 diff --git a/src/core/state/coachShown.store.test.ts b/src/core/state/coachShown.store.test.ts
 new file mode 100644
 index 0000000..0bbc16f
@@ -1565,6 +1683,116 @@ index 0000000..0bbc16f
 +    });
 +    await store.hydrate();
 +    expect(store.getSnapshot().coachShown.shown).toEqual({ [`${chest.source}|*`]: TEST_NOW });
++  });
++});
+diff --git a/src/core/state/coachTooSoonPastMidnight.store.test.ts b/src/core/state/coachTooSoonPastMidnight.store.test.ts
+new file mode 100644
+index 0000000..1c544c5
+--- /dev/null
++++ b/src/core/state/coachTooSoonPastMidnight.store.test.ts
+@@ -0,0 +1,104 @@
++import { describe, expect, it } from 'vitest';
++import { requireExercise } from '../../catalog/exercises/catalog';
++import { createDefaultLocations } from '../validation/location';
++import { createDefaultProfile } from '../validation/profile';
++import { TOO_SOON_SOURCE } from '../../engine/coach/coachConductor';
++import { allEntries } from '../../engine/workout/types';
++import { coachContextOf } from '../../features/coach/useCoach';
++import { record } from '../../test/records';
++import { createTestStore } from '../../test/testStore';
++
++/**
++ * The fourth review of Maintenance 33, on the screens' coach (`coachContextOf`): a check-in told
++ * just after midnight, on a workout made the evening before, is the day's it was told
++ * (`checkInDayOf`), so the coach's "too soon" reads its short night.
++ *
++ * Steps: four bench press sets a rep short of failure on Tuesday at 18:10 (the chest's window 36 h,
++ * 48 h after a short night; "too soon" warns inside three quarters of it). Wednesday at 23:40 the
++ * plan is made, three sets of the dumbbell fly added to it; at 23:58 it is started; at 00:05 on Thursday the lifter checks
++ * in with sleep "Short". At 00:10, 30 h after the bench, the coach warns the chest may not have
++ * recovered. Read against the evening the plan was made, the short night is none of Thursday's and
++ * the 30 h are past three quarters of 36. Synthetic data only.
++ */
++
++const BENCH_DAY = '2026-09-08T18:10:00.000Z';
++const MADE = '2026-09-09T23:40:00.000Z';
++const STARTED = '2026-09-09T23:58:00.000Z';
++const TOLD = '2026-09-10T00:05:00.000Z';
++const LOOKED = '2026-09-10T00:10:00.000Z';
++
++describe('the coach past midnight', () => {
++  it('reads a check-in told after midnight as the day’s it was told', async () => {
++    const clock = { now: MADE };
++    const { store } = createTestStore({ now: () => clock.now });
++    await store.hydrate();
++    const base = createDefaultProfile(clock.now);
++    await store.completeOnboarding(
++      {
++        ...base,
++        bodyweight: 185,
++        // Every day ticked: Wednesday's plan is a day of the plan.
++        schedule: {
++          ...base.schedule,
++          availableDays: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
++          weeklyFrequency: 6,
++        },
++      },
++      createDefaultLocations({ gymAccess: true }, clock.now),
++    );
++    const db = await store.getDatabase();
++    await db.put('workouts', {
++      ...record(
++        0,
++        'barbell-bench-press',
++        [
++          [8, 100, 1],
++          [8, 100, 1],
++          [8, 100, 1],
++          [8, 100, 1],
++        ],
++        [6, 10],
++        1,
++      ),
++      id: 'w-bench-tuesday',
++      startedAt: BENCH_DAY,
++      completedAt: BENCH_DAY,
++    });
++    await store.hydrate();
++    // Hard work for the chest still to come: three sets of the dumbbell fly.
++    expect(
++      (
++        await store.recalibrate({
++          type: 'add-exercise',
++          exerciseId: 'dumbbell-fly',
++          muscle: 'chest',
++          sets: 3,
++        })
++      )?.ok,
++    ).toBe(true);
++    const fly = allEntries(store.getSnapshot().session!.workout.blocks).find(
++      (entry) => entry.exerciseId === 'dumbbell-fly',
++    );
++    expect(requireExercise(fly!.exerciseId).primaryMuscles).toContain('chest');
++    clock.now = STARTED;
++    store.startWorkout();
++    clock.now = TOLD;
++    await store.recalibrate({
++      type: 'readiness',
++      readiness: {
++        energy: 3,
++        soreness: 2,
++        sleep: 2,
++        motivation: 3,
++        jointDiscomfort: [],
++        timePressure: false,
++      },
++    });
++    clock.now = LOOKED;
++    const card = coachContextOf(
++      { ...store.getSnapshot(), lastExportAt: LOOKED },
++      Date.parse(LOOKED),
++    )?.card;
++    expect(card?.signal.source.startsWith(`${TOO_SOON_SOURCE}|chest|`)).toBe(true);
 +  });
 +});
 diff --git a/src/core/state/feverRestDayCoachOffer.store.test.ts b/src/core/state/feverRestDayCoachOffer.store.test.ts
@@ -4669,7 +4897,7 @@ index 0000000..62a4914
 +});
 diff --git a/src/engine/coach/feverUnderWayFinishCard.test.ts b/src/engine/coach/feverUnderWayFinishCard.test.ts
 new file mode 100644
-index 0000000..73a58f8
+index 0000000..d986337
 --- /dev/null
 +++ b/src/engine/coach/feverUnderWayFinishCard.test.ts
 @@ -0,0 +1,107 @@
@@ -4701,8 +4929,8 @@ index 0000000..73a58f8
 + * card is never shown: the workout under way has no "Finish here" at all. Before the third review
 + * (9580f26) the filter held back only offers that add work, and the card was there.
 + *
-+ * The fix (the fourth pass): a rest day drops what changes today's plan, never the way out of the
-+ * workout: "Finish here", "End and save it" and a swap for pain under way stay.
++ * The fix (the fourth pass): a rest day drops what keeps today's workout going in another shape
++ * (a change, a rest, a swap), never the way out of it: "Finish here" and "End and save it" stay.
 + *
 + * Synthetic data only.
 + */
@@ -7525,14 +7753,15 @@ index 0000000..4938991
 +});
 diff --git a/src/engine/recalibration/headColdCheckInAgainWords.test.ts b/src/engine/recalibration/headColdCheckInAgainWords.test.ts
 new file mode 100644
-index 0000000..851372a
+index 0000000..a0838f4
 --- /dev/null
 +++ b/src/engine/recalibration/headColdCheckInAgainWords.test.ts
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,128 @@
 +import { describe, expect, it } from 'vitest';
 +import { createDefaultProfile } from '../../core/validation/profile';
 +import { emptyCompleted } from './recalibrate';
 +import type { CompletedWork, Readiness } from './types';
++import { allEntries } from '../workout/types';
 +import { BENCH, bench, plan, profileOf, run, trained } from '../../test/backOffs';
 +import { RECORD_NOW } from '../../test/records';
 +
@@ -7559,8 +7788,8 @@ index 0000000..851372a
 + * start's words are worked out the same way. Before the third review (9580f26) the summary was
 + * "Checked in: no changes needed."
 + *
-+ * The fix (the fourth pass): the check-in's and the hard start's words read the plan with the day's
-+ * floor laid again, as it is after every change.
++ * The fix (the fourth pass): the check-in's words read the plan with the day's floor laid again, as
++ * it is after every change. A hard start's never differ by it (its own test below).
 + *
 + * Synthetic data only.
 + */
@@ -7615,6 +7844,45 @@ index 0000000..851372a
 +      expect(result.changes).toEqual([]);
 +      expect(result.summary.headline).not.toMatch(/effort back/);
 +    }
++  });
++
++  it('a hard start with it claims no effort back either', () => {
++    const workout = plan(history, profile);
++    const entry = bench(workout);
++    const warmup = entry.sets.find((set) => set.kind === 'warmup')!;
++    const completed: CompletedWork = {
++      ...emptyCompleted(),
++      startedAt: RECORD_NOW,
++      currentEntryId: entry.id,
++      sets: [
++        {
++          entryId: entry.id,
++          exerciseId: BENCH,
++          setIndex: warmup.index,
++          kind: 'warmup',
++          reps: 5,
++          weight: warmup.targetWeight,
++          rir: 5,
++          completedAt: RECORD_NOW,
++        },
++      ],
++    };
++    const options = { completed, currentEntryId: entry.id, profile, history };
++    const told = run({ type: 'readiness', readiness: headCold }, workout, options);
++    // The bench, under way, held at the floor.
++    const top = bench(told.workout).sets.find((set) => set.tier === 'top')!;
++    expect(top.targetRir).toBe(2);
++    const lifts = allEntries(told.workout.blocks)
++      .filter((one) => one.id !== entry.id)
++      .slice(0, 2)
++      .map((one) => one.exerciseId);
++    const hard = run({ type: 'bad-start', low: true, lifts }, told.workout, {
++      ...options,
++      constraints: told.constraints,
++    });
++    // The bench, begun, keeps its sets: the ease lands on the lifts not begun.
++    expect(bench(hard.workout).sets).toEqual(bench(told.workout).sets);
++    expect(hard.summary.headline).not.toMatch(/effort back/);
 +  });
 +});
 diff --git a/src/engine/recalibration/headColdLiftUnderWay.test.ts b/src/engine/recalibration/headColdLiftUnderWay.test.ts
@@ -10113,7 +10381,7 @@ index 1c4988b..53283e2 100644
  
      const fresh = run(
 diff --git a/src/engine/recalibration/recalibrate.ts b/src/engine/recalibration/recalibrate.ts
-index 6affbde..15defdf 100644
+index 6affbde..46111a3 100644
 --- a/src/engine/recalibration/recalibrate.ts
 +++ b/src/engine/recalibration/recalibrate.ts
 @@ -1,4 +1,13 @@
@@ -11082,7 +11350,7 @@ index 6affbde..15defdf 100644
          // Nothing left to bring back (the lift under way keeps its sets, and sets at their fewest
          // stay): no claim that anything came back. Otherwise the words name only what changed.
          unchanged:
-@@ -5157,27 +5631,64 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -5157,26 +5631,61 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        };
      }
  
@@ -11149,17 +11417,13 @@ index 6affbde..15defdf 100644
        // The ease is laid over the plan, or taken off it, as a layer (the sixth pass).
        const workout = layer.finish(request.workout, constraints);
 -      // As a check-in's words: only what changed on the lifts still to come (Maintenance 24).
--      const change = dayChange({ ...request, workout: layer.shown }, workout);
-+      // As a check-in's words: only what changed on the lifts still to come (Maintenance 24), the
-+      // day's floor laid again as after every change.
-+      const change = dayChange(
-+        { ...request, workout: layer.shown },
-+        heldToTheDay(workout, request, constraints),
-+      );
++      // As a check-in's words: only what changed on the lifts still to come (Maintenance 24). The
++      // day's floor never moves them: a hard start taken names what it eased, and one taken back
++      // the eased lifts it gives back (the fourth review of Maintenance 33).
+       const change = dayChange({ ...request, workout: layer.shown }, workout);
        const sets = (after?.sets ?? 0) - (before?.sets ?? 0);
        const fewer = sets < 0 && change.fewer;
-       const more = sets > 0 && change.more;
-@@ -5194,7 +5705,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -5194,7 +5703,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
                : '';
        // "Back to plan" only when nothing else of the day's settings stays (a check-in, harder or
        // easier): otherwise the lifts come back to those (the review of item 42).
@@ -11168,7 +11432,7 @@ index 6affbde..15defdf 100644
        const up = [more ? 'sets' : '', change.harder ? 'effort' : ''].filter(Boolean).join(' and ');
        return {
          ...base,
-@@ -5512,6 +6023,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
+@@ -5512,6 +6021,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
        const existing = entry.sets.find((set) => set.kind === 'drop');
        if (trigger.on) {
          if (!exercise.dropSetSafe) throw new Error(`${exercise.name} is not safe for a drop set.`);
@@ -14657,6 +14921,97 @@ index eea50c7..7b541ea 100644
                          )
                          .join(', ')}
                    {rows.length > 8 ? ` and ${rows.length - 8} more` : ''}
+diff --git a/src/features/plan/checkInPastMidnight.screens.test.tsx b/src/features/plan/checkInPastMidnight.screens.test.tsx
+new file mode 100644
+index 0000000..e1e3404
+--- /dev/null
++++ b/src/features/plan/checkInPastMidnight.screens.test.tsx
+@@ -0,0 +1,85 @@
++import { act, render, screen } from '@testing-library/react';
++import { describe, expect, it, vi } from 'vitest';
++import { App } from '../../app/App';
++import { createDefaultLocations } from '../../core/validation/location';
++import { createDefaultProfile } from '../../core/validation/profile';
++import { record } from '../../test/records';
++import { Providers, createTestStore } from '../../test/testStore';
++
++const clock = vi.hoisted(() => ({ now: '2026-09-09T23:40:00.000Z' }));
++
++vi.mock('../library/useCustomMedia', () => ({ useCustomMedia: () => null }));
++vi.mock('../../core/time/clock', async (original) => ({
++  ...(await original<typeof import('../../core/time/clock')>()),
++  useNow: () => Date.parse(clock.now),
++  useMomentReached: () => false,
++}));
++
++/**
++ * The fourth review of Maintenance 33, on the Plan screen: a check-in told just after midnight, on
++ * a workout made the evening before, is the day's it was told (`checkInDayOf`), so the recovery
++ * balance reads its short night.
++ *
++ * Steps (the device's clock on UTC): four bench press sets a rep short of failure on Tuesday at
++ * 18:10 (the chest's window 36 h, 48 h after a short night). Wednesday at 23:40 the plan is made; at
++ * 23:58 it is started; at 00:05 on Thursday the lifter checks in with sleep "Short". At 00:10, 30 h
++ * after the bench, Plan gives the chest 18 h left. Read against the evening the plan was made, the
++ * short night is none of Thursday's: 6 h left. Synthetic data only.
++ */
++
++describe('the Plan screen past midnight', () => {
++  it('reads a check-in told after midnight as the day’s it was told', async () => {
++    const { store } = createTestStore({ now: () => clock.now });
++    await store.hydrate();
++    await store.completeOnboarding(
++      { ...createDefaultProfile(clock.now), bodyweight: 185 },
++      createDefaultLocations({ gymAccess: true }, clock.now),
++    );
++    const db = await store.getDatabase();
++    await db.put('workouts', {
++      ...record(
++        0,
++        'barbell-bench-press',
++        [
++          [8, 100, 1],
++          [8, 100, 1],
++          [8, 100, 1],
++          [8, 100, 1],
++        ],
++        [6, 10],
++        1,
++      ),
++      id: 'w-bench-tuesday',
++      startedAt: '2026-09-08T18:10:00.000Z',
++      completedAt: '2026-09-08T18:10:00.000Z',
++    });
++    await store.hydrate();
++    clock.now = '2026-09-09T23:58:00.000Z';
++    store.startWorkout();
++    clock.now = '2026-09-10T00:05:00.000Z';
++    await store.recalibrate({
++      type: 'readiness',
++      readiness: {
++        energy: 3,
++        soreness: 2,
++        sleep: 2,
++        motivation: 3,
++        jointDiscomfort: [],
++        timePressure: false,
++      },
++    });
++
++    clock.now = '2026-09-10T00:10:00.000Z';
++    act(() => {
++      window.location.hash = '#/plan';
++    });
++    render(
++      <Providers store={store}>
++        <App />
++      </Providers>,
++    );
++    const balance = await screen.findByTestId('recovery-balance');
++    // The screen writes the hours with non-breaking spaces.
++    expect(balance.textContent).toContain('Chest (18 h left)');
++  });
++});
 diff --git a/src/features/plan/midnightRecoveryLine.screens.test.tsx b/src/features/plan/midnightRecoveryLine.screens.test.tsx
 new file mode 100644
 index 0000000..a64d546
@@ -15637,10 +15992,10 @@ index 2d318cc..194f913 100644
       "      const backOffLogs = this.backOffLogsOf({ ...session, completed }, entry, isDone);",
 diff --git a/tools/reverts/mutate-m33.py b/tools/reverts/mutate-m33.py
 new file mode 100644
-index 0000000..73b63c2
+index 0000000..1891b27
 --- /dev/null
 +++ b/tools/reverts/mutate-m33.py
-@@ -0,0 +1,602 @@
+@@ -0,0 +1,601 @@
 +"""Maintenance 33 mutation checks: revert each recovery and readiness rule alone, run its tests,
 +expect a failure, restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
 +
@@ -15760,6 +16115,9 @@ index 0000000..73b63c2
 +T_LIGHTER_BEFORE_TOP = "src/engine/recalibration/lighterBeforeTopSetSwapBack.test.ts"
 +T_LIGHTER_PICKED_UP = "src/engine/recalibration/lighterPickedUpAgain.test.ts"
 +T_HEAD_COLD_WORDS = "src/engine/recalibration/headColdCheckInAgainWords.test.ts"
++T_PAST_MIDNIGHT_STORE = "src/core/state/checkInPastMidnight.store.test.ts"
++T_COACH_PAST_MIDNIGHT = "src/core/state/coachTooSoonPastMidnight.store.test.ts"
++T_PLAN_PAST_MIDNIGHT = "src/features/plan/checkInPastMidnight.screens.test.tsx"
 +
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
@@ -16136,10 +16494,6 @@ index 0000000..73b63c2
 +     "      const change = dayChange(\n        { ...request, workout: layer.shown },\n        heldToTheDay(workout, request, constraints),\n      );\n      // Sets are named",
 +     "      const change = dayChange({ ...request, workout: layer.shown }, workout);\n      // Sets are named",
 +     [T_HEAD_COLD_WORDS], None),
-+    ("Z32 ... and the hard start's", ENGINE,
-+     "      const change = dayChange(\n        { ...request, workout: layer.shown },\n        heldToTheDay(workout, request, constraints),\n      );\n      const sets = (after?.sets",
-+     "      const change = dayChange({ ...request, workout: layer.shown }, workout);\n      const sets = (after?.sets",
-+     [T_HEAD_COLD_WORDS], None),
 +    ("Z33 a swap back works out what the lift owes from the plan's own top set, eased once", ENGINE,
 +     "    eased ? kept?.sets?.find((set) => set.tier === 'top') : undefined,",
 +     "    undefined,", [T_LIGHTER_BEFORE_TOP], None),
@@ -16166,16 +16520,16 @@ index 0000000..73b63c2
 +     "  return session.createdAt;", [T_PAST_MIDNIGHT, T_CHECKIN_AT_STORED], None),
 +    ("Z41 ... kept through every change", ENGINE,
 +     "    ...(constraints.checkInAt ? { checkInAt: constraints.checkInAt } : {}),\n", "",
-+     [T_PAST_MIDNIGHT, T_CHECKIN_CARRIED], None),
++     [T_PAST_MIDNIGHT, T_CHECKIN_CARRIED, T_PAST_MIDNIGHT_STORE], None),
 +    ("Z42 ... the hard start's reading in the store", STORE,
 +     "      madeAt: checkInDayOf(session),", "      madeAt: session.createdAt,",
-+     [T_PAST_MIDNIGHT], None),
++     [T_PAST_MIDNIGHT, T_PAST_MIDNIGHT_STORE], None),
 +    ("Z43 ... the coach's", USECOACH,
 +     "    madeAt: checkInDayOf(session),", "    madeAt: session.createdAt,",
-+     [T_MIDNIGHT, T_MIDNIGHT_COACH], None),
++     [T_MIDNIGHT, T_MIDNIGHT_COACH, T_COACH_PAST_MIDNIGHT], None),
 +    ("Z44 ... the plan screen's", PLANSCREEN,
 +     "  const madeAt = state.session ? checkInDayOf(state.session) : null;",
-+     "  const madeAt = state.session?.createdAt ?? null;", [T_MIDNIGHT], None),
++     "  const madeAt = state.session?.createdAt ?? null;", [T_MIDNIGHT, T_PLAN_PAST_MIDNIGHT], None),
 +]
 +
 +
@@ -16367,10 +16721,10 @@ index 0000000..e3a0e43
 +print("written")
 diff --git a/tools/reverts/table_m33.txt b/tools/reverts/table_m33.txt
 new file mode 100644
-index 0000000..07e38a9
+index 0000000..720b9b4
 --- /dev/null
 +++ b/tools/reverts/table_m33.txt
-@@ -0,0 +1,416 @@
+@@ -0,0 +1,412 @@
 +# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 +MUTATIONS = [
 +    # The windows from the hardest sets.
@@ -16746,10 +17100,6 @@ index 0000000..07e38a9
 +     "      const change = dayChange(\n        { ...request, workout: layer.shown },\n        heldToTheDay(workout, request, constraints),\n      );\n      // Sets are named",
 +     "      const change = dayChange({ ...request, workout: layer.shown }, workout);\n      // Sets are named",
 +     [T_HEAD_COLD_WORDS], None),
-+    ("Z32 ... and the hard start's", ENGINE,
-+     "      const change = dayChange(\n        { ...request, workout: layer.shown },\n        heldToTheDay(workout, request, constraints),\n      );\n      const sets = (after?.sets",
-+     "      const change = dayChange({ ...request, workout: layer.shown }, workout);\n      const sets = (after?.sets",
-+     [T_HEAD_COLD_WORDS], None),
 +    ("Z33 a swap back works out what the lift owes from the plan's own top set, eased once", ENGINE,
 +     "    eased ? kept?.sets?.find((set) => set.tier === 'top') : undefined,",
 +     "    undefined,", [T_LIGHTER_BEFORE_TOP], None),
@@ -16776,14 +17126,14 @@ index 0000000..07e38a9
 +     "  return session.createdAt;", [T_PAST_MIDNIGHT, T_CHECKIN_AT_STORED], None),
 +    ("Z41 ... kept through every change", ENGINE,
 +     "    ...(constraints.checkInAt ? { checkInAt: constraints.checkInAt } : {}),\n", "",
-+     [T_PAST_MIDNIGHT, T_CHECKIN_CARRIED], None),
++     [T_PAST_MIDNIGHT, T_CHECKIN_CARRIED, T_PAST_MIDNIGHT_STORE], None),
 +    ("Z42 ... the hard start's reading in the store", STORE,
 +     "      madeAt: checkInDayOf(session),", "      madeAt: session.createdAt,",
-+     [T_PAST_MIDNIGHT], None),
++     [T_PAST_MIDNIGHT, T_PAST_MIDNIGHT_STORE], None),
 +    ("Z43 ... the coach's", USECOACH,
 +     "    madeAt: checkInDayOf(session),", "    madeAt: session.createdAt,",
-+     [T_MIDNIGHT, T_MIDNIGHT_COACH], None),
++     [T_MIDNIGHT, T_MIDNIGHT_COACH, T_COACH_PAST_MIDNIGHT], None),
 +    ("Z44 ... the plan screen's", PLANSCREEN,
 +     "  const madeAt = state.session ? checkInDayOf(state.session) : null;",
-+     "  const madeAt = state.session?.createdAt ?? null;", [T_MIDNIGHT], None),
++     "  const madeAt = state.session?.createdAt ?? null;", [T_MIDNIGHT, T_PLAN_PAST_MIDNIGHT], None),
 +]

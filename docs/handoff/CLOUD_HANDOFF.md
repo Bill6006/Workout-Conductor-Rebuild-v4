@@ -12,7 +12,9 @@ Round M's twenty-fourth, Round N's fourteenth and Maintenance 33's fourth. The s
 `main`'s `2595631`, Round N on Round M, Maintenance 33 on Round N (`git apply` each diff on its
 base, in that order).
 
-- **Round M**: local `992c87d` (`round-m-wip/round-m.diff` on `2595631`). The twenty-fourth pass
+- **Round M**: local `0a82961` (`round-m-wip/round-m.diff` on `2595631`); `0a82961` adds to
+  `992c87d` only the earlier rounds' tables re-anchored onto Round M's code (22 entries of
+  Maintenance 23 to 27, all run and caught), so Round N's diff applies on either. The twenty-fourth pass
   (three LOW) is complete: Today tells a loaded copy as the day's offer only where the day offers
   its kind; a saved second workout loaded on another day is a catch-up of its muscles, or the
   split's day it was laid out on (`secondOnAnotherDay`); an empty copy takes the day's mark as its
@@ -29,17 +31,19 @@ base, in that order).
   set's reps as the plan has them; an Undo replays every lift on the structure. Suite 3314 passed, 5
   skipped; M32 table at 286 entries, all 24 new and affected caught. **Next**: the fifteenth review
   (`git diff 9e9078e 1fcd67a` is the fourteenth pass).
-- **Maintenance 33**: local `9bc67b7` on `1fcd67a` (`round-o-wip/round-o.diff`), its fourth pass
+- **Maintenance 33**: local `4bcc2a1` on `1fcd67a` (`round-o-wip/round-o.diff`), its fourth pass
   (seven: two MEDIUM, five LOW) fixed: the way out of the workout stays on a rest day; every plan of the day
   keeps the day's check-in, as told, at the time told (`withDayCheckIn`, `checkInAt`); a saved copy
   is the plan under the floor; a swap back eases once from the plan's own top set; a lift picked up
   again under "Lighter" comes back eased with its record; the check-in's words read the plan with
-  the floor laid again. Suite 3481 passed, 5 skipped, with the zone tests; M33 table at 142 entries,
-  the revert run of the new and affected entries under way at this checkpoint. **Next**: the fifth
-  review (`git diff 3d24e37 9bc67b7` is the fourth pass).
-- **Older tables**: Round M's code moved anchors of the M24 to M27 tables (`--check`: 10, 13, 20 and
-  1 more not found than on `main`), and Maintenance 33's `refitRecord` moves M26's 42z22. Re-anchor
-  them in the cross-round run before shipping.
+  the floor laid again. Suite 3485 passed, 5 skipped, with the zone tests; M33 table at 141
+  entries, 32 of the 33 new and affected caught (Z32 retired as equivalent, its call removed).
+  **Next**: the fifth review, running at this checkpoint (`git diff 3d24e37 4bcc2a1` is the fourth
+  pass); Round M's twenty-fifth and Round N's fifteenth reviews are running too.
+- **Older tables**: Round M's moved entries are re-anchored (above). Round N's code moves 23 more of
+  the M23 to M26 tables (`mutate-m26.py --all --check` on Round N), and Maintenance 33's 22 more,
+  with three of the M31 table (V15, H152, H153) and four of the M32 table (N47, N103, N274, N292).
+  Re-anchor them in Round N's and Maintenance 33's own worktrees once their reviews are clean.
 
 ### Checkpoint, 2026-10-30, afternoon (superseded)
 
