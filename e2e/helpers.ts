@@ -74,3 +74,17 @@ export async function skipWarmupIfShown(page: Page): Promise<void> {
   const skipWarmup = page.getByTestId('skip-warmup');
   if (await skipWarmup.isVisible()) await skipWarmup.click();
 }
+
+/**
+ * Takes the full session where Today offers a catch-up instead (Maintenance 31, item 12): a day the
+ * default schedule does not tick offers one to a lifter with a workout in the last two weeks. A
+ * test of the day's usual plan takes the full session first; any other day it does nothing.
+ */
+export async function takeFullSessionIfOffered(page: Page): Promise<void> {
+  const action = page.getByTestId('day-note-action');
+  await expect(page.getByTestId('start-workout').or(action).first()).toBeVisible();
+  if ((await action.count()) > 0 && (await action.textContent()) === 'Full session') {
+    await action.click();
+    await expect(action).toHaveText('Catch-up instead');
+  }
+}

@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ensureProfile } from './helpers';
+import { ensureProfile, takeFullSessionIfOffered } from './helpers';
 
 /**
  * Maintenance 21, round C. The coach talks only about the workout on the screen; a lift done at
@@ -201,6 +201,9 @@ test.describe('a lift done at bodyweight that keeps falling short', () => {
   }, testInfo) => {
     await ensureProfile(page);
     await seedShortChinUps(page);
+    // On a day the schedule does not tick, the chin-ups make a catch-up the day's offer (round M),
+    // and the coach offers no work off the plan: this is a test of the day's usual plan.
+    await takeFullSessionIfOffered(page);
     await rewrite(page, (session) => {
       without('chin-up')(session);
       firstIs('lat-pulldown', 'secondary-hypertrophy')(session);

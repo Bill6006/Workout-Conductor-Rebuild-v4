@@ -12,12 +12,13 @@ still pass means the rule has no test that guards it.
 | `mutate-m27.py` | Maintenance 27 (round I) | 193 |
 | `mutate-m28.py` | Maintenance 28 (round J) | 83 |
 | `mutate-m29.py` | Maintenance 29 (round K) | 32 |
-| `mutate-m30.py` | Maintenance 30 (round L) | 87, before the fourth review pass's fixes |
+| `mutate-m30.py` | Maintenance 30 (round L) | 121 |
+| `mutate-m31.py` | Maintenance 31 (round M), with `--utc` | M31_ENTRIES |
 
-The tables are data: each row is `(name, file, old, new, tests, nth)`. `mutate-m30.py`'s table is
-written from `table_m30.txt`: edit the `.txt`, then run `python3 table_m30.py`. Never write a table
-through a shell heredoc, which collapses its backslashes. Each new round copies `mutate-m30.py` as
-its own runner, with its own table.
+The tables are data: each row is `(name, file, old, new, tests, nth)`. From M30 on, a round's table
+is written from its `table_mNN.txt`: edit the `.txt`, then run `python3 table_mNN.py`. Never write a
+table through a shell heredoc, which collapses its backslashes. Each new round copies the last
+round's runner and its `table_mNN.py` as its own, with its own table.
 
 ## Running one on Linux
 

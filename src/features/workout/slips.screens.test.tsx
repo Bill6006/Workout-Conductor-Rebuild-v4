@@ -353,6 +353,9 @@ describe('the slip check on the Workout tab after the seventh pass of item 40', 
       completedAt: when,
     });
     await store.hydrate();
+    // The full session: TEST_NOW offers a catch-up, which takes no curl the biceps have no room for
+    // (Maintenance 31, the thirteenth review of round M).
+    await store.setFullSession(true);
     store.startWorkout();
     const first = allEntries(store.getSnapshot().session!.workout.blocks)[0]!;
     await store.recalibrate({ type: 'replace', entryId: first.id, exerciseId: 'barbell-curl' });

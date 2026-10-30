@@ -28,8 +28,15 @@ async function trained(
     ...(options.now ? { now: options.now } : {}),
   });
   await handle.store.hydrate();
+  // TEST_NOW is a Wednesday: ticked here, so the day plans the regular session (a day not ticked
+  // offers a catch-up to a lifter in training, Maintenance 31).
+  const profile = createDefaultProfile(TEST_NOW);
   await handle.store.completeOnboarding(
-    { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
+    {
+      ...profile,
+      bodyweight: 185,
+      schedule: { ...profile.schedule, availableDays: [...profile.schedule.availableDays, 'wed'] },
+    },
     createDefaultLocations({ gymAccess: true }, TEST_NOW),
   );
   const planned = allEntries(handle.store.getSnapshot().session!.workout.blocks);

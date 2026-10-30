@@ -1346,6 +1346,12 @@ SUPERSEDED = {
     "42v6 a straight block counts its working sets, a drop set apart": LAYER,
     "PRar a Play in How to cut short by a pause is no refusal":
         "How to's clip is started only by the keep-playing hook since Maintenance 26, item 50, whose catch tells a refusal from a play cut short (PRas guards it)",
+    # Round M (Maintenance 31): a plan left open from an earlier day gives way to today's before a
+    # saved workout is loaded (H199 in mutate-m31.py), so the copy's key is today's either way.
+    "34w5 a saved workout loaded on it is today's plan": (
+        "Round M's twenty-fifth pass puts today's plan in place of one from an earlier day before a "
+        "copy is loaded (H199 guards it), so the session it replaces has today's key, the same as "
+        "the store's own"),
 }
 
 # Moved by this round's code: the same revert, anchored where the code now is (old, new, nth).
@@ -1585,6 +1591,84 @@ REANCHORED = {
          ("      ...session,\n      completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },\n      rest: null,\n      hold: null,\n    });\n    void this.settleStart();",
           "      ...session,\n      workout: keepUnderWay(session.workout, new Set(session.completed.sets.map((c) => c.entryId))),\n      completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },\n      rest: null,\n      hold: null,\n    });\n    void this.settleStart();")],
         None, None),
+    # Round M (Maintenance 31) moved these twenty-one; last in the map, so they win over any above.
+    # A lift picked up again is held to the catch-up too; one back on its own keeps two off-plan.
+    "2e harder keeps RIR floor (picked up again)": (
+        "        adjust,\n        rirFloor(exercise),\n      ),",
+        "        adjust,\n      ),", None),
+    "33o ... never under the sets the plan had": (
+        "    const least = hardCap && !offPlan ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);",
+        "    const least = hardCap && !offPlan ? 1 : 2;", None),
+    # The effort a lift carries goes through heldShift (the catch-up's reserve): 0 there, hold kept.
+    "34d a lift refitted to new weights keeps its effort": (
+        "    heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),",
+        "    heldShift(request, workout, exercise, entry.role, 0),", None),
+    "34e a max keeps the effort the lift carries": (
+        "              effortShift(from, entry, plainTarget.rir),", "              0,", None),
+    "34f a swap keeps the effort": (
+        "    dayShiftOf(request, workout, entry),\n  );\n  const taken",
+        "    0,\n  );\n  const taken", None),
+    "42z56 the day's effort read from the day's settings, on a swap in place": (
+        "    dayShiftOf(request, workout, entry),\n  );\n  const taken",
+        "    effortShiftOf(request, workout, entry),\n  );\n  const taken", None),
+    "34g a stand-in keeps the effort": (
+        "    dayShiftOf(request, workout, entry),\n  );\n  closeAtLogged(entry, isDone, 'swap');",
+        "    0,\n  );\n  closeAtLogged(entry, isDone, 'swap');", None),
+    "42z57 ... for a stand-in": (
+        "    dayShiftOf(request, workout, entry),\n  );\n  closeAtLogged(entry, isDone, 'swap');",
+        "    effortShiftOf(request, workout, entry),\n  );\n  closeAtLogged(entry, isDone, 'swap');", None),
+    "34k a stand-in reads the effort before the lift stops": (
+        [("  const shift = heldShift(\n    request,\n    workout,\n    exercise,\n    entry.role,\n    dayShiftOf(request, workout, entry),\n  );\n  closeAtLogged(entry, isDone, 'swap');",
+          "  closeAtLogged(entry, isDone, 'swap');"),
+         ("    Math.max(1, Math.min(owed, room)),\n    entry.restSeconds,\n    { shift },\n  );",
+          "    Math.max(1, Math.min(owed, room)),\n    entry.restSeconds,\n    { shift: heldShift(request, workout, exercise, entry.role, dayShiftOf(request, workout, entry)) },\n  );")],
+        None, None),
+    "34h a lift picked up again keeps the effort": (
+        "      shift: heldShift(request, workout, exercise, stopped.role, shift),",
+        "      shift: heldShift(request, workout, exercise, stopped.role, 0),", None),
+    "34k2 a lift picked up again reads the effort before the stand-in stops": (
+        [("  const shift = dayShiftOf(request, workout, entry);\n  if (request.completed.sets.some((set) => set.entryId === entry.id)) {",
+          "  if (request.completed.sets.some((set) => set.entryId === entry.id)) {"),
+         ("      shift: heldShift(request, workout, exercise, stopped.role, shift),",
+          "      shift: heldShift(request, workout, exercise, stopped.role, dayShiftOf(request, workout, entry)),")],
+        None, None),
+    # settleKept keeps and holds a catch-up's swap too; holdToOffer, before it, repeats its lines.
+    "34y11 ... a lift you pinned or swapped in as well as the one in front": (
+        "      (entry.id === request.currentEntryId || keptAsPicked(entry, request)) &&",
+        "      (entry.id === request.currentEntryId ||\n        (!entry.locked && !entry.pinned && keptAsPicked(entry, request))) &&",
+        None),
+    "34y3 ... and the new settings' effort": (
+        "    const rir = Math.max(hold?.minRir ?? 0, pushed ? pushRir(after.rir) : after.rir);",
+        "    const rir = Math.max(hold?.minRir ?? 0, prescriptionToday(next, exercise, entry.role).rir);",
+        None),
+    "34y14 ... keeping the ramps it has": (
+        "        warmups: entry.sets.filter((set) => set.kind === 'warmup').length,\n      },\n    );\n    entry.sets = entry.dropSet",
+        "      },\n    );\n    entry.sets = entry.dropSet", None),
+    # refresh's summary says "Nothing more for today." for an emptied catch-up, its count in words.
+    "37z the summary's minutes follow the timers": (
+        "      : workout.explanation.summary.replace(\n          /: [0-9]+ exercises? in about [0-9]+ min/,\n          `: ${exercisesCount(count)} in about ${Math.round(time.totalMinutes)} min`,\n        );",
+        "      : workout.explanation.summary;", None),
+    "37aj the summary counts the exercises": (
+        "          `: ${exercisesCount(count)} in about ${Math.round(time.totalMinutes)} min`,",
+        "          `: ${exercisesCount(count + 1)} in about ${Math.round(time.totalMinutes)} min`,", None),
+    # A copy reads its own length through planLength, a catch-up's Default the next length below.
+    "42z15 a copy is timed for its own length": (
+        "  const target = planLength(plan.duration.choice, plan.duration.defaultMinutes, plan.templateId);",
+        "  const target = plan.duration.targetMinutes;", None),
+    # The preview built again takes the lift put back; a saved workout loads as a copy of itself.
+    "34t the plan built again waits its turn": (
+        "    const run = this.calibrationQueue.then(() => this.rebuildPreview(putBack));",
+        "    const run = Promise.resolve(this.rebuildPreview(putBack));", None),
+    "34w5 a saved workout loaded on it is today's plan": (
+        "createSession(this.baseKey() ?? session.baseKey, copy.workout, now)",
+        "createSession(session.baseKey, copy.workout, now)", None),
+    # addsWork, new for a day off the plan, repeats pushesForMore's lines: these stay on its own.
+    "35r held back: an extra set": (
+        "    (trigger?.type === 'sets' && trigger.workingDelta > 0) ||\n    trigger?.type === 'rep-range' ||\n",
+        "    trigger?.type === 'rep-range' ||\n", None),
+    "35t held back: a drop set": (
+        "    trigger?.type === 'rep-range' ||\n    (trigger?.type === 'drop-set' && trigger.on)",
+        "    trigger?.type === 'rep-range' ||\n    false", None),
 }
 
 table = [

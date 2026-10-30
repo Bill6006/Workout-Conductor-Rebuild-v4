@@ -20,6 +20,11 @@ const VALUE = 'Protecting your highest-value sets';
 const REMAINING = 'Updating the remaining workout';
 
 export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
+  'session-kind': {
+    label: 'Catch-up, second workout or full session',
+    scope: 'full',
+    evaluating: ['Reading what this week still lacks', VALUE, CONFLICTS],
+  },
   loading: {
     label: 'Available weights',
     scope: 'partial',
@@ -258,6 +263,12 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
         : 'Your start no longer falls short';
     case 'end-by':
       return trigger.time ? 'Fitting to an exact end time' : 'Returning to the chosen length';
+    case 'session-kind':
+      return trigger.full
+        ? 'Building the full session'
+        : trigger.kind === 'second'
+          ? 'Building the second workout'
+          : 'Building the catch-up';
   }
 }
 

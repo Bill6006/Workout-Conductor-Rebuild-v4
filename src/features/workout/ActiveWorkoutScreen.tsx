@@ -59,7 +59,7 @@ import { enteredE1rm, enteredMaxFor } from '../../engine/progression/maxes';
 import { hasNoLoad, startRatio } from '../../engine/progression/startingLoad';
 import { repsSlip, weightSlip, type SlipQuestion } from '../../engine/progression/slips';
 import type { SetKind } from '../../engine/workout/types';
-import { contextFor } from '../../engine/recalibration/recalibrate';
+import { contextFor, swapsOffered } from '../../engine/recalibration/recalibrate';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import {
   currentPosition,
@@ -893,44 +893,50 @@ export function ActiveWorkoutScreen() {
     : undefined;
   // A stopped exercise has nothing left to change: its sheet says so in place of its actions.
   const selectedStopped = selected !== null && isStopped(selected.entry);
+  // A catch-up offers no swap it would turn down (Maintenance 31, the thirteenth review of round M).
   const alternatives =
     selected && selectedExercise && !selectedStopped
-      ? rankAlternatives({
-          current: selectedExercise,
-          context,
-          // The exercise a stand-in took over from is offered back; swapping to it picks it up.
-          otherExercises: allEntries(workout.blocks)
-            .filter(
-              (entry) =>
-                entry.id !== selected.entry.id &&
-                !stoppedBefore(workout.blocks, selected.entry).includes(entry),
-            )
-            .map((entry) => requireExercise(entry.exerciseId)),
-          supersetPartner:
-            selected.block.kind === 'superset'
-              ? requireExercise(
-                  selected.block.entries.find((entry) => entry.id !== selected.entry.id)
-                    ?.exerciseId ?? selected.entry.exerciseId,
-                )
-              : undefined,
-          dropSetPlanned: selected.entry.dropSet,
-          plannedSets: {
-            sets: selected.entry.sets.length,
-            restSeconds: selected.entry.restSeconds,
-          },
-          signals: {
-            ...buildRankingSignals({
-              profile,
-              history,
-              now: new Date().toISOString(),
-              sessionPainJoints: session.constraints.painJoints,
-              coachRoutes,
-              currentExerciseId: selectedExercise.id,
-            }),
-            capLimited: capLimitedFor(selected.entry, selectedExercise),
-          },
-          limit: 6,
-        })
+      ? swapsOffered(
+          rankAlternatives({
+            current: selectedExercise,
+            context,
+            // The exercise a stand-in took over from is offered back; swapping to it picks it up.
+            otherExercises: allEntries(workout.blocks)
+              .filter(
+                (entry) =>
+                  entry.id !== selected.entry.id &&
+                  !stoppedBefore(workout.blocks, selected.entry).includes(entry),
+              )
+              .map((entry) => requireExercise(entry.exerciseId)),
+            supersetPartner:
+              selected.block.kind === 'superset'
+                ? requireExercise(
+                    selected.block.entries.find((entry) => entry.id !== selected.entry.id)
+                      ?.exerciseId ?? selected.entry.exerciseId,
+                  )
+                : undefined,
+            dropSetPlanned: selected.entry.dropSet,
+            plannedSets: {
+              sets: selected.entry.sets.length,
+              restSeconds: selected.entry.restSeconds,
+            },
+            signals: {
+              ...buildRankingSignals({
+                profile,
+                history,
+                now: new Date().toISOString(),
+                sessionPainJoints: session.constraints.painJoints,
+                coachRoutes,
+                currentExerciseId: selectedExercise.id,
+              }),
+              capLimited: capLimitedFor(selected.entry, selectedExercise),
+            },
+            limit: 6,
+          }),
+          { ...session, history, timestamp: new Date().toISOString() },
+          workout,
+          selected.entry,
+        )
       : null;
   const selectedStarted = selected
     ? session.completed.sets.some((set) => set.entryId === selected.entry.id)

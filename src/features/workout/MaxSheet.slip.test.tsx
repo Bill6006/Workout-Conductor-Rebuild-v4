@@ -188,6 +188,9 @@ describe('MaxSheet after the seventh pass of item 40', () => {
     });
     await handle.store.hydrate();
     const store = handle.store;
+    // The full session: TEST_NOW offers a catch-up, which takes no curl the biceps have no room for
+    // (Maintenance 31, the thirteenth review of round M).
+    await store.setFullSession(true);
     const first = allEntries(store.getSnapshot().session!.workout.blocks)[0]!;
     await store.recalibrate({ type: 'replace', entryId: first.id, exerciseId: 'barbell-curl' });
     const curl = allEntries(store.getSnapshot().session!.workout.blocks)[0]!;

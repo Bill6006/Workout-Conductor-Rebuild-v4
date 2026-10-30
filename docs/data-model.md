@@ -111,6 +111,20 @@ That is what lets a backup written by a newer app version pass through an older 
   - The cloud copy's `day` column of a workout is now the device's day the workout began (item 1;
     before, the UTC day it was finished). Nothing reads it back: each app works out a workout's day
     from its own times.
+- Maintenance 31 (round M) added only optional fields to the kept session, each dropped when
+  unreadable, never the session around it, and extended no stored enum:
+  - The session constraints' `catchUp`: the day's catch-up or second workout (items 12 and 32), its
+    `kind` (`catch-up` | `second`), its `muscles` (each with `sets`, `minRir` and `why`, `behind` |
+    `remainder`) and the muscles that `sitOut`, read through the engine's own lists
+    (`CATCH_UP_KINDS`, `CATCH_UP_REASONS`, `MUSCLE_IDS`); and `fullSession`, the full session taken
+    on such a day. A session kept from before has neither, and the day plans as usual.
+  - The stored plan's `templateId` may be `catch-up` or `second-workout` (`CATCH_UP_TEMPLATE_IDS`).
+    It was always text, never an enum: an older copy shows such a plan with its own title.
+  - The stored plan's `catchUpSlots`: the slots a catch-up or a second workout was laid out in
+    (each a movement, a role and muscles, with the catch-up's sets and reserve, and for a slot added
+    for a muscle a lift misses, `after`, the slot it follows in the plan's order), which a rebuild
+    around what the plan keeps fills again. A plan without them, or with ones it cannot read, lays
+    its catch-up out again at its next rebuild; an `after` it cannot read is dropped alone.
 
 ## Save safety
 

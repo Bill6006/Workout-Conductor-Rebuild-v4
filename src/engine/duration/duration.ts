@@ -2,12 +2,13 @@ import { isHold, type CatalogExercise } from '../../catalog/exercises/exerciseSc
 import { pushedToEffort } from '../progression/progression';
 import { restCategory } from '../progression/roles';
 import { blockSequence, isPairedSwitch, restBetween } from '../workout/sequence';
-import type {
-  DurationChoice,
-  SetPrescription,
-  TimeBreakdown,
-  WorkoutBlock,
-  WorkoutEntry,
+import {
+  CATCH_UP_TEMPLATE_IDS,
+  type DurationChoice,
+  type SetPrescription,
+  type TimeBreakdown,
+  type WorkoutBlock,
+  type WorkoutEntry,
 } from '../workout/types';
 
 /**
@@ -24,6 +25,34 @@ import type {
  */
 
 export const DURATION_CHOICES: readonly DurationChoice[] = [15, 30, 45, 'default'];
+
+/**
+ * The length the app offers next below the lifter's Default: a catch-up's or a second workout's
+ * (Maintenance 31, the owner's "shorter catch-up session"), 45 minutes for a Default of 60.
+ */
+export function shorterLength(defaultMinutes: number): number {
+  const lengths = DURATION_CHOICES.filter(
+    (choice): choice is Exclude<DurationChoice, 'default'> => choice !== 'default',
+  );
+  const shorter = lengths.filter((minutes) => minutes < defaultMinutes);
+  return shorter.length > 0 ? Math.max(...shorter) : Math.min(...lengths);
+}
+
+/**
+ * The minutes a plan's length choice comes to: for a catch-up or a second workout built from what
+ * is behind, the Default is the next length below it, wherever the length is read (the second
+ * review of round M: a check-in short on time, an end time, a rebuild under way).
+ */
+export function planLength(
+  choice: DurationChoice,
+  defaultMinutes: number,
+  templateId: string,
+): number {
+  const catchUp = (Object.values(CATCH_UP_TEMPLATE_IDS) as string[]).includes(templateId);
+  return choice === 'default' && catchUp
+    ? shorterLength(defaultMinutes)
+    : resolveTargetMinutes(choice, defaultMinutes);
+}
 
 export function isDurationChoice(value: unknown): value is DurationChoice {
   return value === 'default' || value === 15 || value === 30 || value === 45;

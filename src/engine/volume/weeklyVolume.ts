@@ -7,7 +7,9 @@ import {
 } from '../../catalog/muscles/muscles';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
-import type { MusclePriority } from '../workout/types';
+import { CATCH_UP_TEMPLATE_IDS, type MusclePriority } from '../workout/types';
+
+const OFF_ROTATION: ReadonlySet<string> = new Set(Object.values(CATCH_UP_TEMPLATE_IDS));
 
 /**
  * Weekly volume, recent exposure, targets, and the muscle priorities that
@@ -93,9 +95,10 @@ export function computeExposure(history: readonly WorkoutRecord[], nowIso: strin
   return {
     daysSinceMuscle,
     daysSinceExercise,
+    // A catch-up or a second workout takes no place in the rotation (the review of round M).
     recentTemplates: recent
       .map((item) => item.templateId)
-      .filter((id): id is string => Boolean(id)),
+      .filter((id): id is string => Boolean(id) && !OFF_ROTATION.has(id as string)),
     sessionsLast14Days: recent.length,
   };
 }

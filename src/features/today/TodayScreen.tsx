@@ -10,7 +10,9 @@ import { ScreenHeader } from '../../components/Screen/Screen';
 import { undoAvailable } from '../../core/state/session';
 import { useAppState, useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { formatDayLabel, useNow } from '../../core/time/clock';
+import { localWeekday } from '../../core/time/localDate';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
+import { swapsOffered } from '../../engine/recalibration/recalibrate';
 import { buildRankingSignals } from '../../engine/alternatives/signals';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import {
@@ -28,6 +30,7 @@ import { GOAL_OPTIONS, labelFor, styleLabel } from '../profile/labels';
 import { LocationSheet } from './LocationSheet';
 import { ReadinessSheet } from './ReadinessSheet';
 import { WorkoutPreviewCard } from './WorkoutPreviewCard';
+import { dayNoteOf } from './dayNote';
 import { doneKeys } from '../../core/state/session';
 import { postponeRefusal, postponeRefusalText } from '../../engine/workout/sequence';
 import styles from './TodayScreen.module.css';
@@ -92,41 +95,47 @@ export function TodayScreen() {
   const done = doneKeys(session.completed);
   // A stopped exercise has nothing left to change: its sheet says so in place of its actions.
   const selectedStopped = selected !== null && isStopped(selected.entry);
+  // A catch-up offers no swap it would turn down (Maintenance 31, the thirteenth review of round M).
   const alternatives =
     selected && selectedExercise && !selectedStopped
-      ? rankAlternatives({
-          current: selectedExercise,
-          context,
-          // The exercise a stand-in took over from is offered back; swapping to it picks it up.
-          otherExercises: allEntries(workout.blocks)
-            .filter(
-              (entry) =>
-                entry.id !== selected.entry.id &&
-                !stoppedBefore(workout.blocks, selected.entry).includes(entry),
-            )
-            .map((entry) => requireExercise(entry.exerciseId)),
-          supersetPartner:
-            selected.block.kind === 'superset'
-              ? requireExercise(
-                  selected.block.entries.find((entry) => entry.id !== selected.entry.id)
-                    ?.exerciseId ?? selected.entry.exerciseId,
-                )
-              : undefined,
-          dropSetPlanned: selected.entry.dropSet,
-          plannedSets: {
-            sets: selected.entry.sets.length,
-            restSeconds: selected.entry.restSeconds,
-          },
-          signals: buildRankingSignals({
-            profile,
-            history,
-            now: new Date().toISOString(),
-            sessionPainJoints: session.constraints.painJoints,
-            coachRoutes,
-            currentExerciseId: selectedExercise.id,
+      ? swapsOffered(
+          rankAlternatives({
+            current: selectedExercise,
+            context,
+            // The exercise a stand-in took over from is offered back; swapping to it picks it up.
+            otherExercises: allEntries(workout.blocks)
+              .filter(
+                (entry) =>
+                  entry.id !== selected.entry.id &&
+                  !stoppedBefore(workout.blocks, selected.entry).includes(entry),
+              )
+              .map((entry) => requireExercise(entry.exerciseId)),
+            supersetPartner:
+              selected.block.kind === 'superset'
+                ? requireExercise(
+                    selected.block.entries.find((entry) => entry.id !== selected.entry.id)
+                      ?.exerciseId ?? selected.entry.exerciseId,
+                  )
+                : undefined,
+            dropSetPlanned: selected.entry.dropSet,
+            plannedSets: {
+              sets: selected.entry.sets.length,
+              restSeconds: selected.entry.restSeconds,
+            },
+            signals: buildRankingSignals({
+              profile,
+              history,
+              now: new Date().toISOString(),
+              sessionPainJoints: session.constraints.painJoints,
+              coachRoutes,
+              currentExerciseId: selectedExercise.id,
+            }),
+            limit: 6,
           }),
-          limit: 6,
-        })
+          { ...session, history, timestamp: new Date().toISOString() },
+          workout,
+          selected.entry,
+        )
       : null;
 
   // Every session-only action closes the sheet and runs through the one Recalibration Engine.
@@ -219,6 +228,10 @@ export function TodayScreen() {
     }
   };
   const readiness = session.constraints.readiness;
+  const note = dayNoteOf(
+    session,
+    profile.schedule.availableDays.includes(localWeekday(new Date(now).toISOString())),
+  );
 
   return (
     <>
@@ -252,6 +265,25 @@ export function TodayScreen() {
           window.location.hash = routeHref('workout');
         }}
         onShowBarcode={hasBarcode ? () => store.openBarcodeSheet() : undefined}
+        dayNote={
+          note
+            ? {
+                text: note.text,
+                actionLabel: note.action?.label,
+                onAction: note.action
+                  ? () => {
+                      const full = note.action!.full;
+                      store.setFullSession(full).catch((error: unknown) => {
+                        toast.show(
+                          error instanceof Error ? error.message : 'The session could not change',
+                          'error',
+                        );
+                      });
+                    }
+                  : undefined,
+              }
+            : null
+        }
       />
 
       {coach ? (

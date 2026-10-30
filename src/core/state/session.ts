@@ -3,6 +3,7 @@ import type { LastingSwap } from '../../engine/planning/lastingSwaps';
 import type { SessionLoading } from '../../engine/loading/loading';
 import type { PersonalRecord } from '../../engine/scoring/personalRecords';
 import { PersonalRecordSchema, ReserveCheckLogSchema } from '../validation/workoutRecord';
+import { CatchUpSpecSchema } from '../validation/catchUpSpec';
 import { getExercise } from '../../catalog/exercises/catalog';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
@@ -243,6 +244,17 @@ const ReadinessSchema = z.looseObject({
   timePressure: z.boolean(),
 });
 
+/** A plan the lifter emptied today (`EmptiedPlan`): its offer, and the layout it was laid out on. */
+const EmptiedPlanSchema = z.looseObject({ offer: z.string(), layout: z.string().min(1) });
+
+/** The plans the lifter emptied, each that fails to read dropped alone. */
+const EmptiedPlansSchema = z.array(z.unknown()).transform((items) =>
+  items.flatMap((item) => {
+    const read = EmptiedPlanSchema.safeParse(item);
+    return read.success ? [{ offer: read.data.offer, layout: read.data.layout }] : [];
+  }),
+);
+
 const ConstraintsSchema = z.looseObject({
   busyEquipment: z.array(z.string()),
   // Maintenance 25: a session saved before has none; one that fails to read keeps none.
@@ -279,6 +291,26 @@ const ConstraintsSchema = z.looseObject({
     .nullable()
     .default(null),
   focus: z.enum(MUSCLE_IDS).nullable().default(null),
+  // Maintenance 31 (items 12 and 32): a session saved before has none; one that fails to read is
+  // dropped, and the day plans as usual.
+  catchUp: CatchUpSpecSchema.nullable().optional().catch(undefined),
+  fullSession: z.boolean().optional().catch(undefined),
+  // The seventeenth to twentieth reviews of round M: each plan that fails to read is dropped alone,
+  // and a plan of its offer and layout is built as usual.
+  emptied: EmptiedPlansSchema.optional().catch(undefined),
+  // The twenty-third review of round M: a saved workout loaded keeps the day's own choices aside;
+  // each part that fails to read is dropped alone, and the later plans read the day as usual.
+  dayChoices: z
+    .looseObject({
+      catchUp: CatchUpSpecSchema.nullable().optional().catch(undefined),
+      fullSession: z.boolean().optional().catch(undefined),
+      emptied: EmptiedPlansSchema.optional().catch(undefined),
+    })
+    .optional()
+    .catch(undefined),
+  // The eighteenth review of round M: each dropped alone when unreadable.
+  closedSlots: z.array(z.number().int().min(0)).optional().catch(undefined),
+  swappedAway: z.array(z.string()).optional().catch(undefined),
 });
 
 const CompletedSchema = z.looseObject({

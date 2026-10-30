@@ -303,12 +303,18 @@ export function reserveCheckSet(input: {
   history: readonly WorkoutRecord[];
   status: ReserveCheckStatus;
   now: string;
-  day: { deload: boolean; lowCheckIn: boolean; hardStart: boolean };
+  /**
+   * The day's own state: a deload, a low check-in, a hard start, or a day off the plan (a catch-up or
+   * a second workout, where no set goes to failure: the twenty-first review of round M).
+   */
+  day: { deload: boolean; lowCheckIn: boolean; hardStart: boolean; offPlan?: boolean };
   /** Whether a reading on a lift today would complete a pair for its curve (item 41). */
   pairs?: (exerciseId: string, entry: WorkoutEntry) => boolean;
 }): ReserveCheckSet | null {
   if (!input.status.due) return null;
-  if (input.day.deload || input.day.lowCheckIn || input.day.hardStart) return null;
+  if (input.day.deload || input.day.lowCheckIn || input.day.hardStart || input.day.offPlan) {
+    return null;
+  }
   const latest = input.history.reduce<string | null>((newest, record) => {
     const at = record.completedAt ?? record.startedAt;
     return newest === null || Date.parse(at) > Date.parse(newest) ? at : newest;

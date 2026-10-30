@@ -8,6 +8,7 @@ import { ExerciseThumb } from '../../components/ExerciseDetail/ExerciseMedia';
 import type { LocationProfile } from '../../core/validation/location';
 import type { ChangeSummary, EntryChange } from '../../engine/recalibration/types';
 import {
+  allEntries,
   isStopped,
   pushMarkOf,
   workingSets,
@@ -45,6 +46,11 @@ interface WorkoutPreviewCardProps {
   onShowBarcode?: () => void;
   /** Sets logged this session, not skipped, as `entryId:setIndex`: what a stopped exercise counts. */
   logged?: ReadonlySet<string>;
+  /**
+   * The day's one line on a catch-up or a second workout (Maintenance 31), with its button: the
+   * full session, or the catch-up again.
+   */
+  dayNote?: { text: string; actionLabel?: string; onAction?: () => void } | null;
 }
 
 const NONE_LOGGED: ReadonlySet<string> = new Set();
@@ -169,6 +175,7 @@ export function WorkoutPreviewCard({
   onStart,
   onShowBarcode,
   logged = NONE_LOGGED,
+  dayNote = null,
 }: WorkoutPreviewCardProps) {
   const { duration } = workout;
   const fitted = duration.choice !== 'default' || (endBy?.on ?? false);
@@ -184,10 +191,30 @@ export function WorkoutPreviewCard({
     fitted || duration.overByMinutes > 1 || duration.estimatedMinutes !== defaultEstimatedMinutes;
   const changeOf = (entry: WorkoutEntry) =>
     changes.find((change) => change.entryId === entry.id)?.kind;
+  // A second workout with nothing left to give (Maintenance 31): the day's line says so, and there
+  // is nothing to start.
+  const nothing =
+    dayNote !== null && sessionStatus === 'preview' && allEntries(workout.blocks).length === 0;
 
   return (
     <Card tone="accent" eyebrow="Today's workout" title={workout.title}>
       <p className={styles.demoNote}>{workout.explanation.summary}</p>
+
+      {dayNote ? (
+        <p className={styles.dayNote} data-testid="day-note">
+          <span data-testid="day-note-text">{dayNote.text}</span>
+          {dayNote.onAction && dayNote.actionLabel ? (
+            <button
+              type="button"
+              className={styles.link}
+              onClick={dayNote.onAction}
+              data-testid="day-note-action"
+            >
+              {dayNote.actionLabel}
+            </button>
+          ) : null}
+        </p>
+      ) : null}
 
       <div className={styles.metaRow}>
         <DurationSelector
@@ -292,7 +319,7 @@ export function WorkoutPreviewCard({
         ))}
       </div>
 
-      <p className={styles.warmup}>{workout.warmup.note}</p>
+      {nothing ? null : <p className={styles.warmup}>{workout.warmup.note}</p>}
 
       <ol className={styles.exercises} aria-label="Session list">
         {workout.blocks.map((block, index) => (
@@ -363,23 +390,27 @@ export function WorkoutPreviewCard({
         </ul>
       </details>
 
-      <Button
-        variant="primary"
-        onClick={onStart}
-        aria-describedby="start-workout-hint"
-        data-testid="start-workout"
-      >
-        {sessionStatus === 'preview'
-          ? 'Start Workout'
-          : sessionStatus === 'completed'
-            ? 'See the summary'
-            : 'Continue workout'}
-      </Button>
-      <p id="start-workout-hint" className={styles.hint}>
-        Change the length above and the session recalibrates at once. Tap an exercise for its
-        demonstration, alternatives, and session-only changes: swap, pin, busy station, skip, hurts.
-        Start opens the active workout with one-tap set logging and the rest timer.
-      </p>
+      {nothing ? null : (
+        <>
+          <Button
+            variant="primary"
+            onClick={onStart}
+            aria-describedby="start-workout-hint"
+            data-testid="start-workout"
+          >
+            {sessionStatus === 'preview'
+              ? 'Start Workout'
+              : sessionStatus === 'completed'
+                ? 'See the summary'
+                : 'Continue workout'}
+          </Button>
+          <p id="start-workout-hint" className={styles.hint}>
+            Change the length above and the session recalibrates at once. Tap an exercise for its
+            demonstration, alternatives, and session-only changes: swap, pin, busy station, skip,
+            hurts. Start opens the active workout with one-tap set logging and the rest timer.
+          </p>
+        </>
+      )}
     </Card>
   );
 }

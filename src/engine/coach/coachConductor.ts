@@ -53,7 +53,7 @@ import {
   computeWeeklyVolume,
 } from '../volume/weeklyVolume';
 import { checkExerciseFit, isBlocked } from '../conflicts/conflictEngine';
-import { buildConflictContext, preferredIdsOf } from '../conflicts/context';
+import { preferredIdsOf } from '../conflicts/context';
 import { barWeightFor, startRatio } from '../progression/startingLoad';
 import {
   EFFORT_REPS_CEILING,
@@ -62,10 +62,12 @@ import {
   microDeload,
   stepUp,
 } from '../progression/progression';
-import { MAX_WORKING_SETS } from '../recalibration/recalibrate';
+import { MAX_WORKING_SETS, catchUpRefusal } from '../recalibration/recalibrate';
 import {
   accessoryPicker,
+  builtCatchUp,
   pickAccessoryFor,
+  restingInPlan,
   sessionConflictContext,
   splitFor,
   swappedOutIds,
@@ -545,6 +547,31 @@ export const PAIN_HELP_LINE =
 export const PAIN_PATTERN_FOOTNOTE = `A pattern in what you logged, not a diagnosis. ${PAIN_HELP_LINE}`;
 
 /**
+ * The lifts the day sets aside from every offer the coach makes: the day's avoid list and the lifts
+ * the lifter swapped away today, which no change brings back by itself (the nineteenth review of
+ * round M: the coverage card offered the curl swapped away; the twentieth: so did the pain pattern's
+ * card).
+ */
+function dayExclusions(input: CoachInput): string[] {
+  return [...input.constraints.avoidExerciseIds, ...(input.constraints.swappedAway ?? [])];
+}
+
+/**
+ * Whether the day's catch-up or second workout turns down a swap the coach would offer
+ * (`catchUpRefusal`, as the swap and its sheet read it): an offer is a swap the day takes (the
+ * twenty-first review of round M: the four-week swaps offered taps the swap refused).
+ */
+function dayRefuses(input: CoachInput, entry: WorkoutEntry, next: CatalogExercise): boolean {
+  const day = {
+    constraints: input.constraints,
+    completed: input.completed,
+    history: input.history,
+    timestamp: input.now,
+  };
+  return catchUpRefusal(day, input.workout, entry, next) !== null;
+}
+
+/**
  * The pain pattern's card (Maintenance 27, item 45, docs/research/pain-patterns.md): it names the
  * joint, the exercise, the counts and the dates, says it is a pattern in what was logged and not a
  * diagnosis, and offers the four-week swap to the alternative. No condition, no cause, no promise.
@@ -553,12 +580,19 @@ function painPatternSignal(
   input: CoachInput,
   remaining: readonly WorkoutEntry[],
 ): { signal: CoachSignal; joint: Joint } | null {
-  const context = buildConflictContext(input.profile, input.location);
+  // The alternative fits the place, the day's list and the joints flagged today, and is not in
+  // today's plan already, where the swap would be refused (the twentieth and twenty-second reviews
+  // of round M: a dip offered with the shoulder flagged today).
+  const context = sessionConflictContext(input.profile, input.location, {
+    excludeExerciseIds: dayExclusions(input),
+    painJoints: [...input.constraints.painJoints],
+  });
+  const today = new Set(allEntries(input.workout.blocks).map((entry) => entry.exerciseId));
   const found = painPatterns({
     history: input.history,
     now: input.now,
     swaps: input.swaps,
-    fits: (exercise) => !isBlocked(checkExerciseFit(exercise, context)),
+    fits: (exercise) => !today.has(exercise.id) && !isBlocked(checkExerciseFit(exercise, context)),
     since: input.resets?.pain ?? null,
   });
   for (const pattern of found) {
@@ -566,6 +600,7 @@ function painPatternSignal(
     if (!entry) continue;
     const exercise = requireExercise(pattern.exerciseId);
     const other = requireExercise(pattern.alternativeId);
+    if (dayRefuses(input, entry, other)) continue;
     const joint = jointLabel(pattern.joint);
     const count = pattern.reportDates.length;
     const share =
@@ -938,10 +973,42 @@ export function spareMinutes(
   return input.workout.duration.targetMinutes - elapsed / 60 - left;
 }
 
+/**
+ * The muscles today's catch-up or second workout leaves alone, as it was built (Maintenance 31):
+ * the coach offers no work for one, nor a lift that works one.
+ */
+function restingToday(input: CoachInput): Set<MuscleId> {
+  return restingInPlan(input.constraints, input.workout, input.history, input.now);
+}
+
+/**
+ * A day off the plan, as the plan was built (the review of round M): a catch-up built from what is
+ * behind, or a second workout, the full session not taken. It holds its sets and its reserve: the
+ * coach offers it no extra set, drop set, longer range or added exercise, as the plan adds none.
+ */
+function offPlanToday(input: CoachInput): boolean {
+  const stored = input.constraints.catchUp;
+  if (!stored || input.constraints.fullSession) return false;
+  return stored.kind === 'second' || builtCatchUp(stored, input.workout).muscles.length > 0;
+}
+
+/** An offer that adds work: a set, a drop set, a range with a set more, or an exercise. */
+function addsWork(signal: CoachSignal): boolean {
+  const trigger = signal.action?.kind === 'recalibrate' ? signal.action.trigger : null;
+  return (
+    (trigger?.type === 'sets' && trigger.workingDelta > 0) ||
+    (trigger?.type === 'rep-range' && (trigger.workingDelta ?? 0) > 0) ||
+    (trigger?.type === 'drop-set' && trigger.on) ||
+    trigger?.type === 'add-exercise'
+  );
+}
+
 /** Two sets of the best accessory for a muscle, when today still has room for them. */
 function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction | null {
   const entries = allEntries(input.workout.blocks);
   if (spareMinutes(input) < ROOM_MINUTES) return null;
+  const resting = restingToday(input);
+  if (resting.has(muscle)) return null;
   const accessory = pickAccessoryFor(
     muscle,
     entries.map((entry) => requireExercise(entry.exerciseId)),
@@ -949,13 +1016,14 @@ function accessoryActionFor(input: CoachInput, muscle: MuscleId): CoachAction | 
       profile: input.profile,
       location: input.location,
       constraints: {
-        excludeExerciseIds: input.constraints.avoidExerciseIds,
+        excludeExerciseIds: dayExclusions(input),
         painJoints: jointsToProtect(input),
       },
       history: input.history,
       now: input.now,
       focus: input.focus ?? null,
       swaps: input.swaps,
+      resting,
     }),
   );
   if (!accessory) return null;
@@ -1063,7 +1131,7 @@ function fewerRepsOffer(input: CoachInput, entry: WorkoutEntry): CoachSignal | n
   const reps: [number, number] = [Math.max(1, floor - 3), floor - 1];
   const today = new Set(allEntries(input.workout.blocks).map((candidate) => candidate.exerciseId));
   const context = sessionConflictContext(input.profile, input.location, {
-    excludeExerciseIds: input.constraints.avoidExerciseIds,
+    excludeExerciseIds: dayExclusions(input),
     painJoints: jointsToProtect(input),
   });
   // Never one the lifter swapped out for weeks, nor the same move made heavier: its loaded
@@ -1424,12 +1492,15 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
   const covered = new Set(
     entries.flatMap((entry) => requireExercise(entry.exerciseId).primaryMuscles),
   );
+  // Never a muscle today's catch-up or second workout leaves alone (Maintenance 31).
+  const resting = restingToday(input);
   const gap = priorities.find(
     (priority) =>
       priority.weeklyTarget > 0 &&
       priority.weeklySetsDone / priority.weeklyTarget < COVERAGE_GAP &&
       priority.weight >= 1.1 &&
-      !covered.has(priority.muscle),
+      !covered.has(priority.muscle) &&
+      !resting.has(priority.muscle),
   );
   if (!gap) return [];
   const left = Math.max(0, planned - doneThisWeek - 1);
@@ -1458,13 +1529,14 @@ function coverageSignals(input: CoachInput): CoachSignal[] {
             profile: input.profile,
             location: input.location,
             constraints: {
-              excludeExerciseIds: input.constraints.avoidExerciseIds,
+              excludeExerciseIds: dayExclusions(input),
               painJoints: jointsToProtect(input),
             },
             history: input.history,
             now: input.now,
             focus: input.focus ?? null,
             swaps: input.swaps,
+            resting,
           }),
         )
       : undefined;
@@ -1585,13 +1657,13 @@ function varietyOffer(
     history: input.history,
     now: input.now,
     context: sessionConflictContext(input.profile, input.location, {
-      excludeExerciseIds: input.constraints.avoidExerciseIds,
+      excludeExerciseIds: dayExclusions(input),
       painJoints: jointsToProtect(input),
     }),
     swaps: input.swaps,
     today: allEntries(input.workout.blocks).map((one) => one.exerciseId),
   });
-  if (!other) return null;
+  if (!other || dayRefuses(input, entry, other)) return null;
   return {
     kind: 'lasting-swap',
     entryId: entry.id,
@@ -2109,7 +2181,9 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
     ...scheduleSignals(input),
     ...tipSignals(input),
     ...pushSignals(input),
-  ].filter((signal) => !addsToPushedMuscles(input, signal));
+  ]
+    .filter((signal) => !addsToPushedMuscles(input, signal))
+    .filter((signal) => !offPlanToday(input) || !addsWork(signal));
   return inDeloadWeek(input) ? signals.filter((signal) => !pushesForMore(signal)) : signals;
 }
 

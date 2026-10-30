@@ -13,8 +13,8 @@ const profile = createDefaultProfile(NOW);
 describe('trigger registry', () => {
   it('covers every trigger with a label, a scope, and what the engine evaluates', () => {
     const types = Object.keys(TRIGGER_REGISTRY) as TriggerType[];
-    // 'bad-start' joined in Maintenance 26 (item 42).
-    expect(types).toHaveLength(29);
+    // 'bad-start' joined in Maintenance 26 (item 42), 'session-kind' in Maintenance 31 (item 12).
+    expect(types).toHaveLength(30);
     for (const type of types) {
       const definition = TRIGGER_REGISTRY[type];
       expect(definition.label.length).toBeGreaterThan(0);

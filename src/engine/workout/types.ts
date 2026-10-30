@@ -1,4 +1,5 @@
 import type { CatalogExercise, TrainingRole } from '../../catalog/exercises/exerciseSchema';
+import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 
 /**
@@ -11,6 +12,21 @@ import type { MuscleId } from '../../catalog/muscles/muscles';
 export type DurationChoice = 15 | 30 | 45 | 'default';
 
 export type SetKind = 'warmup' | 'working' | 'drop';
+
+/**
+ * The template ids a catch-up and a second workout are planned as (Maintenance 31). Neither takes a
+ * place in the split's rotation: the day's own sessions keep their order.
+ */
+export const CATCH_UP_TEMPLATE_IDS = { 'catch-up': 'catch-up', second: 'second-workout' } as const;
+
+/**
+ * A plan the lifter's own hand emptied today (the twentieth review of round M): the day's offer it
+ * was for (`offerKey`) and the layout it was laid out on (its template).
+ */
+export interface EmptiedPlan {
+  offer: string;
+  layout: string;
+}
 
 /**
  * Every way the progression engine arrives at a target, as one list. The
@@ -191,8 +207,9 @@ export interface StoppedWork {
   /**
    * Why it stopped: `place`, the place could not equip it (it picks up again where it fits);
    * `swap`, it was swapped out once started (it stays stopped unless swapped back); `skip`, the
-   * exercise carrying its sets was skipped, so it owes nothing more. An entry with no reason
-   * written stopped at a place.
+   * exercise carrying its sets was skipped, or on a day off the plan nothing could carry them (the
+   * sixteenth review of round M), so it owes nothing more. An entry with no reason written stopped
+   * at a place.
    */
   why?: 'place' | 'swap' | 'skip';
 }
@@ -247,6 +264,22 @@ export interface WorkoutExplanation {
   time: TimeBreakdown;
 }
 
+/** A slot of a catch-up's or a second workout's layout (Maintenance 31). */
+export interface CatchUpSlot {
+  pattern: MovementPatternId;
+  role: TrainingRole;
+  muscles: MuscleId[];
+  /** The catch-up's sets for the slot: never more than the role's own. */
+  sets?: number;
+  /** The catch-up's fewest reps in reserve for the slot. */
+  minRir?: number;
+  /**
+   * A slot added for a muscle a slot's lift misses: the slot it comes right after in the plan's
+   * order (the ninth review of round M). It keeps its own number, after the layout's.
+   */
+  after?: number;
+}
+
 export interface GeneratedWorkout {
   id: string;
   templateId: string;
@@ -273,6 +306,12 @@ export interface GeneratedWorkout {
   confidence: 'high' | 'medium' | 'low';
   compromises: string[];
   recalibration: { version: number; lastTrigger: string | null };
+  /**
+   * A catch-up's or a second workout's slots as laid out (the seventh review of round M): a rebuild
+   * around what the plan keeps fills these, so each lift kept stays in its own slot; one built
+   * whole lays them out again from what the place has.
+   */
+  catchUpSlots?: CatchUpSlot[];
 }
 
 export interface ResolvedEntry {

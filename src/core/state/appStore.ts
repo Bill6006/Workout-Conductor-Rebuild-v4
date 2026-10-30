@@ -17,7 +17,7 @@ import { isHold } from '../../catalog/exercises/exerciseSchema';
 import { holdById } from '../../engine/workout/setText';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
-import { resolveTargetMinutes } from '../../engine/duration/duration';
+import { planLength } from '../../engine/duration/duration';
 import { autoregulate, outcomeFor } from '../../engine/recalibration/autoregulate';
 import { readStart, startKey, type StartReading } from '../../engine/recalibration/badStart';
 import { dropSetWeight, pendingDropSet, withDropWeight } from '../../engine/recalibration/dropSet';
@@ -125,11 +125,31 @@ import {
   planOwnExercise,
   withoutStops,
   type DurationChoice,
+  type EmptiedPlan,
   type GeneratedWorkout,
   type WorkoutEntry,
 } from '../../engine/workout/types';
 import { prescribeFor } from '../../engine/progression/roles';
-import { generateWorkout, withSwapLines } from '../../engine/workoutGenerator/generate';
+import {
+  builtCatchUp,
+  emptiedLayoutsFor,
+  generateWorkout,
+  marksOfDay,
+  sessionDose,
+  firstSessionDose,
+  offPlanSpec,
+  offerKey,
+  sameOffer,
+  secondOnAnotherDay,
+  withSwapLines,
+} from '../../engine/workoutGenerator/generate';
+import {
+  catchUpKind,
+  catchUpSpec,
+  trainedIn,
+  type CatchUpSpec,
+} from '../../engine/planning/catchUp';
+import { weekModel } from '../../engine/planning/weekModel';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
 import { normalizeName } from '../backup/legacyImport';
 import {
@@ -615,6 +635,28 @@ const BARCODE_LOCK = 'workout-conductor-v4-barcodes';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The day's own choices as every later plan the same day reads them (Maintenance 31): its offer, the
+ * full session taken, the plans the lifter emptied and the lifts swapped away. A saved workout
+ * loaded keeps the first three aside (`dayChoices`, the twenty-third review of round M), read with
+ * what the lifter chose on the loaded plan: the full session taken from it, a plan of it emptied.
+ */
+function dayChoicesOf(constraints: WorkoutSession['constraints']): {
+  catchUp: CatchUpSpec | null;
+  fullSession: boolean;
+  emptied: EmptiedPlan[];
+  swappedAway: string[];
+} {
+  const kept = constraints.dayChoices;
+  const own = constraints.emptied ?? [];
+  return {
+    catchUp: (kept ? kept.catchUp : constraints.catchUp) ?? null,
+    fullSession: constraints.fullSession === true || kept?.fullSession === true,
+    emptied: marksOfDay(kept?.emptied ?? [], own),
+    swappedAway: [...(constraints.swappedAway ?? [])],
+  };
+}
+
 function sortLocations(locations: LocationProfile[]): LocationProfile[] {
   const order = { home: 0, gym: 1, travel: 2, custom: 3 } as const;
   return [...locations].sort(
@@ -981,6 +1023,7 @@ export class AppStore {
         deload: session.constraints.deload !== null,
         lowCheckIn: lowCheckIn(session.constraints.readiness),
         hardStart: session.constraints.badStart === true,
+        offPlan: offPlanSpec(session.constraints, session.workout) !== null,
       },
       // A check where it would pair with a recent one for the lift's own curve (item 41): its
       // last working set's top reps plus reserve, about where a set to failure ends.
@@ -1220,9 +1263,10 @@ export class AppStore {
    * Reuses the persisted session when it was generated from today's inputs;
    * otherwise (first run, a new day, an edited profile, new history) generates
    * a fresh Default session silently. A started or completed workout is never
-   * replaced underneath the user.
+   * replaced underneath the user. `carry` is a preview just put aside to be built again, whose
+   * choices for the day carry over as the one on the screen's would.
    */
-  private ensureSession(): void {
+  private ensureSession(carry: WorkoutSession | null = null): void {
     const key = this.baseKey();
     const { profile } = this.state;
     if (!key || !profile) {
@@ -1246,23 +1290,175 @@ export class AppStore {
       return;
     }
     const now = this.now();
-    const deload =
-      this.state.deloadWeek && inDeloadWindow(this.state.deloadWeek, now)
-        ? { startsAt: this.state.deloadWeek.startsAt, endsAt: this.state.deloadWeek.endsAt }
-        : null;
+    const deload = this.deloadToday(now);
     const focus = this.state.coachFocus?.muscle ?? null;
+    // What the day offers (Maintenance 31): a catch-up on a day not ticked, a second workout on a
+    // day trained. A deload week holds back everything that pushes for more, as the coach does.
+    const catchUp = this.catchUpFor(profile, now, deload !== null);
+    // The full session the lifter took today stays theirs through the day's later plans.
+    const before = current ?? carry;
+    const day = before ? dayChoicesOf(before.constraints) : null;
+    // Made today: a workout begun yesterday and discarded today carries nothing of its day (the
+    // second review of round M).
+    const keepFull =
+      catchUp !== null &&
+      before !== null &&
+      localDayKey(before.createdAt) === localDayKey(now) &&
+      day?.fullSession === true &&
+      day.catchUp?.kind === catchUp.kind;
+    // The plans the lifter's hand emptied today stay so through the day's later plans, each for its
+    // own offer and layout, as the full session taken does (the eighteenth to twentieth reviews of
+    // round M: a workout from another device brought every lift back, the skips forgotten).
+    const sameDay = before !== null && localDayKey(before.createdAt) === localDayKey(now);
+    const marked = sameDay ? (day?.emptied ?? []) : [];
+    // The lifts swapped away today stay away from every later plan the same day (the eighteenth
+    // review of round M; the twenty-first: a workout from another device brought one back).
+    const away = sameDay ? (day?.swappedAway ?? []) : [];
+    // Built afresh each time, a plan the lifter emptied too: the generator lays each layout emptied
+    // for this offer out empty and says where it was built (the twenty-second review of round M: the
+    // old plan handed back kept the lines of the place it was emptied at).
     const workout = generateWorkout({
       profile,
       location: this.currentLocation(),
       history: this.state.readHistory,
       now,
       duration: 'default',
-      constraints: { deload, focusMuscle: focus, swaps: this.activeSwaps() },
+      constraints: {
+        deload,
+        focusMuscle: focus,
+        swaps: this.activeSwaps(),
+        catchUp: keepFull ? null : catchUp,
+        // Each layout the lifter emptied for this offer stays empty (the nineteenth review).
+        ...(keepFull ? {} : emptiedLayoutsFor({ catchUp, emptied: marked })),
+        ...(away.length > 0 ? { awayIds: away } : {}),
+      },
       maxes: this.state.strengthMaxes,
       resets: this.state.learnedResets,
     });
     const session = createSession(key, workout, now);
-    this.setSession({ ...session, constraints: { ...session.constraints, deload, focus } });
+    this.setSession({
+      ...session,
+      constraints: {
+        ...session.constraints,
+        deload,
+        focus,
+        ...(catchUp ? { catchUp } : {}),
+        ...(keepFull ? { fullSession: true } : {}),
+        // The plans emptied before, for the way back (the seventeenth review of round M) and for
+        // every later plan the same day (the eighteenth to twentieth).
+        ...(marked.length > 0 ? { emptied: marked.map((plan) => ({ ...plan })) } : {}),
+        ...(away.length > 0 ? { swappedAway: [...away] } : {}),
+      },
+    });
+  }
+
+  /** The deload week planned that covers `now`, as a plan's constraints hold it, or none. */
+  private deloadToday(now: string): WorkoutSession['constraints']['deload'] {
+    const week = this.state.deloadWeek;
+    return week && inDeloadWindow(week, now)
+      ? { startsAt: week.startsAt, endsAt: week.endsAt }
+      : null;
+  }
+
+  /**
+   * What the day offers (Maintenance 31): a catch-up on a day not ticked, a second workout on a day
+   * trained, built from the week model, with no muscles when nothing calls for one; null on a day
+   * that offers neither. A deload week holds back the catch-up, as it does everything that pushes
+   * for more, and keeps a second workout going easy on what was done (the review of round M).
+   */
+  private catchUpFor(profile: UserProfile, now: string, deload: boolean): CatchUpSpec | null {
+    const history = this.state.readHistory;
+    const kind = catchUpKind(profile, history, now);
+    if (!kind || (deload && kind === 'catch-up')) return null;
+    const week = weekModel({
+      profile,
+      location: this.currentLocation(),
+      history,
+      now,
+      resets: this.state.learnedResets,
+    });
+    // What is left of a muscle trained today is read from the day's first workout, one with a set
+    // done past the warm-ups (the reviews of round M).
+    const today = localDayKey(now);
+    const first = [...history]
+      .filter(
+        (record) =>
+          record.startedAt <= now && localDayKey(record.startedAt) === today && trainedIn(record),
+      )
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt))[0];
+    return catchUpSpec(
+      week,
+      profile,
+      kind,
+      (muscle) => sessionDose(profile, muscle),
+      (muscle) => firstSessionDose(profile, first, muscle),
+    );
+  }
+
+  /**
+   * Today's plan not yet started, with what the day offers read again (the review of round M). The
+   * full session taken stays taken while the day offers the same kind.
+   */
+  private offerReadAgain(
+    session: WorkoutSession,
+    profile: UserProfile,
+  ): WorkoutSession['constraints'] {
+    const constraints = session.constraints;
+    if (session.status !== 'preview' || this.fromEarlierDay(session)) return constraints;
+    const catchUp = this.catchUpFor(profile, this.now(), constraints.deload !== null);
+    // A saved workout loaded is read as itself: the offer read again is the day's, kept aside for
+    // the plans after it (the twenty-third review of round M).
+    const kept = constraints.dayChoices;
+    if (kept) {
+      const day = { ...kept };
+      delete day.catchUp;
+      delete day.fullSession;
+      if (catchUp) day.catchUp = catchUp;
+      const full = kept.fullSession === true && kept.catchUp?.kind === catchUp?.kind;
+      if (catchUp && full) day.fullSession = true;
+      return { ...constraints, dayChoices: day };
+    }
+    const next = { ...constraints };
+    delete next.catchUp;
+    delete next.fullSession;
+    if (catchUp) next.catchUp = catchUp;
+    if (catchUp && constraints.fullSession && constraints.catchUp?.kind === catchUp.kind) {
+      next.fullSession = true;
+    }
+    return next;
+  }
+
+  /** The day's offer read again for a save, and whether it changed (the third review of round M). */
+  private offerOverrides(
+    session: WorkoutSession,
+    profile: UserProfile,
+    trigger: RecalibrationTrigger['type'],
+  ): Pick<RecalibrationRequest, 'constraints' | 'offerChanged'> {
+    const constraints = this.offerReadAgain(session, profile);
+    // A catch-up with no lift where today's plan was made, which was the split's own session
+    // there: another place, or new equipment, may have one, and the plan is made again whole, as
+    // a fresh one would be (the fifth review of round M: Today said nothing could be caught up at
+    // a gym that could).
+    const stored = session.constraints.catchUp;
+    const unbuilt =
+      (trigger === 'location' || trigger === 'equipment') &&
+      !session.constraints.fullSession &&
+      stored !== null &&
+      stored !== undefined &&
+      stored.muscles.length > 0 &&
+      builtCatchUp(stored, session.workout).muscles.length === 0;
+    return sameOffer(constraints, session.constraints) && !unbuilt
+      ? { constraints }
+      : { constraints, offerChanged: true };
+  }
+
+  /**
+   * The full session on a day that offers a catch-up or a second workout, or the day's own session
+   * again (Maintenance 31).
+   */
+  setFullSession(full: boolean): Promise<RecalibrationResult | null> {
+    const kind = this.state.session?.constraints.catchUp?.kind;
+    return this.recalibrate({ type: 'session-kind', full, ...(kind ? { kind } : {}) });
   }
 
   /** Puts the kept-workout notice away; the kept copy itself stays on the device. */
@@ -1415,6 +1611,16 @@ export class AppStore {
     // The history read before the overlay's pause, as the session and profile are.
     const request = this.calibrationRequest(trigger, session, profile, reason ?? described.title, {
       history,
+      // A saved schedule, experience or place can change what the day offers (the review of round
+      // M): today's plan not yet started reads it again, as a fresh plan would, with a technique
+      // saved in the same save too (the second review), and a new offer is built whole (the third),
+      // as is one the place's new equipment may build (the fifth).
+      ...(trigger.type === 'profile' ||
+      trigger.type === 'location' ||
+      trigger.type === 'technique' ||
+      trigger.type === 'equipment'
+        ? this.offerOverrides(session, profile, trigger.type)
+        : {}),
     });
     let result: RecalibrationResult;
     try {
@@ -1638,7 +1844,12 @@ export class AppStore {
     this.leaveEarlierDay();
     const { session, profile } = this.state;
     if (!session || !profile) return Promise.resolve(null);
-    const minutes = resolveTargetMinutes(session.duration, profile.schedule.typicalDurationMinutes);
+    // The plan's own length: a catch-up's is the next below the Default (the second review of M).
+    const minutes = planLength(
+      session.duration,
+      profile.schedule.typicalDurationMinutes,
+      session.workout.templateId,
+    );
     const time = on ? new Date(this.nowMs() + minutes * 60_000).toISOString() : null;
     return this.recalibrate({ type: 'end-by', time });
   }
@@ -2380,6 +2591,7 @@ export class AppStore {
     const session = this.requireSession();
     const trimmed = name.trim();
     if (!trimmed) throw new Error('Give the workout a name.');
+    const own = offPlanSpec(session.constraints, session.workout);
     const saved: SavedWorkout = {
       id: `saved-${this.now().replace(/\D/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`,
       name: trimmed.slice(0, 60),
@@ -2389,6 +2601,11 @@ export class AppStore {
       // The plan under a hard start's ease, with no marks: the ease of today is no part of a plan
       // for another day (Maintenance 26, the sixth and seventh passes of item 42).
       workout: planUnderTheEase(session.workout),
+      // The catch-up or second workout it was laid out for, so a copy loaded is that plan again (the
+      // twenty-third review of round M).
+      ...(own ? { catchUp: own } : {}),
+      // The day its plan was made, which no rebuild moves (the twenty-sixth review of round M).
+      planDay: localDayKey(session.createdAt),
     };
     const db = await this.getDatabase();
     const receipt = await putVerified(db, 'savedWorkouts', saved, { now: this.now });
@@ -2405,6 +2622,10 @@ export class AppStore {
   /** Starts a fresh preview session from a saved workout; everything after that recalibrates as usual. */
   loadSavedWorkout(id: string): void {
     const saved = this.state.savedWorkouts.find((item) => item.id === id);
+    // A plan left open from an earlier day gives way to today's first, so the copy stands in for
+    // today's plan with today's choices (the twenty-fifth review of round M: loaded over Friday's
+    // plan on Saturday, it kept none of Saturday's offer, its full session no tap away).
+    if (saved) this.leaveEarlierDay();
     const session = this.state.session;
     if (!saved || !session || session.status !== 'preview') return;
     const now = this.now();
@@ -2435,8 +2656,56 @@ export class AppStore {
       },
     };
     const headline = `Loaded "${saved.name}".`;
+    // The day's choices hold through it for every later plan the same day, kept aside: its offer,
+    // the full session taken, the plans emptied, and the lifts swapped away, which the loaded plan
+    // keeps to as well (the twenty-second review: loaded, begun and discarded, the next plan read
+    // none of them).
+    const day = dayChoicesOf(session.constraints);
+    // Read as itself, on any day: the catch-up or second workout it was saved as, or none (the
+    // twenty-third review of round M: given the day's offer, a saved pull day read as the split's
+    // day standing in for it, and a saved catch-up was built as the split's day at a rebuild). A
+    // second workout is the day trained's: the day its plan was made, while that day is still one
+    // trained; on any other it says nothing of a day trained (`secondOnAnotherDay`; the
+    // twenty-fifth review: saved the next morning from the plan left on the screen, it was taken
+    // for that day's own; the twenty-sixth: rebuilt under way past midnight, its workout's own time
+    // read the next day).
+    const planDay = saved.planDay ?? localDayKey(saved.workout.generatedAt);
+    const trainedDay = planDay === localDayKey(now) && day.catchUp?.kind === 'second';
+    const copy =
+      saved.catchUp?.kind === 'second' && !trainedDay
+        ? secondOnAnotherDay(saved.catchUp, workout)
+        : { spec: saved.catchUp ?? null, workout };
+    const own = copy.spec;
+    const made = createSession(this.baseKey() ?? session.baseKey, copy.workout, now);
+    // The day's plans emptied for its own offer are its own, as they are the day's plan's: every
+    // rebuild of it finds them, a layout another place lays out included (the twenty-fifth review of
+    // round M: the copy taken home laid out whole the split's day the lifter had emptied there). Its
+    // lifts back in the layout it is laid out on end that one's mark, as lifts back in a plan do (the
+    // twentieth review); a copy with no lift brings none back, its mark kept (the twenty-fourth).
+    const offer = own ? offerKey({ catchUp: own }) : null;
+    const ofOffer = (plan: EmptiedPlan) => offer !== null && plan.offer === offer;
+    const lifts = allEntries(copy.workout.blocks).length > 0;
+    const ownMarks = day.emptied.filter(
+      (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),
+    );
+    const marks = day.emptied.filter((plan) => !ofOffer(plan));
     this.setSession({
-      ...createSession(this.baseKey() ?? session.baseKey, workout, now),
+      ...made,
+      constraints: {
+        ...made.constraints,
+        // The deload week that covers today holds through it, as through every rebuild
+        // (Maintenance 23; the twenty-fourth review of round M: a copy loaded in one was planned as
+        // in a week without it).
+        deload: this.deloadToday(now),
+        ...(own ? { catchUp: own } : {}),
+        ...(ownMarks.length > 0 ? { emptied: ownMarks.map((plan) => ({ ...plan })) } : {}),
+        ...(day.swappedAway.length ? { swappedAway: [...day.swappedAway] } : {}),
+        dayChoices: {
+          ...(day.catchUp ? { catchUp: day.catchUp } : {}),
+          ...(day.fullSession ? { fullSession: true } : {}),
+          ...(marks.length > 0 ? { emptied: marks } : {}),
+        },
+      },
       duration: saved.duration,
       lastSummary: {
         headline,
@@ -2472,7 +2741,11 @@ export class AppStore {
     if (!session || session.status !== 'completed') return;
     clearSession(this.storage);
     this.setState({ session: null });
-    this.ensureSession();
+    // A workout saved with nothing logged is no workout of the day: its day's choices hold for the
+    // next plan, as a workout discarded holds them (the twenty-first review of round M: the plans
+    // emptied and the full session taken were lost).
+    const trained = session.completed.sets.some((set) => set.kind !== 'warmup' && !set.skipped);
+    this.ensureSession(trained ? null : session);
   }
 
   /** Ends the workout without saving anything; a fresh preview is generated as usual. */
@@ -2481,7 +2754,8 @@ export class AppStore {
     if (!session || session.status === 'preview' || session.status === 'completed') return;
     clearSession(this.storage);
     this.setState({ session: null });
-    this.ensureSession();
+    // The full session taken today holds through a workout begun and discarded (the review of M).
+    this.ensureSession(session);
   }
 
   // ---------------------------------------------------------------- custom content
@@ -3568,18 +3842,46 @@ export class AppStore {
    * busy equipment, an end time still ahead) are applied to the new plan by the engine, as every
    * rebuild applies them.
    */
-  private regeneratePreview(): Promise<void> {
-    const run = this.calibrationQueue.then(() => this.rebuildPreview());
+  private regeneratePreview(putBack: string | null = null): Promise<void> {
+    const run = this.calibrationQueue.then(() => this.rebuildPreview(putBack));
     this.calibrationQueue = run.catch(() => undefined);
     return run;
   }
 
-  private rebuildPreview(): void {
-    const session = this.state.session;
-    if (!session || session.status !== 'preview') return;
+  /** `putBack`: a lift the lifter puts back today, off the day's list of lifts swapped away. */
+  private rebuildPreview(putBack: string | null = null): void {
+    const current = this.state.session;
+    if (!current) return;
+    // A lift the lifter puts back is off the day's list, the plan made again or not: a workout
+    // under way or finished hands the list to every later plan the same day (the twenty-second
+    // review of round M: stopped while the workout ran, a kept swap's lift stayed away after it).
+    const listed = current.constraints.swappedAway ?? [];
+    const kept = listed.filter((id) => id !== putBack);
+    const constraints = { ...current.constraints };
+    if (kept.length > 0) constraints.swappedAway = kept;
+    else delete constraints.swappedAway;
+    // ... and off the list an Undo puts back, which takes back a change, not a lift put back since
+    // (the twenty-third review of round M).
+    const earlier = current.previous;
+    let previous = earlier;
+    if (earlier && putBack !== null && earlier.constraints.swappedAway?.includes(putBack)) {
+      const left = earlier.constraints.swappedAway.filter((id) => id !== putBack);
+      const restored = { ...earlier.constraints };
+      if (left.length > 0) restored.swappedAway = left;
+      else delete restored.swappedAway;
+      previous = { ...earlier, constraints: restored };
+    }
+    const session: WorkoutSession =
+      kept.length === listed.length && previous === current.previous
+        ? current
+        : { ...current, constraints, previous };
+    if (current.status !== 'preview') {
+      if (session !== current) this.setSession(session);
+      return;
+    }
     clearSession(this.storage);
     this.setState({ session: null });
-    this.ensureSession();
+    this.ensureSession(session);
     const fresh = this.state.session;
     const { profile, readHistory: history } = this.state;
     if (!fresh || !profile || this.fromEarlierDay(session)) return;
@@ -3589,7 +3891,30 @@ export class AppStore {
       Date.parse(session.constraints.endBy) > Date.parse(this.now())
         ? session.constraints.endBy
         : null;
+    // What the day offers is the fresh plan's to say (Maintenance 31): a deload week planned now
+    // offers no catch-up, whatever the plan before it did.
     const today = { ...session.constraints, endBy };
+    delete today.catchUp;
+    delete today.fullSession;
+    if (fresh.constraints.catchUp !== undefined) today.catchUp = fresh.constraints.catchUp;
+    if (fresh.constraints.fullSession) today.fullSession = true;
+    // A catch-up or second workout the lifter's changes emptied stays so when the preview is built
+    // again for the same offer (the sixteenth review of round M: a coach focus set brought a new
+    // catch-up of other lifts for the same muscles): made again as every later plan the same day is,
+    // it is laid out empty (`ensureSession`, the nineteenth to twenty-second reviews).
+    // The slots the lifter closed were the old plan's: a plan made again lays them out again (the
+    // eighteenth review of round M).
+    delete today.closedSlots;
+    // Made again, the plan is the day's own, a saved workout loaded too: the day's choices are its
+    // own again (the twenty-third review of round M).
+    delete today.dayChoices;
+    delete today.emptied;
+    if (fresh.constraints.emptied?.length) {
+      today.emptied = fresh.constraints.emptied.map((plan) => ({ ...plan }));
+    }
+    // The lifts swapped away today need no rebuild here: the plan is made again as every later plan
+    // the same day is, without them, but for one the lifter puts back (above; the twentieth to
+    // twenty-second reviews of round M).
     const chosen =
       session.duration !== fresh.duration ||
       today.readiness !== null ||
@@ -4259,7 +4584,9 @@ export class AppStore {
   async stopLastingSwap(from: string): Promise<void> {
     const change = await this.changeSwaps((current) => withoutSwap(current, from));
     if (!change.saved) throw new Error('The swap could not be stopped.');
-    await this.regeneratePreview();
+    // The lift the swap stood in for comes back where the plan has it, as a swap back puts it back:
+    // off the day's list of lifts swapped away (the twentieth review of round M).
+    await this.regeneratePreview(from);
   }
 
   /**

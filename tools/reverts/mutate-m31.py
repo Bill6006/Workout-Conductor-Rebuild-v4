@@ -1,0 +1,1321 @@
+"""Maintenance 31 mutation checks: revert each round M rule alone, run its tests, expect a failure,
+restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
+
+  python mutate-m31.py --repo=PATH            run every M31 entry in a copy of the repository
+  python mutate-m31.py --repo=PATH 6a 31b     run the entries whose names start with these
+  python mutate-m31.py --repo=PATH --check    only check that every anchor is found once
+  python mutate-m31.py --repo=PATH --utc ...  as the CI runner: the tests in UTC, then the day
+                                              rules' tests in two zones (scripts/test-zones.mjs)
+
+The table below is data: nothing in it runs.
+"""
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+# The repository this runner sits in (tools/reverts/ -> the root). Run it in a copy instead:
+# from M26 on, --repo=PATH; see tools/reverts/README.md.
+ROOT = pathlib.Path(__file__).resolve().parents[2] if "__file__" in globals() else pathlib.Path.cwd()
+for _flag in sys.argv[1:]:
+    if _flag.startswith("--repo="):
+        ROOT = pathlib.Path(_flag.split("=", 1)[1])
+
+WEEK = "src/engine/planning/weekModel.ts"
+CATCH = "src/engine/planning/catchUp.ts"
+GENERATE = "src/engine/workoutGenerator/generate.ts"
+ENGINE = "src/engine/recalibration/recalibrate.ts"
+SESSION = "src/core/state/session.ts"
+SAVED = "src/core/validation/savedWorkout.ts"
+STORE = "src/core/state/appStore.ts"
+NOTE = "src/features/today/dayNote.ts"
+TODAY = "src/features/today/TodayScreen.tsx"
+COACH = "src/engine/coach/coachConductor.ts"
+CARD = "src/features/today/WorkoutPreviewCard.tsx"
+VOLUME = "src/engine/volume/weeklyVolume.ts"
+DURATION = "src/engine/duration/duration.ts"
+
+T_WEEK = "src/engine/planning/weekModel.test.ts"
+T_CATCH = "src/engine/planning/catchUp.test.ts"
+T_SESSION = "src/engine/workoutGenerator/catchUpSession.test.ts"
+T_STORE = "src/core/state/catchUp.store.test.ts"
+T_STORED = "src/core/state/session.catchUp.test.ts"
+T_SCREEN = "src/features/today/dayNote.screens.test.tsx"
+T_RESTS = "src/engine/workoutGenerator/catchUpRests.test.ts"
+T_NOTE = "src/features/today/dayNote.test.tsx"
+T_DAY = "src/engine/planning/catchUpDay.test.ts"
+T_OFF = "src/engine/workoutGenerator/offPlanDay.test.ts"
+T_LAYOUT = "src/engine/workoutGenerator/catchUpLayout.test.ts"
+T_EASE = "src/engine/recalibration/recalibrate.easeLayer.test.ts"
+# The eleventh review of round M.
+T_NAMES = "src/engine/recalibration/catchUpStandInNames.test.ts"
+T_SPARE = "src/engine/workoutGenerator/catchUpSpareNames.test.ts"
+T_EXTRA = "src/engine/workoutGenerator/pushExtraName.test.ts"
+T_COMFORT = "src/engine/recalibration/catchUpComfortSwap.test.ts"
+# The twelfth review of round M.
+T_NOTHING = "src/engine/recalibration/catchUpNothingComesIn.test.ts"
+T_COMES_FOR = "src/engine/recalibration/catchUpComesInFor.test.ts"
+T_WITHIN = "src/engine/recalibration/catchUpComesInWithin.test.ts"
+T_RESERVE = "src/engine/recalibration/catchUpSwapReserve.test.ts"
+T_FRESH = "src/engine/workoutGenerator/catchUpFreshNames.test.ts"
+T_ONE_SET = "src/engine/recalibration/catchUpOneSetStandIn.test.ts"
+T_LAYOUT_NAMES = "src/engine/workoutGenerator/catchUpLayoutNames.test.ts"
+# The thirteenth review of round M.
+T_COMFORT_KEPT = "src/engine/recalibration/catchUpComfortKept.test.ts"
+T_REOPENED = "src/engine/workoutGenerator/catchUpReopenedReserve.test.ts"
+T_SWAP_RULES = "src/engine/recalibration/catchUpSwapRules.test.ts"
+T_ONE_LIFT = "src/engine/recalibration/catchUpOneLiftLeftOut.test.ts"
+T_ONE_OWED = "src/engine/recalibration/catchUpOneSetOwed.test.ts"
+T_END_TIME = "src/engine/workoutGenerator/catchUpEndTimeSets.test.ts"
+T_LINES_AFTER = "src/engine/recalibration/catchUpLinesAfterChange.test.ts"
+T_ONE_EXERCISE = "src/engine/workoutGenerator/catchUpOneExercise.test.ts"
+T_EMPTIED = "src/features/today/catchUpEmptied.test.ts"
+# The fourteenth review of round M.
+T_COMFORT_LENGTH = "src/engine/recalibration/catchUpComfortLength.test.ts"
+T_SWAP_RESTING = "src/engine/recalibration/catchUpSwapResting.test.ts"
+T_EMPTIED_LENGTH = "src/engine/recalibration/catchUpEmptiedLength.test.ts"
+T_END_TIME_BACK = "src/engine/workoutGenerator/catchUpEndTimeBack.test.ts"
+T_COMFORT_EASIER = "src/engine/recalibration/catchUpComfortEasier.test.ts"
+T_EMPTIED_SKIP = "src/engine/recalibration/catchUpEmptiedSkip.test.ts"
+T_SHEET_REASON = "src/engine/recalibration/catchUpSheetReason.test.ts"
+T_SECOND_NOTE = "src/features/today/secondEmptiedNote.test.ts"
+# The fifteenth review's.
+T_SWAP_BACK_OVER = "src/engine/recalibration/catchUpSwapBackOver.test.ts"
+T_SWAP_BACK_ROOM = "src/engine/recalibration/catchUpSwapBackRoom.test.ts"
+T_SHEET_DONE = "src/engine/recalibration/catchUpSheetDone.test.ts"
+T_BACK_TO_EMPTIED = "src/engine/recalibration/catchUpBackToEmptied.test.ts"
+T_HURTS_EMPTIED = "src/engine/recalibration/catchUpHurtsEmptied.test.ts"
+T_EMPTIED_NEW_OFFER = "src/core/state/catchUpEmptiedNewOffer.store.test.ts"
+T_STOP_REASON = "src/engine/recalibration/catchUpStopReason.test.ts"
+T_HURTS_ONE_SET = "src/engine/recalibration/catchUpHurtsOneSet.test.ts"
+T_COMFORT_REOPENED = "src/engine/workoutGenerator/catchUpComfortReopened.test.ts"
+T_STAND_IN_LEFT_OUT = "src/engine/workoutGenerator/catchUpStandInLeftOutName.test.ts"
+T_EMPTIED_WHOLE = "src/engine/recalibration/catchUpEmptiedWhole.test.ts"
+T_EMPTIED_PREVIEW = "src/core/state/catchUpEmptiedPreview.store.test.ts"
+T_CHECK_IN_JOINT = "src/engine/recalibration/catchUpCheckInJoint.test.ts"
+T_SECOND_SWAP = "src/engine/recalibration/secondNothingBehindSwap.test.ts"
+T_SECOND_EMPTIED = "src/engine/recalibration/secondNothingBehindEmptied.test.ts"
+T_SECOND_COMFORT = "src/engine/recalibration/secondNothingBehindComfort.test.ts"
+T_SECOND_ONE_SET = "src/engine/recalibration/secondNothingBehindOneSet.test.ts"
+T_SHEET_DONE_UNRANKED = "src/engine/recalibration/catchUpSheetDoneUnranked.test.ts"
+T_SHEET_ONE_SET_REASON = "src/engine/recalibration/catchUpSheetOneSetReason.test.ts"
+T_STOPPED_SLOT = "src/engine/recalibration/catchUpStoppedSlot.test.ts"
+T_SLOT_OWN_NAME = "src/engine/recalibration/catchUpSlotOwnName.test.ts"
+T_COMFORT_UNPINNED = "src/engine/recalibration/catchUpComfortUnpinned.test.ts"
+# The seventeenth review of round M.
+SCHEMA = "src/engine/workout/workoutSchema.ts"
+T_EMPTIED_WAY_BACK = "src/engine/recalibration/catchUpEmptiedWayBack.test.ts"
+T_PLACE_AFTER_SKIP = "src/engine/recalibration/catchUpPlaceStopAfterSkip.test.ts"
+T_SECOND_PLACE_ONE_SET = "src/engine/recalibration/secondNothingBehindPlaceOneSet.test.ts"
+T_LEFT_OUT_SLOT = "src/engine/recalibration/catchUpLeftOutSlot.test.ts"
+T_SWAPPED_AWAY = "src/engine/recalibration/swappedAwayKept.test.ts"
+T_KEPT_AWAY = "src/core/state/keptSwapAwayFrom.store.test.ts"
+T_SWAP_BACK_FREES = "src/engine/recalibration/swapBackFreesAway.test.ts"
+T_COACH_AWAY = "src/engine/coach/coachOffersSwappedAway.test.ts"
+T_ROUND_TRIP = "src/engine/recalibration/emptiedRoundTrip.test.ts"
+T_ROUND_TRIP_STORE = "src/core/state/catchUpEmptiedRoundTrip.store.test.ts"
+T_KEPT_DOSE = "src/core/state/catchUpKeptDose.store.test.ts"
+T_SHEET_ONE_SET_UNRANKED = "src/engine/recalibration/catchUpSheetOneSetUnranked.test.ts"
+T_HURTS_NAME = "src/engine/recalibration/hurtsStandInName.test.ts"
+T_BUSY = "src/engine/recalibration/recalibrate.busy.test.ts"
+T_CLOSED_TRIP = "src/engine/recalibration/catchUpClosedSlotTrip.test.ts"
+T_WAY_BACK_PLACE = "src/engine/recalibration/secondWayBackPlaceEmpty.test.ts"
+T_SECOND_LEFT_OUT = "src/engine/recalibration/secondNothingBehindLeftOut.test.ts"
+T_SWAP_CHAIN = "src/engine/recalibration/swapChainKeptAway.test.ts"
+T_STOPPED_SWAP = "src/engine/recalibration/stoppedSwapKeptAway.test.ts"
+T_AWAY_COMFORT = "src/engine/recalibration/swappedAwayComfortPick.test.ts"
+T_PUT_BACK = "src/engine/recalibration/swappedAwayPutBack.test.ts"
+T_EMPTIED_LATER = "src/core/state/catchUpEmptiedLaterPlan.store.test.ts"
+T_HURTS_REPLACED = "src/engine/recalibration/hurtsBringsBackReplaced.test.ts"
+T_EMPTIED_BY_HAND = "src/engine/recalibration/catchUpEmptiedByHand.test.ts"
+T_AWAY_PICKS = "src/engine/workoutGenerator/swappedAwayPicks.test.ts"
+T_TRIP_OTHER_OFFER = "src/core/state/emptiedTripOtherOffer.store.test.ts"
+T_TWO_LAYOUTS = "src/engine/recalibration/emptiedTwoLayouts.test.ts"
+T_NOTHING_BEHIND_WAY_BACK = "src/engine/recalibration/emptiedNothingBehindWayBack.test.ts"
+T_PAIN_CARD_DAY = "src/engine/coach/painCardDayLists.test.ts"
+T_PREVIEW_AWAY = "src/core/state/previewAgainSwappedAway.store.test.ts"
+T_SECOND_FAILURE = "src/engine/workoutGenerator/secondWorkoutToFailure.test.ts"
+RESERVE = "src/engine/progression/reserveCheck.ts"
+# The twenty-first review of round M.
+T_BEGINNER_OFF_PLAN = "src/engine/workoutGenerator/beginnerOffPlanReserve.test.ts"
+T_LATER_AWAY = "src/core/state/laterPlanSwappedAway.store.test.ts"
+T_PAIN_OFF_PLAN = "src/engine/coach/painCardOffPlan.test.ts"
+T_RESERVE_OFF_PLAN = "src/core/state/reserveCheckOffPlan.store.test.ts"
+T_SAVED_NOTHING = "src/core/state/savedWithNothingLogged.store.test.ts"
+# The twenty-second review of round M.
+T_IN_TRAINING = "src/core/state/inTrainingNothingLogged.store.test.ts"
+T_PAIN_SORE_TODAY = "src/engine/coach/painCardSoreJointToday.test.ts"
+T_SHEET_DONE_PLAN = "src/engine/recalibration/sheetDoneDayOfPlan.test.ts"
+T_KEPT_STOPPED = "src/core/state/keptSwapStoppedUnderWay.store.test.ts"
+T_SAVED_LOADED = "src/core/state/savedWorkoutLoaded.store.test.ts"
+T_EMPTIED_OTHER_PLACE = "src/core/state/emptiedSavedOtherPlace.store.test.ts"
+# The twenty-third review of round M.
+T_SAVED_AS_OFFER = "src/core/state/savedWorkoutReadAsOffer.store.test.ts"
+T_UNDO_PUT_BACK = "src/core/state/undoAfterKeptSwapStopped.store.test.ts"
+T_SAVED_AFTER_EMPTIED = "src/core/state/savedCatchUpLoadedAfterEmptied.store.test.ts"
+T_SAVED_OTHER_DAY = "src/core/state/savedCatchUpOtherDay.store.test.ts"
+T_DAY_CHOICES_STORED = "src/core/state/session.dayChoices.test.ts"
+# The twenty-fourth review of round M.
+T_SAVED_DAY_WORDS = "src/core/state/savedOffPlanDayWords.store.test.ts"
+T_SECOND_OTHER_DAY = "src/engine/workoutGenerator/secondOnAnotherDay.test.ts"
+T_EMPTY_COPY = "src/core/state/emptyCopyEndsMark.store.test.ts"
+T_SAVED_DELOAD = "src/core/state/savedWorkoutDeloadWeek.store.test.ts"
+# The twenty-fifth review of round M.
+T_EARLIER_LOAD = "src/core/state/earlierDayLoadNote.store.test.ts"
+T_SECOND_NEXT_DAY = "src/core/state/secondSavedNextDay.store.test.ts"
+T_COPY_EMPTIED_LAYOUT = "src/core/state/copyRebuiltIntoEmptiedLayout.store.test.ts"
+T_SECOND_WORDS = "src/core/state/secondCopyWords.store.test.ts"
+T_NOTHING_BEHIND_NOTE = "src/core/state/copyNothingBehindNote.store.test.ts"
+T_EMPTY_SECOND = "src/core/state/emptySecondOnAnotherDay.store.test.ts"
+# The twenty-sixth review of round M.
+T_EMPTY_FULL_WAY_BACK = "src/core/state/emptyCopyFullSessionWayBack.store.test.ts"
+# The twenty-seventh review of round M.
+T_COPY_FULL_READ_AGAIN = "src/core/state/copyFullSessionOfferReadAgain.store.test.ts"
+T_COPY_FULL_EMPTIED = "src/core/state/copyFullSessionEmptiedWayBack.store.test.ts"
+T_COPY_FULL_HOLDS = "src/core/state/copyFullSessionChoiceHolds.store.test.ts"
+T_REBUILT_MIDNIGHT = "src/core/state/secondRebuiltPastMidnight.store.test.ts"
+T_FRESHEST = "src/core/state/convertedFreshestLine.store.test.ts"
+
+# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
+MUTATIONS = [
+    # The week model.
+    ("W1 this week's sets only, Monday to Sunday on the device", WEEK,
+     "    if (record.startedAt > now || localWeekKey(record.startedAt) !== week) continue;",
+     "    if (record.startedAt > now) continue;", [T_WEEK], None),
+    ("W2 a secondary muscle at half", WEEK,
+     "    muscles[muscle][field] += sets * INDIRECT_SET_WEIGHT;",
+     "    muscles[muscle][field] += sets;", [T_WEEK], None),
+    ("W3 today's sets kept apart", WEEK,
+     "      if (day === today) credit(muscles, entry.exerciseId, sets, 'today');\n", "",
+     [T_WEEK, T_STORE], None),
+    ("W4 a warm-up is no set for the week", WEEK,
+     "      const sets = entry.sets.filter((set) => set.completed && set.kind !== 'warmup').length;",
+     "      const sets = entry.sets.filter((set) => set.completed).length;", [T_WEEK], None),
+    ("W5 nothing planned past Sunday", WEEK,
+     "    if (localWeekKey(date) !== week) break;\n", "", [T_WEEK], None),
+    ("W6 today a session to come only while nothing was begun", WEEK,
+     "    if (offset === 0 && trainedToday) continue;\n", "", [T_WEEK], None),
+    ("W7 only the sessions the week has left, with more days ticked", WEEK,
+     "  return capped ? days.slice(0, left) : days;", "  return days;", [T_WEEK], None),
+    ("W8 the sessions to come count", WEEK,
+     "        'planned',\n", "        'done',\n", [T_WEEK], None),
+
+    # The catch-up rule.
+    ("C1 the 48-hour rule", CATCH,
+     "    if (state.daysSince !== null && state.daysSince < CATCH_UP.RECENT_DAYS) continue;\n", "",
+     [T_CATCH], None),
+    ("C2 never under two sets", CATCH,
+     "    if (sets < CATCH_UP.MIN_SETS) continue;", "    if (sets < 1) continue;", [T_CATCH], None),
+    ("C3 three sets, two for a beginner", CATCH,
+     "      Math.min(beginner ? CATCH_UP.BEGINNER_SETS : CATCH_UP.SETS, short, dose - state.today),",
+     "      Math.min(CATCH_UP.SETS, short, dose - state.today),", [T_CATCH], None),
+    ("C4 never more than the week is short", CATCH,
+     "      Math.min(beginner ? CATCH_UP.BEGINNER_SETS : CATCH_UP.SETS, short, dose - state.today),",
+     "      Math.min(beginner ? CATCH_UP.BEGINNER_SETS : CATCH_UP.SETS, dose - state.today),", [T_CATCH], None),
+    ("C5 nor the muscle's usual sets", CATCH,
+     "      Math.min(beginner ? CATCH_UP.BEGINNER_SETS : CATCH_UP.SETS, short, dose - state.today),",
+     "      Math.min(beginner ? CATCH_UP.BEGINNER_SETS : CATCH_UP.SETS, short),", [T_CATCH], None),
+    ("C5b ... today's half sets counted against them", CATCH,
+     "      Math.min(beginner ? CATCH_UP.BEGINNER_SETS : CATCH_UP.SETS, short, dose - state.today),",
+     "      Math.min(beginner ? CATCH_UP.BEGINNER_SETS : CATCH_UP.SETS, short, dose),", [T_CATCH], None),
+    ("C6 a beginner further from failure", CATCH,
+     "      minRir: offPlanFloor(profile),",
+     "      minRir: CATCH_UP.MIN_RIR,", [T_CATCH], None),
+    ("C7 the largest share short first", CATCH,
+     "    b.share - a.share || MUSCLE_IDS.indexOf(a.muscle) - MUSCLE_IDS.indexOf(b.muscle);",
+     "    a.share - b.share || MUSCLE_IDS.indexOf(a.muscle) - MUSCLE_IDS.indexOf(b.muscle);",
+     [T_CATCH], None),
+    ("C8 what was missed before what is left of today's", CATCH,
+     "    muscles: [...behind.sort(order), ...remainders.sort(order)].map(",
+     "    muscles: [...remainders.sort(order), ...behind.sort(order)].map(", [T_CATCH], None),
+    ("C9 a beginner's muscles trained today sit out", CATCH,
+     "      if (beginner || recent || left < CATCH_UP.MIN_SETS) {",
+     "      if (recent || left < CATCH_UP.MIN_SETS) {", [T_CATCH], None),
+    ("C9b ... and one trained in the 48 hours before today too", CATCH,
+     "      if (beginner || recent || left < CATCH_UP.MIN_SETS) {",
+     "      if (beginner || left < CATCH_UP.MIN_SETS) {", [T_CATCH, T_DAY], None),
+    ("C10 the remainder three or more short of failure", CATCH,
+     "          minRir: CATCH_UP.REMAINDER_RIR,", "          minRir: CATCH_UP.MIN_RIR,",
+     [T_CATCH], None),
+    ("C11 one session's dose for the day", CATCH,
+     "      const left = Math.floor(Math.min(todayDoseOf(muscle) - state.today, short, CATCH_UP.SETS));",
+     "      const left = Math.floor(Math.min(todayDoseOf(muscle), short, CATCH_UP.SETS));", [T_CATCH], None),
+    ("C11b ... read from today's own session", CATCH,
+     "      const left = Math.floor(Math.min(todayDoseOf(muscle) - state.today, short, CATCH_UP.SETS));",
+     "      const left = Math.floor(Math.min(dose - state.today, short, CATCH_UP.SETS));",
+     [T_CATCH, T_STORE], None),
+    ("C12 nothing left for a muscle whose week is on track", CATCH,
+     "      const left = Math.floor(Math.min(todayDoseOf(muscle) - state.today, short, CATCH_UP.SETS));",
+     "      const left = Math.floor(Math.min(todayDoseOf(muscle) - state.today, CATCH_UP.SETS));",
+     [T_CATCH], None),
+    ("C12b trained today means direct sets today", CATCH,
+     "    if (kind === 'second' && state.todayDirect > 0) {",
+     "    if (kind === 'second' && state.today > 0) {", [T_CATCH, T_DAY], None),
+    ("C13 a day trained offers a second workout", CATCH,
+     "  if (trainedToday) return 'second';", "  if (trainedToday) return null;", [T_STORE], None),
+    ("C13b ... once a set of the day's workout is done", CATCH,
+     "      record.startedAt <= now && localDayKey(record.startedAt) === today && trainedIn(record),",
+     "      record.startedAt <= now && localDayKey(record.startedAt) === today,", [T_STORE, T_DAY], None),
+    ("C13c ... a working set, not a warm-up", CATCH,
+     "    entry.sets.some((set) => set.completed && set.kind !== 'warmup'),",
+     "    entry.sets.some((set) => set.completed),", [T_DAY], None),
+    ("C14 a catch-up only on a day not ticked", CATCH,
+     "  if (profile.schedule.availableDays.includes(localWeekday(now))) return null;\n", "",
+     [T_STORE], None),
+    ("C15 a catch-up only for a lifter in training", CATCH,
+     "  return recent ? 'catch-up' : null;", "  return 'catch-up';", [T_STORE], None),
+
+    # The generator.
+    ("G1 a catch-up is built from its own muscles", GENERATE,
+     "    (catchUp\n      ? catchUpTemplate(", "    (false\n      ? catchUpTemplate(",
+     [T_SESSION, T_STORE], None),
+    ("G2 a catch-up of one muscle is one still", GENERATE,
+     "  const catchUp = spec && spec.muscles.length > 0 ? spec : null;",
+     "  const catchUp = spec && spec.muscles.length > 1 ? spec : null;", [T_RESTS], None),
+    ("G3 a muscle's own slot leads with it", GENERATE,
+     "    ...slots.filter((candidate) => candidate.muscles[0] === muscle),\n", "", [T_SESSION], None),
+    ("G4 muscles sharing a slot share one lift", GENERATE,
+     "    if (shared) {", "    if (shared && false) {", [T_SESSION], None),
+    ("G5 the strength lifts first", GENERATE,
+     "      ...group(isMissed).filter(strength),\n      ...group(isMissed).filter((candidate) => !strength(candidate)),",
+     "      ...group(isMissed),", [T_SESSION], None),
+    ("G6 never more sets than the catch-up gives", GENERATE,
+     "    sets: Math.min(prescription.sets, slotSpec.sets ?? prescription.sets),",
+     "    sets: prescription.sets,", [T_SESSION], None),
+    ("G7 never less reserve than it asks", GENERATE,
+     "    rir: Math.max(prescription.rir, slotSpec.minRir ?? 0),", "    rir: prescription.rir,",
+     [T_SESSION], None),
+    ("G8 no lift to push weighed off the plan", GENERATE,
+     "    !offPlan &&\n", "", [T_SESSION], 0),
+    ("G9 nor its extra session put in", GENERATE,
+     "    !offPlan &&\n", "", [T_SESSION], 1),
+    ("G10 Why this workout says what it is for", GENERATE,
+     "    ...(spec && (catchUp !== null || spec.kind === 'second') ? catchUpLines(spec, blocks) : []),\n",
+     "", [T_SESSION, T_RESTS], None),
+    ("G11 ... and what sits out", GENERATE,
+     "  if (spec.sitOut.length > 0) {", "  if (false) {", [T_SESSION], None),
+    ("G12 a muscle's usual sets: the most a template of the split gives", GENERATE,
+     "  return Math.max(0, ...splitFor(profile).map((template) => setsIn(profile, template, muscle)));",
+     "  return Math.max(0, ...splitFor(profile).slice(0, 1).map((template) => setsIn(profile, template, muscle)));",
+     [T_SESSION], None),
+
+    # The engine and the stored session.
+    ("E1 every rebuild keeps the catch-up", ENGINE,
+     "    catchUp: constraints.fullSession\n      ? null\n      : scope === 'full'\n        ? (constraints.catchUp ?? null)\n        : catchUpToday(constraints, request.workout),\n",
+     "", [T_STORE], None),
+    ("E2 ... unless the full session was taken", ENGINE,
+     "    catchUp: constraints.fullSession\n      ? null\n      : scope === 'full'",
+     "    catchUp: scope === 'full'", [T_STORE], None),
+    ("E3 the switch takes the full session, and gives it back", ENGINE,
+     "      } else delete constraints.fullSession;", "      }", [T_STORE], None),
+    ("E4 a change keeps what the day offers", ENGINE,
+     "    ...(constraints.catchUp !== undefined ? { catchUp: cloneSpec(constraints.catchUp) } : {}),\n",
+     "", [T_STORE], None),
+    ("E5 ... and the full session taken", ENGINE,
+     "    ...(constraints.fullSession ? { fullSession: true } : {}),\n", "", [T_STORE], None),
+    ("S1 a catch-up that cannot be read is dropped, never the session", SESSION,
+     "  catchUp: CatchUpSpecSchema.nullable().optional().catch(undefined),\n  fullSession:",
+     "  catchUp: CatchUpSpecSchema.nullable().optional(),\n  fullSession:", [T_STORED], None),
+    ("S2 ... and a full session that cannot be read", SESSION,
+     "  fullSession: z.boolean().optional().catch(undefined),\n  // The seventeenth",
+     "  fullSession: z.boolean().optional(),\n  // The seventeenth", [T_STORED], None),
+
+    # The store.
+    ("ST1 the day's catch-up or second workout", STORE,
+     "    const catchUp = this.catchUpFor(profile, now, deload !== null);",
+     "    const catchUp = null as ReturnType<typeof this.catchUpFor>;", [T_STORE], None),
+    ("ST2 no catch-up in a deload week", STORE,
+     "    if (!kind || (deload && kind === 'catch-up')) return null;", "    if (!kind) return null;",
+     [T_STORE], None),
+    ("ST2b ... but a second workout, going easy on what was done", STORE,
+     "    if (!kind || (deload && kind === 'catch-up')) return null;",
+     "    if (!kind || deload) return null;", [T_STORE], None),
+    ("ST3 the full session kept through the day", STORE,
+     "      day?.fullSession === true &&", "      false &&", [T_STORE], None),
+    ("ST4 ... and through a plan built again", STORE,
+     "    const before = current ?? carry;", "    const before = current;", [T_STORE], None),
+    ("ST5 a plan built again reads the day's offer afresh", STORE,
+     "    delete today.catchUp;\n    delete today.fullSession;\n", "", [T_STORE], None),
+    ("ST6 the session keeps the offer", STORE,
+     "        ...(catchUp ? { catchUp } : {}),\n", "", [T_STORE], None),
+
+    # Today.
+    ("T1 the line for a catch-up", NOTE,
+     "      action: { label: 'Full session', full: true },", "      action: undefined,",
+     [T_STORE, T_SCREEN], 2),
+    ("T2 ... and for the full session taken", NOTE,
+     "{ action: { label: 'Catch-up instead', full: false } }", "{}", [T_STORE, T_SCREEN], None),
+    ("T3 the button takes the session it names", TODAY,
+     "                      const full = note.action!.full;", "                      const full = true;",
+     [T_SCREEN], None),
+
+    # The review of round M: what a catch-up or a second workout leaves alone.
+    ("R1 a second workout gives no lift for a muscle that sits out", CATCH,
+     "    ...spec.sitOut,\n", "", [T_RESTS], None),
+    ("R2 ... nor for one trained in the last 48 hours it is not built for", CATCH,
+     "        !built.has(muscle) && (daysSinceMuscle[muscle] ?? Infinity) < CATCH_UP.RECENT_DAYS,",
+     "        false,", [T_RESTS], None),
+    ("R3 none for a day with nothing behind", CATCH,
+     "  if (!spec || (spec.kind === 'catch-up' && spec.muscles.length === 0)) return new Set();",
+     "  if (!spec) return new Set();", [T_RESTS], None),
+    ("R4 a muscle's lift is the first one it can take", GENERATE,
+     "  return (usable ? trains.find(takes) : undefined) ?? trains[0];", "  return trains[0];",
+     [T_RESTS], None),
+    ("R5 a lift two muscles share takes the fewest sets either has left", GENERATE,
+     "      sets: Math.min(slotSpec.sets ?? Infinity, ...shares.map((left) => left.sets)),",
+     "      sets: slotSpec.sets,", [T_RESTS, T_SESSION], None),
+    ("R6 ... at the most reserve either asks", GENERATE,
+     "      minRir: Math.max(slotSpec.minRir ?? 0, offPlanRir, ...shares.map((left) => left.minRir)),",
+     "      minRir: Math.max(slotSpec.minRir ?? 0, offPlanRir),", [T_RESTS], None),
+    ("R7 a slot left out for a muscle that rests says nothing", GENERATE,
+     "      if (!restsHere && short?.length !== 0) {", "      if (short?.length !== 0) {",
+     [T_RESTS], None),
+    ("R8 Why this workout names only what a lift went in for", GENERATE,
+     "      .filter((item) => item.why === why && covered.has(item.muscle))",
+     "      .filter((item) => item.why === why)", [T_RESTS], None),
+    ("R9 a catch-up with no lift left plans as with nothing behind", GENERATE,
+     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain && !emptiedByLifter()) {",
+     "  if (false) {", [T_RESTS, T_NOTE], None),
+    ("R10 nothing more for today", GENERATE,
+     "  const nothing = (spec?.kind === 'second' || catchUp !== null) && count === 0;",
+     "  const nothing = false;",
+     [T_RESTS, T_NOTE], None),
+    ("R11 the lift to push waits for a day of the plan", GENERATE,
+     "      push && !offPlan && index === pushSlot && pushFits(push.exercise) ? push.exercise : undefined;",
+     "      push && index === pushSlot && pushFits(push.exercise) ? push.exercise : undefined;",
+     [T_RESTS, T_OFF], None),
+    ("R12 a slot's pick works no muscle that rests", GENERATE,
+     "    .filter((exercise) => !worksResting(exercise, picker))\n", "", [T_RESTS], 0),
+    ("R13 ... nor the coach's", GENERATE,
+     "    .filter((exercise) => !worksResting(exercise, picker))\n", "", [T_RESTS], 1),
+    ("R14 the coach offers nothing for a muscle that rests", COACH,
+     "      !covered.has(priority.muscle) &&\n      !resting.has(priority.muscle),",
+     "      !covered.has(priority.muscle),", [T_RESTS], None),
+    ("R15 ... unless the full session was taken", GENERATE,
+     "  if (!stored || constraints.fullSession) return new Set();",
+     "  if (!stored) return new Set();", [T_RESTS], None),
+    ("R16 Today reads the plan as it was built", NOTE,
+     "  const built = builtCatchUp(stored, session.workout).muscles.length > 0;",
+     "  const built = stored.muscles.length > 0;", [T_NOTE], None),
+    ("R17 a second workout's full session, and back", NOTE,
+     "    return { text: 'You trained today.', action: { label: 'Go easy instead', full: false } };",
+     "    return { text: 'You trained today.' };", [T_NOTE, T_STORE], None),
+    ("R18 nothing more for today, the full session a tap away", NOTE,
+     "    text: `You trained today${nothingBehind}: nothing more for today.`,\n    action: { label: 'Full session', full: true },",
+     "    text: `You trained today${nothingBehind}: nothing more for today.`,", [T_NOTE], None),
+    ("R19 nothing to start when nothing is left", CARD,
+     "    dayNote !== null && sessionStatus === 'preview' && allEntries(workout.blocks).length === 0;",
+     "    false;", [T_NOTE], None),
+    ("R20 the switch knows the day's kind", STORE,
+     "    return this.recalibrate({ type: 'session-kind', full, ...(kind ? { kind } : {}) });",
+     "    return this.recalibrate({ type: 'session-kind', full });", [T_STORE], None),
+    ("R21 ... and says which it builds", ENGINE,
+     "            ? 'The second workout'", "            ? 'The catch-up'", [T_STORE], None),
+
+    # The first review of round M.
+    ("V1 a catch-up is the next length below the Default", GENERATE,
+     "    (catchUp !== null && duration === 'default'\n      ? shorterLength(defaultMinutes)\n      : resolveTargetMinutes(duration, defaultMinutes));",
+     "    resolveTargetMinutes(duration, defaultMinutes);", [T_DAY], None),
+    ("V2 off the plan, the lift to push gives way in every slot", GENERATE,
+     "  const givesWay = push && (!push.natural || offPlan) ? [push.exercise.id] : [];",
+     "  const givesWay = push && !push.natural ? [push.exercise.id] : [];", [T_OFF], None),
+    ("V3 a kept swap brings in no lift for a muscle that rests", GENERATE,
+     "      if (next.primaryMuscles.some((muscle) => rests.has(muscle))) continue;\n", "",
+     [T_OFF], None),
+    ("V4 no drop set off the plan", GENERATE,
+     "  if (!offPlan && profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {",
+     "  if (profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {", [T_DAY, T_OFF], None),
+    ("V5 a muscle with nothing left rests for the slots after", GENERATE,
+     "    const spent = [...budget]\n      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)\n      .map(([muscle]) => muscle);",
+     "    const spent: MuscleId[] = [];", [T_DAY], None),
+    ("V6 every lift counts against its muscles' sets", GENERATE,
+     "    for (const left of shares) left.sets -= prescription.sets;\n", "", [T_DAY], None),
+    ("V7 the split's rotation passes a catch-up by", VOLUME,
+     "      .filter((id): id is string => Boolean(id) && !OFF_ROTATION.has(id as string)),",
+     "      .filter((id): id is string => Boolean(id)),", [T_DAY], None),
+    ("V8 today's direct sets", WEEK,
+     "    if (field === 'today') muscles[muscle].todayDirect += sets;\n", "", [T_DAY], None),
+    ("V9 the 48 hours before today", WEEK,
+     "    muscles[muscle].daysBefore = earlier.daysSinceMuscle[muscle] ?? null;\n", "", [T_DAY], None),
+    ("V10 what is left read from the day's first session", STORE,
+     "      (muscle) => firstSessionDose(profile, first, muscle),",
+     "      (muscle) => sessionDose(profile, muscle),", [T_STORE], None),
+    ("V11 the full session holds through a workout discarded", STORE,
+     "    // The full session taken today holds through a workout begun and discarded (the review of M).\n    this.ensureSession(session);",
+     "    this.ensureSession();", [T_STORE], None),
+    ("V12 a profile or a place saved reads the day's offer again", STORE,
+     "        ? this.offerOverrides(session, profile, trigger.type)", "        ? {}", [T_STORE], None),
+    ("V13 ... the full session kept while the day offers the same", STORE,
+     "    if (catchUp && constraints.fullSession && constraints.catchUp?.kind === catchUp.kind) {",
+     "    if (false) {", [T_STORE], None),
+    ("V14 ... on a plan not yet started only", STORE,
+     "    if (session.status !== 'preview' || this.fromEarlierDay(session)) return constraints;",
+     "    if (this.fromEarlierDay(session)) return constraints;", [T_STORE], None),
+    ("V15 the coach adds no work off the plan", COACH,
+     "    .filter((signal) => !offPlanToday(input) || !addsWork(signal));", "    .filter(() => true);",
+     [T_OFF, T_RESTS], None),
+    ("V16 ... a catch-up built is off the plan, one planned as usual is not", COACH,
+     "  return stored.kind === 'second' || builtCatchUp(stored, input.workout).muscles.length > 0;",
+     "  return stored.kind === 'second';", [T_RESTS], None),
+    ("V17 ... no exercise added", COACH,
+     "    (trigger?.type === 'drop-set' && trigger.on) ||\n    trigger?.type === 'add-exercise'",
+     "    (trigger?.type === 'drop-set' && trigger.on)", [T_RESTS], None),
+    ("V18 ... no drop set", COACH,
+     "    (trigger?.type === 'drop-set' && trigger.on) ||\n    trigger?.type === 'add-exercise'",
+     "    trigger?.type === 'add-exercise'", [T_OFF], None),
+    ("V19 ... no set more", COACH,
+     "    (trigger?.type === 'sets' && trigger.workingDelta > 0) ||\n    (trigger?.type === 'rep-range' && (trigger.workingDelta ?? 0) > 0) ||",
+     "    (trigger?.type === 'rep-range' && (trigger.workingDelta ?? 0) > 0) ||", [T_OFF], None),
+    ("V20 no swap brings in a lift for a muscle that rests", ENGINE,
+     "              !exercise.primaryMuscles.some((muscle) => resting.has(muscle)) &&\n", "",
+     [T_OFF], None),
+    ("V21 Today's line leads with what was missed only where a lift went in", NOTE,
+     "      text: ledWith\n", "      text: built\n", [T_NOTE], None),
+    ("V22 ... for a muscle behind", NOTE,
+     "  const ledWith = stored.muscles.some((item) => item.why === 'behind' && covered.has(item.muscle));",
+     "  const ledWith = stored.muscles.some((item) => covered.has(item.muscle));", [T_NOTE], None),
+    ("V23 a day not ticked says so with no catch-up to offer", NOTE,
+     "  if (!stored) return ticked ? null : { text: 'Not one of your training days.' };",
+     "  if (!stored) return null;", [T_NOTE, T_SCREEN], None),
+    ("V24 ... as Today reads the schedule", TODAY,
+     "    profile.schedule.availableDays.includes(localWeekday(new Date(now).toISOString())),",
+     "    true,", [T_SCREEN], None),
+
+    # The second review of round M.
+    ("X1 the lift in front keeps the catch-up's sets through a day's setting", ENGINE,
+     "    const sets = Math.min(own, Math.max(room, Math.min(own, working)));",
+     "    const sets = own;", [T_OFF], None),
+    ("X2 ... and its reserve", ENGINE,
+     "    const rir = Math.max(hold?.minRir ?? 0, pushed ? pushRir(after.rir) : after.rir);",
+     "    const rir = pushed ? pushRir(after.rir) : after.rir;", [T_OFF], None),
+    ("X3 what comes in for a lift keeps the catch-up's reserve", ENGINE,
+     "  return Math.max(shift, hold.minRir - prescriptionToday(request, exercise, role).rir);",
+     "  return shift;", [T_OFF], None),
+    ("X4 a slot the budget empties hands its muscle to the next slot", GENERATE,
+     "    if (!pick && catchUp) {", "    if (false) {", [T_SESSION, T_DAY], None),
+    ("X5 a lift kept through a rebuild counts against its muscles", GENERATE,
+     "      if (left) left.sets -= sets;\n", "", [T_OFF], None),
+    ("X6 the session's kind switched builds the new kind whole", ENGINE,
+     "(type === 'session-kind' || request.offerChanged)", "request.offerChanged",
+     [T_STORE], None),
+    ("X7 a catch-up's own length wherever the length is read", DURATION,
+     "  return choice === 'default' && catchUp\n    ? shorterLength(defaultMinutes)\n    : resolveTargetMinutes(choice, defaultMinutes);",
+     "  return resolveTargetMinutes(choice, defaultMinutes);", [T_OFF, T_STORE], None),
+    ("X8 ... the minutes left after a change to one lift", ENGINE,
+     "    request.workout.templateId,\n", "    '',\n", [T_OFF], 0),
+    ("X9 ... a rebuild under way", ENGINE,
+     "    request.workout.templateId,\n", "    '',\n", [T_OFF], 1),
+    ("X10 ... a check-in short on time", ENGINE,
+     "        readiness.timePressure && request.duration === 'default' && !(catchUpLength && length <= 45)",
+     "        readiness.timePressure && request.duration === 'default'", [T_STORE], None),
+    ("X11 ... an end time", STORE,
+     "      session.workout.templateId,\n", "      '',\n", [T_STORE], None),
+    ("X12 the day's first workout gives the sets it planned: a deload day, a catch-up", GENERATE,
+     "  if (!record) return sessionDose(profile, muscle);\n  return record.entries.reduce(",
+     "  if (!record) return sessionDose(profile, muscle);\n  if (record) return sessionDose(profile, muscle);\n  return record.entries.reduce(",
+     [T_STORE], None),
+    ("X13 ... a lift that works the muscle secondarily at half, as the week counts it", GENERATE,
+     "        ? INDIRECT_SET_WEIGHT\n", "        ? 1\n", [T_STORE], None),
+    ("X14 the day's first workout is one with a set done", STORE,
+     "          record.startedAt <= now && localDayKey(record.startedAt) === today && trainedIn(record),",
+     "          record.startedAt <= now && localDayKey(record.startedAt) === today,", [T_STORE], None),
+    ("X15 a technique saved with the schedule reads the offer again", STORE,
+     "      trigger.type === 'technique' ||\n", "", [T_STORE], None),
+    ("X16 a movement that leads with the muscle when the split's lifts rest", GENERATE,
+     "    ...[...new Set(leading)]\n      .filter((pattern) => !known.has(pattern))\n      .map((pattern) => slot(pattern, 'secondary-hypertrophy', [muscle])),\n",
+     "", [T_RESTS], None),
+    ("X17 the full session holds only through the day it was taken", STORE,
+     "      localDayKey(before.createdAt) === localDayKey(now) &&\n", "", [T_STORE], 0),
+
+    # The third review of round M.
+    ("Z1 a lift planned afresh keeps the catch-up's reserve: weights, place, busy equipment", ENGINE,
+     "    heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),\n",
+     "    effortShift(request, entry, plainTarget.rir),\n", [T_OFF], None),
+    ("Z2 ... a max entered", ENGINE,
+     "            heldShift(\n              from,\n              workout,\n              exercise,\n              entry.role,\n              effortShift(from, entry, plainTarget.rir),\n            ),",
+     "            effortShift(from, entry, plainTarget.rir),", [T_OFF], None),
+    ("Z3 a save that changes the day's offer says so", STORE,
+     "    return sameOffer(constraints, session.constraints) && !unbuilt\n      ? { constraints }\n      : { constraints, offerChanged: true };",
+     "    return { constraints };", [T_STORE], None),
+    ("Z4 ... and the plan is built whole", ENGINE,
+     "(type === 'session-kind' || request.offerChanged)", "type === 'session-kind'",
+     [T_STORE], None),
+    ("Z5 an offer is its kind and its muscles", GENERATE,
+     "  return [spec.kind, ...spec.muscles.map((item) => item.muscle)].join(' ');",
+     "  return spec.kind;", [T_SESSION], None),
+    ("Z6 ... a catch-up with nothing behind is the split's day", GENERATE,
+     "  if (!spec || (spec.kind === 'catch-up' && spec.muscles.length === 0)) return '';",
+     "  if (!spec) return '';", [T_SESSION], None),
+    ("Z7 ... and so is the full session taken", GENERATE,
+     "  const spec = constraints.fullSession ? null : (constraints.catchUp ?? null);",
+     "  const spec = constraints.catchUp ?? null;", [T_SESSION, T_STORE], 0),
+    ("Z8 a catch-up slot's lift works a muscle it is for", GENERATE,
+     "      ...(short ? { trains: new Set(short) } : {}),\n", "", [T_SESSION, T_OFF], None),
+    ("Z9 ... one for more of them first", GENERATE,
+     "      covers(b, picker.trains) - covers(a, picker.trains) ||\n", "", [T_SESSION], None),
+    ("Z11 muscles share a slot only through one lift for both", GENERATE,
+     "        candidate.pattern === own.pattern &&\n        oneLift(candidate.pattern, [...candidate.muscles, item.muscle]),",
+     "        candidate.pattern === own.pattern,", [T_SESSION], None),
+    ("Z12 a catch-up slot is for the day's muscles alone", GENERATE,
+     "muscles: [item.muscle], sets", "muscles: [...own.muscles], sets", [T_SESSION], None),
+    ("Z13 a lift goes in for every one of the day's muscles it works", GENERATE,
+     "      ...[...budget.keys()].filter((muscle) => !slotSpec.muscles.includes(muscle)),\n", "",
+     [T_DAY, T_OFF], None),
+    ("Z14 a lasting swap that misses the catch-up's muscle waits", GENERATE,
+     "      if (trains && covers(next, trains) < covers(pick, trains)) continue;\n", "",
+     [T_OFF], None),
+    ("Z16 a lift picked up again keeps the catch-up's reserve", GENERATE,
+     "        minRir: Math.max(\n          offPlanRir,\n          shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,\n        ),\n",
+     "", [T_OFF], None),
+    ("Z17 ... counts against its muscles", GENERATE,
+     "    spend(exercise.id, sets);\n", "", [T_OFF], None),
+    ("Z18 ... and takes back the sets of the stand-in that gives way", GENERATE,
+     "    for (const entry of standIns) spend(entry.exerciseId, -workingOf(entry));\n", "",
+     [T_OFF], None),
+    ("Z19 a muscle with one set left rests for the slots after, its own slot too", GENERATE,
+     "      .filter(([, left]) => left.sets < CATCH_UP.MIN_SETS)",
+     "      .filter(([, left]) => left.sets <= 0)", [T_SESSION], None),
+    ("Z22 the lift in front gets no set its muscles have no room for", ENGINE,
+     "    const room = catchUpRoom(spec, workout, entry, isDone);",
+     "    const room = catchUpHold(spec, exercise)?.sets ?? Infinity;", [T_OFF], None),
+    ("Z23 ... and a set where they have room, as a plan made harder does", ENGINE,
+     "    const sets = Math.min(own, Math.max(room, Math.min(own, working)));",
+     "    const sets = Math.min(own, working, room);", [T_OFF], None),
+
+    # The fourth review of round M.
+    ("Y1 the lift to push, giving its place up, gives catch-up muscles no slot", GENERATE,
+     "            exercise.id !== push?.exercise.id &&\n", "", [T_OFF], None),
+    ("Y3 a swap-in for fewer of a shared slot's muscles waits", GENERATE,
+     "      if (trains && covers(next, trains) < covers(pick, trains)) continue;",
+     "      if (trains && covers(next, trains) === 0) continue;", [T_OFF], None),
+    ("Y4 a plan rebuilt around what it keeps reads the offer as it was built", ENGINE,
+     "        : catchUpToday(constraints, request.workout),",
+     "        : (constraints.catchUp ?? null),", [T_STORE], None),
+    ("Y5 ... a plan built whole reads it afresh", ENGINE,
+     "      : scope === 'full'\n        ? (constraints.catchUp ?? null)\n        : catchUpToday(constraints, request.workout),",
+     "      : catchUpToday(constraints, request.workout),", [T_STORE], None),
+
+    # The fifth review of round M.
+    ("U3 a change of place builds a plan whole where the catch-up had no lift", STORE,
+     "      (trigger === 'location' || trigger === 'equipment') &&", "      false &&",
+     [T_STORE], None),
+    ("U4 ... and new equipment at the place", STORE,
+     "(trigger === 'location' || trigger === 'equipment')", "trigger === 'location'",
+     [T_STORE], None),
+    ("U5 ... the equipment saved reads the day's offer again", STORE,
+     "      trigger.type === 'technique' ||\n      trigger.type === 'equipment'",
+     "      trigger.type === 'technique'", [T_STORE], None),
+
+    # The sixth and seventh reviews of round M: the catch-up's layout kept with the plan.
+    ("P1 a catch-up's layout is kept with the plan", GENERATE,
+     "    ...(catchUp\n      ? {\n          catchUpSlots: slots.map((candidate) => ({\n            ...candidate,\n            muscles: [...candidate.muscles],\n          })),\n        }\n      : {}),\n",
+     "", [T_LAYOUT, T_OFF], None),
+    ("P2 ... a rebuild around what it keeps passes it on", ENGINE,
+     "    ...(scope !== 'full' && request.workout.catchUpSlots\n      ? { catchUpSlots: request.workout.catchUpSlots }\n      : {}),\n",
+     "", [T_LAYOUT, T_OFF], None),
+    ("P3 ... and the plan fills it, no layout made again", GENERATE,
+     "    (catchUp && constraints.catchUpSlots && constraints.catchUpSlots.length > 0",
+     "    (false && catchUp && constraints.catchUpSlots && constraints.catchUpSlots.length > 0",
+     [T_LAYOUT, T_OFF], None),
+    ("P4 a muscle a slot's lift misses takes a slot of its own", GENERATE,
+     "    if (catchUp && index < laidOut) slots.push(...missedBy(planned, index));\n", "",
+     [T_LAYOUT, T_OFF], None),
+    ("P5 ... one, never one more at each rebuild", GENERATE,
+     "      if (slots.slice(index + 1).some((later) => later.muscles.includes(muscle))) return [];\n",
+     "", [T_LAYOUT], None),
+    ("P6 ... none for a slot with no lift going on: a stand-in skipped", GENERATE,
+     "    if (live.length === 0 || live.some((entry) => entry.replacedFrom !== undefined)) return [];",
+     "    if (live.some((entry) => entry.replacedFrom !== undefined)) return [];",
+     [T_LAYOUT], None),
+    ("P7 ... nor for one the lifter's swap there left so", GENERATE,
+     "    if (live.length === 0 || live.some((entry) => entry.replacedFrom !== undefined)) return [];",
+     "    if (live.length === 0) return [];", [T_LAYOUT, T_OFF], None),
+
+    # The eighth review of round M.
+    ("K1 a kept layout takes the dose the offer asks now", GENERATE,
+     "              ...(own ? { sets: own.sets, minRir: own.minRir } : {}),\n", "",
+     [T_STORE], None),
+    ("K2 a slot for a muscle a lift misses is filled right after that lift's", GENERATE,
+     "      if (!filled.has(child) && slots[child]?.after === index) fillFrom(child);\n", "",
+     [T_LAYOUT], None),
+    ("K3 ... keeping its own number, after the layout's: every lift keeps its name", GENERATE,
+     "    if (catchUp && index < laidOut) slots.push(...missedBy(planned, index));",
+     "    if (catchUp && index < laidOut) slots.splice(index + 1, 0, ...missedBy(planned, index));",
+     [T_LAYOUT], None),
+    ("K4 a catch-up's slot with nothing left to give lists no compromise", GENERATE,
+     "      if (!restsHere && short?.length !== 0) {", "      if (!restsHere) {",
+     [T_LAYOUT], None),
+    ("K5 a lift still to do before the main lift leads", GENERATE,
+     "(beforeMain ? firstToDo : anchor)", "anchor", [T_LAYOUT], None),
+    ("K6 ... only one before it: a lift finished keeps its place in the summary", GENERATE,
+     "    inOrder.indexOf(firstToDo) < inOrder.indexOf(anchor);", "    true;", [T_EASE], None),
+
+    # The ninth review of round M.
+    ("J1 a second workout leads with what was missed, then what is left of today's", GENERATE,
+     "      (muscle) => spec.muscles.find((item) => item.muscle === muscle)?.why === 'behind',",
+     "      () => true,", [T_STORE], None),
+    ("J2 no week-aware order off the plan: a catch-up keeps its strength lifts first", GENERATE,
+     "  if (keep.length === 0 && blocks.length > 2 && !offPlan) {",
+     "  if (keep.length === 0 && blocks.length > 2) {", [T_STORE], None),
+
+    # The tenth review of round M.
+    ("H1 a lift planned again keeps the name it had in the plan before", GENERATE,
+     "      if (same) take(entry, same.id);\n", "", [T_NAMES, T_SPARE, T_LAYOUT_NAMES], None),
+    ("H7 what comes in for a lift works no muscle the plan has given its sets", ENGINE,
+     "    ...(spec?.muscles ?? [])\n      .filter(\n        (item) =>\n          item.sets -\n            givenBeside(workout, entry, item.muscle, isDone) -\n            (current.primaryMuscles.includes(item.muscle) ? doneHere : 0) <\n          CATCH_UP.MIN_SETS,\n      )\n      .map((item) => item.muscle),\n",
+     "", [T_COMFORT], None),
+
+    # The twelfth review of round M.
+    ("H8 a slot's new lift takes the name of the lift it replaces there", GENERATE,
+     "      if (was) take(entry, was.id);\n", "", [T_NAMES, T_FRESH], None),
+    ("H11 a lift begun with nothing to come in stops at its sets (comfort)", ENGINE,
+     "      const stopped = stopAtLogged(workout, entry, request);", "      const stopped = false;",
+     [T_NOTHING], None),
+    ("H12 ... (pain, a lift that no longer fits)", ENGINE,
+     "      if (stopAtLogged(workout, entry, request)) {", "      if (false) {", [T_NOTHING],
+     None),
+    ("H13 what comes in works a muscle its lift went in for", ENGINE, "              (wentFor.length === 0 ||",
+     "              (true ||", [T_COMES_FOR], None),
+    ("H14 ... its own sets done counted", ENGINE,
+     "            (current.primaryMuscles.includes(item.muscle) ? doneHere : 0) <", "            0 <",
+     [T_ONE_SET], None),
+    ("H15 ... within what the day's muscles have left", ENGINE,
+     "    planWorking.length > 0 ? Math.max(1, Math.min(planWorking.length, room)) : null,",
+     "    planWorking.length || null,", [T_WITHIN], None),
+    ("H16 ... after a set too", ENGINE, "    Math.max(1, Math.min(owed, room)),", "    owed,",
+     [T_WITHIN], None),
+    ("H17 the catch-up's least reserve for a lift for none of its muscles", ENGINE,
+     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : offPlanFloor(profile),",
+     "        ? 0\n        : offPlanFloor(profile),", [T_RESERVE], None),
+    ("H18 ... in the day's re-plan and every rebuild", ENGINE,
+     [("    const hold = heldIn(spec, exercise, request.profile);", "    const hold = catchUpHold(spec, exercise);"),
+      ("    const hold = heldIn(spec, exercise, request.profile);", "    const hold = catchUpHold(spec, exercise);")],
+     None, [T_RESERVE], 0),
+    ("H19 a fresh name past every name taken", GENERATE,
+     "          : `e${Math.max(0, ...[...used, ...had.map((was) => was.id)].map(numbered)) + 1}`,",
+     "          : `e${Math.max(0, ...[...keptIds].map(numbered)) + 1}`,", [T_SPARE, T_FRESH, T_NAMES],
+     None),
+
+    # The thirteenth review of round M.
+    ("H20 what comes in for comfort stays through a rebuild", ENGINE,
+     "    if (keptAsPicked(entry, request)) lockedIds.add(entry.id);",
+     "    if (entry.locked || entry.pinned) lockedIds.add(entry.id);", [T_COMFORT_KEPT], None),
+    ("H21 a lift begun with one set owed: nothing comes in for it", ENGINE,
+     "  if (\n    offPlanSpec(request.constraints, workout) !== null &&\n    doneHere > 0 &&\n    owed < CATCH_UP.MIN_SETS\n  ) {\n    return undefined;\n  }\n",
+     "", [T_ONE_OWED], None),
+    ("H22 the lifter's swap keeps to the day's muscles", ENGINE,
+     "      const refused = catchUpRefusal(request, workout, entry, next);",
+     "      const refused = null as string | null;", [T_SWAP_RULES], None),
+    ("H23 ... never a one-set stand-in", ENGINE,
+     "  if (!back && done > 0 && working.length - done < CATCH_UP.MIN_SETS) {",
+     "  if (false) {",
+     [T_SWAP_RULES, T_ONE_OWED], None),
+    ("H24 ... a lift stopped earlier swapped back to", ENGINE,
+     "  const back = stoppedBefore(workout.blocks, entry).some(\n    (earlier) => earlier.exerciseId === next.id,\n  );",
+     "  const back = false;", [T_SWAP_RULES, T_NAMES, T_COMFORT, T_NOTHING], None),
+    ("H25 the swap sheet offers no swap the catch-up turns down", ENGINE,
+     "  const candidates = result.candidates.filter((_, at) => refusals[at] === null);",
+     "  const candidates = result.candidates;", [T_SWAP_RULES], None),
+    ("H26 a catch-up may come to nothing more for today", ENGINE,
+     "  if (entries.length === 0 && request.trigger.type !== 'finish-early' && !offPlan) {",
+     "  if (entries.length === 0 && request.trigger.type !== 'finish-early') {",
+     [T_ONE_LIFT, T_EMPTIED], None),
+    ("H27 ... and says so", ENGINE, "    offPlan && count === 0\n", "    false\n", [T_EMPTIED], None),
+    ("H28 the catch-up's lines made true after a change in place", ENGINE,
+     "    reasons: offPlan ? withCatchUpLines(reasons, spec, workout.blocks) : reasons,",
+     "    reasons,", [T_LINES_AFTER], None),
+    ("H29 one exercise in the singular", GENERATE,
+     "  return `${count} ${count === 1 ? 'exercise' : 'exercises'}`;",
+     "  return `${count} exercises`;", [T_ONE_EXERCISE], None),
+    ("H30 an emptied catch-up rebuilt stays the catch-up", GENERATE,
+     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain && !emptiedByLifter()) {",
+     "  if (catchUp !== null && count === 0 && !emptiedAgain && !emptiedByLifter()) {", [T_EMPTIED, T_COMFORT_KEPT, T_EMPTIED_LENGTH], None),
+    ("H31 ... with nothing more for today", GENERATE,
+     "  const nothing = (spec?.kind === 'second' || catchUp !== null) && count === 0;",
+     "  const nothing = spec?.kind === 'second' && count === 0;", [T_EMPTIED], None),
+    ("H32 ... named the catch-up", GENERATE,
+     "    title: nothing && spec?.kind === 'second' ? CATCH_UP_TITLES.second.title : template.title,",
+     "    title: nothing ? CATCH_UP_TITLES.second.title : template.title,", [T_EMPTIED], None),
+    ("H33 a lift for none of the day's muscles picked up again keeps the catch-up's reserve",
+     GENERATE,
+     "          shares.length > 0 ? Math.max(0, ...shares.map((left) => left.minRir)) : least,",
+     "          Math.max(0, ...shares.map((left) => left.minRir)),", [T_REOPENED], None),
+    ("H34 no stand-in for one set owed", GENERATE,
+     "      if (owed === undefined || (offPlan && owed < CATCH_UP.MIN_SETS)) return;",
+     "      if (owed === undefined) return;", [T_ONE_OWED], None),
+    ("H35 an end time keeps a catch-up's lifts at two sets", GENERATE,
+     "        : entry.id === pushEntry?.id || offPlan\n", "        : entry.id === pushEntry?.id\n",
+     [T_END_TIME], None),
+    ("H37 Today says an emptied catch-up has nothing more", NOTE,
+     "    if (built && allEntries(session.workout.blocks).length === 0) {", "    if (false) {",
+     [T_EMPTIED], None),
+
+    # The fourteenth review of round M.
+    ("H38 what came in for comfort stays through a length picked", ENGINE,
+     "    allEntries(request.workout.blocks).some((entry) => keptAsPicked(entry, request));",
+     "    allEntries(request.workout.blocks).some((entry) => entry.locked || entry.pinned);",
+     [T_COMFORT_LENGTH], None),
+    ("H39 the day's settings reach what came in for comfort", ENGINE,
+     "      (entry.id === request.currentEntryId || keptAsPicked(entry, request)) &&",
+     "      (entry.id === request.currentEntryId || entry.pinned || entry.locked) &&",
+     [T_COMFORT_EASIER], None),
+    ("H40 ... in a catch-up only what came in for another", ENGINE,
+     "  return offPlanSpec(request.constraints, request.workout) !== null;\n}",
+     "  return false;\n}", [T_COMFORT_KEPT, T_COMFORT_LENGTH, T_COMFORT_EASIER, T_COMFORT_UNPINNED],
+     None),
+    ("H42 ... never planned as the split's day for what the lifter set aside", GENERATE,
+     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain && !emptiedByLifter()) {",
+     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain) {", [T_EMPTIED_LENGTH], None),
+    ("H43 an end time brings back no lift of a catch-up at one set", GENERATE,
+     "    const least = hardCap && !offPlan ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);",
+     "    const least = hardCap ? 1 : Math.max(2, plannedSets.get(move.id) ?? 0);",
+     [T_END_TIME_BACK], None),
+    ("H44 the lifter's swap brings in no lift for a muscle that rests", ENGINE,
+     "  if (rests.length > 0) {", "  if (false) {", [T_SWAP_RESTING], None),
+    ("H45 the sheet gives the refusal's own reason", ENGINE,
+     "        : reasons.length === 1 && reasons[0]", "        : false", [T_SHEET_REASON], None),
+    ("H46 ... and so does \"Uncomfortable\" on a lift with one set left", ENGINE,
+     "        headline: stopped\n          ? oneLeft\n", "        headline: stopped\n          ? false\n",
+     [T_SHEET_REASON], None),
+    ("H47 Today says a second workout emptied has nothing more", NOTE,
+     "  if (built && allEntries(session.workout.blocks).length === 0) {", "  if (false) {",
+     [T_SECOND_NOTE], 1),
+
+    # The fifteenth review of round M.
+    ("H48 a swap back keeps to what its muscles lack", ENGINE,
+     "          (back ? 1 : CATCH_UP.MIN_SETS),", "          (back ? -Infinity : CATCH_UP.MIN_SETS),",
+     [T_SWAP_BACK_OVER], None),
+    ("H49 ... picking up no more than they have left", ENGINE, "  const count = Math.min(owed, room);",
+     "  const count = owed;", [T_SWAP_BACK_ROOM], None),
+    ("H50 a lift done says so on its sheet", ENGINE,
+     "  if (working.length > 0 && done === working.length) return doneWords(current.name);",
+     "  if (false) return doneWords(current.name);", [T_SHEET_DONE], None),
+    ("H51 the way back to an emptied catch-up is the catch-up again", ENGINE,
+     "    validateWorkout(next, { ...request, constraints }, context);",
+     "    validateWorkout(next, request, context);", [T_BACK_TO_EMPTIED], None),
+    ("H52 a catch-up emptied by \"Hurts\" stays so built whole", GENERATE,
+     "      excludeExerciseIds: [],\n      painJoints: [],\n      awayIds: [],\n    };",
+     "      excludeExerciseIds: [],\n      awayIds: [],\n    };", [T_HURTS_EMPTIED, T_CHECK_IN_JOINT], None),
+    ("H54 \"Uncomfortable\" reads one set owed before the lift stops", ENGINE,
+     "      const oneLeft = oneSetOwed(request, workout, entry);\n      const stopped = stopAtLogged(workout, entry, request);",
+     "      const stopped = stopAtLogged(workout, entry, request);\n      const oneLeft = oneSetOwed(request, workout, entry);",
+     [T_STOP_REASON], None),
+    ("H55 \"Hurts\" on a lift with one set left says so", ENGINE,
+     "          oneLeft\n            ? `${exercise.name} stops at the sets done: one set left",
+     "          false\n            ? `${exercise.name} stops at the sets done: one set left",
+     [T_HURTS_ONE_SET], None),
+    ("H56 what comes in for comfort in a catch-up is the lifter's pick", ENGINE,
+     "          offPlanToday(request, workout),\n        );\n        renamePostponed(constraints, previous.id",
+     "          false,\n        );\n        renamePostponed(constraints, previous.id", [T_COMFORT_REOPENED],
+     None),
+    ("H57 ... and so is what comes in for pain", ENGINE,
+     "        offPlanToday(request, workout),\n      );\n      renamePostponed(constraints, exercise.id",
+     "        false,\n      );\n      renamePostponed(constraints, exercise.id", [T_COMFORT_REOPENED],
+     None),
+    ("H58 ... in a catch-up or a second workout only", ENGINE,
+     "function offPlanToday(request: RecalibrationRequest, workout: GeneratedWorkout): boolean {\n  return offPlanSpec(request.constraints, workout) !== null;",
+     "function offPlanToday(request: RecalibrationRequest, workout: GeneratedWorkout): boolean {\n  return true;",
+     [T_COMFORT_REOPENED], None),
+    ("H59 a stand-in's name past every name the plan had", GENERATE,
+     "[...used, ...had.map((was) => was.id)]", "[...used]", [T_STAND_IN_LEFT_OUT], None),
+    # The sixteenth review.
+    ("H62 a catch-up emptied by a joint in the check-in is the lifter's emptying", GENERATE,
+     "      (constraints.excludeExerciseIds?.length ?? 0) === 0 &&\n      (constraints.painJoints?.length ?? 0) === 0",
+     "      (constraints.excludeExerciseIds?.length ?? 0) === 0", [T_CHECK_IN_JOINT], None),
+    ("H63 a second workout with nothing behind is off the plan", GENERATE,
+     "  return spec.kind === 'second' || spec.muscles.length > 0 ? spec : null;",
+     "  return spec.muscles.length > 0 ? spec : null;",
+     [T_SECOND_SWAP, T_SECOND_EMPTIED, T_SECOND_COMFORT, T_SECOND_ONE_SET], None),
+    ("H64 ... its swap sheet and swaps refused for muscles that rest", ENGINE,
+     "  const spec = offPlanSpec(day.constraints, workout);\n  if (!spec) return null;",
+     "  const spec = offPlanSpec(day.constraints, workout);\n  if (!spec || spec.muscles.length === 0) return null;",
+     [T_SECOND_SWAP], None),
+    ("H65 ... its plan may come to nothing more for today", ENGINE,
+     "  const offPlan = offPlanSpec(request.constraints, workout) !== null;\n  if (entries.length === 0",
+     "  const offPlan = (offPlanSpec(request.constraints, workout)?.muscles.length ?? 0) > 0;\n  if (entries.length === 0",
+     [T_SECOND_EMPTIED], None),
+    ("H66 ... what comes in for comfort is kept as picked", ENGINE,
+     "  if (entry.replacedFrom === undefined || isStopped(entry)) return false;\n  return offPlanSpec(request.constraints, request.workout) !== null;",
+     "  if (entry.replacedFrom === undefined || isStopped(entry)) return false;\n  return (offPlanSpec(request.constraints, request.workout)?.muscles.length ?? 0) > 0;",
+     [T_SECOND_COMFORT, T_COMFORT_UNPINNED], None),
+    ("H67 ... a lift with one set owed takes nothing in", ENGINE,
+     "  if (offPlanSpec(request.constraints, workout) === null) return false;\n  const { isDone } = classify(request);",
+     "  if ((offPlanSpec(request.constraints, workout)?.muscles.length ?? 0) === 0) return false;\n  const { isDone } = classify(request);",
+     [T_SECOND_ONE_SET], None),
+    ("H68 ... nor does the swap it is offered", ENGINE,
+     "  if (\n    offPlanSpec(request.constraints, workout) !== null &&\n    doneHere > 0 &&",
+     "  if (\n    (offPlanSpec(request.constraints, workout)?.muscles.length ?? 0) > 0 &&\n    doneHere > 0 &&",
+     [T_SECOND_ONE_SET], None),
+    ("H70 the sheet gives the lift's own reason, one set left, where any refusal does", ENGINE,
+     "          : own\n            ? `${own}.`",
+     "          : false\n            ? `${own}.`", [T_SHEET_ONE_SET_REASON], None),
+    ("H71 a lift stopped with nothing in owes nothing more on a day off the plan", ENGINE,
+     "offPlanToday(request, workout) ? 'skip' : 'swap'", "'swap'", [T_STOPPED_SLOT], None),
+    ("H72 a new lift takes no slot name a lift left out still had", GENERATE,
+     "own !== undefined && !used.has(own) && !had.some((was) => was.id === own)",
+     "own !== undefined && !used.has(own)", [T_SLOT_OWN_NAME], None),
+    # The seventeenth review.
+    ("H73 the way back to a catch-up the lifter emptied finds it so, as every rebuild does", ENGINE,
+     "    ...emptiedLayoutsFor(constraints),\n",
+     "", [T_EMPTIED_WAY_BACK, T_STORE, T_EMPTIED_SKIP, T_EMPTIED_LENGTH, T_EMPTIED_WHOLE], None),
+    ("H74 ... the lifter's hand emptying it marks it so", ENGINE,
+     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
+     "    constraints.emptied = [...marked, { offer: '-', layout: next.templateId }];",
+     [T_EMPTIED_WAY_BACK, T_STORE], None),
+    ("H75 ... for that offer only", GENERATE,
+     "    .filter((plan) => plan.offer === offer)\n",
+     "", [T_EMPTIED_WAY_BACK, T_EMPTIED_NEW_OFFER, T_EMPTIED_BY_HAND], None),
+    ("H76 ... where the offer is laid out still", GENERATE,
+     "  const emptiedAgain = emptiedHere && entries.length > 0;",
+     "  const emptiedAgain = emptiedHere;", [T_EMPTIED_WAY_BACK, T_ROUND_TRIP], None),
+    ("H77 ... a change keeps the mark", ENGINE,
+     "    ...(constraints.emptied ? { emptied: constraints.emptied.map((plan) => ({ ...plan })) } : {}),\n",
+     "",
+     [T_EMPTIED_WAY_BACK, T_STORE], None),
+    ("H78 ... and so does a later plan the same day", STORE,
+     "        ...(marked.length > 0 ? { emptied: marked.map((plan) => ({ ...plan })) } : {}),\n",
+     "", [T_STORE, T_EMPTIED_LATER, T_ROUND_TRIP_STORE], None),
+    ("H79 ... a mark that cannot be read is dropped, never the session", SESSION,
+     "  emptied: EmptiedPlansSchema.optional().catch(undefined),\n  // The twenty-third",
+     "  emptied: EmptiedPlansSchema.optional(),\n  // The twenty-third", [T_STORED], None),
+    ("H80 a lift stopped by a place picks up past a stand-in stopped with nothing in", GENERATE,
+     "    const owed = Math.min(...kept.filter(isStopped).map((entry) => entry.stopped?.owed ?? 0));",
+     "    const owed = Math.min(...kept.filter(isStopped).map(owedBy));", [T_PLACE_AFTER_SKIP], None),
+    ("H81 one set owed takes no stand-in on any day off the plan", GENERATE,
+     "      if (owed === undefined || (offPlan && owed < CATCH_UP.MIN_SETS)) return;",
+     "      if (owed === undefined || (catchUp !== null && owed < CATCH_UP.MIN_SETS)) return;",
+     [T_SECOND_PLACE_ONE_SET], None),
+    ("H82 a lift the lifter swaps away stays away today", ENGINE,
+     "      constraints.swappedAway = swappingBack ? away : [...new Set([...away, previous.id])];",
+     "      constraints.swappedAway = away;",
+     [T_LEFT_OUT_SLOT, T_SWAPPED_AWAY, T_SWAP_CHAIN, T_STOPPED_SWAP, T_AWAY_COMFORT], None),
+    ("H83 ... unless the lifter puts it back where the plan had it", ENGINE,
+     "      const away = swappingBack ? before.filter((id) => id !== next.id) : before;",
+     "      const away = before;", [T_SWAPPED_AWAY, T_PUT_BACK, T_SWAP_BACK_FREES], None),
+    ("H84 ... a swap back to the plan's own pick turns nothing away", ENGINE,
+     "      const swappingBack = next.id === entry.replacedFrom;", "      const swappingBack = false;",
+     [T_BUSY], None),
+    ("H85 ... and the plan picks none by itself", ENGINE,
+     "    ...(constraints.swappedAway ? { awayIds: constraints.swappedAway } : {}),\n", "",
+     [T_SWAP_CHAIN, T_STOPPED_SWAP, T_LEFT_OUT_SLOT, T_SWAPPED_AWAY], None),
+    ("H86 a lift left out with nothing to come in closes its slot off the plan", ENGINE,
+     "  if (gone.slot === undefined || !offPlanToday(request, workout)) return;",
+     "  return;", [T_LEFT_OUT_SLOT], None),
+    ("H87 ... a closed slot takes no lift", GENERATE, "    if (offPlan && closedSlots.has(index)) return;\n", "",
+     [T_LEFT_OUT_SLOT, T_SECOND_LEFT_OUT], None),
+    ("H88 ... and keeps the plan's layout through a rebuild", ENGINE,
+     "  if ((request.constraints.closedSlots?.length ?? 0) > 0) return 'partial';\n", "",
+     [T_LEFT_OUT_SLOT, T_SECOND_LEFT_OUT], None),
+    ("H89 ... a mark that cannot be read is dropped alone", SESSION,
+     "  closedSlots: z.array(z.number().int().min(0)).optional().catch(undefined),",
+     "  closedSlots: z.array(z.number().int().min(0)).optional(),", [T_STORED], None),
+    ("H90 a save holds the lifts a catch-up keeps to the dose it asks now", ENGINE,
+     "  if (!spec || keep.length === 0) return keep;", "  return keep;", [T_KEPT_DOSE], None),
+    ("H91 ... no more sets than its muscles are given a lift", ENGINE,
+     "    const sets = Math.min(working.length, hold.sets);", "    const sets = working.length;",
+     [T_KEPT_DOSE], None),
+    ("H92 ... no less reserve than they ask", ENGINE,
+     "    const rir = Math.max(hold.minRir, least);", "    const rir = least;", [T_KEPT_DOSE], None),
+    ("H93 one set left with nothing ranked says so on the sheet", ENGINE,
+     "  if (itself === oneSetLeft(name) && result.candidates.length === 0) {", "  if (false) {",
+     [T_SHEET_ONE_SET_UNRANKED], None),
+    ("H94 a stand-in's name past the plan's names before the change", ENGINE,
+     "[...allEntries(workout.blocks), ...allEntries(before.blocks)]", "allEntries(workout.blocks)",
+     [T_HURTS_NAME], None),
+
+    # The eighteenth review of round M.
+    ("H95 only the lifter's hand marks a plan emptied", ENGINE,
+     "  } else if (BY_HAND.has(request.trigger.type) && !marked.some(isThis)) {",
+     "  } else if (!marked.some(isThis)) {", [T_CLOSED_TRIP], None),
+    ("H96 ... and lifts back in the plan end its mark", ENGINE,
+     "    if (!marked.some(isThis)) return;\n    const others",
+     "    return;\n    const others", [T_EMPTIED_BY_HAND, T_TWO_LAYOUTS], None),
+    ("H99 a layout made again opens the slots closed", ENGINE,
+     "  if (scope === 'full') delete constraints.closedSlots;\n", "", [T_EMPTIED_BY_HAND], None),
+    ("H100 ... and so does the preview made again", STORE, "    delete today.closedSlots;\n", "",
+     [T_EMPTIED_LATER], None),
+    ("H101 the closed slots reach the plan", ENGINE,
+     "    ...(constraints.closedSlots ? { closedSlots: constraints.closedSlots } : {}),\n", "",
+     [T_LEFT_OUT_SLOT, T_SECOND_LEFT_OUT], None),
+    ("H102 a lift left out closes its slot by the day's settings, nothing behind or not", ENGINE,
+     "  constraints.closedSlots = [...new Set([...(constraints.closedSlots ?? []), gone.slot])];", "",
+     [T_LEFT_OUT_SLOT, T_SECOND_LEFT_OUT], None),
+    ("H103 ... left out for comfort", ENGINE,
+     "      if (!stopped) closeSlot(constraints, workout, request, removeEntry(workout, entry.id));",
+     "      if (!stopped) removeEntry(workout, entry.id);", [T_LEFT_OUT_SLOT, T_SECOND_LEFT_OUT], None),
+    ("H104 ... or for pain", ENGINE, "        closeSlot(constraints, workout, request, gone);\n", "",
+     [T_LEFT_OUT_SLOT, T_SECOND_LEFT_OUT, T_HURTS_EMPTIED], None),
+    ("H105 what comes in for comfort or pain is no lift swapped away", ENGINE,
+     "    ...(request.constraints.swappedAway ?? []),\n", "", [T_AWAY_COMFORT], None),
+    ("H106 ... nor one the same change replaced", ENGINE, "    ...(options.takenOut ?? []),\n", "",
+     [T_HURTS_REPLACED], None),
+    ("H107 ... on any day", ENGINE,
+     "    ...(resting.size > 0 || wentFor.length > 0 || turnedAway.size > 0",
+     "    ...(resting.size > 0 || wentFor.length > 0", [T_HURTS_REPLACED], None),
+    ("H108 ... read off the catalog", ENGINE, "              !turnedAway.has(exercise.id) &&\n", "",
+     [T_AWAY_COMFORT, T_HURTS_REPLACED], None),
+    ("H109 ... each lift replaced counted at once", ENGINE, "      takenOut.add(exercise.id);\n", "",
+     [T_HURTS_REPLACED], None),
+    ("H110 no slot's own pick is a lift swapped away", GENERATE,
+     "        excluded: new Set([...givesWay, ...[...away].filter((id) => !swappedOut.has(id))]),",
+     "        excluded: new Set(givesWay),", [T_AWAY_PICKS, T_SWAP_CHAIN], None),
+    ("H111 ... nor the next best", GENERATE, "    excluded: new Set([...swappedOut, ...away]),",
+     "    excluded: swappedOut,", [T_AWAY_PICKS], None),
+    ("H112 ... nor a lasting swap's swap-in", GENERATE, " || away.has(next.id)) continue;",
+     ") continue;", [T_AWAY_PICKS], None),
+    ("H113 ... nor the lift to push in its place", GENERATE, "    !away.has(lift.id) &&\n", "",
+     [T_AWAY_PICKS], None),
+    ("H114 a catch-up whose only lifts were swapped away is the lifter's emptying", GENERATE,
+     "      (constraints.painJoints?.length ?? 0) === 0 &&\n      away.size === 0",
+     "      (constraints.painJoints?.length ?? 0) === 0", [T_AWAY_PICKS], None),
+    ("H115 ... read without them", GENERATE,
+     "      painJoints: [],\n      awayIds: [],\n    };",
+     "      painJoints: [],\n    };", [T_AWAY_PICKS], None),
+    ("H117 ... only the same day", STORE,
+     "    const sameDay = before !== null && localDayKey(before.createdAt) === localDayKey(now);",
+     "    const sameDay = before !== null;", [T_EMPTIED_LATER, T_LATER_AWAY], None),
+    # The nineteenth review of round M.
+    ("H119 a kept swap gives way to its swap-in for a lift swapped away today", GENERATE,
+     "...[...away].filter((id) => !swappedOut.has(id))",
+     "...away", [T_KEPT_AWAY], None),
+    ("H120 ... never back by itself when its swap-in cannot join", GENERATE,
+     "(fitsWith(natural) && !away.has(natural.id) ? natural : undefined)",
+     "(fitsWith(natural) ? natural : undefined)", [T_KEPT_AWAY, T_AWAY_PICKS], None),
+    ("H121 a lift put back elsewhere stays away from its own slot", ENGINE,
+     "      const away = swappingBack ? before.filter((id) => id !== next.id) : before;",
+     "      const away = before.filter((id) => id !== next.id);", [T_SWAP_BACK_FREES, T_SWAPPED_AWAY], None),
+    ("H122 every coach offer sets aside the lifts swapped away today", COACH,
+     "  return [...input.constraints.avoidExerciseIds, ...(input.constraints.swappedAway ?? [])];",
+     "  return [...input.constraints.avoidExerciseIds];", [T_COACH_AWAY], None),
+    ("H123 each plan the lifter emptied keeps its own mark", ENGINE,
+     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
+     "    constraints.emptied = [{ offer, layout: next.templateId }];", [T_TWO_LAYOUTS], None),
+    ("H124 ... a plan laid out another way leaves the mark", ENGINE,
+     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer && plan.layout === next.templateId;",
+     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer;", [T_TWO_LAYOUTS, T_ROUND_TRIP_STORE],
+     None),
+    ("H125 the layout emptied, laid out again where it has a lift, takes none", GENERATE,
+     "  if (emptiedAgain) {\n    entries.length = 0;",
+     "  if (false) {\n    entries.length = 0;", [T_ROUND_TRIP, T_EMPTIED_WAY_BACK], None),
+    ("H126 ... and is no fallback to the split's day", GENERATE,
+     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedAgain && !emptiedByLifter()) {",
+     "  if (catchUp !== null && count === 0 && !rebuilt && !emptiedByLifter()) {", [T_ROUND_TRIP_STORE, T_ROUND_TRIP], None),
+    ("H127 ... the whole offer read without the layouts emptied", GENERATE,
+     "    delete open.emptiedLayouts;\n",
+     "", [T_BACK_TO_EMPTIED], None),
+    ("H129 a later plan the same day lays each layout emptied out empty", STORE,
+     "        ...(keepFull ? {} : emptiedLayoutsFor({ catchUp, emptied: marked })),\n",
+     "", [T_ROUND_TRIP_STORE], None),
+    ("H132 a stored plan emptied that cannot be read is dropped alone", SESSION,
+     "const EmptiedPlansSchema = z.array(z.unknown()).transform((items) =>\n  items.flatMap((item) => {\n    const read = EmptiedPlanSchema.safeParse(item);\n    return read.success ? [{ offer: read.data.offer, layout: read.data.layout }] : [];\n  }),\n);",
+     "const EmptiedPlansSchema = z.array(EmptiedPlanSchema);", [T_STORED], None),
+    # The twentieth review of round M.
+    ("H134 lifts back in one plan the lifter emptied end that plan's mark only", ENGINE,
+     "    const others = marked.filter((plan) => !isThis(plan));",
+     "    const others: EmptiedPlan[] = [];", [T_TWO_LAYOUTS], None),
+    ("H135 ... a plan of another offer leaves the mark", ENGINE,
+     "  const isThis = (plan: EmptiedPlan) => plan.offer === offer && plan.layout === next.templateId;",
+     "  const isThis = (plan: EmptiedPlan) => plan.layout === next.templateId;", [T_TRIP_OTHER_OFFER],
+     None),
+    ("H136 the mark keeps the layout the lifter emptied", ENGINE,
+     "    constraints.emptied = [...marked, { offer, layout: next.templateId }];",
+     "    constraints.emptied = [...marked, { offer, layout: 'catch-up' }];",
+     [T_NOTHING_BEHIND_WAY_BACK, T_ROUND_TRIP_STORE], None),
+    ("H137 no set of a day off the plan goes to failure", GENERATE,
+     "  const offPlanRir = offPlan ? offPlanFloor(profile) : 0;", "  const offPlanRir = 0;",
+     [T_SECOND_FAILURE], None),
+    ("H138 ... nor under a day's setting: a second workout with nothing behind held a set short", ENGINE,
+     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : offPlanFloor(profile),",
+     "        ? Math.min(...spec.muscles.map((item) => item.minRir))\n        : 0,", [T_SECOND_FAILURE], None),
+    ("H139 the pain card's alternative is none the day sets aside", COACH,
+     "    excludeExerciseIds: dayExclusions(input),\n    painJoints: [...input.constraints.painJoints],\n",
+     "    excludeExerciseIds: [],\n    painJoints: [...input.constraints.painJoints],\n",
+     [T_PAIN_CARD_DAY], None),
+    ("H140 ... nor one already in today's plan", COACH,
+     "    fits: (exercise) => !today.has(exercise.id) && !isBlocked(checkExerciseFit(exercise, context)),",
+     "    fits: (exercise) => !isBlocked(checkExerciseFit(exercise, context)),", [T_PAIN_CARD_DAY], None),
+    ("H142 a kept swap stopped brings back the lift it stood in for", STORE,
+     "    const kept = listed.filter((id) => id !== putBack);",
+     "    const kept = [...listed];", [T_PREVIEW_AWAY], None),
+    # The twenty-first review of round M.
+    ("H143 a beginner's day off the plan keeps two in reserve", CATCH,
+     "  return profile.experience === 'beginner' ? CATCH_UP.BEGINNER_MIN_RIR : CATCH_UP.MIN_RIR;",
+     "  return CATCH_UP.MIN_RIR;", [T_BEGINNER_OFF_PLAN, T_REOPENED], None),
+    ("H144 ... a plan made again for a day made harder too", GENERATE,
+     "  const offPlanRir = offPlan ? offPlanFloor(profile) : 0;",
+     "  const offPlanRir = offPlan ? CATCH_UP.MIN_RIR : 0;", [T_BEGINNER_OFF_PLAN], None),
+    ("H145 ... and \"harder\" for a lift for none of the day's muscles", ENGINE,
+     "        : offPlanFloor(profile),", "        : CATCH_UP.MIN_RIR,", [T_BEGINNER_OFF_PLAN], None),
+    ("H146 no reserve check on a day off the plan", RESERVE,
+     "  if (input.day.deload || input.day.lowCheckIn || input.day.hardStart || input.day.offPlan) {",
+     "  if (input.day.deload || input.day.lowCheckIn || input.day.hardStart) {", [T_RESERVE_OFF_PLAN],
+     None),
+    ("H147 ... the store tells the check the day is off the plan", STORE,
+     "        offPlan: offPlanSpec(session.constraints, session.workout) !== null,\n", "",
+     [T_RESERVE_OFF_PLAN], None),
+    ("H148 the pain card offers no swap the day turns down", COACH,
+     "    if (dayRefuses(input, entry, other)) continue;\n", "", [T_PAIN_OFF_PLAN], None),
+    ("H149 ... nor does the four-week variety swap", COACH,
+     "  if (!other || dayRefuses(input, entry, other)) return null;", "  if (!other) return null;",
+     [T_PAIN_OFF_PLAN], None),
+    ("H150 a later plan the same day keeps the lifts swapped away today", STORE,
+     "        ...(away.length > 0 ? { awayIds: away } : {}),\n", "", [T_LATER_AWAY], None),
+    ("H151 ... and the day's list goes on with it", STORE,
+     "        ...(away.length > 0 ? { swappedAway: [...away] } : {}),\n", "", [T_LATER_AWAY], None),
+    ("H152 a workout saved with nothing logged keeps the day's choices", STORE,
+     "    this.ensureSession(trained ? null : session);", "    this.ensureSession(null);",
+     [T_SAVED_NOTHING], None),
+    ("H153 ... one with a set done starts the day's next plan afresh", STORE,
+     "    this.ensureSession(trained ? null : session);", "    this.ensureSession(session);",
+     [T_SAVED_NOTHING], None),
+    ("H154 ... a set skipped is no set done", STORE,
+     "    const trained = session.completed.sets.some((set) => set.kind !== 'warmup' && !set.skipped);",
+     "    const trained = session.completed.sets.some((set) => set.kind !== 'warmup');",
+     [T_SAVED_NOTHING], None),
+    # The twenty-second review of round M.
+    ("H155 a lifter in training has trained: a workout saved with nothing logged is no training", CATCH,
+     "      Date.parse(now) - Date.parse(record.startedAt) <= CATCH_UP.ACTIVE_DAYS * 86_400_000 &&\n      trainedIn(record),\n",
+     "      Date.parse(now) - Date.parse(record.startedAt) <= CATCH_UP.ACTIVE_DAYS * 86_400_000,\n",
+     [T_IN_TRAINING], None),
+    ("H156 the pain card's swap fits the joints flagged today", COACH,
+     "    painJoints: [...input.constraints.painJoints],\n", "", [T_PAIN_SORE_TODAY], None),
+    ("H157 the sheet says a lift done is done on any day", ENGINE,
+     "  if (finished) return { candidates: [], emptyReason: `${doneWords(name)}.` };\n", "",
+     [T_SHEET_DONE_PLAN, T_SHEET_DONE_UNRANKED], None),
+    ("H158 a lift put back while the workout runs or is finished is off the day's list", STORE,
+     "    if (!current) return;\n    // A lift the lifter puts back",
+     "    if (!current || current.status !== 'preview') return;\n    // A lift the lifter puts back",
+     [T_KEPT_STOPPED], None),
+    ("H159 ... the workout under way left as it is", STORE,
+     "    if (current.status !== 'preview') {\n      if (session !== current) this.setSession(session);\n      return;\n    }\n",
+     "", [T_KEPT_STOPPED], None),
+    ("H160 a plan the lifter emptied is built afresh where it is made", STORE,
+     "    const workout = generateWorkout({\n      profile,\n      location: this.currentLocation(),",
+     "    const workout = before !== null && allEntries(before.workout.blocks).length === 0 && marked.length > 0 ? before.workout : generateWorkout({\n      profile,\n      location: this.currentLocation(),",
+     [T_EMPTIED_OTHER_PLACE], None),
+    ("H161 a saved workout loaded keeps the day's offer", STORE,
+     "          ...(day.catchUp ? { catchUp: day.catchUp } : {}),\n", "", [T_SAVED_LOADED], None),
+    ("H162 ... the full session taken", STORE,
+     "          ...(day.fullSession ? { fullSession: true } : {}),\n", "", [T_SAVED_LOADED], None),
+    ("H163 ... the plans emptied", STORE,
+     "          ...(marks.length > 0 ? { emptied: marks } : {}),\n", "", [T_SAVED_LOADED], None),
+    ("H164 ... and the lifts swapped away", STORE,
+     "        ...(day.swappedAway.length ? { swappedAway: [...day.swappedAway] } : {}),\n", "",
+     [T_SAVED_LOADED], None),
+    ("H166 ... a lift done has no working set left", ENGINE,
+     "    !entry.sets.some((set) => set.kind === 'working' && !doneKeys.has(`${entry.id}:${set.index}`));",
+     "    true;", [T_SHEET_ONE_SET_UNRANKED, T_SHEET_ONE_SET_REASON, T_SHEET_DONE_PLAN], None),
+    # The twenty-third review of round M.
+    ("H167 a saved workout loaded is read as itself, never as the day's offer", STORE,
+     "        ...(own ? { catchUp: own } : {}),\n        ...(ownMarks.length",
+     "        ...(day?.catchUp ? { catchUp: day.catchUp } : {}),\n        ...(ownMarks.length",
+     [T_SAVED_AS_OFFER], None),
+    ("H168 ... as the catch-up it was saved as, on any day", STORE,
+     "        : { spec: saved.catchUp ?? null, workout };", "        : { spec: null, workout };",
+     [T_SAVED_OTHER_DAY, T_SAVED_AFTER_EMPTIED], None),
+    ("H169 ... which a copy keeps when saved", STORE,
+     "      ...(own ? { catchUp: own } : {}),\n      // The day its plan was made", "      // The day its plan was made",
+     [T_SAVED_OTHER_DAY], None),
+    ("H170 the day's choices kept aside for every later plan the same day", STORE,
+     "        dayChoices: {\n          ...(day.catchUp ? { catchUp: day.catchUp } : {}),\n          ...(day.fullSession ? { fullSession: true } : {}),\n          ...(marks.length > 0 ? { emptied: marks } : {}),\n        },",
+     "        dayChoices: {},", [T_SAVED_LOADED], None),
+    ("H171 ... and read by every later plan", STORE,
+     "  const kept = constraints.dayChoices;\n  const own = constraints.emptied ?? [];",
+     "  const kept = undefined as WorkoutSession['constraints']['dayChoices'];\n  const own = constraints.emptied ?? [];",
+     [T_SAVED_LOADED], None),
+    ("H172 ... with a plan the lifter emptied on the loaded one", GENERATE,
+     "  const fresh = own.filter(\n    (plan) => !kept.some((other) => other.offer === plan.offer && other.layout === plan.layout),\n  );",
+     "  const fresh = own.filter(() => false);", [T_SAVED_AFTER_EMPTIED], None),
+    ("H173 ... and the full session taken from it", STORE,
+     "    fullSession: constraints.fullSession === true || kept?.fullSession === true,",
+     "    fullSession: kept ? kept.fullSession === true : constraints.fullSession === true,",
+     [T_SAVED_AFTER_EMPTIED], None),
+    ("H174 a saved workout's lifts back in a plan the lifter emptied end its mark", STORE,
+     "      (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),",
+     "      (plan) => ofOffer(plan),", [T_SAVED_AFTER_EMPTIED, T_EMPTY_COPY], None),
+    ("H175 a save reads the day's offer again aside for a saved workout loaded", STORE,
+     "    const kept = constraints.dayChoices;\n    if (kept) {",
+     "    const kept = constraints.dayChoices;\n    if (false) {", [T_SAVED_OTHER_DAY], None),
+    ("H176 ... the full session taken read again with it", STORE,
+     "      if (catchUp && full) day.fullSession = true;\n", "", [T_SAVED_LOADED], None),
+    ("H177 the preview made again is the day's own plan, no choices kept aside", STORE,
+     "    delete today.dayChoices;\n", "", [T_SAVED_AFTER_EMPTIED], None),
+    ("H178 ... with the day's plans emptied", STORE,
+     "    if (fresh.constraints.emptied?.length) {\n      today.emptied = fresh.constraints.emptied.map((plan) => ({ ...plan }));\n    }\n",
+     "", [T_EMPTIED_PREVIEW, T_SAVED_AFTER_EMPTIED, T_ROUND_TRIP_STORE], None),
+    ("H179 an Undo keeps a lift put back off the day's list", STORE,
+     "    if (earlier && putBack !== null && earlier.constraints.swappedAway?.includes(putBack)) {",
+     "    if (false) {", [T_UNDO_PUT_BACK], None),
+    ("H180 the day's choices kept aside dropped alone when unreadable", SESSION,
+     "      emptied: EmptiedPlansSchema.optional().catch(undefined),\n    })\n    .optional()\n    .catch(undefined),",
+     "      emptied: EmptiedPlansSchema.optional().catch(undefined),\n    })\n    .optional(),",
+     [T_DAY_CHOICES_STORED], None),
+    ("H181 ... each part of them alone", SESSION,
+     "      catchUp: CatchUpSpecSchema.nullable().optional().catch(undefined),\n      fullSession",
+     "      catchUp: CatchUpSpecSchema.nullable().optional(),\n      fullSession",
+     [T_DAY_CHOICES_STORED], None),
+    ("H182 a saved workout's own catch-up dropped alone when unreadable", SAVED,
+     "  catchUp: CatchUpSpecSchema.optional().catch(undefined),", "  catchUp: CatchUpSpecSchema.optional(),",
+     [T_DAY_CHOICES_STORED], None),
+    ("H183 the day's choices kept aside go with the loaded plan through every change", ENGINE,
+     "    ...(constraints.dayChoices\n      ? {", "    ...(false\n      ? {", [T_SAVED_LOADED], None),
+    # The twenty-fourth review of round M.
+    ("H184 a saved second workout loaded on another day says nothing of a day trained", STORE,
+     "      saved.catchUp?.kind === 'second' && !trainedDay", "      false",
+     [T_SAVED_DAY_WORDS, T_SECOND_NEXT_DAY], None),
+    ("H185 ... loaded the day it was saved, that day's second workout still", STORE,
+     "      saved.catchUp?.kind === 'second' && !trainedDay", "      saved.catchUp?.kind === 'second'",
+     [T_SAVED_DAY_WORDS], None),
+    ("H186 ... one built from its muscles is a catch-up of them", GENERATE,
+     "  if (workout.templateId !== CATCH_UP_TITLES.second.id) {\n    return {\n      spec: null,",
+     "  if (true) {\n    return {\n      spec: null,", [T_SECOND_OTHER_DAY, T_SAVED_DAY_WORDS], None),
+    ("H187 ... one laid out on the split's day is that day's plan", GENERATE,
+     "  if (workout.templateId !== CATCH_UP_TITLES.second.id) {\n    return {\n      spec: null,",
+     "  if (false) {\n    return {\n      spec: null,", [T_SECOND_OTHER_DAY], None),
+    ("H188 ... with the day's own title", GENERATE,
+     "        title:\n          TEMPLATES.find((template) => template.id === workout.templateId)?.title ?? workout.title,\n",
+     "", [T_SECOND_OTHER_DAY], None),
+    ("H189 ... and no line of a day trained", GENERATE,
+     "          reasons: reasons.filter((line) => !CATCH_UP_LINE.test(line)),",
+     "          reasons,", [T_SECOND_OTHER_DAY], None),
+    ("H190 ... its muscles behind, none what is left of a session", GENERATE,
+     "    muscles: spec.muscles.map((item) => ({ ...item, why: 'behind' })),",
+     "    muscles: spec.muscles.map((item) => ({ ...item })),", [T_SECOND_OTHER_DAY], None),
+    ("H191 ... nothing sitting out", GENERATE,
+     "    sitOut: [],\n  };\n  const { id, title } = CATCH_UP_TITLES['catch-up'];",
+     "    sitOut: [...spec.sitOut],\n  };\n  const { id, title } = CATCH_UP_TITLES['catch-up'];",
+     [T_SECOND_OTHER_DAY, T_SAVED_DAY_WORDS], None),
+    ("H192 ... laid out as a catch-up", GENERATE,
+     "      templateId: id,\n      title,\n      explanation: {",
+     "      explanation: {", [T_SECOND_OTHER_DAY, T_SAVED_DAY_WORDS], None),
+    ("H193 ... its summary a catch-up's", GENERATE,
+     "        summary: workout.explanation.summary.replace(\n          `${CATCH_UP_TITLES.second.title}: `,\n          `${title}: `,\n        ),\n",
+     "", [T_SECOND_OTHER_DAY, T_SAVED_DAY_WORDS], None),
+    ("H194 ... its lines a catch-up's", GENERATE,
+     "        reasons: withCatchUpLines(reasons, caught, workout.blocks).map(named),",
+     "        reasons: reasons.map(named),", [T_SECOND_OTHER_DAY, T_SAVED_DAY_WORDS], None),
+    ("H195 Today's line tells a loaded copy as the day's offer only where the day offers its kind", NOTE,
+     "  const stored = day && own && offers !== own.kind ? null : own;",
+     "  const stored = own;", [T_SAVED_DAY_WORDS], None),
+    ("H196 a saved workout's marks of its offer are its own alone", STORE,
+     "    const marks = day.emptied.filter((plan) => !ofOffer(plan));",
+     "    const marks = day.emptied;", [T_EMPTY_COPY], None),
+    ("H197 ... and kept as its own", STORE,
+     "    const ownMarks = day.emptied.filter(\n      (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),\n    );",
+     "    const ownMarks: EmptiedPlan[] = [];", [T_EMPTY_COPY], None),
+    ("H198 a saved workout loaded keeps the deload week that covers today", STORE,
+     "        deload: this.deloadToday(now),\n", "", [T_SAVED_DELOAD], None),
+    # The twenty-fifth review of round M.
+    ("H199 a copy loaded over a plan from an earlier day takes today's choices", STORE,
+     "    if (saved) this.leaveEarlierDay();\n", "", [T_EARLIER_LOAD], None),
+    ("H200 a second workout is one only on the day its plan was made", STORE,
+     "    const trainedDay = planDay === localDayKey(now) && day.catchUp?.kind === 'second';",
+     "    const trainedDay = day.catchUp?.kind === 'second';", [T_SECOND_NEXT_DAY], None),
+    ("H201 ... while that day is still one trained", STORE,
+     "    const trainedDay = planDay === localDayKey(now) && day.catchUp?.kind === 'second';",
+     "    const trainedDay = planDay === localDayKey(now);", [T_SECOND_NEXT_DAY], None),
+    ("H202 ... not the day it was saved", STORE,
+     "    const planDay = saved.planDay ?? localDayKey(saved.workout.generatedAt);",
+     "    const planDay = localDayKey(saved.createdAt);", [T_SECOND_NEXT_DAY], None),
+    ("H203 a copy's marks of its offer in another layout are its own", STORE,
+     "      (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),",
+     "      (plan) => ofOffer(plan) && plan.layout === copy.workout.templateId && !lifts,",
+     [T_COPY_EMPTIED_LAYOUT], None),
+    ("H204 a converted copy's lines name the catch-up, not the second workout", GENERATE,
+     "        reasons: withCatchUpLines(reasons, caught, workout.blocks).map(named),",
+     "        reasons: withCatchUpLines(reasons, caught, workout.blocks),", [T_SECOND_WORDS], None),
+    ("H205 ... in every line that names it, the recovery line's title too", GENERATE,
+     "    line.replaceAll(second, title).replaceAll(second.toLowerCase(), title.toLowerCase());",
+     "    line.replaceAll(second.toLowerCase(), title.toLowerCase());", [T_FRESHEST], None),
+    ("H206 a loaded catch-up is the day's offer only where something is behind", NOTE,
+     "    offered && (offered.kind === 'second' || offered.muscles.length > 0) ? offered.kind : null;",
+     "    offered ? offered.kind : null;", [T_NOTHING_BEHIND_NOTE], None),
+    ("H207 an empty copy that is none of the day's offer keeps the full session a tap away", NOTE,
+     "  if (day && !stored && allEntries(session.workout.blocks).length === 0) {",
+     "  if (false) {", [T_EMPTY_SECOND], None),
+    # The twenty-sixth review of round M.
+    ("H208 the full session from a copy that stands for none of the day's offer is the day's own", ENGINE,
+     "        if (day && offer && offers !== null && constraints.catchUp?.kind !== offers) {\n          constraints.catchUp = cloneSpec(offer);\n          const marks = marksOfDay(day.emptied ?? [], constraints.emptied ?? []);\n          if (marks.length > 0) constraints.emptied = marks;\n          else delete constraints.emptied;\n          delete constraints.dayChoices;\n        }\n",
+     "", [T_EMPTY_FULL_WAY_BACK], None),
+    ("H209 a copy records the day its plan was made", STORE,
+     "      planDay: localDayKey(session.createdAt),\n", "", [T_REBUILT_MIDNIGHT], None),
+    ("H210 ... the day its session was made, never its workout's last rebuild", STORE,
+     "      planDay: localDayKey(session.createdAt),",
+     "      planDay: localDayKey(session.workout.generatedAt),", [T_REBUILT_MIDNIGHT], None),
+    ("H211 ... read where the copy has it", STORE,
+     "    const planDay = saved.planDay ?? localDayKey(saved.workout.generatedAt);",
+     "    const planDay = localDayKey(saved.workout.generatedAt);", [T_REBUILT_MIDNIGHT], None),
+    # The twenty-seventh review of round M.
+    ("H212 the full session from such a copy takes the plans emptied today as its own", ENGINE,
+     "          if (marks.length > 0) constraints.emptied = marks;\n          else delete constraints.emptied;\n",
+     "", [T_COPY_FULL_EMPTIED], None),
+    ("H213 ... and keeps nothing aside: the plan is the day's own", ENGINE,
+     "          delete constraints.dayChoices;\n", "", [T_COPY_FULL_READ_AGAIN, T_COPY_FULL_HOLDS], None),
+]
+
+
+def apply(original, old, new, nth):
+    pairs = old if isinstance(old, list) else [(old, new)]
+    mutated = original
+    for part_old, part_new in pairs:
+        count = mutated.count(part_old)
+        if (nth is None and count != 1) or (nth is not None and count <= nth):
+            return None, f"ANCHOR x{count}"
+        at = -1
+        for _ in range((nth or 0) + 1):
+            at = mutated.index(part_old, at + 1)
+        mutated = mutated[:at] + part_new + mutated[at + len(part_old):]
+    return mutated, None
+
+
+args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
+check = "--check" in sys.argv
+utc = "--utc" in sys.argv
+results = []
+for name, rel, old, new, tests, nth in MUTATIONS:
+    if args and not any(name.startswith(prefix) for prefix in args):
+        continue
+    path = ROOT / rel
+    original = path.read_bytes().decode("utf-8")
+    mutated, bad = apply(original, old, new, nth)
+    if bad:
+        results.append((name, bad, ""))
+        print(f"{bad:9} {name}", flush=True)
+        continue
+    if check:
+        continue
+    try:
+        path.write_bytes(mutated.encode("utf-8"))
+        env = dict(os.environ, TZ="UTC") if utc else None
+        run = subprocess.run(
+            "npx vitest run " + " ".join(tests),
+            shell=True, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env,
+        )
+        out = run.stdout + run.stderr
+        summary = re.search(r"Tests\s+(.*)", out)
+        line = summary.group(1).strip() if summary else "no summary (compile error?)"
+        killed = "failed" in line or summary is None
+        if utc:
+            # As the CI runner: the tests in UTC, then the day rules' tests in two zones.
+            zones = subprocess.run(
+                "node scripts/test-zones.mjs",
+                shell=True, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", env=env,
+            )
+            line = f"UTC: {line}; zones: {'failed' if zones.returncode != 0 else 'passed'}"
+            killed = killed or run.returncode != 0 or zones.returncode != 0
+        results.append((name, "KILLED" if killed else "SURVIVED", line))
+    finally:
+        path.write_bytes(original.encode("utf-8"))
+    print(f"{results[-1][1]:9} {name}: {results[-1][2]}", flush=True)
+
+if check:
+    print(f"anchors checked: {len(MUTATIONS)} entries, {len(results)} not found")
+    sys.exit(0)
+print("\n==== summary")
+for name, verdict, line in results:
+    print(f"{verdict:9} {name}  [{line}]")
+survived = [r for r in results if r[1] != "KILLED"]
+print(f"\n{len(results) - len(survived)} killed, {len(survived)} not killed")

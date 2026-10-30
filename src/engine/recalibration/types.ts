@@ -2,6 +2,7 @@ import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { StrengthMaxes } from '../progression/maxes';
 import type { DeloadWindow } from '../planning/deload';
 import type { LastingSwap } from '../planning/lastingSwaps';
+import type { CatchUpSpec } from '../planning/catchUp';
 import type { LearnedResets } from '../learned/resets';
 import type { AutoregulationPlan } from './autoregulate';
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
@@ -9,7 +10,7 @@ import type { LocationProfile } from '../../core/validation/location';
 import type { SessionLoading } from '../loading/loading';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
-import type { DurationChoice, GeneratedWorkout, SetKind } from '../workout/types';
+import type { DurationChoice, EmptiedPlan, GeneratedWorkout, SetKind } from '../workout/types';
 
 /**
  * Types for the central Recalibration Engine. A typed request carries the
@@ -82,7 +83,9 @@ export type RecalibrationTrigger =
    * treatment, or loses it. `lifts` names the two that fell short.
    */
   | { type: 'bad-start'; low: boolean; lifts: string[] }
-  | { type: 'end-by'; time: string | null };
+  | { type: 'end-by'; time: string | null }
+  /** The full session on a day that offers a catch-up, or the catch-up again (Maintenance 31). */
+  | { type: 'session-kind'; full: boolean; kind?: 'catch-up' | 'second' };
 
 export type TriggerType = RecalibrationTrigger['type'];
 
@@ -193,6 +196,48 @@ export interface SessionConstraints {
   deload: DeloadWindow | null;
   /** A coach focus: the session leads with this muscle. */
   focus: MuscleId | null;
+  /**
+   * A catch-up on a day not ticked, or a second workout on a day trained (Maintenance 31, items 12
+   * and 32): what the day offers, with no muscles when nothing calls for one. Absent on a session
+   * saved before, and on a day that offers neither.
+   */
+  catchUp?: CatchUpSpec | null;
+  /** The lifter took the full session on a day that offers a catch-up (Maintenance 31). */
+  fullSession?: boolean;
+  /**
+   * The plans the lifter's own hand emptied today, each its last lift skipped or left out (the
+   * seventeenth to twentieth reviews of round M): the offer it was for and its layout, the offer's
+   * own or the split's own day a place with no lift for the offer put in its place. Every later plan
+   * of that offer laid out the same way takes no lift: a rebuild, the way back from the full
+   * session, a later plan the same day. Another offer or another layout is another plan, and leaves
+   * each mark as it is; lifts back in a plan the lifter emptied end its own. Absent on a session
+   * saved before, and with none; a place that empties a plan marks nothing.
+   */
+  emptied?: EmptiedPlan[];
+  /**
+   * The slots of today's catch-up or second workout whose lift the lifter's change left out with
+   * nothing to come in (the seventeenth and eighteenth reviews of round M): no rebuild that keeps
+   * the plan's layout puts a lift in them; a layout made again (the full session and back, a changed
+   * offer, the preview made again) drops them. Absent on a session saved before.
+   */
+  closedSlots?: number[];
+  /**
+   * The lifts the lifter swapped away today (the eighteenth review of round M): no change brings
+   * one back by itself, though the lifter may put one back. Absent on a session saved before.
+   */
+  swappedAway?: string[];
+  /**
+   * The day's own choices while a saved workout loaded stands in for its plan (the twenty-third
+   * review of round M): its offer, the full session taken, the plans the lifter emptied. The loaded
+   * plan is read as itself (its own `catchUp`, the one it was saved with, or none); every later plan
+   * the same day reads these, with what the lifter chose on the loaded plan (`dayChoicesOf`).
+   * Absent on any other session.
+   */
+  dayChoices?: {
+    catchUp?: CatchUpSpec | null;
+    fullSession?: boolean;
+    emptied?: EmptiedPlan[];
+  };
 }
 
 export interface RecalibrationRequest {
@@ -217,6 +262,11 @@ export interface RecalibrationRequest {
   swaps?: readonly LastingSwap[];
   /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
   resets?: LearnedResets | null;
+  /**
+   * A save changed what the day offers (Maintenance 31): a catch-up where the split's session was,
+   * or the other way. A plan not begun is built whole, as the full session taken is.
+   */
+  offerChanged?: boolean;
 }
 
 export type ChangeKind = 'added' | 'removed' | 'replaced' | 'adjusted';

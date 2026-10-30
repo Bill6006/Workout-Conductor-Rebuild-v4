@@ -19,6 +19,8 @@ const FILES = [
   'src/core/time/localDays.test.ts',
   'src/features/today/useTodayWorkout.localDay.test.tsx',
   'src/engine/planning/deload.test.ts',
+  'src/engine/planning/weekModel.test.ts',
+  'src/core/state/secondRebuiltPastMidnight.store.test.ts',
 ];
 
 for (const { zone, offset } of ZONES) {

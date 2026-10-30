@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TRAINING_ROLES } from '../../catalog/exercises/exerciseSchema';
+import { MOVEMENT_PATTERN_IDS } from '../../catalog/movementPatterns/movementPatterns';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
 import { PROGRESSION_MODES, type GeneratedWorkout } from './types';
 
@@ -205,6 +206,22 @@ export const GeneratedWorkoutSchema = z.looseObject({
     version: z.number().int().min(1),
     lastTrigger: z.string().nullable(),
   }),
+  // Maintenance 31, the seventh review of round M: optional, and dropped rather than refused; a
+  // plan without it lays its catch-up out again at its next rebuild.
+  catchUpSlots: z
+    .array(
+      z.looseObject({
+        pattern: z.enum(MOVEMENT_PATTERN_IDS),
+        role: z.enum(TRAINING_ROLES),
+        muscles: z.array(z.enum(MUSCLE_IDS)),
+        sets: z.number().int().min(1).optional(),
+        minRir: z.number().min(0).max(5).optional(),
+        // The ninth review: dropped alone when unreadable, the slot then ordered by its number.
+        after: z.number().int().min(0).optional().catch(undefined),
+      }),
+    )
+    .optional()
+    .catch(undefined),
 });
 
 /** The parsed shape is structurally the engine's GeneratedWorkout. */

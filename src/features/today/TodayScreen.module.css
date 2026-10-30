@@ -178,6 +178,20 @@
   color: var(--color-text);
 }
 
+/* The day's one line on a catch-up or a second workout (Maintenance 31), its button beside it. */
+.dayNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--color-text);
+}
+
+.dayNote .link {
+  min-height: 44px;
+}
+
 .warmup {
   font-size: 0.82rem;
   color: var(--color-text-muted);
