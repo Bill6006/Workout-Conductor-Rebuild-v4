@@ -42,7 +42,7 @@ function upperDay(swaps: LastingSwap[]): CoachInput {
     duration: 'default',
     constraints: { templateId: 'upper', swaps },
   });
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   return {
     workout: {
       ...workout,

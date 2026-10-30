@@ -26,8 +26,9 @@ import {
   computeWeeklyVolume,
 } from '../../engine/volume/weeklyVolume';
 import type { LoggedExercise, SessionRating, WorkoutRecord } from '../validation/workoutRecord';
-import type { CompletionSummary, WorkoutSession } from './session';
+import { checkInDayOf, type CompletionSummary, type WorkoutSession } from './session';
 import { painNextLine } from '../../engine/recovery/painReport';
+import { dayRecovery, recoveryWindows } from '../../engine/recovery/recovery';
 import {
   estimateDoneSeconds,
   measureTrainingSeconds,
@@ -188,6 +189,11 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
           jointDiscomfort: [...session.constraints.readiness.jointDiscomfort],
         }
       : null,
+    // When it was told: one check-in, kept for every plan of its day, is counted once (the fifth
+    // review of Maintenance 33).
+    ...(session.constraints.readiness && session.constraints.checkInAt
+      ? { checkInAt: session.constraints.checkInAt }
+      : {}),
     prs: [],
   };
 }
@@ -371,12 +377,38 @@ export function buildCompletion(
     .slice(0, 3)
     .map((priority) => muscleName(priority.muscle))
     .join(', ')}.`;
+  // Each muscle's own window from this session's hard work (Maintenance 33, `recoveryWindows`): by
+  // its hardest sets and the body region, the dose, a new lift, long lengths, the session's own
+  // check-in (a short night), as the Plan screen reads it (the second review). Light work sets none.
+  const windows = recoveryWindows(
+    after,
+    dayRecovery({
+      readiness: session.constraints.readiness,
+      // The check-in the day's its session was made on, as the Plan screen reads it (the third
+      // review of Maintenance 33: past midnight the two gave a muscle two windows).
+      madeAt: checkInDayOf(session),
+      history: after,
+      now: completedAtIso,
+      resets,
+    }),
+  );
+  const byHours = new Map<number, string[]>();
+  for (const window of windows.values()) {
+    if (window.at !== completedAtIso) continue;
+    byHours.set(window.hours, [...(byHours.get(window.hours) ?? []), muscleName(window.muscle)]);
+  }
+  const listed = (names: string[]) =>
+    names.length <= 3
+      ? names.length === 1
+        ? names[0]
+        : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+      : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
   const recoveryNote = [
-    muscles.length > 0
-      ? `Give ${muscles
-          .slice(0, 3)
-          .map((muscle) => muscleName(muscle as MuscleId))
-          .join(', ')} about 48 h before loading them again.`
+    byHours.size > 0
+      ? `Recovery before loading them hard again: ${[...byHours]
+          .sort(([a], [b]) => a - b)
+          .map(([hours, names]) => `${listed(names)} about ${hours} h`)
+          .join(', ')}.`
       : 'Nothing was trained hard enough to need recovery time.',
     record.rating?.effort === 'too-hard' ? 'Rated too hard: an easier day or a rest day next.' : '',
     // The rating's pain is said once, under Next time; only other joints hurt mid-workout add here.

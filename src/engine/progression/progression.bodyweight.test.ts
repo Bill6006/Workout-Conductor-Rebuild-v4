@@ -223,7 +223,7 @@ describe('a family estimate passes only between lifts measured the same way', ()
 describe('the history notes about a lift done at bodyweight', () => {
   it('never tell it to add 5 lb or take 10% off, and still do for a loaded lift', () => {
     const history = chinUps([9, 6, 2], SHORT);
-    const fatigue = interpretFatigue(history, RECORD_NOW, null);
+    const fatigue = interpretFatigue(history, RECORD_NOW);
     const notes = analyzeStrategy({ history, profile, now: RECORD_NOW, fatigue });
     expect(
       notes.filter(
@@ -242,7 +242,7 @@ describe('the history notes about a lift done at bodyweight', () => {
       history: benchShort,
       profile,
       now: RECORD_NOW,
-      fatigue: interpretFatigue(benchShort, RECORD_NOW, null),
+      fatigue: interpretFatigue(benchShort, RECORD_NOW),
     });
     expect(benchNotes.some((note) => note.recommendation === 'micro-deload')).toBe(true);
   });

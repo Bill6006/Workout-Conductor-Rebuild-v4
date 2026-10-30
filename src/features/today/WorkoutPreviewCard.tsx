@@ -51,6 +51,8 @@ interface WorkoutPreviewCardProps {
    * full session, or the catch-up again.
    */
   dayNote?: { text: string; actionLabel?: string; onAction?: () => void } | null;
+  /** A rest day from the check-in (Maintenance 33): the day's line says so, and nothing starts. */
+  restToday?: boolean;
 }
 
 const NONE_LOGGED: ReadonlySet<string> = new Set();
@@ -184,6 +186,7 @@ export function WorkoutPreviewCard({
   onShowBarcode,
   logged = NONE_LOGGED,
   dayNote = null,
+  restToday = false,
 }: WorkoutPreviewCardProps) {
   const { duration } = workout;
   const fitted = duration.choice !== 'default' || (endBy?.on ?? false);
@@ -202,7 +205,8 @@ export function WorkoutPreviewCard({
   // A second workout with nothing left to give (Maintenance 31): the day's line says so, and there
   // is nothing to start.
   const nothing =
-    dayNote !== null && sessionStatus === 'preview' && allEntries(workout.blocks).length === 0;
+    (dayNote !== null && sessionStatus === 'preview' && allEntries(workout.blocks).length === 0) ||
+    (restToday && sessionStatus === 'preview');
 
   return (
     <Card tone="accent" eyebrow="Today's workout" title={workout.title}>

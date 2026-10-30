@@ -47,7 +47,7 @@ function input(history: WorkoutRecord[], extra: Partial<CoachInput> = {}): Coach
     profile,
     history,
     now: RECORD_NOW,
-    fatigue: interpretFatigue(history, RECORD_NOW, null),
+    fatigue: interpretFatigue(history, RECORD_NOW),
     strategy: [],
     lastExportAt: RECORD_NOW,
     workoutCount: history.length,

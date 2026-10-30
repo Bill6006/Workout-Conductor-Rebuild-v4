@@ -13,6 +13,7 @@ import { formatDayLabel, useNow } from '../../core/time/clock';
 import { localWeekday } from '../../core/time/localDate';
 import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
 import { swapsOffered } from '../../engine/recalibration/recalibrate';
+import { REST_TODAY, illnessOf } from '../../engine/readiness/checkIn';
 import { buildRankingSignals } from '../../engine/alternatives/signals';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import {
@@ -228,6 +229,9 @@ export function TodayScreen() {
     }
   };
   const readiness = session.constraints.readiness;
+  // A fever or aches all over (Maintenance 33): a rest day, nothing to start; the plan is kept, so
+  // a check-in changed back gives it again.
+  const resting = session.status === 'preview' && illnessOf(readiness) === 'body';
   const note = dayNoteOf(
     session,
     profile.schedule.availableDays.includes(localWeekday(new Date(now).toISOString())),
@@ -265,24 +269,31 @@ export function TodayScreen() {
           window.location.hash = routeHref('workout');
         }}
         onShowBarcode={hasBarcode ? () => store.openBarcodeSheet() : undefined}
+        restToday={resting}
         dayNote={
-          note
+          resting
             ? {
-                text: note.text,
-                actionLabel: note.action?.label,
-                onAction: note.action
-                  ? () => {
-                      const full = note.action!.full;
-                      store.setFullSession(full).catch((error: unknown) => {
-                        toast.show(
-                          error instanceof Error ? error.message : 'The session could not change',
-                          'error',
-                        );
-                      });
-                    }
-                  : undefined,
+                text: REST_TODAY,
+                actionLabel: 'Update check-in',
+                onAction: () => setCheckingIn(true),
               }
-            : null
+            : note
+              ? {
+                  text: note.text,
+                  actionLabel: note.action?.label,
+                  onAction: note.action
+                    ? () => {
+                        const full = note.action!.full;
+                        store.setFullSession(full).catch((error: unknown) => {
+                          toast.show(
+                            error instanceof Error ? error.message : 'The session could not change',
+                            'error',
+                          );
+                        });
+                      }
+                    : undefined,
+                }
+              : null
         }
       />
 
@@ -299,8 +310,8 @@ export function TodayScreen() {
       <Card eyebrow="Readiness" title={readiness ? 'Checked in for today' : 'Quick check-in'}>
         <p className={styles.body} data-testid="readiness-summary">
           {readiness
-            ? `Energy ${readiness.energy}/5 · soreness ${readiness.soreness}/5 · sleep ${readiness.sleep}/5 · motivation ${readiness.motivation}/5${readiness.jointDiscomfort.length ? ` · ${readiness.jointDiscomfort.join(', ')} discomfort` : ''}${readiness.timePressure ? ' · short on time' : ''}.`
-            : 'Thirty seconds on energy, soreness, sleep, motivation, joints, and time. The session adjusts instead of cancelling.'}
+            ? `Energy ${readiness.energy}/5 · soreness ${readiness.soreness}/5 · sleep ${readiness.sleep}/5 · motivation ${readiness.motivation}/5${illnessOf(readiness) === 'head' ? ' · head cold' : illnessOf(readiness) === 'body' ? ' · fever or aches' : ''}${readiness.jointDiscomfort.length ? ` · ${readiness.jointDiscomfort.join(', ')} discomfort` : ''}${readiness.timePressure ? ' · short on time' : ''}.`
+            : 'Thirty seconds on how you feel, your joints and your time. Low answers change what the app expects of your first sets; a cold, a sore joint or little time change the plan.'}
           {coach ? ` Fatigue ${coach.fatigue.level}: ${coach.fatigue.evidence[0]}` : ''}
         </p>
         <button

@@ -37,7 +37,7 @@ function input(
     now: NOW,
     duration: 'default',
   });
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   return {
     workout,
     status: 'preview',
@@ -85,8 +85,12 @@ function readyForLoad(): WorkoutRecord[] {
   );
 }
 
+/**
+ * The bench press stalled over four weeks. Its last session is three days back: one the day before
+ * leaves the chest inside its window, and since Maintenance 33 the "too soon" card leads.
+ */
 function stalled(): WorkoutRecord[] {
-  return [21, 14, 7, 1].map((daysAgo) =>
+  return [23, 16, 9, 3].map((daysAgo) =>
     record(daysAgo, BENCH, [
       [5, 185, 2],
       [5, 185, 2],
@@ -193,7 +197,7 @@ describe('coaching by experience', () => {
   });
 
   it('diagnoses undershooting separately and offers the next load step', () => {
-    const easy = [21, 14, 7, 1].map((daysAgo) =>
+    const easy = [23, 16, 9, 3].map((daysAgo) =>
       record(daysAgo, BENCH, [
         [5, 185, 4],
         [5, 185, 4],
@@ -275,7 +279,7 @@ describe('a finished workout takes no tap that would change it', () => {
     const route = gatherSignals(finished(stalled())).find((s) => s.source === 'stall: route');
     expect(route).toBeDefined();
     expect(route?.action).toBeNull();
-    const easy = [21, 14, 7, 1].map((daysAgo) =>
+    const easy = [23, 16, 9, 3].map((daysAgo) =>
       record(daysAgo, BENCH, [
         [5, 185, 4],
         [5, 185, 4],

@@ -9,8 +9,10 @@ export const LEARNED_RESETS_ID = 'learned-resets';
 
 /** The learned values a reset applies to: how well reps in reserve are judged (item 43), each
  * lift's own curve (item 41), the habit of lifting above or below the suggested weight, pain
- * patterns (item 45), and the lifter's own pace (Maintenance 28, item 4). */
-export const LEARNED_KINDS = ['reserve', 'curves', 'habit', 'pain', 'pace'] as const;
+ * patterns (item 45), the lifter's own pace (Maintenance 28, item 4), and each muscle's own recovery
+ * window (Maintenance 33). A copy of the app from before a kind keeps its time as a field it does not
+ * know (`parseResets`). */
+export const LEARNED_KINDS = ['reserve', 'curves', 'habit', 'pain', 'pace', 'recovery'] as const;
 export type LearnedKind = (typeof LEARNED_KINDS)[number];
 
 /**

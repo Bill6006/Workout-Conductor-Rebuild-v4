@@ -51,14 +51,16 @@ describe('coach focus in the store', () => {
   });
 
   it("keeps today's length, check-in, skips and missing plates when the focus rebuilds the preview", async () => {
-    // Maintenance 24: the plan rebuilt for the focus keeps what the lifter chose for today.
+    // Maintenance 24: the plan rebuilt for the focus keeps what the lifter chose for today. Since
+    // Maintenance 33 a head cold is the check-in's own change to the plan.
     const low = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const chosen = await seeded();
     const plain = await seeded();
@@ -77,18 +79,22 @@ describe('coach focus in the store', () => {
     expect(after.duration).toBe(45);
     expect(reference.duration).toBe(45);
     expect(after.constraints.focus).toBe('lats');
-    expect(after.constraints.readiness).toMatchObject({ energy: 2, sleep: 2 });
+    expect(after.constraints.readiness).toMatchObject({ illness: 'head' });
     expect(after.constraints.avoidExerciseIds).toContain(skipped.exerciseId);
     expect(after.loading.missingPlates).toEqual([2.5]);
     expect(allEntries(after.workout.blocks).map((entry) => entry.exerciseId)).not.toContain(
       skipped.exerciseId,
     );
-    // The check-in's extra rep in reserve, on the main lift both plans open with.
+    // The head cold's floor: every working set 2 or more short of failure, where the plan without
+    // it asks less of some; both plans open with the same main lift.
     const main = (session: typeof after) => allEntries(session.workout.blocks)[0]!;
-    const rir = (session: typeof after) =>
-      main(session).sets.find((set) => set.kind === 'working')!.targetRir;
+    const reserves = (session: typeof after) =>
+      allEntries(session.workout.blocks).flatMap((entry) =>
+        entry.sets.filter((set) => set.kind === 'working').map((set) => set.targetRir),
+      );
     expect(main(after).exerciseId).toBe(main(reference).exerciseId);
-    expect(rir(after)).toBe(Math.min(4, rir(reference) + 1));
+    expect(Math.min(...reserves(after))).toBeGreaterThanOrEqual(2);
+    expect(Math.min(...reserves(reference))).toBeLessThan(2);
   });
 
   it('drops an end time already past when the focus rebuilds the preview', async () => {

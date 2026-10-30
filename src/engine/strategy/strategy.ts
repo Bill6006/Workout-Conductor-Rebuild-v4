@@ -337,18 +337,18 @@ function recoveryInsights(
       severity: 2,
     });
   }
-  if (fatigue.consecutiveDays >= 3 || fatigue.hardRatings >= 2) {
+  // Days in a row are no sign in themselves since Maintenance 33 (`recovery.ts`): sessions rated
+  // too hard are.
+  if (fatigue.hardRatings >= 2) {
     insights.push({
       kind: 'recovery',
       recommendation: 'hold',
       headline: 'Recovery is behind',
       why: [
-        fatigue.consecutiveDays >= 3
-          ? `${fatigue.consecutiveDays} training days in a row.`
-          : `${fatigue.hardRatings} recent sessions rated too hard.`,
+        `${fatigue.hardRatings} recent sessions rated too hard.`,
         'A rest day, or a shorter session at held loads, beats a flat one.',
       ],
-      sessions: Math.max(2, fatigue.consecutiveDays),
+      sessions: Math.max(2, fatigue.hardRatings),
       confidence: 'medium',
       severity: 2,
     });

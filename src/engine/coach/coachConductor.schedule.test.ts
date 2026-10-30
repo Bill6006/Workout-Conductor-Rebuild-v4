@@ -66,7 +66,7 @@ function input(profile: UserProfile, extra: Partial<CoachInput> = {}): CoachInpu
     profile,
     history,
     now: RECORD_NOW,
-    fatigue: interpretFatigue(history, RECORD_NOW, null),
+    fatigue: interpretFatigue(history, RECORD_NOW),
     strategy: [],
     lastExportAt: RECORD_NOW,
     workoutCount: history.length,
@@ -138,5 +138,59 @@ describe('the card to move the schedule', () => {
       },
     };
     expect(card(input(fits))).toBeUndefined();
+  });
+});
+
+/**
+ * Maintenance 33, proposal part 5: the card reads the moved week with the same check as "too soon"
+ * (docs/research/recovery-time-course.md), so the schedule it offers cannot contradict the recovery
+ * advice. It says the days, never refuses the move.
+ */
+describe('the moved week read for recovery', () => {
+  const weeks = (days: Weekday[]) =>
+    ['2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31'].flatMap((monday) =>
+      days.map((day) => trained(monday, day)),
+    );
+
+  it('says the days its plan works muscles hard again too soon, and the lighter option', () => {
+    // Trained Mon, Tue and Wed: the moved week's Wednesday works the upper body Tuesday worked.
+    const signal = card({ ...input(base), history: weeks(['mon', 'tue', 'wed']) });
+    expect(signal?.why[1]).toContain('Moved: 3 days, on Mon, Tue and Wed');
+    expect(signal?.footnote).toBe(
+      'On Wed the plan would work the side delts, lats, biceps and triceps hard again when they may not have recovered; the coach offers a lighter option that day.',
+    );
+    expect(signal?.action).toMatchObject({
+      kind: 'schedule',
+      availableDays: ['mon', 'tue', 'wed'],
+    });
+  });
+
+  it('names the days Monday first and each muscle once', () => {
+    // Every day trained: six sessions from today, Thursday; the week wraps to Tuesday.
+    const signal = card({
+      ...input(base),
+      history: weeks(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']),
+    });
+    // The full-body day's dumbbell Romanian deadlift loads the hamstrings and glutes long, 12 h
+    // more (the second review of Maintenance 33): Monday's plan comes inside their windows too.
+    expect(signal?.footnote).toBe(
+      'On Mon, Tue, Sat and Sun the plan would work the biceps, triceps, hamstrings and glutes hard again when they may not have recovered; the coach offers a lighter option those days.',
+    );
+  });
+
+  it('says nothing where the moved days leave each muscle its recovery', () => {
+    // Mon and Tue: the split follows to upper and lower, a day for each.
+    const signal = card({ ...input(base), history: weeks(['mon', 'tue']) });
+    expect(signal?.why).toHaveLength(2);
+    expect(signal?.footnote).toBeUndefined();
+  });
+
+  it('reads the log it is given each time', () => {
+    const crowded = weeks(['mon', 'tue', 'wed']);
+    expect(card({ ...input(base), history: crowded })?.footnote).toContain('On Wed');
+    const spaced = card({ ...input(base), history: weeks(['mon', 'tue']) });
+    expect(spaced?.why[1]).toContain('Moved: 2 days, on Mon and Tue');
+    expect(spaced?.footnote).toBeUndefined();
+    expect(card({ ...input(base), history: crowded })?.footnote).toContain('On Wed');
   });
 });

@@ -359,13 +359,15 @@ describe('Equipment busy', () => {
     expect(moved.constraints.postponed).toEqual([
       { exerciseId: 'barbell-bench-press', after: [passed] },
     ]);
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const checkedIn = ok(
       run({ type: 'readiness', readiness: tired }, moved.workout, moved.constraints),
@@ -439,13 +441,15 @@ describe('Equipment busy', () => {
     expect(swapped.constraints.postponed).toEqual([
       { exerciseId: 'barbell-bench-press', after: [passed.exerciseId, 'dumbbell-bench-press'] },
     ]);
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const checkedIn = ok(
       run({ type: 'readiness', readiness: tired }, swapped.workout, swapped.constraints),
@@ -456,13 +460,15 @@ describe('Equipment busy', () => {
   });
 
   it('holds the move when the lift it gave way to is swapped for comfort or for a sore joint', () => {
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     for (const trigger of ['uncomfortable', 'pain'] as const) {
       const workout = plan();
@@ -600,13 +606,15 @@ describe('Equipment busy', () => {
     );
     const [move] = hurt.constraints.postponed;
     expect(move).toBeDefined();
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const checkedIn = ok(
       run({ type: 'readiness', readiness: tired }, hurt.workout, hurt.constraints),
@@ -717,13 +725,15 @@ describe('Equipment busy', () => {
     expect(rowOf(second.workout, 'barbell-bench-press')).toBeGreaterThan(
       rowOf(second.workout, passed.exerciseId),
     );
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const checkedIn = ok(
       run({ type: 'readiness', readiness: tired }, second.workout, second.constraints),
@@ -761,13 +771,15 @@ describe('Equipment busy', () => {
     const [move] = swapped.constraints.postponed;
     expect(move?.exerciseId).toBe('dumbbell-bench-press');
     expect(move?.after).not.toContain('dumbbell-bench-press');
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const checkedIn = ok(
       run({ type: 'readiness', readiness: tired }, swapped.workout, swapped.constraints),
@@ -1128,13 +1140,15 @@ describe('Equipment busy', () => {
         },
       ],
     };
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const rebuilt = ok(run({ type: 'readiness', readiness: tired }, workout, constraints));
     expect(rowOf(rebuilt.workout, 'dumbbell-shoulder-press')).toBe(0);
@@ -1230,13 +1244,15 @@ describe('Equipment busy', () => {
         },
       ],
     };
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const first = ok(run({ type: 'readiness', readiness: tired }, workout, constraints));
     const second = ok(
@@ -1302,13 +1318,15 @@ describe('Equipment busy', () => {
     expect(constraints.postponed[0]?.was ?? []).not.toContain('incline-dumbbell-press');
     // A check-in holds the barbell incline behind the shoulder press, and leaves the incline press
     // in the bench's place in front.
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     step({ type: 'readiness', readiness: tired });
     expect(rowOf(now, 'incline-dumbbell-press')).toBe(0);
@@ -1816,13 +1834,15 @@ describe('Equipment busy', () => {
     expect(move?.was).toContain('barbell-bench-press');
     // A check-in brings the barbell bench back: it is the busy lift under its old name, and it
     // does not lead.
+    // A head cold: a check-in that rebuilds the plan since Maintenance 33 (a low one keeps it).
     const tired = {
-      energy: 2,
+      energy: 3,
       soreness: 3,
-      sleep: 2,
+      sleep: 3,
       motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const checked = ok(
       run({ type: 'readiness', readiness: tired }, again.workout, again.constraints),

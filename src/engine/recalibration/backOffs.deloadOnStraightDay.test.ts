@@ -61,7 +61,7 @@ function coachInput(workout: GeneratedWorkout): CoachInput {
     profile: profileOf(),
     history,
     now: RECORD_NOW,
-    fatigue: interpretFatigue(history, RECORD_NOW, null),
+    fatigue: interpretFatigue(history, RECORD_NOW),
     strategy: [],
     lastExportAt: RECORD_NOW,
     workoutCount: 1,

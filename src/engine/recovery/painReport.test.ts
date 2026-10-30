@@ -51,7 +51,7 @@ describe('the pain reported when a workout is saved', () => {
       { joint: 'shoulder', count: 1 },
       { joint: 'unspecified', count: 1 },
     ]);
-    expect(interpretFatigue(history, RECORD_NOW, null).evidence).toContain(
+    expect(interpretFatigue(history, RECORD_NOW).evidence).toContain(
       'Shoulder pain reported in a recent session.',
     );
   });

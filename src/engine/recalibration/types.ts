@@ -1,3 +1,4 @@
+import type { Illness } from '../readiness/checkIn';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { StrengthMaxes } from '../progression/maxes';
 import type { DeloadWindow } from '../planning/deload';
@@ -22,7 +23,10 @@ import type { DurationChoice, EmptiedPlan, GeneratedWorkout, SetKind } from '../
 
 export type RecalibrationScope = 'local' | 'partial' | 'full';
 
-/** A fast pre-workout check-in; every value is 1 (worst) to 5 (best). */
+/**
+ * A fast pre-workout check-in: energy, sleep and motivation 1 (worst) to 5 (best), soreness 1 (none)
+ * to 5 (wrecked); and, since Maintenance 33, any illness (the gate: `ILLNESSES`).
+ */
 export interface Readiness {
   energy: number;
   soreness: number;
@@ -30,6 +34,7 @@ export interface Readiness {
   motivation: number;
   jointDiscomfort: Joint[];
   timePressure: boolean;
+  illness?: Illness;
 }
 
 export type RecalibrationTrigger =
@@ -95,6 +100,11 @@ export type RecalibrationTrigger =
    * treatment, or loses it. `lifts` names the two that fell short.
    */
   | { type: 'bad-start'; low: boolean; lifts: string[] }
+  /**
+   * Lighter today on a muscle the "too soon" card names (Maintenance 33, the owner's decision 2):
+   * its lifts take a set fewer above the floor and a rep more in reserve.
+   */
+  | { type: 'lighter'; muscle: MuscleId }
   | { type: 'end-by'; time: string | null }
   /** The full session on a day that offers a catch-up, or the catch-up again (Maintenance 31). */
   | { type: 'session-kind'; full: boolean; kind?: 'catch-up' | 'second' };
@@ -197,6 +207,18 @@ export interface SessionConstraints {
   /** ISO time the session must end by, when the exact-end mode is on. */
   endBy: string | null;
   readiness: Readiness | null;
+  /**
+   * The day's check-in was told with a hard start in force (the second review of Maintenance 33):
+   * the start's reading reads none of it, so it never takes the hard start back. Absent on a
+   * session saved before, and for a check-in told before a hard start.
+   */
+  checkInAfterStart?: true;
+  /**
+   * When the day's check-in was told (the fourth review of Maintenance 33): it is the check-in of
+   * that day, wherever the session was made (`checkInDayOf`). Absent on a session saved before, and
+   * with no check-in, which reads the day its session was made on.
+   */
+  checkInAt?: string;
   /** -2 (much easier) to 2 (much harder) for the remaining work. */
   intensity: number;
   /**
@@ -204,6 +226,12 @@ export interface SessionConstraints {
    * check-in's treatment, never on top of one. Absent on a session saved before.
    */
   badStart?: boolean;
+  /**
+   * The muscles the lifter chose to go lighter on today, from the "too soon" card (Maintenance 33,
+   * the owner's decision 2): their lifts take a hard start's ease, never on top of one. Absent on a
+   * session saved before.
+   */
+  lighter?: MuscleId[];
   /** A planned deload week that covers this session, if any. */
   deload: DeloadWindow | null;
   /** A coach focus: the session leads with this muscle. */

@@ -436,7 +436,7 @@ describe('back after a long break in the middle of a workout', () => {
 });
 
 describe('the history notes', () => {
-  const fatigueOf = (history: WorkoutRecord[]) => interpretFatigue(history, NOW, null);
+  const fatigueOf = (history: WorkoutRecord[]) => interpretFatigue(history, NOW);
 
   it('never compare a lift across a break', () => {
     const history = [

@@ -68,7 +68,7 @@ test.describe('adaptive coach', () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test('a low readiness check-in adjusts the session and moves the coach to recovery', async ({
+  test('a low check-in keeps the plan and judges the first sets a step easier', async ({
     page,
   }) => {
     await ensureProfile(page);
@@ -90,12 +90,30 @@ test.describe('adaptive coach', () => {
     await sheet.getByTestId('readiness-apply').click();
 
     await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
-    await expect(page.getByTestId('recalibration-summary')).toContainText(/Adjusted for today/);
-    await expect(page.getByTestId('readiness-summary')).toContainText('Energy 1/5');
-    await expect(page.getByTestId('coach-card')).toHaveAttribute('data-domain', 'recovery');
-    await expect(page.getByTestId('coach-headline')).toContainText(
-      /Fatigue is building|Recovery first/,
+    // Maintenance 33 (the owner's decision 1): a check-in lowers what the app expects of the day's
+    // first sets, never the plan, and soreness alone never counts.
+    await expect(page.getByTestId('recalibration-summary')).toContainText(
+      /The plan stays; today's first sets are judged a step easier\./,
     );
+    await expect(page.getByTestId('readiness-summary')).toContainText('Energy 1/5');
+    await expect(page.locator('[data-testid="coach-card"][data-domain="recovery"]')).toHaveCount(0);
+  });
+
+  test('a fever or aches all over make it a rest day', async ({ page }) => {
+    await ensureProfile(page);
+    await page.getByTestId('readiness-open').click();
+    const sheet = page.getByRole('dialog', { name: 'Quick check-in' });
+    await expect(sheet).toBeVisible();
+    await sheet
+      .getByRole('radiogroup', { name: 'Unwell' })
+      .getByRole('radio', { name: 'Fever or aches' })
+      .click();
+    await sheet.getByTestId('readiness-apply').click();
+    await expect(page.getByTestId('calibration-overlay')).toBeHidden({ timeout: 8_000 });
+    await expect(page.getByTestId('recalibration-summary')).toContainText(
+      'Fever or aches all over: rest today, and train again once they have gone.',
+    );
+    await expect(page.getByTestId('start-workout')).toHaveCount(0);
   });
 
   test('every card carries a load target and its evidence during the workout', async ({ page }) => {

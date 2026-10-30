@@ -132,7 +132,12 @@ async function begunThenTired() {
   store.startWorkout();
   const ramp = bench().sets.find((set) => set.kind === 'warmup')!;
   await store.logSet(bench().id, ramp.index, { weight: ramp.targetWeight, reps: 5, rir: 5 });
-  await store.recalibrate({ type: 'readiness', readiness: { ...tired, energy: 1 } });
+  // On Maintenance 33's fatigue model today's check-in scores no fatigue: the day runs the lift
+  // straight by a head cold's floor over the top set's reserve (`straightToday`).
+  await store.recalibrate({
+    type: 'readiness',
+    readiness: { ...tired, energy: 1, illness: 'head' },
+  });
   // Under way, it keeps its top set and back-offs through the check-in.
   expect(working().map((set) => set.tier)).toEqual(['top', 'back-off', 'back-off', 'back-off']);
   return { store, entries, bench, working };
@@ -199,9 +204,10 @@ describe('a main lift picked up again before its top set on a day that runs it s
     const begun = await begunThenTired();
     await pickUp(begun);
     const sets = begun.working().map((set) => [set.tier ?? 'straight', set.targetWeight]);
-    // Straight at the back-offs' load: 5% under the top set's 185, held for the day's fatigue.
+    // Straight at the back-offs' load. On Maintenance 33 a head cold holds no load: 5% under the
+    // top set at 190 the plan asks, 180 (Round N's day of high fatigue held it at 175).
     expect(sets.length).toBeGreaterThan(0);
-    expect(sets.every(([tier, load]) => tier === 'straight' && load === 175)).toBe(true);
+    expect(sets.every(([tier, load]) => tier === 'straight' && load === 180)).toBe(true);
     // At 1fcd67a: undefined (and the entry keeps its drop of 5% with no top set).
     expect(begun.bench().atBackOffs).toBe(true);
   });

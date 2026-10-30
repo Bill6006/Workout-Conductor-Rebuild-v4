@@ -7,6 +7,7 @@ import { CatchUpSpecSchema } from '../validation/catchUpSpec';
 import { getExercise } from '../../catalog/exercises/catalog';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
+import { ILLNESSES } from '../../engine/readiness/checkIn';
 import { emptyCompleted, emptyConstraints } from '../../engine/recalibration/recalibrate';
 import type {
   ChangeSummary,
@@ -242,6 +243,8 @@ const ReadinessSchema = z.looseObject({
   motivation: z.number().min(1).max(5),
   jointDiscomfort: z.array(z.enum(JOINTS)),
   timePressure: z.boolean(),
+  // Maintenance 33: a check-in saved before has none; one this copy cannot read is none.
+  illness: z.enum(ILLNESSES).optional().catch(undefined),
 });
 
 /** A plan the lifter emptied today (`EmptiedPlan`): its offer, and the layout it was laid out on. */
@@ -283,9 +286,17 @@ const ConstraintsSchema = z.looseObject({
     .catch(undefined),
   endBy: z.iso.datetime().nullable(),
   readiness: ReadinessSchema.nullable(),
+  // The second review of Maintenance 33: one that fails to read is dropped, and the check-in reads as
+  // told before the start.
+  checkInAfterStart: z.literal(true).optional().catch(undefined),
+  // The fourth review of Maintenance 33: one that fails to read is dropped, and the check-in reads as
+  // the day its session was made on.
+  checkInAt: z.iso.datetime().optional().catch(undefined),
   intensity: z.number().int().min(-2).max(2),
   // Maintenance 26 (item 42): a session saved before has none; one that fails to read keeps none.
   badStart: z.boolean().optional().catch(undefined),
+  // Maintenance 33: a session saved before has none; one that fails to read keeps none.
+  lighter: z.array(z.enum(MUSCLE_IDS)).optional().catch(undefined),
   deload: z
     .object({ startsAt: z.iso.datetime(), endsAt: z.iso.datetime() })
     .nullable()
@@ -468,6 +479,15 @@ export function computeBaseKey(
   historyLength: number,
 ): string {
   return `${day}|${profile.updatedAt}|${location?.id ?? ''}:${location?.updatedAt ?? ''}|${historyLength}`;
+}
+
+/**
+ * When a session's check-in was told, for every reader of the day's check-in (`checkInOfDay`): the
+ * time it was told (the fourth review of Maintenance 33: told after midnight on a plan made before
+ * it, no reader read it), or the day its session was made on for one told before that was kept.
+ */
+export function checkInDayOf(session: Pick<WorkoutSession, 'createdAt' | 'constraints'>): string {
+  return session.constraints.checkInAt ?? session.createdAt;
 }
 
 export function createSession(

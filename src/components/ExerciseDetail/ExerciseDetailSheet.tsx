@@ -9,6 +9,7 @@ import {
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
 import { SWAP_WEEKS } from '../../engine/planning/lastingSwaps';
+import { PAIN_GATE_LINE } from '../../engine/readiness/checkIn';
 import type { AlternativeResult } from '../../engine/alternatives/rankAlternatives';
 import { useOwnDemonstration } from '../../features/library/useOwnDemonstration';
 import { Toggle } from '../Form/Toggle';
@@ -312,6 +313,9 @@ export function ExerciseDetailSheet({
               Hurts, protect it
             </button>
           </div>
+          <p className={styles.text} data-testid="pain-gate">
+            {PAIN_GATE_LINE}
+          </p>
         </section>
       ) : null}
 

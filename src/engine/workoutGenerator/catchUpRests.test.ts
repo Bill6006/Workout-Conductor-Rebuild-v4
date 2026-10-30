@@ -249,7 +249,7 @@ describe('the coach on a second workout', () => {
       duration: 'default',
       constraints: { templateId: 'upper' },
     });
-    const fatigue = interpretFatigue(history, RECORD_NOW, null);
+    const fatigue = interpretFatigue(history, RECORD_NOW);
     const input: CoachInput = {
       workout: {
         ...workout,

@@ -49,7 +49,7 @@ const history = [
 
 describe('a top set skipped, its back-offs done as asked', () => {
   it('is no fall in the fatigue’s estimated maxes', () => {
-    const fatigue = interpretFatigue(history, RECORD_NOW, null);
+    const fatigue = interpretFatigue(history, RECORD_NOW);
     // On e6ed7ed: performanceDrift -5, "Estimated maxes fell 5% over the last two sessions."
     expect(fatigue.evidence.join(' ')).not.toContain('Estimated maxes fell');
     expect(fatigue.performanceDrift ?? 0).toBeGreaterThanOrEqual(0);

@@ -25,7 +25,7 @@ describe('the coach’s deload of a stalled main lift, the first review of round
       profile: profileOf(),
       history: trained(),
       now: RECORD_NOW,
-      fatigue: interpretFatigue([], RECORD_NOW, null),
+      fatigue: interpretFatigue([], RECORD_NOW),
       strategy: [],
       lastExportAt: RECORD_NOW,
       workoutCount: 0,
@@ -83,7 +83,7 @@ describe('the coach’s micro-deload of a main lift, the first review of round N
       profile: profileOf(),
       history: trained(),
       now: RECORD_NOW,
-      fatigue: interpretFatigue([], RECORD_NOW, null),
+      fatigue: interpretFatigue([], RECORD_NOW),
       strategy: [
         {
           kind: 'load',

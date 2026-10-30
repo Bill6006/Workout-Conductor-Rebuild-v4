@@ -7,7 +7,7 @@ import {
   startOfLocalDay,
 } from '../../core/time/localDate';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
-import type { FatigueSignal } from '../recovery/fatigue';
+import { performanceFellWords, type FatigueSignal } from '../recovery/fatigue';
 import { computeExposure } from '../volume/weeklyVolume';
 
 /**
@@ -95,9 +95,12 @@ export function recommendDeload(
   }
   const signs: string[] = [];
   if (fatigue.performanceDrift !== null && fatigue.performanceDrift <= -5) {
-    signs.push(
-      `estimated maxes fell ${Math.abs(fatigue.performanceDrift)}% over the last two sessions`,
+    // As the fatigue says it: a fall against what the sets asked, where they were read so.
+    const fell = performanceFellWords(
+      Math.abs(fatigue.performanceDrift),
+      fatigue.performanceAgainstAsked,
     );
+    signs.push(`${fell.charAt(0).toLowerCase()}${fell.slice(1)}`);
   }
   if (fatigue.rirDrift !== null && fatigue.rirDrift <= -0.5) {
     signs.push('sets have been running closer to failure than planned');

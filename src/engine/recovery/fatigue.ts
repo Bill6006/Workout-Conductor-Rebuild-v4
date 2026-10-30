@@ -1,15 +1,20 @@
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
-import { addLocalDays, localDayKey } from '../../core/time/localDate';
-import type { Readiness } from '../recalibration/types';
+import { oncePerCheckIn } from '../readiness/checkIn';
 import { holdById } from '../workout/setText';
+import { againstEarlier, askedRead, type AskedRead } from './againstAsked';
 import { ratingPainWords } from './painReport';
 
 /**
- * Fatigue interpretation from actual records and today's readiness: sessions
- * in the last week, consecutive training days, how far logged reps in reserve
- * drifted below the targets, hard or painful session ratings, and the
- * check-in. The result feeds progression (hold loads when fatigue is high),
- * the coach, and the strategy analysis. Never a diagnosis from one poor set.
+ * Fatigue interpretation from actual records: how far logged reps in reserve drifted below the
+ * targets, hard or painful session ratings, rests that ran long, and estimated maxes falling. The
+ * result feeds progression (hold loads when fatigue is high), the coach, and the strategy analysis.
+ * Never a diagnosis from one poor set.
+ *
+ * Since Maintenance 33 (docs/proposals/week-model-readiness-time.md, part 1; the owner's decision
+ * 1) no day count scores: fatigue stays in the trained muscles (Behm 2021, 33818751), and
+ * consecutive days are no problem in themselves (27682004, 29967584), so recovery is judged per
+ * muscle (`recovery.ts`). Nor does the check-in: it lowers what the app expects of the day's first
+ * sets, never the plan (`readCheckIn`). The week's sessions are still counted, for the words.
  */
 
 export type FatigueLevel = 'fresh' | 'normal' | 'elevated' | 'high';
@@ -18,8 +23,8 @@ export interface FatigueSignal {
   level: FatigueLevel;
   score: number;
   evidence: string[];
+  /** Sessions in the last seven days, for the words; they score nothing (Maintenance 33). */
   sessionsLast7Days: number;
-  consecutiveDays: number;
   /** Average logged RIR minus target RIR over the last two sessions; negative means closer to failure. */
   rirDrift: number | null;
   hardRatings: number;
@@ -27,20 +32,18 @@ export interface FatigueSignal {
   readinessTrend: number;
   /** Consecutive working sets in the last two sessions logged well past the usual rest. */
   longRests: number;
-  /** Percent change of each lift's estimated max, newest against previous, averaged; null without pairs. */
+  /**
+   * Percent change of each lift's estimated max, newest against previous, each set read against
+   * what it asked (`againstAsked`), averaged; null without pairs (Maintenance 33).
+   */
   performanceDrift: number | null;
+  /** A lift's pair in the drift was read against what its sets asked: the words say so. */
+  performanceAgainstAsked: boolean;
 }
 
 const DAY_MS = 86_400_000;
 
-/** The device's day (Maintenance 28, item 1). */
-const dayKey = localDayKey;
-
-export function interpretFatigue(
-  history: readonly WorkoutRecord[],
-  nowIso: string,
-  readiness: Readiness | null = null,
-): FatigueSignal {
+export function interpretFatigue(history: readonly WorkoutRecord[], nowIso: string): FatigueSignal {
   const now = Date.parse(nowIso);
   const qualifying = history
     .filter((record) =>
@@ -55,32 +58,6 @@ export function interpretFatigue(
   const sessionsLast7Days = qualifying.filter(
     (record) => now - Date.parse(record.completedAt ?? record.startedAt) <= 7 * DAY_MS,
   ).length;
-  if (sessionsLast7Days >= 5) {
-    score += 2;
-    evidence.push(`${sessionsLast7Days} sessions in the last 7 days.`);
-  } else if (sessionsLast7Days === 4) {
-    score += 1;
-    evidence.push('4 sessions in the last 7 days.');
-  }
-
-  // A workout counts on the day it began.
-  const days = [...new Set(qualifying.map((record) => dayKey(record.startedAt)))];
-  let consecutiveDays = 0;
-  let cursor = dayKey(nowIso);
-  const yesterday = (key: string) =>
-    localDayKey(addLocalDays(new Date(`${key}T12:00:00`).toISOString(), -1));
-  if (!days.includes(cursor)) cursor = yesterday(cursor);
-  while (days.includes(cursor)) {
-    consecutiveDays += 1;
-    cursor = yesterday(cursor);
-  }
-  if (consecutiveDays >= 4) {
-    score += 2;
-    evidence.push(`${consecutiveDays} training days in a row.`);
-  } else if (consecutiveDays === 3) {
-    score += 1;
-    evidence.push('3 training days in a row.');
-  }
 
   const drifts: number[] = [];
   for (const record of qualifying.slice(0, 2)) {
@@ -132,29 +109,11 @@ export function interpretFatigue(
     );
   }
 
-  // Saved check-ins: a trend, not just today.
-  const checkIns = qualifying
-    .slice(0, 3)
-    .map(
-      (record) =>
-        (record as { readiness?: { energy: number; sleep: number; soreness: number } | null })
-          .readiness ?? null,
-    )
-    .filter(
-      (entry): entry is { energy: number; sleep: number; soreness: number } => entry !== null,
-    );
-  const readinessTrend = checkIns.filter((entry) => entry.energy <= 2 || entry.sleep <= 2).length;
-  const soreTrend = checkIns.filter((entry) => entry.soreness >= 4).length;
-  if (readinessTrend >= 2) {
-    score += 1;
-    evidence.push(
-      `Low energy or sleep in ${readinessTrend} of the last ${checkIns.length} check-ins.`,
-    );
-  }
-  if (soreTrend >= 2) {
-    score += 1;
-    evidence.push(`Sore in ${soreTrend} of the last ${checkIns.length} check-ins.`);
-  }
+  // Saved check-ins with low energy or sleep, counted for the deload's words; they score nothing.
+  // Each told once, on a day of two workouts too (the fifth review of Maintenance 33).
+  const readinessTrend = oncePerCheckIn(qualifying.slice(0, 3)).filter(
+    (record) => record.readiness && (record.readiness.energy <= 2 || record.readiness.sleep <= 2),
+  ).length;
 
   // Rests that ran long between logged sets suggest grinding.
   let longRests = 0;
@@ -180,63 +139,64 @@ export function interpretFatigue(
     );
   }
 
-  // Performance drift per lift: newest estimated max against the previous one, averaged.
-  const maxes = new Map<string, number[]>();
+  // Performance drift per lift: its newest session's best set against the session before's, each
+  // read against what it asked (Maintenance 33, `againstAsked`): at the same ask as lifted, at
+  // another against its own, so the plan's own change lifted as asked is no fall. A load planned
+  // lighter later in a session (the eighth review of round N: a shoulder press after three pressing
+  // lifts read 17% down against the full-body day's), in a deload week, or the plan's load step after
+  // the reps climbed its range (the first review of Maintenance 33: read 10% down) is none. A
+  // session saved with no targets is read as it is, and set only against another such.
+  const reads = new Map<string, AskedRead[]>();
+  const estimate = (weight: number, reps: number) => weight * (1 + Math.min(reps, 12) / 30);
   for (const record of qualifying.slice(0, 4)) {
     for (const entry of record.entries) {
       // A hold's seconds are not reps, so they carry no estimated max to drift; a straight day at
       // the back-offs' load is lighter by design, no fall (the fifth review of round N), nor are its
       // back-offs: a session with its top set skipped reads nothing (the seventh).
       if (holdById(entry.exerciseId) || entry.atBackOffs === true) continue;
-      let best = 0;
+      let best: { set: (typeof entry.sets)[number]; max: number } | null = null;
       for (const set of entry.sets) {
         if (
-          set.kind === 'working' &&
-          set.completed &&
-          set.weight !== null &&
-          set.tier !== 'back-off'
+          set.kind !== 'working' ||
+          !set.completed ||
+          set.weight === null ||
+          set.weight <= 0 ||
+          set.tier === 'back-off'
         ) {
-          best = Math.max(best, set.weight * (1 + Math.min(set.reps, 12) / 30));
+          continue;
         }
+        const max = estimate(set.weight, set.reps);
+        if (best === null || max > best.max) best = { set, max };
       }
-      if (best > 0) maxes.set(entry.exerciseId, [...(maxes.get(entry.exerciseId) ?? []), best]);
+      if (best !== null) {
+        reads.set(entry.exerciseId, [
+          ...(reads.get(entry.exerciseId) ?? []),
+          askedRead(best.set, best.max, estimate),
+        ]);
+      }
     }
   }
   const changes: number[] = [];
-  for (const list of maxes.values()) {
-    if (list.length >= 2 && (list[1] as number) > 0) {
-      changes.push((((list[0] as number) - (list[1] as number)) / (list[1] as number)) * 100);
+  let performanceAgainstAsked = false;
+  for (const list of reads.values()) {
+    const [newest, before] = list;
+    const share = newest && before ? againstEarlier(newest, before) : null;
+    if (share !== null) {
+      changes.push((share - 1) * 100);
+      performanceAgainstAsked ||= newest?.ask !== null;
     }
   }
+  const fell = (by: number) => `${performanceFellWords(by, performanceAgainstAsked)}.`;
   const performanceDrift =
     changes.length > 0
       ? Math.round((changes.reduce((a, b) => a + b, 0) / changes.length) * 10) / 10
       : null;
   if (performanceDrift !== null && performanceDrift <= -10) {
     score += 2;
-    evidence.push(
-      `Estimated maxes fell ${Math.abs(performanceDrift)}% over the last two sessions.`,
-    );
+    evidence.push(fell(Math.abs(performanceDrift)));
   } else if (performanceDrift !== null && performanceDrift <= -5) {
     score += 1;
-    evidence.push(
-      `Estimated maxes fell ${Math.abs(performanceDrift)}% over the last two sessions.`,
-    );
-  }
-
-  if (readiness) {
-    if (readiness.energy <= 2 || readiness.sleep <= 2) {
-      score += 2;
-      evidence.push('Low energy or sleep in today’s check-in.');
-    }
-    if (readiness.soreness >= 4) {
-      score += 1;
-      evidence.push('Sore today.');
-    }
-    if (readiness.energy >= 4 && readiness.sleep >= 4 && readiness.soreness <= 2) {
-      score -= 1;
-      evidence.push('Feeling fresh in today’s check-in.');
-    }
+    evidence.push(fell(Math.abs(performanceDrift)));
   }
 
   const level: FatigueLevel =
@@ -247,11 +207,18 @@ export function interpretFatigue(
     score,
     evidence,
     sessionsLast7Days,
-    consecutiveDays,
     rirDrift,
     hardRatings,
     readinessTrend,
     longRests,
     performanceDrift,
+    performanceAgainstAsked,
   };
+}
+
+/** The drift's fall in words, without the stop, as the evidence and the deload advice say it. */
+export function performanceFellWords(by: number, againstAsked: boolean): string {
+  return againstAsked
+    ? `Lifts fell ${by}% against what their sets asked over the last two sessions`
+    : `Estimated maxes fell ${by}% over the last two sessions`;
 }

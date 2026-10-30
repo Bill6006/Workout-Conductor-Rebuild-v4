@@ -141,15 +141,23 @@ async function begunStraightThenBetter() {
     'back-off 180 at 2',
   ]);
   // A low check-in before the start: fatigue high, the bench press straight at its back-offs' load.
-  await store.recalibrate({ type: 'readiness', readiness: { ...tired, energy: 1 } });
-  expect(working()).toEqual(['straight 175 at 3', 'straight 175 at 3', 'straight 175 at 3']);
+  // On Maintenance 33's fatigue model today's check-in scores no fatigue: the day runs the lift
+  // straight by a head cold's floor over the top set's reserve (`straightToday`).
+  await store.recalibrate({
+    type: 'readiness',
+    readiness: { ...tired, energy: 1, illness: 'head' },
+  });
+  // A head cold holds no load and takes no set: 5% under the top set at 190 the plan asks, at its
+  // floor (Round N's day of high fatigue held them at 175 at 3, a set fewer).
+  const straightDay = Array<string>(4).fill('straight 180 at 2');
+  expect(working()).toEqual(straightDay);
   store.startWorkout();
   const ramp = bench().sets.find((set) => set.kind === 'warmup')!;
   await store.logSet(bench().id, ramp.index, { weight: ramp.targetWeight, reps: 5, rir: 5 });
   // A good check-in under way: fatigue back to elevated. The lift under way keeps its sets.
   const good = { ...tired, energy: 4, sleep: 4, soreness: 2, motivation: 4 };
   await store.recalibrate({ type: 'readiness', readiness: good });
-  expect(working()).toEqual(['straight 175 at 3', 'straight 175 at 3', 'straight 175 at 3']);
+  expect(working()).toEqual(straightDay);
   // The day as built now, under that check-in: the bench press on its top set and back-offs.
   const state = store.getSnapshot();
   const fresh = generateWorkout({
@@ -197,8 +205,14 @@ describe('a main lift begun straight on a day of high fatigue, picked up once it
   ])('%s: takes its top set and back-offs, as the day plans them', async (_, pickUp) => {
     const begun = await begunStraightThenBetter();
     await pickUp(begun);
-    // At 604fba7: ['straight 180 at 2', 'straight 180 at 2', 'straight 180 at 2'].
-    expect(begun.working()).toEqual(['top 190 at 1', 'back-off 180 at 2', 'back-off 180 at 2']);
+    // At 604fba7: ['straight 180 at 2', 'straight 180 at 2', 'straight 180 at 2']. On Maintenance 33
+    // the four sets the head cold kept: the top set and three back-offs.
+    expect(begun.working()).toEqual([
+      'top 190 at 1',
+      'back-off 180 at 2',
+      'back-off 180 at 2',
+      'back-off 180 at 2',
+    ]);
   });
 });
 
@@ -214,6 +228,6 @@ describe('a main lift that regained its top set by a pick-up', () => {
     const { store, bench } = begun;
     const top = bench().sets.find((set) => set.tier === 'top')!;
     await store.logSet(bench().id, top.index, { weight: 190, reps: 2, rir: 0 });
-    expect(begun.working()).toEqual(['back-off 175 at 2', 'back-off 175 at 2']);
+    expect(begun.working()).toEqual(Array<string>(3).fill('back-off 175 at 2'));
   });
 });

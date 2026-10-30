@@ -198,13 +198,23 @@ describe('multi-session strategy', () => {
     expect(coverage[0]?.why[0]).toMatch(/of \d+ sets this week/);
   });
 
-  it('flags recovery after three days in a row', () => {
-    const history = [
+  it('flags recovery on what the sessions show, never on days in a row (Maintenance 33)', () => {
+    // Three days running, every set as planned: no day count scores (Behm 2021; the owner's
+    // decision 1), so nothing is behind.
+    const steady = [
       record(0, 'barbell-bench-press', [[5, 185, 2]]),
       record(1, 'cable-fly', [[12, 40, 1]], [10, 15], 1),
       record(2, 'lat-pulldown', [[10, 120, 1]], [8, 12], 1),
     ];
-    expect(analyze(history).find((item) => item.kind === 'recovery')).toMatchObject({
+    expect(analyze(steady).find((item) => item.kind === 'recovery')).toBeUndefined();
+    // The same days rated too hard, the sets well closer to failure than planned: recovery is behind.
+    const hard = { effort: 'too-hard' as const, pain: false, energyAfter: 2, note: '' };
+    const behind = [
+      record(0, 'barbell-bench-press', [[5, 185, 0]], [4, 6], 2, { rating: hard }),
+      record(1, 'cable-fly', [[12, 40, 0]], [10, 15], 2, { rating: hard }),
+      record(2, 'lat-pulldown', [[10, 120, 0]], [8, 12], 2, { rating: hard }),
+    ];
+    expect(analyze(behind).find((item) => item.kind === 'recovery')).toMatchObject({
       recommendation: 'hold',
       headline: 'Recovery is behind',
     });

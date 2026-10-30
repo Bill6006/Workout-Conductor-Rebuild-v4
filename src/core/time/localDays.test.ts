@@ -15,7 +15,7 @@ import {
 import { dateCheck } from '../../engine/planning/pushPace';
 import { planWeek } from '../../engine/planning/weeklyPlan';
 import type { Readiness } from '../../engine/recalibration/types';
-import { interpretFatigue } from '../../engine/recovery/fatigue';
+import { recoveryWindows } from '../../engine/recovery/recovery';
 import { consistencyScore } from '../../engine/scoring/analytics';
 import { TEST_NOW, createTestStore } from '../../test/testStore';
 import { fromUtcMidnight, localDayKey } from './localDate';
@@ -23,7 +23,7 @@ import { fromUtcMidnight, localDayKey } from './localDate';
 /**
  * Maintenance 28, the owner's item 1: the device's date everywhere the app works out what day it
  * is. Every case sits late in the evening, where the UTC day has already turned west of UTC: today's
- * plan and its choices, the week's rows, a run of training days, the week a workout counts in, and
+ * plan and its choices, the week's rows, a run of hard days, the week a workout counts in, and
  * the day the cloud copy records.
  */
 
@@ -109,16 +109,19 @@ describe("the device's date (Maintenance 28, item 1)", () => {
     expect(done[0]).toMatchObject({ weekday: 'sat', today: false });
   });
 
-  it("counts a run of training days by the device's days", () => {
-    // Monday 22:00, Tuesday 08:00, Wednesday 22:00, Thursday 08:00: four days running.
+  it("counts a run of hard days by the device's days", () => {
+    // Monday 22:00, Tuesday 08:00, Wednesday 22:00, Thursday 08:00: four days running. Since
+    // Maintenance 33 the run counts only with energy low today, for every muscle's window.
     const history = [
       session(local(7, 22), 'w-1'),
       session(local(8, 8), 'w-2'),
       session(local(9, 22), 'w-3'),
       session(local(10, 8), 'w-4'),
     ];
-    const fatigue = interpretFatigue(history, local(10, 12));
-    expect(fatigue.evidence).toContain('4 training days in a row.');
+    const windows = recoveryWindows(history, { now: local(10, 12), lowEnergy: true });
+    expect(windows.get('quads')?.reasons).toContain(
+      '4 hard days running, energy low today: 12 h more',
+    );
   });
 
   it('counts a Sunday evening workout in its own week', () => {
@@ -143,9 +146,9 @@ describe("the device's date (Maintenance 28, item 1)", () => {
       session(local(9, 23, 30), 'w-3'),
       session(local(10, 8), 'w-4'),
     ];
-    expect(interpretFatigue(history, local(10, 12)).evidence).toContain(
-      '4 training days in a row.',
-    );
+    expect(
+      recoveryWindows(history, { now: local(10, 12), lowEnergy: true }).get('quads')?.reasons,
+    ).toContain('4 hard days running, energy low today: 12 h more');
     // Begun on Sunday at 23:30, finished on Monday: last week's.
     const score = consistencyScore(
       [session(local(13, 23, 30), 'w-5')],

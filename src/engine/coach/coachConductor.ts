@@ -1,9 +1,15 @@
 import { getExercise, requireExercise } from '../../catalog/exercises/catalog';
 import { isHold, type CatalogExercise, type Joint } from '../../catalog/exercises/exerciseSchema';
-import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
+import { MUSCLE_IDS, muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 import { UNFINISHED_STALE_HOURS } from '../../core/alerts/cues';
+import { localDayKey, localWeekKey } from '../../core/time/localDate';
 import type { LocationProfile } from '../../core/validation/location';
-import type { ProgramStyle, UserProfile, Weekday } from '../../core/validation/profile';
+import {
+  WEEKDAYS,
+  type ProgramStyle,
+  type UserProfile,
+  type Weekday,
+} from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { remainingMinutes } from '../duration/duration';
 import { blockSequence } from '../workout/sequence';
@@ -16,7 +22,7 @@ import type {
   SessionConstraints,
 } from '../recalibration/types';
 import type { LastingSwap } from '../planning/lastingSwaps';
-import type { PlannedSession } from '../planning/weeklyPlan';
+import { plannedWorkouts, tooSoonAhead, type PlannedSession } from '../planning/weeklyPlan';
 import { activePush } from '../planning/pushLift';
 import type { LearnedResets } from '../learned/resets';
 import { dayList, scheduleFit } from '../planning/scheduleFit';
@@ -29,6 +35,19 @@ import {
   shortTwiceRunning,
   targetIn,
 } from '../planning/pushPace';
+import { REST_TODAY, illnessOf, readCheckIn } from '../readiness/checkIn';
+import { readLoggedReserve, type ReserveEstimate } from '../progression/reserveCheck';
+import {
+  FIRST_SET,
+  againstRested,
+  hoursSince,
+  readFirstSet,
+  recoveryWindows,
+  tooSoonToday,
+  checkInOfDay,
+  dayRecovery,
+} from '../recovery/recovery';
+import { RULES } from '../rules/ruleTable';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { painPatterns } from '../recovery/painPattern';
 import { lastPainReport, painSourceLine } from '../recovery/painReport';
@@ -62,7 +81,11 @@ import {
   microDeload,
   stepUp,
 } from '../progression/progression';
-import { MAX_WORKING_SETS, catchUpRefusal } from '../recalibration/recalibrate';
+import {
+  MAX_WORKING_SETS,
+  catchUpRefusal,
+  keepsShortOfFailure,
+} from '../recalibration/recalibrate';
 import {
   accessoryPicker,
   builtCatchUp,
@@ -71,6 +94,7 @@ import {
   sessionConflictContext,
   splitFor,
   swappedOutIds,
+  musclesInWords,
 } from '../workoutGenerator/generate';
 import { ADDS_TO_BODYWEIGHT, LOADED_VERSIONS } from '../workoutGenerator/loadedVersions';
 import {
@@ -309,6 +333,8 @@ export interface CoachCard {
 export interface CoachInput {
   workout: GeneratedWorkout;
   status: 'preview' | 'active' | 'paused' | 'completed';
+  /** When the session was made: its check-in is that day's (`dayRecovery`); absent, today's. */
+  madeAt?: string | null;
   duration: DurationChoice;
   completed: CompletedWork;
   constraints: SessionConstraints;
@@ -320,6 +346,8 @@ export interface CoachInput {
   lastExportAt: string | null;
   /** The cloud copy is on and holds everything logged, so a backup reminder would be noise. */
   cloudCurrent?: boolean;
+  /** The new cards the lifter has seen (Maintenance 33): the card limits read it. */
+  shown?: CoachShown;
   /** Offers already taken this session (see `acceptKey`): they are not made twice. */
   accepted?: readonly string[];
   /** The rest now: when it ends, or what is left of it while paused (Maintenance 25). */
@@ -344,6 +372,11 @@ export interface CoachInput {
   swaps?: readonly LastingSwap[];
   /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
   resets?: LearnedResets | null;
+  /**
+   * The reserve-check estimate the history is read through (item 43): today's sets are read through
+   * it too (the second review of Maintenance 33). Absent: today's sets as logged.
+   */
+  reserveEstimate?: Pick<ReserveEstimate, 'correction' | 'band'> | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -642,6 +675,20 @@ function safetySignals(input: CoachInput): CoachSignal[] {
   // A finished workout has nothing left to swap: its warnings were for the sets still to come.
   if (input.status === 'completed') return [];
   const signals: CoachSignal[] = [];
+  // A fever or aches all over reported under way (Maintenance 33, the readiness model's illness
+  // gate): no day to train, so the coach offers to finish here. Before the start, Today itself
+  // says it is a rest day.
+  if (restToday(input) && input.status !== 'preview') {
+    signals.push({
+      domain: 'safety',
+      headline: 'Fever or aches: finish here',
+      why: [REST_TODAY],
+      action: { kind: 'finish', label: 'Finish here' },
+      confidence: 'high',
+      severity: 3,
+      source: 'illness',
+    });
+  }
   const remaining = remainingEntries(input);
   for (const joint of input.constraints.painJoints) {
     const loaded = remaining.find((entry) => {
@@ -807,9 +854,188 @@ function saveSignals(input: CoachInput): CoachSignal[] {
   ];
 }
 
+/**
+ * "Too soon" (Maintenance 33, the owner's decision 2; docs/research/recovery-time-course.md): a
+ * muscle today's plan still works hard well inside its window, or whose first set today confirms it
+ * (8% or more under the lift's rested sessions, each set read against what it asked, a step more
+ * with a low check-in, while the muscle is inside its window). A warning with the lighter option a
+ * tap away, never a block and never by itself; light work is never flagged. Not now keeps it away
+ * for that muscle until the week ends (decision 5): its source names the week.
+ */
+function tooSoonSignals(input: CoachInput): CoachSignal[] {
+  if (input.status === 'completed') return [];
+  const readiness = input.constraints.readiness;
+  // A fever or aches all over make the day a rest day, with no workout to lighten: the rest day
+  // offers nothing that changes today's workout (`changesToday`, the first and third reviews of
+  // Maintenance 33).
+  // The day's context as every reader of the windows takes it, the check-in the day's its session
+  // was made on (the third review of Maintenance 33: past midnight the completion, the Plan screen
+  // and the coach read three windows).
+  const day = dayRecovery({
+    readiness,
+    madeAt: input.madeAt ?? null,
+    history: input.history,
+    now: input.now,
+    resets: input.resets,
+  });
+  const read = readCheckIn(
+    checkInOfDay(readiness, input.madeAt, input.now),
+    input.history,
+    input.now,
+  );
+  const windows = recoveryWindows(input.history, day);
+  if (windows.size === 0) return [];
+  // The lifts still to come, none eased already (a hard start's ease, or the lighter option): the
+  // option would add nothing to them, never on top of either.
+  const ahead = remainingEntries(input).filter((entry) => !entry.eased?.sets);
+  const aheadIds = new Set(ahead.map((entry) => entry.id));
+  const plan: GeneratedWorkout = {
+    ...input.workout,
+    blocks: input.workout.blocks.map((block) => ({
+      ...block,
+      entries: block.entries.filter((entry) => aheadIds.has(entry.id)),
+    })),
+  };
+  const found = new Map<
+    MuscleId,
+    { hours: number; window: number; first?: { name: string; under: number } }
+  >();
+  for (const item of tooSoonToday(plan, windows, input.now)) {
+    found.set(item.muscle, { hours: item.hours, window: item.window });
+  }
+  // A lift's first working set today against its rested sessions, each set read against what it
+  // asked (proposal part 2: one session is noisy, about 4%, so a single day acts only on a drop of
+  // 8% or more; the first review of Maintenance 33: a deload's first set lifted as asked read 11%
+  // under the rested sessions' heavier ones).
+  const need = FIRST_SET.DROP + (read.lowered ? RULES.expectationShare.value : 0);
+  for (const entry of allEntries(input.workout.blocks)) {
+    const first = input.completed.sets
+      .filter((set) => set.entryId === entry.id && set.kind === 'working' && !set.skipped)
+      .sort((a, b) => Date.parse(a.completedAt) - Date.parse(b.completedAt))[0];
+    if (!first) continue;
+    const asked = entry.sets.find((set) => set.index === first.setIndex);
+    const reading = readFirstSet({
+      reps: first.reps,
+      weight: first.weight,
+      // As the rules read the rested sessions it is set against (`readLoggedReserve`).
+      rir: readLoggedReserve(first, input.reserveEstimate ?? null),
+      targetWeight: asked?.targetWeight,
+      targetReps: asked?.targetReps,
+      targetRir: asked?.targetRir,
+    });
+    const share =
+      reading === null ? null : againstRested(reading, entry.exerciseId, input.history, input.now);
+    if (share === null || 1 - share < need) continue;
+    const exercise = requireExercise(entry.exerciseId);
+    for (const muscle of exercise.primaryMuscles) {
+      const window = windows.get(muscle);
+      if (!window) continue;
+      const since = hoursSince(window, first.completedAt);
+      if (since < 0 || since >= window.hours) continue;
+      // The hours when the first set read so: later in the workout they may have passed the window
+      // (the first review of Maintenance 33: "Worked hard 37 h ago; about 36 h to recover").
+      found.set(muscle, {
+        hours: Math.round(since),
+        window: window.hours,
+        first: { name: exercise.name, under: Math.round((1 - share) * 100) },
+      });
+    }
+  }
+  const lighter = new Set(input.constraints.lighter ?? []);
+  const week = localWeekKey(input.now);
+  const signals: CoachSignal[] = [];
+  for (const [muscle, item] of found) {
+    if (lighter.has(muscle)) continue;
+    // Only where a lift still to come works it directly, and the option would ease it.
+    if (!ahead.some((entry) => requireExercise(entry.exerciseId).primaryMuscles.includes(muscle))) {
+      continue;
+    }
+    const window = windows.get(muscle);
+    const words = musclesInWords([muscle]);
+    signals.push({
+      domain: 'recovery',
+      headline: `The ${words} may not have recovered`,
+      why: [
+        `Worked hard ${item.hours} h ${item.first ? `before your first ${item.first.name} set` : 'ago'}; about ${item.window} h to recover${window ? ` (${window.reasons.join('; ')})` : ''}.`,
+        ...(item.first
+          ? [
+              `Your first ${item.first.name} set read ${item.first.under}% under your rested sessions.`,
+            ]
+          : []),
+        'Lighter keeps the loads: a set fewer and a rep more in reserve on its lifts today.',
+      ],
+      action: {
+        kind: 'recalibrate',
+        trigger: { type: 'lighter', muscle },
+        label: `Lighter for the ${words}`,
+      },
+      confidence: 'medium',
+      severity: 2,
+      source: `${TOO_SOON_SOURCE}|${muscle}|${week}`,
+      untilNew: true,
+    });
+  }
+  return signals;
+}
+
+/** The "too soon" card's source, before the muscle and the week (Maintenance 33). */
+export const TOO_SOON_SOURCE = 'too-soon';
+
+/**
+ * The approved proposal's new cards (Maintenance 33: "too soon"; time intelligence's join them),
+ * held to the owner's card limits (decision 5): at most one new card a day and three a week. A card
+ * the lifter has seen shows on as before; the limits hold back only one not yet seen.
+ */
+export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE];
+
+export function isNudge(signal: Pick<CoachSignal, 'source'>): boolean {
+  return NUDGE_SOURCES.some(
+    (source) => signal.source === source || signal.source.startsWith(`${source}|`),
+  );
+}
+
+/** The new cards the lifter has seen, kept in the meta store: key `source|exerciseId`, when first. */
+export interface CoachShown {
+  id: 'coach-shown';
+  shown: Record<string, string>;
+}
+
+export const COACH_SHOWN_ID = 'coach-shown';
+
+export function emptyShown(): CoachShown {
+  return { id: COACH_SHOWN_ID, shown: {} };
+}
+
+/** A new card seen now, if it is one: the record kept to the last two weeks. */
+export function recordShown(
+  shown: CoachShown,
+  signal: Pick<CoachSignal, 'source' | 'exerciseId'>,
+  now: string,
+): CoachShown {
+  const key = declineKey(signal);
+  if (!isNudge(signal) || shown.shown[key] !== undefined) return shown;
+  const since = Date.parse(now) - 14 * DAY_MS;
+  const kept = Object.fromEntries(
+    Object.entries(shown.shown).filter(([, at]) => Date.parse(at) >= since),
+  );
+  return { ...shown, shown: { ...kept, [key]: now } };
+}
+
+/** Whether a new card not yet seen waits for the card limits: one a day, three a week. */
+function overCardLimits(input: CoachInput, signal: CoachSignal): boolean {
+  if (!isNudge(signal)) return false;
+  const shown = input.shown?.shown ?? {};
+  if (shown[declineKey(signal)] !== undefined) return false;
+  const times = Object.values(shown);
+  const day = localDayKey(input.now);
+  if (times.filter((at) => localDayKey(at) === day).length >= RULES.cardsPerDay.value) return true;
+  const week = localWeekKey(input.now);
+  return times.filter((at) => localWeekKey(at) === week).length >= RULES.cardsPerWeek.value;
+}
+
 function recoverySignals(input: CoachInput): CoachSignal[] {
   const { fatigue } = input;
-  const signals: CoachSignal[] = [];
+  const signals: CoachSignal[] = [...tooSoonSignals(input)];
   const checkedIn = input.constraints.readiness !== null;
   // A check-in adjusts today's workout, so a finished one is not offered it.
   const finished = input.status === 'completed';
@@ -838,7 +1064,8 @@ function recoverySignals(input: CoachInput): CoachSignal[] {
       headline: 'Fatigue is building',
       why: [
         ...fatigue.evidence.slice(0, 2),
-        'Loads hold where reps were tight; nothing is added today.',
+        // Nothing holds at this level (the review of Maintenance 33): the words say so.
+        "Nothing changes on this alone: today's first sets show how you have recovered.",
       ],
       action: checkedIn || finished ? null : { kind: 'readiness', label: 'Quick check-in' },
       confidence: 'medium',
@@ -990,6 +1217,28 @@ function offPlanToday(input: CoachInput): boolean {
   const stored = input.constraints.catchUp;
   if (!stored || input.constraints.fullSession) return false;
   return stored.kind === 'second' || builtCatchUp(stored, input.workout).muscles.length > 0;
+}
+
+/**
+ * A fever or aches all over (Maintenance 33, the readiness model's illness gate): a rest day, with
+ * no workout to add to (the second review of Maintenance 33: the coverage card offered two sets).
+ */
+function restToday(input: CoachInput): boolean {
+  return illnessOf(input.constraints.readiness) === 'body';
+}
+
+/**
+ * An offer that keeps today's workout going in another shape: any change to it, a rest, a swap, a
+ * swap kept for weeks that starts today. A rest day has none (the third review of Maintenance 33: a
+ * stalled lift's load and "Fit to 45 min" were offered on it); what is for later days stays, and so
+ * does the way out of the workout, the rest day's own advice (the fourth review: "Fever or aches:
+ * finish here" was held back with the rest).
+ */
+function changesToday(signal: CoachSignal): boolean {
+  const kind = signal.action?.kind;
+  return (
+    kind === 'recalibrate' || kind === 'rest' || kind === 'alternatives' || kind === 'lasting-swap'
+  );
 }
 
 /** An offer that adds work: a set, a drop set, a range with a set more, or an exercise. */
@@ -1577,7 +1826,10 @@ function tipSignals(input: CoachInput): CoachSignal[] {
   if (
     input.profile.techniques.dropSets &&
     input.status !== 'completed' &&
-    allowsFailure(resolveStyle(input.profile))
+    allowsFailure(resolveStyle(input.profile)) &&
+    // A day that keeps every set short of failure (an illness) takes no drop set, as the tap would
+    // refuse (the first review of Maintenance 33).
+    !keepsShortOfFailure(input.constraints)
   ) {
     const volume = computeWeeklyVolume(input.history, input.now);
     const exposure = computeExposure(input.history, input.now);
@@ -2119,6 +2371,45 @@ export const SCHEDULE_SOURCE = 'schedule move';
  * complete weeks of training on one side of the schedule, or on other days, bring one card to move
  * it. It shows the weeks, the schedule and the move; the split follows the new number on the tap.
  */
+/** The moved week's "too soon" check, kept while what it reads stays the same (`crowdedDays`). */
+let crowdedKept: {
+  refs: readonly unknown[];
+  key: string;
+  days: ReturnType<typeof tooSoonAhead>;
+} | null = null;
+
+/**
+ * The days of the moved week whose plan would work a muscle hard well inside its window. It builds
+ * the week, and the coach reads its cards each minute and at every set logged, so it is kept while
+ * the profile, place, log and resets are the same objects, for the same move and hour.
+ */
+function crowdedDays(
+  input: CoachInput,
+  proposal: { weeklyFrequency: number; availableDays: readonly Weekday[] },
+): ReturnType<typeof tooSoonAhead> {
+  const resets = input.resets ?? null;
+  const refs = [input.profile, input.location, input.history, resets];
+  const key = `${proposal.weeklyFrequency}|${proposal.availableDays.join()}|${input.history.length}|${input.now.slice(0, 13)}`;
+  if (crowdedKept?.key === key && crowdedKept.refs.every((ref, at) => ref === refs[at])) {
+    return crowdedKept.days;
+  }
+  const moved = {
+    ...input.profile,
+    schedule: {
+      ...input.profile.schedule,
+      weeklyFrequency: proposal.weeklyFrequency,
+      availableDays: [...proposal.availableDays],
+    },
+  };
+  const days = tooSoonAhead(
+    plannedWorkouts(moved, input.location, input.history, input.now, resets),
+    input.history,
+    resets,
+  );
+  crowdedKept = { refs, key, days };
+  return days;
+}
+
 function scheduleSignals(input: CoachInput): CoachSignal[] {
   if (input.status === 'completed') return [];
   const fit = scheduleFit(input.history, input.profile, input.now);
@@ -2140,6 +2431,18 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
       : fit.measured !== null && fit.measured > proposal.weeklyFrequency
         ? ` (the most the plan sets)`
         : '';
+  // The same check as "too soon" (Maintenance 33, proposal part 5): a day of the moved week whose
+  // plan works a muscle hard well inside its window from the days before is said, never refused,
+  // and said under the card, never cut with the Why lines a brief card shortens.
+  const ahead = crowdedDays(input, proposal);
+  const days = WEEKDAYS.filter((day) => ahead.some((item) => item.weekday === day));
+  const muscles = MUSCLE_IDS.filter((muscle) =>
+    ahead.some((item) => item.muscles.includes(muscle)),
+  );
+  const crowded =
+    ahead.length > 0
+      ? `On ${dayList(days)} the plan would work the ${musclesInWords(muscles)} hard again when ${muscles.length === 1 ? 'it' : 'they'} may not have recovered; the coach offers a lighter option ${days.length === 1 ? 'that day' : 'those days'}.`
+      : '';
   return [
     {
       domain: 'coverage',
@@ -2151,6 +2454,7 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
         `Your last ${fit.weeks.length} weeks of training: ${fit.weeks.map((week) => dayList(week.days)).join('; ')}.`,
         `Your schedule: ${plural(schedule.weeklyFrequency)} a week, on ${dayList(schedule.availableDays)}. Moved: ${plural(proposal.weeklyFrequency)}${fewest}, on ${dayList(proposal.availableDays)}${follows}; Settings, Schedule, changes it any time.`,
       ],
+      ...(crowded ? { footnote: crowded } : {}),
       action: {
         kind: 'schedule',
         weeklyFrequency: proposal.weeklyFrequency,
@@ -2188,7 +2492,8 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
     ...pushSignals(input),
   ]
     .filter((signal) => !addsToPushedMuscles(input, signal))
-    .filter((signal) => !offPlanToday(input) || !addsWork(signal));
+    .filter((signal) => !addsWork(signal) || !offPlanToday(input))
+    .filter((signal) => !restToday(input) || !changesToday(signal));
   return inDeloadWeek(input) ? signals.filter((signal) => !pushesForMore(signal)) : signals;
 }
 
@@ -2208,7 +2513,8 @@ export function conductCoach(input: CoachInput): CoachCard | null {
       (signal.exerciseId === undefined || today.has(signal.exerciseId)) &&
       !isDeclined(input.declines, signal, input.now) &&
       !isAccepted(input.accepted, signal) &&
-      !isSetAside(input.accepted, signal),
+      !isSetAside(input.accepted, signal) &&
+      !overCardLimits(input, signal),
   );
   const signals = policy.hideObvious ? all.filter((signal) => !signal.obvious) : all;
   if (signals.length === 0) return null;

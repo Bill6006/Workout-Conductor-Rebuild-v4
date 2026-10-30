@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultProfile } from '../../core/validation/profile';
+import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { ProgressionMode, WorkoutBlock, WorkoutEntry } from '../workout/types';
 import { JUDGED_REPS, SHORT_BY_REPS, readStart as readWith, startKey } from './badStart';
 import type { CompletedSet } from './types';
@@ -384,5 +385,73 @@ describe('readStart after the fourth pass of item 42', () => {
     const sets = [logged('e1', 0, 4, 1), logged('e2', 0, 4, 1)];
     expect(readStart(workout([{ ...bench, otherRange: true }, row]), sets).low).toBe(false);
     expect(readStart(workout([bench, row]), sets).low).toBe(true);
+  });
+});
+
+describe('readStart with the recovery windows (Maintenance 33)', () => {
+  const FIRST = Date.UTC(2026, 9, 9, 10, 0);
+  const HOUR = 3_600_000;
+
+  /** A bench press session a rep short of failure, `hoursBefore` today's first set. */
+  function benchDone(hoursBefore: number, weight = 200): WorkoutRecord {
+    const when = new Date(FIRST - hoursBefore * HOUR).toISOString();
+    return {
+      id: `bench-${hoursBefore}`,
+      startedAt: when,
+      completedAt: when,
+      locationId: 'gym',
+      templateId: 'push-arms',
+      endedEarly: false,
+      rating: null,
+      skippedExerciseIds: [],
+      painJoints: [],
+      readiness: null,
+      prs: [],
+      entries: [
+        {
+          exerciseId: 'barbell-bench-press',
+          sets: [0, 1, 2].map(() => ({
+            kind: 'working' as const,
+            reps: 5,
+            weight,
+            rir: 1,
+            completed: true,
+          })),
+        },
+      ],
+    };
+  }
+
+  /**
+   * Four rested sessions 72 h apart, then five rounds of a rested one and one a day after it at the
+   * same first set: the chest's window learned half a day shorter, 24 h. The last ends `hoursBefore`.
+   */
+  function learnedShorter(hoursBefore: number): WorkoutRecord[] {
+    const starts = [0, 72, 144, 216];
+    for (let round = 0; round < 5; round += 1) starts.push(288 + round * 96, 312 + round * 96);
+    const last = starts[starts.length - 1] as number;
+    return starts.map((start) => benchDone(hoursBefore + last - start));
+  }
+
+  // Bench asked 6 at 2 in reserve, logged 3 at 2: three short. The row three short too.
+  const sets = () => [logged('e1', 0, 3, 2), logged('e2', 0, 3, 2)];
+  const read = (history: WorkoutRecord[], resets: { recovery?: string } | null = null) =>
+    readWith(workout([bench, row]), sets(), { ...context, history, resets });
+
+  it('asks a rep more short of a lift whose muscles are inside their windows', () => {
+    // The chest worked hard 20 h ago: 36 h to recover, so three short of the bench is no evidence.
+    expect(read([benchDone(20)]).low).toBe(false);
+    // 40 h ago it is past its window: both lifts read short.
+    expect(read([benchDone(40)])).toEqual({
+      low: true,
+      lifts: ['barbell-bench-press', 'barbell-row'],
+    });
+  });
+
+  it("reads the window the lifter's sessions taught, and after a reset the estimate", () => {
+    // Learned 24 h: 30 h after the last session the chest is past it.
+    expect(read(learnedShorter(30)).low).toBe(true);
+    // A reset of the learned windows: the 36 h estimate, and the chest still inside it.
+    expect(read(learnedShorter(30), { recovery: new Date(FIRST).toISOString() }).low).toBe(false);
   });
 });

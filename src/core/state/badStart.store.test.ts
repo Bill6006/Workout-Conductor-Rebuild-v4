@@ -3,7 +3,6 @@ import { getExercise } from '../../catalog/exercises/catalog';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
 import {
   ESTIMATED_MODES,
-  dayAdjust,
   recalibrate as runRecalibration,
 } from '../../engine/recalibration/recalibrate';
 import { prescribeFor } from '../../engine/progression/roles';
@@ -11,6 +10,7 @@ import { topSetRir } from '../../engine/progression/backOffs';
 import { setFloor } from '../../engine/workoutGenerator/generate';
 import { allEntries, type WorkoutEntry } from '../../engine/workout/types';
 import { record } from '../../test/records';
+import type { WorkoutRecord } from '../validation/workoutRecord';
 import { TEST_NOW, createTestStore } from '../../test/testStore';
 import { createDefaultLocations } from '../validation/location';
 import { createDefaultProfile } from '../validation/profile';
@@ -21,7 +21,7 @@ import { createDefaultProfile } from '../validation/profile';
  */
 async function trained(
   engine?: typeof runRecalibration,
-  options: { overlayMs?: number; now?: () => string } = {},
+  options: { overlayMs?: number; now?: () => string; extra?: readonly WorkoutRecord[] } = {},
 ) {
   const handle = createTestStore({
     minOverlayMs: options.overlayMs ?? 0,
@@ -66,6 +66,7 @@ async function trained(
       });
     }
   }
+  for (const extra of options.extra ?? []) await db.put('workouts', extra);
   await handle.store.hydrate();
   // With that history the plan turns to another day; a chest focus brings the logged lifts back.
   await handle.store.setCoachFocus('chest');
@@ -93,13 +94,13 @@ function judgeable(store: Store): WorkoutEntry[] {
 
 /**
  * Logs a lift's first working set three reps of capacity under what the plan asked: a reserve the
- * day's settings added is not counted against it.
+ * day's settings added (easier, a head cold's floor) is not counted against it.
  */
 async function fallShort(store: Store, entry: WorkoutEntry) {
   store.skipWarmup(entry.id);
   const set = entry.sets.find((candidate) => candidate.kind === 'working')!;
-  const day = Math.max(0, dayAdjust(store.getSnapshot().session!.constraints)?.rir ?? 0);
-  const reps = set.targetReps[0] + set.targetRir - day - 3;
+  const reserve = Math.min(set.targetRir, planRir(store, entry));
+  const reps = set.targetReps[0] + reserve - 3;
   await store.logSet(entry.id, set.index, { weight: set.targetWeight, reps, rir: 0 });
 }
 
@@ -191,7 +192,7 @@ describe('a bad start carries over (Maintenance 26, item 42)', () => {
     }
   });
 
-  it('a low check-in has already eased the rest: a bad start adds nothing on top', async () => {
+  it('a low check-in eases nothing, so a bad start eases the rest (Maintenance 33)', async () => {
     const store = await trained();
     await store.recalibrate({
       type: 'readiness',
@@ -212,11 +213,10 @@ describe('a bad start carries over (Maintenance 26, item 42)', () => {
     await fallShort(store, second!);
     const session = store.getSnapshot().session!;
     expect(session.constraints.badStart).toBe(true);
-    expect(session.lastSummary?.headline).toMatch(
-      // The second lift's own change from the same set is told with it.
-      /^A hard start \(.+ fell well short\): your check-in already eased the rest\.( Also from this set: .+)?$/,
-    );
-    expect(notBegun(store, begun)).toEqual(before);
+    // Since Maintenance 33 a low answer lowers what the app expects, never the plan: the hard start
+    // is the first to ease the rest.
+    expect(session.lastSummary?.headline).toMatch(/^Eased for a hard start \(.+ fell well short; /);
+    expect(notBegun(store, begun)).not.toEqual(before);
   });
 
   it('two reps short on each is ordinary variation: nothing changes', async () => {
@@ -341,25 +341,22 @@ describe('a bad start after the review of item 42', () => {
     expect(store.getSnapshot().session!.constraints.badStart).toBeUndefined();
   });
 
-  it('counts no reserve a low check-in added: two short of the plan is no hard start', async () => {
+  it("counts no reserve a head cold's floor added: two short of the plan is no hard start", async () => {
     const store = await trained();
-    await store.recalibrate({
-      type: 'readiness',
-      readiness: {
-        energy: 2,
-        soreness: 2,
-        sleep: 3,
-        motivation: 3,
-        jointDiscomfort: [],
-        timePressure: false,
-      },
-    });
+    await store.recalibrate({ type: 'readiness', readiness: COLD });
     store.startWorkout();
     const [first, second] = judgeable(store);
+    // The floor lifted at least one of them a rep over the plan.
+    expect(
+      [first!, second!].some(
+        (entry) =>
+          entry.sets.find((set) => set.kind === 'working')!.targetRir > planRir(store, entry),
+      ),
+    ).toBe(true);
     for (const entry of [first!, second!]) {
       store.skipWarmup(entry.id);
       const set = entry.sets.find((candidate) => candidate.kind === 'working')!;
-      // Three short of the target as eased, two short of the plan.
+      // Three short of the target as the floor asks it, two short of the plan where it lifted it.
       await store.logSet(entry.id, set.index, {
         weight: set.targetWeight,
         reps: set.targetReps[0] + set.targetRir - 3,
@@ -369,19 +366,9 @@ describe('a bad start after the review of item 42', () => {
     expect(store.getSnapshot().session!.constraints.badStart).toBeUndefined();
   });
 
-  it('says the start no longer falls short, not "Back to plan", while a sore check-in still takes a set', async () => {
+  it('says the start no longer falls short, not "Back to plan", while a head cold still holds the floor', async () => {
     const store = await trained();
-    await store.recalibrate({
-      type: 'readiness',
-      readiness: {
-        energy: 3,
-        soreness: 4,
-        sleep: 3,
-        motivation: 3,
-        jointDiscomfort: [],
-        timePressure: false,
-      },
-    });
+    await store.recalibrate({ type: 'readiness', readiness: COLD });
     await hardStart(store);
     store.undoLastSet();
     await vi.waitFor(() =>
@@ -449,6 +436,8 @@ const LOW = {
   timePressure: false,
 };
 const GOOD = { ...LOW, energy: 4, sleep: 4, motivation: 4 };
+/** A head cold (Maintenance 33): every set 2 or more short of failure, the check-in's one change. */
+const COLD = { ...GOOD, illness: 'head' as const };
 
 /** An entry as the session has it now. */
 const entryOf = (store: Store, id: string) => entries(store).find((entry) => entry.id === id)!;
@@ -475,16 +464,22 @@ async function shortOfPlan(store: Store, entry: WorkoutEntry, by: number) {
 describe('a bad start after the re-check of item 42', () => {
   it("reads the plan's reserve on a lift that kept an earlier check-in's: two short of it is no hard start", async () => {
     const store = await trained();
-    await store.recalibrate({ type: 'readiness', readiness: LOW });
+    await store.recalibrate({ type: 'readiness', readiness: COLD });
     store.startWorkout();
     const [first, second] = judgeable(store);
-    // The first lift begun (its ramps skipped) keeps its sets through a good check-in after.
-    store.skipWarmup(first!.id);
+    // The lift the head cold's floor lifted, begun (its ramps skipped), keeps its sets through a
+    // good check-in after.
+    const lifted = [first!, second!].find(
+      (entry) =>
+        entry.sets.find((set) => set.kind === 'working')!.targetRir > planRir(store, entry),
+    )!;
+    const other = lifted === first ? second! : first!;
+    store.skipWarmup(lifted.id);
     await store.recalibrate({ type: 'readiness', readiness: GOOD });
-    const kept = entryOf(store, first!.id).sets.find((set) => set.kind === 'working')!;
-    expect(kept.targetRir).toBeGreaterThan(planRir(store, entryOf(store, first!.id)));
-    await shortOfPlan(store, first!, 2);
-    await shortOfPlan(store, second!, 3);
+    const kept = entryOf(store, lifted.id).sets.find((set) => set.kind === 'working')!;
+    expect(kept.targetRir).toBeGreaterThan(planRir(store, entryOf(store, lifted.id)));
+    await shortOfPlan(store, other, 3);
+    await shortOfPlan(store, lifted, 2);
     expect(store.getSnapshot().session!.constraints.badStart).toBeUndefined();
   });
 
@@ -588,17 +583,26 @@ describe('a bad start after the re-check of item 42', () => {
     expect(words).not.toMatch(/your check-in still eases/);
   });
 
-  it('names the hard start when a check-in after a low one feels good: never "nothing left to change"', async () => {
+  it('names the hard start when a check-in after a head cold feels good: never "nothing left to change"', async () => {
     const store = await trained();
-    await store.recalibrate({ type: 'readiness', readiness: LOW });
+    await store.recalibrate({ type: 'readiness', readiness: COLD });
     await hardStart(store);
     await store.recalibrate({ type: 'readiness', readiness: GOOD });
     const session = store.getSnapshot().session!;
     expect(session.constraints.badStart).toBe(true);
-    // The hard start's own ease now stands for the check-in's: said, with what changed (the
-    // seventh pass), never "nothing left to change".
+    // The floor goes and the hard start's ease stays: said, with what changed (the seventh pass of
+    // item 42; Maintenance 33), never "nothing left to change" nor "Planned effort back".
     expect(session.lastSummary?.headline).toMatch(
-      /^Feeling good \(the rest eased for the hard start\): .*adjusted\.$/,
+      /^Feeling good \(effort back up; the rest still eased for the hard start\): .*adjusted\.$/,
+    );
+  });
+
+  it('says the rest stays eased for the hard start when a low check-in follows it', async () => {
+    const store = await trained();
+    await hardStart(store);
+    await store.recalibrate({ type: 'readiness', readiness: LOW });
+    expect(store.getSnapshot().session!.lastSummary?.headline).toBe(
+      'Checked in: the rest stays eased for the hard start.',
     );
   });
 });
@@ -1203,4 +1207,51 @@ describe('a set logged and undone before any change takes the plan back (Mainten
       expect(after.sets.filter((candidate) => candidate.kind === 'working')).toHaveLength(planned);
     });
   }
+});
+
+describe('the windows the hard start reads (Maintenance 33)', () => {
+  /**
+   * A pec deck session 30 h ago, three sets of 12 logged at 3 in reserve. With `checked`, its first
+   * set's reserve check went on to 13 reps: 1 in reserve, as measured.
+   */
+  const fly = (checked: boolean): WorkoutRecord => {
+    const when = new Date(Date.parse(TEST_NOW) - 30 * 3_600_000).toISOString();
+    // No long-length work (the cable fly is one since the third review of Maintenance 33).
+    const done = record(0, 'pec-deck', [
+      [12, 40, 3],
+      [12, 40, 3],
+      [12, 40, 3],
+    ]);
+    return {
+      ...done,
+      id: 'fly-30h',
+      startedAt: when,
+      completedAt: when,
+      entries: done.entries.map((entry) => ({
+        ...entry,
+        sets: entry.sets.map((set, index) =>
+          index === 0 && checked ? { ...set, reserveCheck: { total: 13 } } : set,
+        ),
+      })),
+    };
+  };
+
+  it('read the log as the rules read it: a reserve check measured nearer failure than logged', async () => {
+    // As logged, the chest's window is a day (three in reserve) and has run out; as the rules read it
+    // (the first review of Maintenance 33: the store gave the hard start the log as logged), it still
+    // runs, so the first sets are expected a step less of, and three reps short is no hard start.
+    const store = await trained(undefined, { extra: [fly(true)] });
+    store.startWorkout();
+    const [first, second] = judgeable(store);
+    // The first lift works the chest: a step less is expected of it, so it falls short of nothing.
+    expect(getExercise(first!.exerciseId)!.primaryMuscles).toContain('chest');
+    await fallShort(store, first!);
+    await fallShort(store, second!);
+    expect(store.getSnapshot().session!.constraints.badStart).toBeUndefined();
+  });
+
+  it('the same log with no reserve check: the window has run out, and the start is hard', async () => {
+    const store = await trained(undefined, { extra: [fly(false)] });
+    await hardStart(store);
+  });
 });

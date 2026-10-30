@@ -91,7 +91,14 @@ describe('the row under Strength focus on five days, a tired Friday every other 
       exerciseId: ROW,
       constraintsFor: (day) => ({
         templateId: week[day % 7]!,
-        ...(day % 7 === 6 && Math.floor(day / 7) % 2 === 1 ? { readiness: tired } : {}),
+        // Maintenance 33: a check-in lowers what the app expects, never the plan; a head cold keeps
+        // every set two short of failure, so the main day runs straight, as fatigue made it before.
+        ...(day % 7 === 6 && Math.floor(day / 7) % 2 === 1
+          ? {
+              readiness: { ...tired, illness: 'head' as const },
+              adjust: { sets: 0, rir: 0, restFactor: 1, rirFloor: 2 },
+            }
+          : {}),
       }),
     });
     const lines = seen

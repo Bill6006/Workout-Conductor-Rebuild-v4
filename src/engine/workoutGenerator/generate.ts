@@ -82,6 +82,7 @@ import {
 import { styleInfo } from '../planning/styles';
 import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
 import {
+  BACK_OFF,
   backOffCap,
   backOffLoadAfter,
   owedBackOffLoad,
@@ -193,11 +194,20 @@ export function closeAtLogged(
   const owed = entry.sets.filter(
     (set) => set.kind === 'working' && !isDone(entry.id, set.index),
   ).length;
+  // The plan its record kept stays with what stopped it, for a swap back alone (the third review of
+  // Maintenance 33: swapped back after "Lighter", a saved copy kept the bench's top set alone).
+  const was = entry.eased;
+  const record =
+    was?.sets && (was.exerciseId === undefined || was.exerciseId === entry.exerciseId)
+      ? was
+      : undefined;
   delete entry.eased;
   entry.sets = entry.sets.filter((set) => isDone(entry.id, set.index));
   entry.warmupSets = entry.sets.filter((set) => set.kind === 'warmup').length;
   entry.dropSet = entry.sets.some((set) => set.kind === 'drop');
-  if (entry.stopped === undefined && planned) entry.stopped = { owed, why };
+  if (entry.stopped === undefined && planned) {
+    entry.stopped = { owed, why, ...(record ? { record } : {}) };
+  }
 }
 
 /** What the warm-up says, for its general minutes and the session's length. */
@@ -224,6 +234,16 @@ export interface PrescriptionAdjustment {
   restFactor: number;
   /** Multiplier on every target load (a deload week uses 0.9). */
   loadScale?: number;
+  /**
+   * The fewest reps in reserve the day allows any set (Maintenance 33): a head cold on the
+   * check-in keeps every set 2 or more short of failure, no top set and no drop set.
+   */
+  rirFloor?: number;
+}
+
+/** The fewest reps in reserve the day's settings allow, or none. */
+export function dayRirFloor(adjust: PrescriptionAdjustment | undefined): number {
+  return adjust?.rirFloor ?? 0;
 }
 
 /** A logged set as the session context needs it: whose, what kind, when, and whether it was skipped. */
@@ -1438,6 +1458,7 @@ function withDeload(
         rir: (day?.rir ?? 0) + DELOAD_RIR_DELTA,
         restFactor: day?.restFactor ?? 1,
         loadScale: DELOAD_LOAD_SCALE,
+        ...(day?.rirFloor !== undefined ? { rirFloor: day.rirFloor } : {}),
       }
     : day;
 }
@@ -1463,7 +1484,7 @@ function adjustPrescription(
   return {
     ...prescription,
     sets: clamp(prescription.sets + adjust.sets, floor, 5),
-    rir: clamp(prescription.rir + adjust.rir, minRir, 4),
+    rir: clamp(prescription.rir + adjust.rir, Math.max(minRir, dayRirFloor(adjust)), 4),
     restSeconds: Math.max(
       MIN_REST_SECONDS[restCategory(role)],
       round5(prescription.restSeconds * adjust.restFactor),
@@ -1517,12 +1538,16 @@ export function pushedPrescription(
     return {
       ...adjusted,
       sets: clamp(sets + Math.min(0, adjust?.sets ?? 0), 2, sets),
-      rir: pushRir(adjusted.rir),
+      rir: Math.max(dayRirFloor(adjust), pushRir(adjusted.rir)),
     };
   }
   const base = { ...own, sets: Math.min(own.sets, push.naturalSets) };
   const day = adjustPrescription(base, role, adjust, minRir);
-  return { ...day, sets: Math.min(day.sets, Math.max(base.sets, 2)), rir: pushRir(day.rir) };
+  return {
+    ...day,
+    sets: Math.min(day.sets, Math.max(base.sets, 2)),
+    rir: Math.max(dayRirFloor(adjust), pushRir(day.rir)),
+  };
 }
 
 /** Whether an exercise trains one of a lift's primary muscles as one of its own. */
@@ -1820,7 +1845,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     chosen: chosenBy([], push),
     ...(resting.size > 0 ? { resting } : {}),
   };
-  const fatigue = interpretFatigue(history, now, constraints.readiness ?? null);
+  const fatigue = interpretFatigue(history, now);
 
   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
   // selections, and accepted alternatives stay in their slots.
@@ -1937,7 +1962,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       prescription,
       suits: backOffsSuit(exercise, role, profile),
       profile,
-      day: backOffDay && fatigue.level !== 'high',
+      // A day with a reserve floor over the top set's (a head cold) runs it straight too.
+      day: backOffDay && fatigue.level !== 'high' && dayRirFloor(adjust) <= BACK_OFF.TOP_RIR,
       exerciseId: exercise.id,
       history,
       load: { step: loading.step, floor, loading },
@@ -3098,7 +3124,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
   // to failure, so a style that takes nothing to failure plans none.
   // None in a catch-up or a second workout: a few sets each, none to failure (the review of round M).
-  if (!offPlan && profile.techniques.dropSets && allowsFailure(resolveStyle(profile))) {
+  // None on a day that keeps every set short of failure (a head cold, Maintenance 33).
+  if (
+    !offPlan &&
+    dayRirFloor(adjust) === 0 &&
+    profile.techniques.dropSets &&
+    allowsFailure(resolveStyle(profile))
+  ) {
     const deficitMuscles = new Set(
       priorities
         .filter(

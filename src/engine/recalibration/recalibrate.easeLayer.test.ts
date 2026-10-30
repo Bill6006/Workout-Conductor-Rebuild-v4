@@ -63,6 +63,11 @@ const tired: Readiness = {
 };
 const fine: Readiness = { ...tired, energy: 4, sleep: 4, motivation: 4, soreness: 2 };
 const sore: Readiness = { ...fine, soreness: 4 };
+/**
+ * A head cold (Maintenance 33): the check-in's one change to the plan besides a sore joint and time
+ * pressure, every working set 2 or more short of failure. A low or sore check-in changes nothing.
+ */
+const cold: Readiness = { ...fine, illness: 'head' };
 
 interface Session {
   profile: UserProfile;
@@ -388,19 +393,33 @@ describe('a hard start laid over the plan (Maintenance 26, the sixth pass of ite
     expect(back.workout.compromises.join(' ')).not.toMatch(/Runs about/);
   });
 
-  it('takes no second set after a sore check-in: the larger of each part, never both', () => {
+  it('lays a hard start over a head cold: a set fewer above the floor, a rep more over it', () => {
+    // Since Maintenance 33 a sore check-in takes no set, so no check-in takes one for the hard start
+    // to match; a head cold's floor is part of the day's plan, and the hard start eases from it.
     const session = underWay(base, gym, 'default');
-    const sorer = run(session, { type: 'readiness', readiness: sore });
-    const eased = hardStart(sorer);
-    const before = new Map(toCome(sorer).map((entry) => [entry.id, entry]));
+    const colder = run(session, { type: 'readiness', readiness: cold });
+    const eased = hardStart(colder);
+    const before = new Map(toCome(colder).map((entry) => [entry.id, entry]));
+    let raised = 0;
     for (const entry of toCome(eased)) {
-      expect(working(entry)).toHaveLength(working(before.get(entry.id)!).length);
+      const plan = working(before.get(entry.id)!);
+      const now = working(entry);
+      expect(now).toHaveLength(plan.length > setFloor(entry.role) ? plan.length - 1 : plan.length);
+      if (requireExercise(entry.exerciseId).measure === 'seconds') continue;
+      now.forEach((set, at) => {
+        expect(plan[at]!.targetRir).toBeGreaterThanOrEqual(2);
+        expect(set.targetRir).toBe(Math.min(4, plan[at]!.targetRir + 1));
+        if (set.targetRir > 2) raised += 1;
+      });
     }
-    expect(eased.result!.summary.headline).toMatch(/an extra rep in reserve/);
-    expect(eased.result!.summary.headline).not.toMatch(/fewer sets/);
+    expect(raised).toBeGreaterThan(0);
     // The other way round, the same plan: the check-in after the hard start.
-    expect(shown(run(hardStart(session), { type: 'readiness', readiness: sore }).workout)).toEqual(
+    expect(shown(run(hardStart(session), { type: 'readiness', readiness: cold }).workout)).toEqual(
       shown(eased.workout),
+    );
+    // A sore check-in after the hard start leaves the ease as it was.
+    expect(run(hardStart(session), { type: 'readiness', readiness: sore }).workout.blocks).toEqual(
+      hardStart(session).workout.blocks,
     );
     // A sore knee checked in after it: the words say what changed as it shows, no set or rep.
     const knee = run(hardStart(session), {
@@ -410,13 +429,18 @@ describe('a hard start laid over the plan (Maintenance 26, the sixth pass of ite
     expect(knee.result!.summary.headline).not.toMatch(/fewer sets|extra rep/);
   });
 
-  it('adds nothing to a low check-in, nor a low check-in to it: the plan a low check-in makes', () => {
+  it('leaves a hard start as it is under a low check-in, either way round (Maintenance 33)', () => {
+    // A low check-in lowers what the app expects of the first sets, never the plan: the hard start
+    // eases the rest on its own, before the check-in or after it.
     for (const duration of [30, 'default'] as const) {
       const session = underWay(base, gym, duration);
       const low = run(session, { type: 'readiness', readiness: tired });
-      const both = run(hardStart(session), { type: 'readiness', readiness: tired });
-      expect(shown(both.workout)).toEqual(low.workout.blocks);
-      expect(hardStart(low).workout.blocks).toEqual(low.workout.blocks);
+      expect(low.workout.blocks).toEqual(session.workout.blocks);
+      const eased = hardStart(session);
+      expect(shown(eased.workout)).not.toEqual(session.workout.blocks);
+      const both = run(eased, { type: 'readiness', readiness: tired });
+      expect(both.workout.blocks).toEqual(eased.workout.blocks);
+      expect(hardStart(low).workout.blocks).toEqual(eased.workout.blocks);
     }
   });
 
@@ -655,15 +679,18 @@ describe('a hard start laid over the plan (Maintenance 26, the sixth pass of ite
     for (const [now, was] of [...kept(carry!), ...kept(easy!)]) expect(now).toEqual(was);
   });
 
-  it('takes no set a check-in took on a day made harder: a lift above the floor keeps its count', () => {
+  it('takes one set above the floor on a day made harder with a head cold, never a second', () => {
     const harder = run(underWay(base, gym, 'default'), { type: 'intensity', direction: 'harder' });
-    const sorer = run(harder, { type: 'readiness', readiness: sore });
-    // Made harder, then sore: lifts sit above the floor, so a second set could still come off.
-    expect(toCome(sorer).some((entry) => working(entry).length > setFloor(entry.role))).toBe(true);
-    const eased = hardStart(sorer);
-    const before = new Map(toCome(sorer).map((entry) => [entry.id, entry]));
+    const colder = run(harder, { type: 'readiness', readiness: cold });
+    // Made harder: lifts sit a set or more above the floor, and the head cold takes none.
+    expect(toCome(colder).some((entry) => working(entry).length > setFloor(entry.role) + 1)).toBe(
+      true,
+    );
+    const eased = hardStart(colder);
+    const before = new Map(toCome(colder).map((entry) => [entry.id, entry]));
     for (const entry of toCome(eased)) {
-      expect(working(entry)).toHaveLength(working(before.get(entry.id)!).length);
+      const plan = working(before.get(entry.id)!).length;
+      expect(working(entry)).toHaveLength(plan > setFloor(entry.role) ? plan - 1 : plan);
     }
   });
 
@@ -1225,7 +1252,7 @@ describe('a hard start laid over the plan (Maintenance 26, the sixth pass of ite
       ...session,
       completed: { ...session.completed, elapsedSeconds: 30 * 60 },
     };
-    const checked = run(later, { type: 'readiness', readiness: sore });
+    const checked = run(later, { type: 'readiness', readiness: cold });
     // The rebuild fitted the rest to the minutes left, with no general warm-up.
     expect(checked.workout.duration.targetMinutes).toBeLessThan(
       session.workout.duration.targetMinutes,
@@ -1474,7 +1501,7 @@ describe('a hard start laid over the plan (Maintenance 26, the sixth pass of ite
       ...session,
       completed: { ...session.completed, elapsedSeconds: 30 * 60 },
     };
-    const checked = run(later, { type: 'readiness', readiness: sore });
+    const checked = run(later, { type: 'readiness', readiness: cold });
     const step = (minutes: number) => `Left out Hammer Curl so the session fits ${minutes} min.`;
     const stepped = (workout: GeneratedWorkout, minutes: number): GeneratedWorkout => ({
       ...workout,

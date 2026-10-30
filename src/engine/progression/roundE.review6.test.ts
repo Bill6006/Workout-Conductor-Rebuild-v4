@@ -394,13 +394,16 @@ describe('a lift with only a ramp done, when the place changes', () => {
 });
 
 describe('the day’s fatigue, for a lift refreshed by a change', () => {
-  const hard = (done: WorkoutRecord) => {
-    done.rating = { effort: 'too-hard', pain: false, energyAfter: 2, note: '' };
+  const hard = (done: WorkoutRecord, pain = false) => {
+    done.rating = { effort: 'too-hard', pain, energyAfter: 2, note: '' };
     return done;
   };
+  // Fatigue high from the sessions' own signs (Maintenance 33: no day count scores): the two newest
+  // logged with nothing in reserve where two were asked, every session rated too hard, the newest
+  // with pain.
   const history = [
-    hard(plain(1, 'back-squat', [5, 5, 5], 185, [4, 6])),
-    hard(plain(2, 'romanian-deadlift', [8, 8, 8], 135, [6, 10])),
+    hard(plain(1, 'back-squat', [5, 5, 5], 185, [4, 6], 0, 2), true),
+    hard(plain(2, 'romanian-deadlift', [8, 8, 8], 135, [6, 10], 0, 2)),
     hard(plain(3, incline, [10, 10, 10], 30, [6, 10])),
     hard(plain(4, 'back-squat', [5, 5, 5], 185, [4, 6])),
     hard(plain(5, 'romanian-deadlift', [8, 8, 8], 135, [6, 10])),

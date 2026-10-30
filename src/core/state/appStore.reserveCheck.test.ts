@@ -291,6 +291,13 @@ describe('the log the rules read', () => {
     };
   };
 
+  it('keeps the estimate it reads the log through beside it, for today’s sets (the second review of Maintenance 33)', async () => {
+    const store = await ready({}, four);
+    expect(store.getSnapshot().readEstimate).toMatchObject({ correction: 2 });
+    const three = await ready({}, four.slice(0, 3));
+    expect(three.getSnapshot().readEstimate).toBeNull();
+  });
+
   it("reads a covered reserve through the lifter's error once four checks are in", async () => {
     const store = await ready({}, four);
     // Each check had 3 left at the stop against 1 judged: an error of 2, read in as 2 more; the

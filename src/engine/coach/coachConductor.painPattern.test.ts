@@ -86,7 +86,7 @@ function input(records: WorkoutRecord[], templateId = 'push-arms'): CoachInput {
     profile,
     history: records,
     now: RECORD_NOW,
-    fatigue: interpretFatigue(records, RECORD_NOW, null),
+    fatigue: interpretFatigue(records, RECORD_NOW),
     strategy: [],
     lastExportAt: RECORD_NOW,
     workoutCount: records.length,

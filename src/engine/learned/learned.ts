@@ -3,13 +3,15 @@ import { jointWord } from '../../catalog/exercises/joints';
 import { JOINTS, type Joint } from '../../catalog/exercises/exerciseSchema';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
-import { PAIN_PATTERN_SOURCE, type CoachDeclines } from '../coach/coachConductor';
+import { PAIN_PATTERN_SOURCE, TOO_SOON_SOURCE, type CoachDeclines } from '../coach/coachConductor';
 import { weightStep } from '../plateMath/plateMath';
 import { PERSONAL_CURVE, curveReadings, liftCurve } from '../progression/personalCurve';
 import { overrideBias, OVERRIDE_MAJORITY, OVERRIDE_WINDOW } from '../progression/overrides';
 import { RESERVE_CHECK, reserveCheckStatus, reserveReadings } from '../progression/reserveCheck';
 import { resolveStyle } from '../planning/styleAdvice';
 import { painPatterns } from '../recovery/painPattern';
+import { LEARNING, learnedWindows } from '../recovery/recovery';
+import { isMuscleId, muscleName } from '../../catalog/muscles/muscles';
 import { PACE, TRAINING_TIME, paceReadings, personalPace } from '../duration/trainingTime';
 import type { LearnedKind, LearnedResets } from './resets';
 
@@ -230,6 +232,13 @@ export function declineName(key: string): string {
     const known = joint !== undefined && isJoint(joint);
     return `A pain pattern${known ? ` at the ${jointWord(joint)}` : ''}${on}`;
   }
+  if (source.startsWith(`${TOO_SOON_SOURCE}|`)) {
+    // "The chest may not have recovered", by what it offered (the first review of Maintenance 33).
+    const muscle = source.split('|')[1] ?? '';
+    return isMuscleId(muscle)
+      ? `Lighter for the ${muscleName(muscle).toLowerCase()}`
+      : 'Lighter for a muscle that may not have recovered';
+  }
   if (source.startsWith('push: stop')) return `Ending the lift to push${on}`;
   if (source.startsWith('push: review')) return `The twelve-week review of the lift to push${on}`;
   if (source.startsWith('strategy: ')) return `A suggestion about your plan${on}`;
@@ -268,18 +277,32 @@ function declineSection(input: LearnedInput): LearnedSection {
     ),
   );
   const isPain = (key: string) => key.startsWith(`${PAIN_PATTERN_SOURCE}|`);
+  // A "too soon" card's Not now keeps that muscle's card away for the rest of its week (the owner's
+  // decision 5): back with the next week, and listed only until then (the first review of
+  // Maintenance 33: listed for good, back a week after the tap). Null for any other key.
+  const nextWeek = (key: string): number | null => {
+    if (!key.startsWith(`${TOO_SOON_SOURCE}|`)) return null;
+    const [year, month, day] = (key.split('|')[2] ?? '').split('-').map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day + 7).getTime();
+  };
+  const now = Date.parse(input.now);
   const entries = Object.entries(input.declines.declines)
     .filter(([key]) => !isPain(key) || live.has(key.slice(0, key.lastIndexOf('|'))))
+    .filter(([key]) => (nextWeek(key) ?? Infinity) > now)
     .sort((a, b) => b[1].lastAt.localeCompare(a[1].lastAt));
   const items = entries.map(([key, decline]) => {
     const back = Date.parse(decline.lastAt) + 7 * DAY_MS;
+    const week = nextWeek(key);
     const when = isPain(key)
       ? `declined ${shortDay(decline.lastAt)}: back with a new report`
-      : decline.count >= 2
-        ? 'declined twice: it stays away'
-        : Date.parse(input.now) < back
-          ? `declined ${shortDay(decline.lastAt)}: back from ${shortDay(new Date(back).toISOString())}`
-          : `declined ${shortDay(decline.lastAt)}`;
+      : week !== null
+        ? `declined ${shortDay(decline.lastAt)}: back from ${shortDay(new Date(week).toISOString())}, with the new week`
+        : decline.count >= 2
+          ? 'declined twice: it stays away'
+          : Date.parse(input.now) < back
+            ? `declined ${shortDay(decline.lastAt)}: back from ${shortDay(new Date(back).toISOString())}`
+            : `declined ${shortDay(decline.lastAt)}`;
     return `${declineName(key)}: ${when}.`;
   });
   return {
@@ -288,7 +311,7 @@ function declineSection(input: LearnedInput): LearnedSection {
     status: items.length === 0 ? 'None.' : `${plural(items.length, 'offer')}.`,
     items,
     evidence:
-      'Not now on an offer keeps it away for a week; twice, until you clear it here. A pain pattern’s stays away until a new report; a safety card’s, for that workout only.',
+      'Not now on an offer keeps it away for a week; twice, until you clear it here. A pain pattern’s stays away until a new report; a muscle that may not have recovered, until the week ends; a safety card’s, for that workout only.',
     resetAt: null,
     reset: items.length === 0 ? null : 'Clear them',
   };
@@ -296,6 +319,12 @@ function declineSection(input: LearnedInput): LearnedSection {
 
 export interface LearnedInput {
   history: readonly WorkoutRecord[];
+  /**
+   * The log as the rules read it, its logged reserve through the reserve checks (item 43); absent,
+   * the log itself. What the windows in use learned is read from it (the third review of
+   * Maintenance 33: the page read the raw log).
+   */
+  readHistory?: readonly WorkoutRecord[];
   profile: UserProfile;
   now: string;
   resets: LearnedResets;
@@ -358,9 +387,48 @@ function paceSection(input: LearnedInput): LearnedSection {
   };
 }
 
+/**
+ * Each muscle's own recovery window (Maintenance 33, docs/research/recovery-time-course.md): what its
+ * own sessions moved it by, within bounds, and how many sessions it read.
+ */
+function recoverySection(input: LearnedInput): LearnedSection {
+  const resetAt = input.resets.recovery ?? null;
+  const learned = [
+    ...learnedWindows(
+      input.readHistory ?? input.history,
+      resetAt ? { recovery: resetAt } : null,
+    ).values(),
+  ];
+  const sessions = (count: number) => `${count} ${count === 1 ? 'session' : 'sessions'}`;
+  const moved = learned.filter((item) => item.shift !== 0);
+  const items = moved.map(
+    (item) =>
+      `${muscleName(item.muscle)}: ${Math.abs(item.shift)} h ${item.shift < 0 ? 'shorter' : 'longer'}, from ${sessions(item.early)} back early and ${sessions(item.rested)} rested.`,
+  );
+  const reading = learned.filter((item) => item.shift === 0);
+  const status =
+    moved.length > 0
+      ? `Your own sessions moved ${moved.length === 1 ? "one muscle's window" : `${moved.length} muscles' windows`}.`
+      : reading.length > 0
+        ? `Still learning: no muscle yet has ${LEARNING.LEAST} sessions back early and ${LEARNING.LEAST} rested that say it recovers faster or slower than the estimate.`
+        : resetAt
+          ? `Nothing learned since you reset it on ${shortDay(resetAt)}.`
+          : 'Nothing learned yet: it reads each session with hard work from this version on.';
+  return {
+    key: 'recovery',
+    title: 'Your recovery',
+    status,
+    items,
+    evidence: `From each session with hard sets for a muscle: its lifts' first working sets, back inside the window the session before set, against the same lifts rested (the middle of their last three to five rested first sets); days ill or after a short night are left out. After ${LEARNING.LEAST} of each, back early within ${Math.round(LEARNING.SAME * 100)}% of rested shortens the window by ${LEARNING.STEP_HOURS} h, and ${Math.round(LEARNING.SLOWER * 100)}% or more under it lengthens it by as much, never under ${LEARNING.LEAST_HOURS} h nor past ${LEARNING.MOST_HOURS} h, nor under half or over half again the estimate. The window says when a muscle worked hard is likely ready again; it never blocks a session.`,
+    resetAt,
+    reset: 'Forget your recovery windows',
+  };
+}
+
 export function learnedSections(input: LearnedInput): LearnedSection[] {
   return [
     paceSection(input),
+    recoverySection(input),
     habitSection(input),
     curveSection(input),
     reserveSection(input),

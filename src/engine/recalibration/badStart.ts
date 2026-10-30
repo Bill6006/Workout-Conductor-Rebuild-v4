@@ -1,12 +1,28 @@
 import { getExercise } from '../../catalog/exercises/catalog';
+import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
+import { readCheckIn } from '../readiness/checkIn';
+import {
+  checkInOfDay,
+  dayRecovery,
+  hoursSince,
+  recoveryWindows,
+  type RecoveryWindow,
+} from '../recovery/recovery';
+import { RULES } from '../rules/ruleTable';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { prescribeFor } from '../progression/roles';
 import { SHORT_BY_REPS, shortBy } from '../progression/shortfall';
-import { allEntries, type WorkoutBlock, type WorkoutEntry } from '../workout/types';
+import {
+  allEntries,
+  type SetPrescription,
+  type WorkoutBlock,
+  type WorkoutEntry,
+} from '../workout/types';
+import type { LearnedResets } from '../learned/resets';
 import { ESTIMATED_MODES } from './recalibrate';
-import type { CompletedSet } from './types';
+import type { CompletedSet, Readiness } from './types';
 
 /**
  * A bad start carries over to the rest of the workout (Maintenance 26, the owner's item 42,
@@ -46,10 +62,49 @@ export function startKey(reading: StartReading): string {
 export interface StartContext {
   profile: UserProfile;
   history: readonly WorkoutRecord[];
+  /**
+   * Today's check-in (Maintenance 33, decision 1): one that lowers what the app expects asks a rep
+   * more short of a lift before it reads as a hard start.
+   */
+  readiness?: Readiness | null;
+  /**
+   * The check-in was told with a hard start in force: the start reads none of it (the second review
+   * of Maintenance 33: told after a hard start, it took the hard start back).
+   */
+  checkInAfterStart?: boolean;
+  /** When the session was made: its check-in is that day's (`dayRecovery`); absent, today's. */
+  madeAt?: string | null;
+  /** What the lifter reset: the windows read only what was logged after it of what sessions teach. */
+  resets?: Pick<LearnedResets, 'recovery'> | null;
+}
+
+/**
+ * Whether the reading expects a step less of a lift (Maintenance 33, the readiness model): the
+ * check-in lowered it, or the lift's muscles are still inside their windows from recent hard work
+ * when its first set is logged (docs/research/readiness-and-soreness.md: recent hard work on the
+ * same muscle lowers the expectation slightly). One step, never two.
+ */
+function expectsLess(
+  exercise: CatalogExercise,
+  first: CompletedSet,
+  lowered: boolean,
+  windows: ReadonlyMap<string, RecoveryWindow>,
+): boolean {
+  if (lowered) return true;
+  return exercise.primaryMuscles.some((muscle) => {
+    const window = windows.get(muscle);
+    return window !== undefined && hoursSince(window, first.completedAt) < window.hours;
+  });
 }
 
 /** Whether a lift's first working set fell well short of its target; null when it cannot say. */
-function shortOf(entry: WorkoutEntry, first: CompletedSet, context: StartContext): boolean | null {
+function shortOf(
+  entry: WorkoutEntry,
+  first: CompletedSet,
+  context: StartContext,
+  lowered = false,
+  windows: ReadonlyMap<string, RecoveryWindow> = new Map(),
+): boolean | null {
   const exercise = getExercise(entry.exerciseId);
   if (!exercise || isHold(exercise)) return null;
   // Only a target the lifter's own logged sets set says something about today: not one read from
@@ -92,9 +147,35 @@ function shortOf(entry: WorkoutEntry, first: CompletedSet, context: StartContext
   // re-read it (the third pass).
   const planRir =
     first.planRir ?? prescribeFor(exercise, entry.role, context.profile, context.history).rir;
-  const reserve = Math.min(set.targetRir, planRir);
-  if (set.targetReps[0] + reserve > JUDGED_REPS) return null;
-  return shortBy(set.targetReps[0], reserve, first.reps, first.rir) >= SHORT_BY_REPS;
+  // At its load, the set as the plan had it before the day's eases: "Lighter" and an illness's floor
+  // take a rep off for each rep of reserve they add there, so the reps to failure it asks are the
+  // plan's (the third review of Maintenance 33: the rep "Lighter" took off counted against the set).
+  // One eased at another load is read as it asks.
+  const asked = planSetAt(entry, set);
+  const reserve = Math.min(asked.targetRir, planRir);
+  if (asked.targetReps[0] + reserve > JUDGED_REPS) return null;
+  const step = expectsLess(exercise, first, lowered, windows) ? RULES.expectationReps.value : 0;
+  return shortBy(asked.targetReps[0], reserve, first.reps, first.rir) >= SHORT_BY_REPS + step;
+}
+
+/**
+ * A set as the plan had it before the day's eases at the same load (the ease's record of the lift,
+ * else the day's floor's), or the set itself.
+ */
+function planSetAt(entry: WorkoutEntry, set: SetPrescription): SetPrescription {
+  const was = entry.eased;
+  const record =
+    was?.sets && (was.exerciseId === undefined || was.exerciseId === entry.exerciseId)
+      ? was.sets
+      : [];
+  const candidates = [
+    record.find((one) => one.index === set.index),
+    entry.floored?.find((one) => one.index === set.index),
+  ];
+  const same = candidates.find(
+    (one) => one !== undefined && one.kind === set.kind && one.targetWeight === set.targetWeight,
+  );
+  return same ?? set;
 }
 
 /**
@@ -123,6 +204,28 @@ export function readStart(
     if (first) firsts.push({ entry, set: first, at: Date.parse(first.completedAt), order });
   });
   firsts.sort((a, b) => a.at - b.at || a.order - b.order);
+  // What the day lowers the expectation by: the check-in, read when the first set was logged, and
+  // each muscle's window from the work before today (Maintenance 33).
+  const at = firsts[0]?.set.completedAt;
+  // A check-in told after the start was called judges none of it.
+  const told = context.checkInAfterStart ? null : (context.readiness ?? null);
+  // The day's context as the coach and the Plan screen read it, the check-in the day's its session
+  // was made on (the first review of Maintenance 33: a short night lengthened the chest's window
+  // everywhere but here; the third: past midnight each reader took another day's).
+  const day =
+    at !== undefined
+      ? dayRecovery({
+          readiness: told,
+          madeAt: context.madeAt ?? null,
+          history: context.history,
+          now: at,
+          resets: context.resets,
+        })
+      : null;
+  const readiness = at !== undefined ? checkInOfDay(told, context.madeAt, at) : null;
+  const lowered =
+    at !== undefined && readiness ? readCheckIn(readiness, context.history, at).lowered : false;
+  const windows = day ? recoveryWindows(context.history, day) : new Map();
   const judged: { exerciseId: string; short: boolean }[] = [];
   const places = new Set<string>();
   const begun = new Set<string>();
@@ -133,7 +236,7 @@ export function readStart(
     places.add(place);
     begun.add(entry.exerciseId);
     if (standIn) continue;
-    const short = shortOf(entry, set, context);
+    const short = shortOf(entry, set, context, lowered, windows);
     if (short === null) continue;
     judged.push({ exerciseId: entry.exerciseId, short });
     if (judged.length === 2) break;

@@ -77,7 +77,7 @@ function pushDay() {
     },
     /** The exercises the coach offers to add, as its cards' actions name them. */
     offered(): string[] {
-      const fatigue = interpretFatigue(history, NOW, null);
+      const fatigue = interpretFatigue(history, NOW);
       const input: CoachInput = {
         workout,
         status: 'preview',

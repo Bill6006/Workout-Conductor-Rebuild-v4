@@ -46,7 +46,7 @@ function input(
     profile,
     history: [],
     now: NOW,
-    fatigue: interpretFatigue([], NOW, null),
+    fatigue: interpretFatigue([], NOW),
     strategy: [],
     lastExportAt: NOW,
     workoutCount: 0,

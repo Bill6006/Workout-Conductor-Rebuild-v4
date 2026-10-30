@@ -11,9 +11,11 @@ import { formatWindow, inDeloadWindow, recommendDeload } from '../../engine/plan
 import { swapIsPast } from '../../engine/planning/lastingSwaps';
 import { describeFocus, planWeek, recoveryBalance } from '../../engine/planning/weeklyPlan';
 import { interpretFatigue } from '../../engine/recovery/fatigue';
+import { dayRecovery } from '../../engine/recovery/recovery';
 import { muscleCoverage } from '../../engine/scoring/analytics';
 import { allEntries } from '../../engine/workout/types';
 import { useToast } from '../../components/Toast/useToast';
+import { checkInDayOf } from '../../core/state/session';
 import { useAppState, useAppStore } from '../../core/state/useAppStore';
 import { HOME_LOCATION_ID, type LocationProfile } from '../../core/validation/location';
 import { routeHref, sectionHref } from '../../app/navigation';
@@ -59,17 +61,27 @@ export function PlanScreen() {
         : [],
     [profile, state.history, nowIso],
   );
-  const recovery = useMemo(() => recoveryBalance(state.history, nowIso), [state.history, nowIso]);
+  // Each muscle's window (Maintenance 33), its sets' reserve read as the rules read it (the coach's
+  // "too soon" reads the same), today's short night or low energy on them all: the check-in of a
+  // session made today, never an earlier day's finished one (the second review).
+  const readiness = state.session?.constraints.readiness ?? null;
+  const madeAt = state.session ? checkInDayOf(state.session) : null;
+  const resets = state.learnedResets;
+  const recovery = useMemo(
+    () =>
+      recoveryBalance(
+        state.readHistory,
+        nowIso,
+        dayRecovery({ readiness, madeAt, history: state.readHistory, now: nowIso, resets }),
+      ),
+    [state.readHistory, nowIso, readiness, madeAt, resets],
+  );
   const deloadAdvice = useMemo(() => {
     if (!profile) return null;
     // Fatigue reads logged reserve as the rules do (Maintenance 27, item 43).
-    const fatigue = interpretFatigue(
-      state.readHistory,
-      nowIso,
-      state.session?.constraints.readiness ?? null,
-    );
+    const fatigue = interpretFatigue(state.readHistory, nowIso);
     return recommendDeload(state.readHistory, fatigue, profile, nowIso);
-  }, [profile, state.readHistory, state.session, nowIso]);
+  }, [profile, state.readHistory, nowIso]);
   const [savedName, setSavedName] = useState('');
   // "#/plan/places" brings the places card into view: Settings links to it.
   const section = useHashSection();
@@ -170,10 +182,12 @@ export function PlanScreen() {
                     : rows
                         .slice(0, 8)
                         .map((row) =>
-                          row.daysSince === null
-                            ? row.name
-                            : // A non-breaking space: "(1 d)" never breaks at a narrow width.
-                              `${row.name} (${row.daysSince}\u00a0d)`,
+                          row.hoursLeft !== null
+                            ? // A non-breaking space: "(12 h left)" never breaks at a narrow width.
+                              `${row.name} (${row.hoursLeft}\u00a0h\u00a0left)`
+                            : row.daysSince === null
+                              ? row.name
+                              : `${row.name} (${row.daysSince}\u00a0d)`,
                         )
                         .join(', ')}
                   {rows.length > 8 ? ` and ${rows.length - 8} more` : ''}

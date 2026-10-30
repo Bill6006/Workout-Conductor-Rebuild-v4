@@ -76,7 +76,7 @@ function shortCalfAtGym(): CoachInput {
         }
       : block,
   );
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   return {
     workout: { ...workout, blocks },
     status: 'preview',

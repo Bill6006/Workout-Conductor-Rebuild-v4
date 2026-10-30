@@ -50,7 +50,7 @@ function input(profile: UserProfile, history: WorkoutRecord[] = []): CoachInput 
     profile,
     history,
     now: NOW,
-    fatigue: interpretFatigue(history, NOW, null),
+    fatigue: interpretFatigue(history, NOW),
     strategy: [],
     lastExportAt: NOW,
     workoutCount: history.length,

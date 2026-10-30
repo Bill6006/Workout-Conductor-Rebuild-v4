@@ -185,6 +185,7 @@ describe('the page', () => {
     const list = sections([]);
     expect(list.map((one) => one.key)).toEqual([
       'pace',
+      'recovery',
       'habit',
       'curves',
       'reserve',
@@ -199,6 +200,60 @@ describe('the page', () => {
       expect(one.reset).not.toBeNull();
       expect(one.evidence.length).toBeGreaterThan(40);
     }
+  });
+
+  it('names a muscle whose own sessions moved its recovery window, and none after its reset', () => {
+    // Maintenance 33: bench sessions a rep short of failure, four rested 72 h apart, then five
+    // rounds of a rested one and one a day after it at the same first set: the chest's window
+    // learned half a day shorter.
+    const hours: number[] = [0, 72, 144, 216];
+    for (let round = 0; round < 5; round += 1) hours.push(288 + round * 96, 312 + round * 96);
+    const last = hours[hours.length - 1] as number;
+    const history = hours.map((hour, index): WorkoutRecord => {
+      const when = new Date(Date.parse(RECORD_NOW) - (last - hour + 48) * 3_600_000).toISOString();
+      return {
+        id: `r-${index}`,
+        startedAt: when,
+        completedAt: when,
+        locationId: 'gym',
+        templateId: 'push-arms',
+        endedEarly: false,
+        rating: null,
+        skippedExerciseIds: [],
+        painJoints: [],
+        readiness: null,
+        prs: [],
+        entries: [
+          {
+            exerciseId: BENCH,
+            sets: [0, 1, 2].map(() => ({
+              kind: 'working' as const,
+              reps: 5,
+              weight: 200,
+              rir: 1,
+              completed: true,
+            })),
+          },
+        ],
+      };
+    });
+    const recovery = section(sections(history), 'recovery');
+    // The bench press works the triceps directly too: both windows learned.
+    expect(recovery.status).toBe("Your own sessions moved 2 muscles' windows.");
+    expect(recovery.items).toEqual([
+      'Chest: 12 h shorter, from 5 sessions back early and 6 sessions rested.',
+      'Triceps: 12 h shorter, from 5 sessions back early and 6 sessions rested.',
+    ]);
+    expect(recovery.reset).toBe('Forget your recovery windows');
+    const reset = section(
+      sections(history, withReset(emptyResets(), 'recovery', RECORD_NOW)),
+      'recovery',
+    );
+    expect(reset.items).toEqual([]);
+    expect(reset.status).toBe(`Nothing learned since you reset it on ${shortDay(RECORD_NOW)}.`);
+    expect(section(sections([]), 'recovery').status).toBe(
+      'Nothing learned yet: it reads each session with hard work from this version on.',
+    );
   });
 
   it('names a lift with a habit, and none after its reset', () => {

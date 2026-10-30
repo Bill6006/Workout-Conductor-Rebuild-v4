@@ -45,7 +45,7 @@ function input(
     profile,
     history,
     now: NOW,
-    fatigue: interpretFatigue(history, NOW, null),
+    fatigue: interpretFatigue(history, NOW),
     strategy: [],
     lastExportAt: NOW,
     workoutCount: history.length,

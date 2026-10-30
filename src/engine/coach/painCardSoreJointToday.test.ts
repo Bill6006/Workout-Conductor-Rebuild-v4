@@ -83,7 +83,7 @@ function day(painJoints: Joint[]) {
     constraints: { painJoints },
   });
   const constraints: SessionConstraints = { ...emptyConstraints(), painJoints };
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   const input: CoachInput = {
     workout,
     status: 'preview',

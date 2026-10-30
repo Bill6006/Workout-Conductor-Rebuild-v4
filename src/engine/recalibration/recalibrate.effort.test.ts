@@ -23,7 +23,8 @@ import type {
  * Maintenance 24, the owner's item 34 (docs/research/effort-setting.md). "Make it harder" or
  * "easier" and a check-in's own adjustment hold through every rebuild of the rest of the workout,
  * and a lift re-targeted on its own (its weights refitted, a max, a swap) keeps the effort it
- * carries, as far as the day's settings still reach.
+ * carries, as far as the day's settings still reach. Since Maintenance 33 the check-in's own
+ * adjustment is a head cold's floor (`cold`): a low check-in no longer changes the plan.
  */
 
 const NOW = '2026-09-03T14:00:00.000Z';
@@ -91,6 +92,14 @@ const tired: Readiness = {
   timePressure: false,
 };
 const fine: Readiness = { ...tired, energy: 4, sleep: 4, motivation: 4, soreness: 2 };
+/**
+ * A head cold (Maintenance 33): since the owner's decision 1 the check-in's one change to the plan
+ * besides a sore joint and time pressure, every working set 2 or more short of failure. A low
+ * check-in lowers what the app expects of the first sets, never the plan.
+ */
+const cold: Readiness = { ...fine, illness: 'head' };
+/** A reserve under the head cold's floor of 2, within the most the app asks. */
+const floored = (rir: number): number => Math.min(4, Math.max(2, rir));
 
 /** The session after "Make it harder" (level 1) or "Make it easier" (level -1). */
 function withIntensity(direction: 'harder' | 'easier'): RecalibrationSuccess {
@@ -174,9 +183,9 @@ describe('Make it harder or easier through a rebuild', () => {
     }
   });
 
-  it("a change of length or place keeps a low check-in's adjustment", () => {
+  it("a change of length or place keeps a head cold's floor", () => {
     // What a lifter sees today: the check-in is on the screen, the harder setting is not.
-    const checkedIn = run({ type: 'readiness', readiness: tired });
+    const checkedIn = run({ type: 'readiness', readiness: cold });
     const settings = { workout: checkedIn.workout, constraints: checkedIn.constraints };
     const cases: [RecalibrationSuccess, RecalibrationSuccess][] = [
       [run({ type: 'duration', choice: 45 }, settings), run({ type: 'duration', choice: 45 })],
@@ -190,20 +199,21 @@ describe('Make it harder or easier through a rebuild', () => {
         exerciseIds(plain.workout).includes(id),
       );
       expect(shared.length).toBeGreaterThanOrEqual(4);
+      expect(shared.some((id) => firstRir(plain.workout, id) < 2)).toBe(true);
       for (const id of shared) {
-        expect(firstRir(kept.workout, id)).toBe(moved(id, firstRir(plain.workout, id), 1));
+        expect(firstRir(kept.workout, id)).toBe(floored(firstRir(plain.workout, id)));
       }
     }
   });
 
-  it('a check-in back to fine brings the planned sets and effort back, and says so', () => {
+  it('a check-in back to fine brings the planned effort back, and says so', () => {
     const before = plan();
-    const low = run({ type: 'readiness', readiness: tired });
+    const low = run({ type: 'readiness', readiness: cold });
     const back = run(
       { type: 'readiness', readiness: fine },
       { workout: low.workout, constraints: low.constraints },
     );
-    expect(back.summary.headline).toMatch(/^Planned sets and effort back: /);
+    expect(back.summary.headline).toMatch(/^Planned effort back: /);
     for (const id of exerciseIds(back.workout).filter((x) => exerciseIds(before).includes(x))) {
       expect(firstRir(back.workout, id)).toBe(firstRir(before, id));
     }
@@ -219,9 +229,10 @@ describe('Make it harder or easier through a rebuild', () => {
   it('a check-in reaches the lift in front until its first set is logged, both ways', () => {
     const before = plan();
     const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
-    const low = run({ type: 'readiness', readiness: tired });
-    const first = allEntries(low.workout.blocks)[0]!;
-    // Started, nothing logged yet: the first lift is in front.
+    const low = run({ type: 'readiness', readiness: cold });
+    // The incline press, planned a rep from failure: the head cold's floor moves it (the bench is
+    // planned at 2 in reserve already). Started, nothing logged yet: it is in front.
+    const first = allEntries(low.workout.blocks)[1]!;
     const inFront = (entryId: string): CompletedWork => ({
       startedAt: NOW,
       elapsedSeconds: 60,
@@ -239,18 +250,17 @@ describe('Make it harder or easier through a rebuild', () => {
     );
     const planned = entryOf(before, first.exerciseId);
     const restored = entryOf(back.workout, first.exerciseId);
-    expect(working(entryOf(low.workout, first.exerciseId)).length).toBeLessThan(
-      working(planned).length,
-    );
+    expect(rirOf(planned).some((rir) => rir < 2)).toBe(true);
+    expect(rirOf(entryOf(low.workout, first.exerciseId))).toEqual(rirOf(planned).map(floored));
     expect(working(restored)).toHaveLength(working(planned).length);
     expect(working(restored).map((set) => set.targetRir)).toEqual(
       working(planned).map((set) => set.targetRir),
     );
-    expect(back.summary.headline).toMatch(/^Planned sets and effort back: /);
-    // The other way: a low check-in right after Start takes the lift in front down too.
-    const start = allEntries(before.blocks)[0]!;
+    expect(back.summary.headline).toMatch(/^Planned effort back: /);
+    // The other way: a head cold right after Start takes the lift in front down too.
+    const start = allEntries(before.blocks)[1]!;
     const cut = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'readiness', readiness: cold },
       { workout: before, completed: inFront(start.id), currentEntryId: start.id },
     );
     const lowFirst = entryOf(low.workout, start.exerciseId);
@@ -362,16 +372,18 @@ describe('Make it harder or easier through a rebuild', () => {
     });
     const counts = (workout: GeneratedWorkout) =>
       allEntries(workout.blocks).map((entry) => working(entry).length);
-    // Start, then Drained: the bench is at its floor of 3 already, so only the reserve moves, and
-    // nothing comes in on minutes a cut never freed.
+    // Start, then a head cold: only the reserve moves, and nothing comes in on minutes a cut never
+    // freed.
     const drained = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'readiness', readiness: cold },
       { workout: plan15, completed: started(first.id), currentEntryId: first.id },
     );
     expect(counts(drained.workout)).toEqual(counts(plan15));
-    expect(drained.summary.headline).toMatch(/^Adjusted for today \(an extra rep in reserve\): /);
-    // Drained before Start, then Start, then Good: the plan as it was, and "effort", not sets, back.
-    const low = run({ type: 'readiness', readiness: tired }, { workout: plan15 });
+    expect(drained.summary.headline).toMatch(
+      /^Adjusted for today \(every set 2 or more short of failure for the head cold\): /,
+    );
+    // A head cold before Start, then Start, then Good: the plan as it was, and "effort" back.
+    const low = run({ type: 'readiness', readiness: cold }, { workout: plan15 });
     const lowFirst = allEntries(low.workout.blocks)[0]!;
     const good = run(
       { type: 'readiness', readiness: fine },
@@ -385,9 +397,11 @@ describe('Make it harder or easier through a rebuild', () => {
     expect(counts(good.workout)).toEqual(counts(plan15));
     expect(good.summary.headline).toMatch(/^Planned effort back: /);
     expect(good.workout.duration.overByMinutes).toBeLessThanOrEqual(1);
-    // At 30 minutes the sets are at their fewest: no word of fewer sets.
-    const low30 = run({ type: 'readiness', readiness: tired }, { workout: short(30) });
-    expect(low30.summary.headline).toMatch(/^Adjusted for today \(an extra rep in reserve\): /);
+    // At 30 minutes: no word of fewer sets.
+    const low30 = run({ type: 'readiness', readiness: cold }, { workout: short(30) });
+    expect(low30.summary.headline).toMatch(
+      /^Adjusted for today \(every set 2 or more short of failure for the head cold\): /,
+    );
   });
 
   it('a lift you pinned or swapped in, nothing logged yet, takes the check-in too', () => {
@@ -396,15 +410,14 @@ describe('Make it harder or easier through a rebuild', () => {
     const pinnedPlan = structuredClone(before);
     const second = allEntries(pinnedPlan.blocks)[1]!;
     second.pinned = true;
-    const low = run({ type: 'readiness', readiness: tired }, { workout: pinnedPlan });
+    const low = run({ type: 'readiness', readiness: cold }, { workout: pinnedPlan });
     const planned = entryOf(before, second.exerciseId);
     const cut = entryOf(low.workout, second.exerciseId);
-    expect(working(cut)).toHaveLength(working(planned).length - 1);
-    expect(working(cut)[0]!.targetRir).toBe(
-      moved(second.exerciseId, working(planned)[0]!.targetRir, 1),
-    );
+    expect(working(planned)[0]!.targetRir).toBeLessThan(2);
+    expect(working(cut)).toHaveLength(working(planned).length);
+    expect(working(cut)[0]!.targetRir).toBe(floored(working(planned)[0]!.targetRir));
     // Swapped in before the check-in: locked in the plan's place, and the check-in reaches it.
-    const lowPlain = run({ type: 'readiness', readiness: tired });
+    const lowPlain = run({ type: 'readiness', readiness: cold });
     const third = allEntries(lowPlain.workout.blocks)[2]!;
     const swap = run(
       { type: 'replace', entryId: third.id, exerciseId: 'machine-shoulder-press' },
@@ -417,11 +430,23 @@ describe('Make it harder or easier through a rebuild', () => {
       { workout: swap.workout, constraints: swap.constraints },
     );
     const restored = entryOf(back.workout, 'machine-shoulder-press');
-    expect(working(restored).length).toBe(working(swappedIn).length + 1);
-    expect(working(restored)[0]!.targetRir).toBe(working(swappedIn)[0]!.targetRir - 1);
+    const plainPlan = plan();
+    const plainSwap = run(
+      {
+        type: 'replace',
+        entryId: allEntries(plainPlan.blocks)[2]!.id,
+        exerciseId: 'machine-shoulder-press',
+      },
+      { workout: plainPlan },
+    );
+    const plainRir = working(entryOf(plainSwap.workout, 'machine-shoulder-press'))[0]!.targetRir;
+    expect(plainRir).toBeLessThan(2);
+    expect(working(swappedIn)[0]!.targetRir).toBe(floored(plainRir));
+    expect(working(restored).length).toBe(working(swappedIn).length);
+    expect(working(restored)[0]!.targetRir).toBe(plainRir);
   });
 
-  it('the lift in front keeps the sets you set by hand, and the words fit a sore day', () => {
+  it('the lift in front keeps the sets you set by hand, and a sore day keeps the plan', () => {
     const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
     const before = plan();
     const first = allEntries(before.blocks)[0]!;
@@ -431,19 +456,24 @@ describe('Make it harder or easier through a rebuild', () => {
       currentEntryId: first.id,
       sets: [],
     };
-    // A set added by hand to the lift in front, then a low check-in: the count is yours, and stays.
+    // A set added by hand to the lift in front, then a head cold: the count is yours, and stays.
     const added = run(
       { type: 'sets', entryId: first.id, workingDelta: 1 },
       { workout: before, completed: started, currentEntryId: first.id },
     );
     const low = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'readiness', readiness: cold },
       { workout: added.workout, completed: started, currentEntryId: first.id },
     );
     expect(working(entryOf(low.workout, first.exerciseId))).toHaveLength(working(first).length + 1);
-    // Sore, not low: sets cut, the reserve as it was, and the words say so.
-    const sore = run({ type: 'readiness', readiness: { ...fine, soreness: 4 } });
-    expect(sore.summary.headline).toMatch(/^Adjusted for today \(fewer sets\): /);
+    // Sore (Maintenance 33): soreness alone never counts, so the plan stays, and the words say
+    // "Checked in", not "Feeling good".
+    const sore = run(
+      { type: 'readiness', readiness: { ...fine, soreness: 4 } },
+      { workout: before },
+    );
+    expect(sore.summary.headline).toBe('Checked in: full workout kept.');
+    expect(sore.workout.blocks).toEqual(before.blocks);
   });
 
   it('a lift in front with a warm-up logged is under way, and keeps its sets', () => {
@@ -493,7 +523,7 @@ describe('Make it harder or easier through a rebuild', () => {
       { type: 'readiness', readiness: { ...fine, soreness: 4 } },
       { workout: short, duration: 30 },
     );
-    expect(sore.summary.headline).toBe('Checked in: no changes needed.');
+    expect(sore.summary.headline).toBe('Checked in: full workout kept.');
     // A sore knee on a day with no lift that loads it: noted, and nothing claimed for it.
     const knee = run({ type: 'readiness', readiness: { ...fine, jointDiscomfort: ['knee'] } });
     expect(knee.constraints.painJoints).toContain('knee');
@@ -501,7 +531,7 @@ describe('Make it harder or easier through a rebuild', () => {
   });
 
   it('a check-in back to fine with nothing left to bring back says only that', () => {
-    const low = run({ type: 'readiness', readiness: tired });
+    const low = run({ type: 'readiness', readiness: cold });
     // Every lift done but the last, under way at its first working set: it keeps its sets.
     const entries = allEntries(low.workout.blocks);
     const last = entries.at(-1) as WorkoutEntry;
@@ -533,7 +563,7 @@ describe('Make it harder or easier through a rebuild', () => {
   it('coming back after a break, an end time, the equipment and the profile keep a check-in', () => {
     const started = logFirstSet(plan(), bench);
     const lowStarted = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'readiness', readiness: cold },
       { workout: plan(), completed: started },
     );
     const settings = { constraints: lowStarted.constraints, completed: started };
@@ -551,17 +581,18 @@ describe('Make it harder or easier through a rebuild', () => {
         (id) => id !== bench && exerciseIds(plain.workout).includes(id),
       );
       expect(shared.length, trigger.type).toBeGreaterThanOrEqual(3);
+      expect(shared.some((id) => firstRir(plain.workout, id) < 2)).toBe(true);
       for (const id of shared) {
         expect(firstRir(kept.workout, id), `${trigger.type} ${id}`).toBe(
-          moved(id, firstRir(plain.workout, id), 1),
+          floored(firstRir(plain.workout, id)),
         );
       }
     }
   });
 
-  it("a lift kept through a change of place keeps a check-in's extra rep", () => {
+  it("a lift kept through a change of place keeps a head cold's floor", () => {
     // The incline press is pinned, so the place change keeps it and fits it to the home weights.
-    const low = run({ type: 'readiness', readiness: tired });
+    const low = run({ type: 'readiness', readiness: cold });
     const incline = 'incline-dumbbell-press';
     const pin = (workout: GeneratedWorkout) => ({
       type: 'pin' as const,
@@ -577,28 +608,30 @@ describe('Make it harder or easier through a rebuild', () => {
     const plainPinned = run(pin(before), { workout: before });
     const plain = run({ type: 'location' }, { workout: plainPinned.workout, location: home });
     expect(entryOf(atHome.workout, incline).pinned).toBe(true);
-    expect(firstRir(atHome.workout, incline)).toBe(
-      moved(incline, firstRir(plain.workout, incline), 1),
-    );
+    expect(firstRir(plain.workout, incline)).toBeLessThan(2);
+    expect(firstRir(atHome.workout, incline)).toBe(floored(firstRir(plain.workout, incline)));
   });
 
-  it("a check-in's own adjustment goes on top of the setting", () => {
+  it("a head cold's floor goes on top of the setting", () => {
     const before = plan();
     const harder = withIntensity('harder');
-    // Harder adds a set and takes a rep of reserve; a low check-in takes a set and adds a rep.
+    // Harder adds a set and takes a rep of reserve; a head cold holds every set at 2 or more.
     const both = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'readiness', readiness: cold },
       { workout: harder.workout, constraints: harder.constraints },
     );
-    const alone = run({ type: 'readiness', readiness: tired }, { workout: before });
-    for (const id of exerciseIds(both.workout).filter((x) => exerciseIds(before).includes(x))) {
-      expect(firstRir(both.workout, id)).toBe(firstRir(before, id));
+    const alone = run({ type: 'readiness', readiness: cold }, { workout: before });
+    const shared = exerciseIds(both.workout).filter((x) => exerciseIds(before).includes(x));
+    expect(shared.some((id) => firstRir(harder.workout, id) < 2)).toBe(true);
+    for (const id of shared) {
+      expect(firstRir(both.workout, id)).toBe(floored(firstRir(harder.workout, id)));
+      expect(firstRir(alone.workout, id)).toBe(floored(firstRir(before, id)));
     }
-    expect(firstRir(alone.workout, bench)).toBe(moved(bench, firstRir(before, bench), 1));
     const working = (workout: GeneratedWorkout) =>
       entryOf(workout, bench).sets.filter((set) => set.kind === 'working').length;
-    expect(working(both.workout)).toBe(working(before));
-    expect(working(alone.workout)).toBe(working(before) - 1);
+    // The floor takes no set: harder's own stays.
+    expect(working(both.workout)).toBe(working(harder.workout));
+    expect(working(alone.workout)).toBe(working(before));
   });
 });
 
@@ -744,9 +777,9 @@ describe('a lift re-targeted on its own keeps the effort it carries', () => {
   });
 
   it('reads the effort on the set still to come, not one done before the check-in', () => {
-    // The bench press's first set was planned and done before a low check-in; its sets to come
-    // carry the check-in's extra rep.
-    const low = run({ type: 'readiness', readiness: tired });
+    // The bench press's first set was planned and done before a head cold; its sets to come carry
+    // the head cold's floor.
+    const low = run({ type: 'readiness', readiness: cold });
     const lift = entryOf(low.workout, bench);
     const first = lift.sets.find((set) => set.kind === 'working');
     if (!first) throw new Error('no working set');
@@ -775,20 +808,21 @@ describe('a lift re-targeted on its own keeps the effort it carries', () => {
     const stand = rirOf(entryOf(standIn.workout, 'dumbbell-bench-press'));
     expect(stand.length).toBeGreaterThan(0);
     expect(stand).toEqual(
-      stand.map(() =>
-        moved('dumbbell-bench-press', firstRir(plain.workout, 'dumbbell-bench-press'), 1),
-      ),
+      stand.map(() => floored(firstRir(plain.workout, 'dumbbell-bench-press'))),
     );
   });
 
-  it("keeps a check-in's extra rep in reserve through a max", () => {
-    const maxes = recordMax(emptyMaxes(), bench, { kind: 'set', weight: 185, reps: 5 }, 'lb', NOW);
-    const checkedIn = run({ type: 'readiness', readiness: tired });
+  it("keeps a head cold's floor through a max", () => {
+    const incline = 'incline-dumbbell-press';
+    const maxes = recordMax(emptyMaxes(), incline, { kind: 'set', weight: 50, reps: 8 }, 'lb', NOW);
+    const checkedIn = run({ type: 'readiness', readiness: cold });
     const fromMax = run(
-      { type: 'max', exerciseId: bench },
+      { type: 'max', exerciseId: incline },
       { workout: checkedIn.workout, constraints: checkedIn.constraints, maxes },
     );
-    expect(firstRir(fromMax.workout, bench)).toBe(3);
+    const plain = run({ type: 'max', exerciseId: incline }, { maxes });
+    expect(firstRir(plain.workout, incline)).toBeLessThan(2);
+    expect(firstRir(fromMax.workout, incline)).toBe(2);
   });
 });
 
@@ -819,12 +853,11 @@ describe('the effort a lift carries counts as far as the day still asks it', () 
   });
 });
 
-describe('a reserve held at its limit', () => {
-  it("still carries a check-in's extra rep to the exercise swapped in", () => {
-    // Foundation, back to chin-ups after 45 days: the chin-up asks 4 in reserve, the most there
-    // is, before and after a low check-in. The lat pulldown swapped in asks its own plain reserve
-    // plus the check-in's rep.
-    const foundation: UserProfile = { ...profile, programStyle: 'foundation' };
+describe('a lift swapped in for one back from a break', () => {
+  it("still carries a head cold's floor to the exercise swapped in", () => {
+    // Back to chin-ups after 45 days: the chin-up asks two reps more in reserve than the day's
+    // plan, 3, and on a head cold's day, whose plan asks 2, the most there is. The lat pulldown
+    // swapped in asks its own plain reserve of 1, lifted to the floor.
     const history = [
       record(
         45,
@@ -841,7 +874,7 @@ describe('a reserve held at its limit', () => {
       const workout =
         overrides.workout ??
         generateWorkout({
-          profile: foundation,
+          profile,
           location: gym,
           history,
           now: RECORD_NOW,
@@ -855,7 +888,7 @@ describe('a reserve held at its limit', () => {
         lockedEntryIds: [],
         currentEntryId: null,
         duration: 'default',
-        profile: foundation,
+        profile,
         location: gym,
         history,
         constraints: emptyConstraints(),
@@ -869,25 +902,24 @@ describe('a reserve held at its limit', () => {
       if (!result.ok) throw new Error(result.error);
       return result;
     };
-    const low = go({ trigger: { type: 'readiness', readiness: tired } });
+    const low = go({ trigger: { type: 'readiness', readiness: cold } });
     expect(firstRir(low.workout, 'chin-up')).toBe(4);
-    const swap = (from: RecalibrationSuccess, constraints: SessionConstraints) =>
+    const swap = (workout: GeneratedWorkout, constraints: SessionConstraints) =>
       go({
         trigger: {
           type: 'replace',
-          entryId: entryOf(from.workout, 'chin-up').id,
+          entryId: entryOf(workout, 'chin-up').id,
           exerciseId: 'lat-pulldown',
         },
-        workout: from.workout,
+        workout,
         constraints,
       });
-    const plainPlan = go({});
-    expect(firstRir(plainPlan.workout, 'chin-up')).toBe(4);
+    const plainPlan = request({}).workout;
+    expect(firstRir(plainPlan, 'chin-up')).toBe(3);
     const plain = swap(plainPlan, emptyConstraints());
-    const kept = swap(low, low.constraints);
-    expect(firstRir(kept.workout, 'lat-pulldown')).toBe(
-      moved('lat-pulldown', firstRir(plain.workout, 'lat-pulldown'), 1),
-    );
+    const kept = swap(low.workout, low.constraints);
+    expect(firstRir(plain.workout, 'lat-pulldown')).toBe(1);
+    expect(firstRir(kept.workout, 'lat-pulldown')).toBe(2);
   });
 });
 
@@ -912,13 +944,11 @@ describe('a check-in and the sets the lifter or the fit to time set', () => {
     const lift = allEntries(trimmed.blocks)[0]!;
     const cutOff = working(lift).slice(2);
     lift.sets = lift.sets.filter((set) => !cutOff.includes(set));
-    const low = run({ type: 'readiness', readiness: tired }, { workout: trimmed, ...at(lift) });
+    const low = run({ type: 'readiness', readiness: cold }, { workout: trimmed, ...at(lift) });
     const lowLift = entryOf(low.workout, lift.exerciseId);
     expect(working(lowLift)).toHaveLength(2);
-    expect(working(lowLift)[0]!.targetRir).toBe(
-      moved(lift.exerciseId, working(lift)[0]!.targetRir, 1),
-    );
-    // Sore after drained: the plan asks the same sets, so the lift keeps its two.
+    expect(working(lowLift)[0]!.targetRir).toBe(floored(working(lift)[0]!.targetRir));
+    // Sore after the head cold: the plan asks the same sets, so the lift keeps its two.
     const sore = run(
       { type: 'readiness', readiness: { ...fine, soreness: 4 } },
       { workout: low.workout, constraints: low.constraints, ...at(lift) },
@@ -969,7 +999,7 @@ describe('a check-in and the sets the lifter or the fit to time set', () => {
     const once = run({ type: 'add-warmup', entryId: raise.id }, { workout: pinned.workout });
     const twice = run({ type: 'add-warmup', entryId: raise.id }, { workout: once.workout });
     const low = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'readiness', readiness: cold },
       { workout: twice.workout, constraints: twice.constraints },
     );
     const lift = entryOf(low.workout, 'lateral-raise');
@@ -982,7 +1012,8 @@ describe('a check-in and the sets the lifter or the fit to time set', () => {
 
   it('keeps a ramp set added by hand', () => {
     const before = plan();
-    const first = allEntries(before.blocks)[0]!;
+    // The incline press: planned a rep from failure, so the head cold's floor reaches it.
+    const first = allEntries(before.blocks)[1]!;
     const ramps = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'warmup');
     const ramped = run(
       { type: 'add-warmup', entryId: first.id },
@@ -991,14 +1022,17 @@ describe('a check-in and the sets the lifter or the fit to time set', () => {
     const count = ramps(entryOf(ramped.workout, first.exerciseId)).length;
     expect(count).toBe(ramps(first).length + 1);
     const low = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'readiness', readiness: cold },
       { workout: ramped.workout, constraints: ramped.constraints, ...at(first) },
     );
     const lowFirst = entryOf(low.workout, first.exerciseId);
     expect(ramps(lowFirst)).toHaveLength(count);
     expect(lowFirst.warmupSets).toBe(count);
     // The check-in still reaches its working sets.
-    expect(working(lowFirst)).toHaveLength(working(first).length - 1);
+    expect(working(first)[0]!.targetRir).toBeLessThan(2);
+    expect(working(lowFirst).map((set) => set.targetRir)).toEqual(
+      working(first).map((set) => floored(set.targetRir)),
+    );
   });
 });
 
@@ -1014,13 +1048,13 @@ describe('the words of a check-in', () => {
     });
   const sore = (joint: Joint): Readiness => ({ ...fine, jointDiscomfort: [joint] });
 
-  it('drained, then sore, say the planned effort came back', () => {
-    const low = run({ type: 'readiness', readiness: tired });
+  it('a head cold, then sore, say the planned effort came back', () => {
+    const low = run({ type: 'readiness', readiness: cold });
     const soreDay = run(
       { type: 'readiness', readiness: { ...fine, soreness: 4 } },
       { workout: low.workout, constraints: low.constraints },
     );
-    expect(soreDay.summary.headline).toMatch(/^Adjusted for today \(the planned effort back\): /);
+    expect(soreDay.summary.headline).toMatch(/^Planned effort back: /);
   });
 
   it('a new length for time pressure with nothing else to change say the length', () => {
@@ -1139,8 +1173,8 @@ describe('the words of a check-in', () => {
   });
 
   it('count no cut for a lift a sore joint stopped, on a day at its fewest sets', () => {
-    // 30 minutes of upper body, the barbell row under way: drained takes no set at 30 minutes, and
-    // a sore lower back stops the row, its sets to a stand-in.
+    // 30 minutes of upper body, the barbell row under way: a head cold takes no set, and a sore
+    // lower back stops the row, its sets to a stand-in.
     const upper = generateWorkout({
       profile,
       location: gym,
@@ -1151,11 +1185,11 @@ describe('the words of a check-in', () => {
     });
     const underWay = logFirstSet(upper, 'barbell-row');
     const drained = run(
-      { type: 'readiness', readiness: { ...tired, jointDiscomfort: ['lower-back'] } },
+      { type: 'readiness', readiness: { ...cold, jointDiscomfort: ['lower-back'] } },
       { workout: upper, completed: underWay, currentEntryId: underWay.currentEntryId },
     );
     expect(drained.summary.headline).toMatch(
-      /^Adjusted for today \(an extra rep in reserve, easier on your lower back\): /,
+      /^Adjusted for today \(every set 2 or more short of failure for the head cold, easier on your lower back\): /,
     );
   });
 

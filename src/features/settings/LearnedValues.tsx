@@ -15,6 +15,7 @@ export function LearnedValues() {
   const store = useAppStore();
   const toast = useToast();
   const history = useAppSelector((state) => state.history);
+  const readHistory = useAppSelector((state) => state.readHistory);
   const profile = useAppSelector((state) => state.profile);
   const resets = useAppSelector((state) => state.learnedResets);
   const declines = useAppSelector((state) => state.coachDeclines);
@@ -25,6 +26,7 @@ export function LearnedValues() {
       profile
         ? learnedSections({
             history,
+            readHistory,
             profile,
             // The minute clock; before it ticks, the profile's own time, as Progress does.
             now: nowEpoch ? new Date(nowEpoch).toISOString() : profile.updatedAt,
@@ -32,7 +34,7 @@ export function LearnedValues() {
             declines,
           })
         : [],
-    [history, profile, nowEpoch, resets, declines],
+    [history, readHistory, profile, nowEpoch, resets, declines],
   );
 
   const reset = async (section: LearnedSection) => {

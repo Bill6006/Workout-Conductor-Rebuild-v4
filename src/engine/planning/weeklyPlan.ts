@@ -5,6 +5,13 @@ import type { UserProfile, Weekday } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { addLocalDays, localDayKey, localWeekday } from '../../core/time/localDate';
 import type { LearnedResets } from '../learned/resets';
+import {
+  hoursSince,
+  learnedWindows,
+  recoveryWindows,
+  tooSoonToday,
+  type RecoveryContext,
+} from '../recovery/recovery';
 import { computeExposure } from '../volume/weeklyVolume';
 import { allEntries, pushMarkOf } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
@@ -66,23 +73,34 @@ function syntheticRecord(date: string, workout: ReturnType<typeof generateWorkou
   };
 }
 
-/** The next planned sessions from today across the coming week. */
-export function planWeek(
+/** A day of the week ahead as the plan would build it, at Default length. */
+export interface PlannedWorkout {
+  date: string;
+  weekday: Weekday;
+  /** Days from today: 0 is today. */
+  offset: number;
+  workout: ReturnType<typeof generateWorkout>;
+}
+
+/**
+ * The sessions of the week ahead as the plan would build them (the days ticked from today, up to
+ * the sessions a week), each built on the ones before it.
+ */
+export function plannedWorkouts(
   profile: UserProfile,
   location: LocationProfile | undefined,
   history: readonly WorkoutRecord[],
   now: string,
-  /** What the lifter reset (Maintenance 27, item 47): the week reads as today's plan does. */
   resets: LearnedResets | null = null,
-): PlannedSession[] {
+): PlannedWorkout[] {
   const available = new Set(profile.schedule.availableDays);
   // The device's day: a workout counts on the day it began (Maintenance 28, item 1).
   const trainedToday = history.some((record) => localDayKey(record.startedAt) === localDayKey(now));
-  const sessions: PlannedSession[] = [];
+  const planned: PlannedWorkout[] = [];
   let simulated: WorkoutRecord[] = [...history];
   for (
     let offset = 0;
-    offset < 7 && sessions.length < profile.schedule.weeklyFrequency;
+    offset < 7 && planned.length < profile.schedule.weeklyFrequency;
     offset += 1
   ) {
     const date = addLocalDays(now, offset);
@@ -97,6 +115,29 @@ export function planWeek(
       duration: 'default',
       resets,
     });
+    planned.push({ date, weekday, offset, workout });
+    simulated = [...simulated, syntheticRecord(date, workout)];
+  }
+  return planned;
+}
+
+/** The next planned sessions from today across the coming week. */
+export function planWeek(
+  profile: UserProfile,
+  location: LocationProfile | undefined,
+  history: readonly WorkoutRecord[],
+  now: string,
+  /** What the lifter reset (Maintenance 27, item 47): the week reads as today's plan does. */
+  resets: LearnedResets | null = null,
+): PlannedSession[] {
+  const sessions: PlannedSession[] = [];
+  for (const { date, weekday, offset, workout } of plannedWorkouts(
+    profile,
+    location,
+    history,
+    now,
+    resets,
+  )) {
     const counts = new Map<MuscleId, number>();
     for (const entry of allEntries(workout.blocks)) {
       for (const muscle of entry.chosenFor) counts.set(muscle, (counts.get(muscle) ?? 0) + 1);
@@ -122,9 +163,52 @@ export function planWeek(
       muscles,
       today: offset === 0,
     });
-    simulated = [...simulated, syntheticRecord(date, workout)];
   }
   return sessions;
+}
+
+/**
+ * The days of the week ahead whose plan would work a muscle hard well inside its window (Maintenance
+ * 33, the "too soon" check, `tooSoonToday`): the windows from the history and the planned days
+ * before it, each lifted at its targets' reserve, moved by what the lifter's own sessions taught
+ * (the planned days teach nothing). The schedule card reads the same check.
+ */
+export function tooSoonAhead(
+  planned: readonly PlannedWorkout[],
+  history: readonly WorkoutRecord[],
+  resets: LearnedResets | null = null,
+): { weekday: Weekday; muscles: MuscleId[] }[] {
+  const found: { weekday: Weekday; muscles: MuscleId[] }[] = [];
+  const learned = learnedWindows(history, resets);
+  let past: readonly WorkoutRecord[] = history;
+  for (const day of planned) {
+    const windows = recoveryWindows(past, { now: day.date, learned });
+    const soon = tooSoonToday(day.workout, windows, day.date);
+    if (soon.length > 0)
+      found.push({ weekday: day.weekday, muscles: soon.map((item) => item.muscle) });
+    past = [...past, liftedAsPlanned(day.date, day.workout)];
+  }
+  return found;
+}
+
+/** A planned day as the record it would leave, every working set at its target's reserve. */
+function liftedAsPlanned(date: string, workout: ReturnType<typeof generateWorkout>): WorkoutRecord {
+  const record = syntheticRecord(date, workout);
+  return {
+    ...record,
+    entries: allEntries(workout.blocks).map((entry) => ({
+      exerciseId: entry.exerciseId,
+      sets: entry.sets
+        .filter((set) => set.kind === 'working')
+        .map((set) => ({
+          kind: 'working' as const,
+          reps: set.targetReps[0],
+          weight: null,
+          rir: set.targetRir,
+          completed: true,
+        })),
+    })),
+  };
 }
 
 export type RecoveryState = 'recovering' | 'ready' | 'fresh';
@@ -133,23 +217,35 @@ export interface RecoveryBalanceRow {
   muscle: MuscleId;
   name: string;
   daysSince: number | null;
+  /** Hours its window still runs, while it is recovering (Maintenance 33). */
+  hoursLeft: number | null;
   state: RecoveryState;
 }
 
-/** Which muscles are still recovering (under 2 days), ready (2 to 4), or fresh. */
+/**
+ * Which muscles are still recovering, ready or fresh (Maintenance 33, `recoveryWindows`): recovering
+ * while inside the window its last hard work set, ready once past it within four days of training,
+ * fresh after that or with nothing logged. Light work sets no window: a muscle trained lightly is
+ * ready.
+ */
 export function recoveryBalance(
   history: readonly WorkoutRecord[],
   now: string,
+  context: Omit<RecoveryContext, 'now'> = {},
 ): RecoveryBalanceRow[] {
   const exposure = computeExposure(history, now);
+  const windows = recoveryWindows(history, { ...context, now });
   return MUSCLE_IDS.map((muscle) => {
     const days = exposure.daysSinceMuscle[muscle] ?? null;
+    const window = windows.get(muscle);
+    const left = window ? window.hours - hoursSince(window, now) : 0;
     const state: RecoveryState =
-      days === null || days >= 4 ? 'fresh' : days < 2 ? 'recovering' : 'ready';
+      left > 0 ? 'recovering' : days === null || days >= 4 ? 'fresh' : 'ready';
     return {
       muscle,
       name: muscleName(muscle),
       daysSince: days === null ? null : Math.round(days * 10) / 10,
+      hoursLeft: left > 0 ? Math.ceil(left) : null,
       state,
     };
   }).sort((a, b) => (a.daysSince ?? 99) - (b.daysSince ?? 99) || a.name.localeCompare(b.name));

@@ -29,7 +29,9 @@ function shortInput(
   place = gym,
 ): CoachInput {
   const exercise = requireExercise(exerciseId);
-  const history: WorkoutRecord[] = [6, 2].map((daysAgo) =>
+  // Three days apart and three days back: a long set a rep short of failure two days before leaves
+  // the glutes inside their window, and since Maintenance 33 the "too soon" card leads.
+  const history: WorkoutRecord[] = [6, 3].map((daysAgo) =>
     record(daysAgo, exerciseId, short, range, 1),
   );
   const workout = generateWorkout({
@@ -73,7 +75,7 @@ function shortInput(
         }
       : block,
   );
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   return {
     workout: { ...workout, blocks },
     status: 'preview',

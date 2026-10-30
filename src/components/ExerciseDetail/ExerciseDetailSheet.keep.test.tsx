@@ -59,6 +59,28 @@ describe('the keep-for-weeks switch', () => {
   });
 });
 
+describe('the pain gate (Maintenance 33)', () => {
+  it('is said beside the button that protects a joint, in a workout only', () => {
+    const handle = createTestStore();
+    const sheet = (session: boolean) => (
+      <Providers store={handle.store}>
+        <ExerciseDetailSheet
+          exercise={bench}
+          onClose={() => undefined}
+          alternatives={alternatives}
+          {...(session ? { sessionActions: actions(() => undefined) } : {})}
+        />
+      </Providers>
+    );
+    const { rerender } = render(sheet(true));
+    expect(screen.getByTestId('pain-gate').textContent).toBe(
+      'Sharp, sudden or rising pain: stop and protect it. Known pain at 5 out of 10 or less that settles by the next morning is fine to train with.',
+    );
+    rerender(sheet(false));
+    expect(screen.queryByTestId('pain-gate')).toBeNull();
+  });
+});
+
 describe('the details after the third pass of item 50', () => {
   it('gives each exercise a demonstration of its own: a Play pressed on one moves no other', () => {
     Object.defineProperty(window, 'matchMedia', {

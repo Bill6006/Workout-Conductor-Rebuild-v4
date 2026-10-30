@@ -9,7 +9,6 @@ const fatigue: FatigueSignal = {
   level: 'fresh',
   evidence: ['No fatigue signals in recent sessions.'],
   sessionsLast7Days: 0,
-  consecutiveDays: 0,
   hardRatings: 0,
 } as FatigueSignal;
 

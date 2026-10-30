@@ -29,7 +29,7 @@ function input(hoursAgo: number, status: CoachInput['status'] = 'active'): Coach
     profile,
     history: [],
     now: NOW,
-    fatigue: interpretFatigue([], NOW, null),
+    fatigue: interpretFatigue([], NOW),
     strategy: [],
     lastExportAt: NOW,
     workoutCount: 0,

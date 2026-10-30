@@ -194,6 +194,11 @@ export interface WorkoutEntry {
    */
   backOffAt?: number;
   /**
+   * The sets the day's floor holds (an illness, Maintenance 33), as they were before it held them:
+   * the plan under the floor, given back where the floor goes (the third review of Maintenance 33).
+   */
+  floored?: SetPrescription[];
+  /**
    * A lift on straight sets at the back-offs' load, after a session on the structure (the fourth
    * review of round N): its top set reads past such a day, as past its back-offs.
    */
@@ -225,6 +230,12 @@ export interface WorkoutEntry {
      */
     settings?: EasedSettings;
     kept?: boolean;
+    /**
+     * Laid by the lighter option on a lift under way (Maintenance 33, the fifth review): a copy gives
+     * what stands in for such a lift, once it stops, the sets the ease took from it, as the plan
+     * has them; a hard start's ease keeps what it left (item 42's known limit).
+     */
+    lighter?: true;
   };
 }
 
@@ -247,6 +258,12 @@ export interface StoppedWork {
    * at a place.
    */
   why?: 'place' | 'swap' | 'skip';
+  /**
+   * The plan an ease kept on the lift (its `eased` record) when it stopped (the third review of
+   * Maintenance 33): a swap back gives it back as the lift's record, so a saved copy has the plan
+   * back; a lift picked up again drops it with the rest of what stopped it.
+   */
+  record?: NonNullable<WorkoutEntry['eased']>;
 }
 
 /** The lift to push in a plan (Maintenance 27, item 44): in its own place, or the extra exposure. */

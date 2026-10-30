@@ -32,7 +32,7 @@ function input(
     duration: 'default',
     ...(templateId ? { constraints: { templateId } } : {}),
   });
-  const fatigue = interpretFatigue(history, NOW, overrides.constraints?.readiness ?? null);
+  const fatigue = interpretFatigue(history, NOW);
   return {
     workout,
     status: 'preview',
@@ -156,12 +156,22 @@ describe('coach conductor', () => {
   });
 
   it('asks for a backup before anything below it and puts recovery ahead of plateaus', () => {
+    // Fatigue high from the sessions' own signs (Maintenance 33: no day count scores, no check-in):
+    // sets closer to failure than planned, the two newest rated too hard, the newest with pain.
+    const hard = { effort: 'too-hard' as const, energyAfter: 2, note: '' };
     const history = [
-      record(1, 'barbell-bench-press', [
-        [5, 185, 0],
-        [4, 185, 0],
-        [4, 185, 0],
-      ]),
+      record(
+        1,
+        'barbell-bench-press',
+        [
+          [5, 185, 0],
+          [4, 185, 0],
+          [4, 185, 0],
+        ],
+        [4, 6],
+        2,
+        { rating: { ...hard, pain: true } },
+      ),
       record(
         2,
         'cable-fly',
@@ -171,6 +181,7 @@ describe('coach conductor', () => {
         ],
         [10, 15],
         1,
+        { rating: { ...hard, pain: false } },
       ),
       record(
         3,
@@ -198,31 +209,9 @@ describe('coach conductor', () => {
     expect(noBackup?.signal.action?.kind).toBe('backup');
     const backedUp = conductCoach(input(history, { workoutCount: 4 }));
     expect(['recovery', 'plateau']).toContain(backedUp?.signal.domain);
-    const tired = interpretFatigue(history, NOW, {
-      energy: 1,
-      soreness: 5,
-      sleep: 1,
-      motivation: 2,
-      jointDiscomfort: [],
-      timePressure: false,
-    });
-    const exhausted = conductCoach(
-      input(history, {
-        workoutCount: 4,
-        fatigue: tired,
-        constraints: {
-          ...emptyConstraints(),
-          readiness: {
-            energy: 1,
-            soreness: 5,
-            sleep: 1,
-            motivation: 2,
-            jointDiscomfort: [],
-            timePressure: false,
-          },
-        },
-      }),
-    );
+    const tired = interpretFatigue(history, NOW);
+    expect(tired.level).toBe('high');
+    const exhausted = conductCoach(input(history, { workoutCount: 4, fatigue: tired }));
     expect(exhausted?.signal.domain).toBe('recovery');
     expect(exhausted?.signal.action).toMatchObject({
       kind: 'recalibrate',

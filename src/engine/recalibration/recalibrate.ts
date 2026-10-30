@@ -1,4 +1,13 @@
 import { dropSetWeight } from './dropSet';
+import {
+  CHECK_IN_ITEMS,
+  REST_TODAY,
+  illnessOf,
+  readCheckIn,
+  worseWords,
+  type CheckInRead,
+} from '../readiness/checkIn';
+import { RULES } from '../rules/ruleTable';
 import { allExercises, requireExercise } from '../../catalog/exercises/catalog';
 import { holdById, targetText } from '../workout/setText';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
@@ -106,6 +115,7 @@ import {
   type GenerationConstraints,
   type KeptEntry,
   type PrescriptionAdjustment,
+  dayRirFloor,
   withCatchUpLines,
   offPlanSpec,
   emptiedLayoutsFor,
@@ -278,16 +288,23 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult 
     // A hard start's ease lies over the plan (Maintenance 26, the sixth pass of item 42): the change
     // is made to the plan under it, and the ease is laid again over what the change leaves.
     const shown = request.workout;
-    const bare = underTheEase(shown, request.completed);
+    // The day's floor lies over the ease as the ease over the plan: taken off first, laid again last.
+    const bare = underTheEase(underTheFloor(shown, request.completed), request.completed);
     const plain = bare === shown ? request : { ...request, workout: bare };
     const layer: Layer = {
       shown,
       finish: (workout, constraints) =>
-        constraints.badStart ? easeTheRest(workout, plain, constraints) : withoutMarks(workout),
+        constraints.badStart || (constraints.lighter?.length ?? 0) > 0
+          ? easeTheRest(workout, plain, constraints)
+          : withoutMarks(workout),
     };
     const outcome = execute(plain, scope, layer);
     const constraints = outcome.constraints;
-    const next = layer.finish(outcome.workout, constraints);
+    const next = heldToTheDay(
+      layer.finish(lighterPickedUp(outcome.workout, plain, constraints), constraints),
+      request,
+      constraints,
+    );
     markEmptied(constraints, request, next);
     // The time and the lines say what the plan now holds, eased or given back.
     if (next !== outcome.workout || bare !== shown) {
@@ -406,8 +423,11 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
       : {}),
     endBy: constraints.endBy,
     readiness: constraints.readiness ? { ...constraints.readiness } : null,
+    ...(constraints.checkInAfterStart ? { checkInAfterStart: true as const } : {}),
+    ...(constraints.checkInAt ? { checkInAt: constraints.checkInAt } : {}),
     intensity: constraints.intensity,
     ...(constraints.badStart ? { badStart: true } : {}),
+    ...(constraints.lighter ? { lighter: [...constraints.lighter] } : {}),
     deload: constraints.deload ? { ...constraints.deload } : null,
     focus: constraints.focus ?? null,
     ...(constraints.catchUp !== undefined ? { catchUp: cloneSpec(constraints.catchUp) } : {}),
@@ -535,6 +555,16 @@ function intensityAdjust(level: number): PrescriptionAdjustment | undefined {
 /** A hard start (Maintenance 26, item 42): the low check-in's treatment, a set fewer and a rep more in reserve. */
 const HARD_START: PrescriptionAdjustment = { sets: -1, rir: 1, restFactor: 1 };
 
+/**
+ * The lighter option of the "too soon" card (Maintenance 33, the owner's decision 2): on the
+ * muscle's lifts a set fewer above the floor and a rep more in reserve at the same load, a rep
+ * fewer (proposal part 2: "keep the load and add a rep in reserve or drop a set"; Robinson 2024:
+ * strength gains were similar whether sets stopped closer to failure or further from it). The card
+ * says the loads are kept, and they are (the first review of Maintenance 33: the hard start's ease
+ * took the loads down).
+ */
+const LIGHTER = { sets: 1, rir: 1 } as const;
+
 /** Whether two of the day's adjustments ask the same of the lifts still to come. */
 function sameAdjust(
   a: PrescriptionAdjustment | undefined,
@@ -543,7 +573,8 @@ function sameAdjust(
   return (
     (a?.sets ?? 0) === (b?.sets ?? 0) &&
     (a?.rir ?? 0) === (b?.rir ?? 0) &&
-    (a?.restFactor ?? 1) === (b?.restFactor ?? 1)
+    (a?.restFactor ?? 1) === (b?.restFactor ?? 1) &&
+    dayRirFloor(a) === dayRirFloor(b)
   );
 }
 
@@ -560,6 +591,7 @@ function feltAdjust(constraints: SessionConstraints): PrescriptionAdjustment | u
     sets: Math.min(checkIn.sets, HARD_START.sets),
     rir: Math.max(checkIn.rir, HARD_START.rir),
     restFactor: Math.max(checkIn.restFactor, HARD_START.restFactor),
+    ...(checkIn.rirFloor !== undefined ? { rirFloor: checkIn.rirFloor } : {}),
   };
 }
 
@@ -575,6 +607,7 @@ function withIntensity(
     sets: harder.sets + felt.sets,
     rir: harder.rir + felt.rir,
     restFactor: harder.restFactor * felt.restFactor,
+    ...(felt.rirFloor !== undefined ? { rirFloor: felt.rirFloor } : {}),
   };
 }
 
@@ -1177,9 +1210,26 @@ function prescriptionToday(
   role: TrainingRole,
 ): Prescription {
   const base = prescribeFor(exercise, role, request.profile, request.history);
-  return request.constraints.deload !== null
-    ? { ...base, rir: Math.min(4, base.rir + DELOAD_RIR_DELTA) }
-    : base;
+  const planned =
+    request.constraints.deload !== null
+      ? { ...base, rir: Math.min(4, base.rir + DELOAD_RIR_DELTA) }
+      : base;
+  // The day's reserve floor, a head cold's (Maintenance 33).
+  const floor = dayFloor(request.constraints);
+  return planned.rir < floor ? { ...planned, rir: floor } : planned;
+}
+
+/**
+ * Whether the day keeps every set short of failure (an illness, Maintenance 33): no drop set, no set
+ * to failure, nor the coach's offer of one (the first review: it offered a drop set the tap refused).
+ */
+export function keepsShortOfFailure(constraints: SessionConstraints): boolean {
+  return dayFloor(constraints) > 0;
+}
+
+/** The fewest reps in reserve the day's settings allow any set (a head cold: 2), or none. */
+function dayFloor(constraints: SessionConstraints): number {
+  return dayRirFloor(dayAdjust(constraints));
 }
 
 /**
@@ -1318,6 +1368,25 @@ function offPlanToday(request: RecalibrationRequest, workout: GeneratedWorkout):
   return offPlanSpec(request.constraints, workout) !== null;
 }
 
+/**
+ * The check-in's lines beside what it changed (Maintenance 33): the expectation it lowered, where
+ * the words above do not say so, and soreness at its worst, which changes nothing.
+ */
+function checkInNotes(read: CheckInRead, lowered: boolean, restSaid = false): string[] {
+  return [
+    // A fever or aches all over are a rest day, said here where the headline names another change.
+    read.illness === 'body' && !restSaid ? REST_TODAY : '',
+    lowered
+      ? `${capitalize(worseWords(read))}: today's first sets are judged a step easier; the plan stays.`
+      : '',
+    read.wrecked
+      ? 'Very sore: your first work set decides, and a swap is a tap away if soreness limits your range.'
+      : '',
+  ].filter(Boolean);
+}
+
+const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
 /** A lift begun with one set left, as a refusal and a stop say it. */
 function oneSetLeft(name: string): string {
   return `${name} has one set left, too few for another lift to take over`;
@@ -1438,7 +1507,10 @@ function effortShift(request: RecalibrationRequest, entry: WorkoutEntry, plainRi
   const day = dayAdjust(request.constraints)?.rir ?? 0;
   // The day's settings, the whole of them first: a reserve held at its limit (4, or the
   // exercise's floor) shows them as much as any.
-  const floor = rirFloor(requireExercise(entry.exerciseId));
+  const floor = Math.max(
+    rirFloor(requireExercise(entry.exerciseId)),
+    dayFloor(request.constraints),
+  );
   for (let shift = day; shift !== 0; shift -= Math.sign(day)) {
     if (carriesDayRir(sets, Math.min(4, Math.max(floor, plainRir + shift)))) return shift;
   }
@@ -1470,10 +1542,129 @@ function backOffDay(
 
 /** Fatigue high today: a main lift goes straight (item 11, the research). */
 function fatigueHigh(request: RecalibrationRequest): boolean {
-  return (
-    interpretFatigue(request.history, request.timestamp, request.constraints.readiness).level ===
-    'high'
-  );
+  return interpretFatigue(request.history, request.timestamp).level === 'high';
+}
+
+/**
+ * A day that runs a main lift straight whatever its structure: fatigue high (item 11), or a reserve
+ * floor over the top set's (a head cold, Maintenance 33).
+ */
+function straightToday(request: RecalibrationRequest): boolean {
+  return fatigueHigh(request) || dayFloor(request.constraints) > BACK_OFF.TOP_RIR;
+}
+
+/**
+ * On a day that keeps every set short of failure (an illness, Maintenance 33), every set still to
+ * come keeps the day's reserve at least, a lift under way's too, at its load, a rep fewer for each
+ * rep more in reserve as "Lighter" eases one; and no drop set is still to come. One done stays as
+ * logged (the second review of Maintenance 33: a head cold told under way left the lift under way
+ * at its reserve, a finisher to failure). The floor lies over the plan as a hard start's ease does:
+ * each set it holds keeps what it was (`floored`), every change is made to the plan under it
+ * (`underTheFloor`) and the floor laid again over what the change leaves, so with the floor gone the
+ * plan is back (the third review: an illness taken back left the lift under way at its floor under
+ * "Planned effort back").
+ */
+function heldToTheDay(
+  workout: GeneratedWorkout,
+  request: FloorContext,
+  constraints: SessionConstraints,
+): GeneratedWorkout {
+  const floor = dayFloor(constraints);
+  if (floor === 0) return workout;
+  const done = new Set(request.completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
+  const toCome = (entry: WorkoutEntry, set: SetPrescription) =>
+    !done.has(`${entry.id}:${set.index}`);
+  const short = (entry: WorkoutEntry, set: SetPrescription) =>
+    toCome(entry, set) &&
+    (set.kind === 'drop' || (set.kind === 'working' && set.targetRir < floor));
+  if (!allEntries(workout.blocks).some((entry) => entry.sets.some((set) => short(entry, set)))) {
+    return workout;
+  }
+  const held = cloneWorkout(workout);
+  for (const entry of allEntries(held.blocks)) {
+    if (!entry.sets.some((set) => short(entry, set))) continue;
+    const exercise = requireExercise(entry.exerciseId);
+    const loading = loadingOf(request, exercise);
+    const bar = barWeightFor(exercise, request.profile.units);
+    // What each set the floor holds was, for the plan under it.
+    const kept = new Map((entry.floored ?? []).map((set) => [set.index, set]));
+    for (const set of entry.sets) {
+      if (short(entry, set) && !kept.has(set.index)) kept.set(set.index, cloneSet(set));
+    }
+    entry.floored = [...kept.values()].sort((a, b) => a.index - b.index);
+    entry.sets = entry.sets
+      .filter((set) => !(set.kind === 'drop' && toCome(entry, set)))
+      .map((set) => {
+        if (!short(entry, set)) return set;
+        const eased = easedSet(
+          set,
+          floor - set.targetRir,
+          exercise,
+          entry.manual,
+          loading,
+          bar,
+          true,
+        );
+        return eased.targetRir >= floor ? eased : { ...eased, targetRir: floor };
+      });
+    entry.dropSet = entry.sets.some((set) => set.kind === 'drop');
+  }
+  return held;
+}
+
+/** What the day's floor reads of a request: what is done, and the weights at the place. */
+type FloorContext = Pick<RecalibrationRequest, 'completed' | 'location' | 'loading' | 'profile'>;
+
+/**
+ * The workout with the day's floor laid again over the sets still to come (`heldToTheDay`), for a
+ * log the store takes back outside the engine ("Undo last set", Delete): its set is one still to
+ * come, held at the floor, and a drop set taken back on a day with none goes (the fifth review of
+ * Maintenance 33: they came back below the floor until the next change laid it).
+ */
+export function floorLaidAgain(
+  workout: GeneratedWorkout,
+  context: FloorContext & Pick<RecalibrationRequest, 'constraints'>,
+): GeneratedWorkout {
+  return heldToTheDay(workout, context, context.constraints);
+}
+
+/**
+ * The plan under the day's floor (`heldToTheDay`): each set still to come that it held has its reps
+ * and reserve back, its load as it stands (the floor never moved one), and a drop set it took comes
+ * back; a set done stays as logged, and keeps its record of what the plan asked of it, which the
+ * hard start's reading reads. The same object when no lift carries the floor.
+ */
+function underTheFloor(workout: GeneratedWorkout, completed: CompletedWork): GeneratedWorkout {
+  if (!allEntries(workout.blocks).some((entry) => entry.floored !== undefined)) return workout;
+  const done = new Set(completed.sets.map((set) => `${set.entryId}:${set.setIndex}`));
+  const bare = cloneWorkout(workout);
+  for (const entry of allEntries(bare.blocks)) {
+    const was = entry.floored;
+    if (!was) continue;
+    const toCome = (index: number) => !done.has(`${entry.id}:${index}`);
+    const logged = was.filter((set) => !toCome(set.index));
+    if (logged.length > 0) entry.floored = logged;
+    else delete entry.floored;
+    const byIndex = new Map(was.map((set) => [set.index, set]));
+    entry.sets = entry.sets.map((set) => {
+      const before = byIndex.get(set.index);
+      if (!before || !toCome(set.index) || set.kind !== before.kind) return set;
+      return {
+        ...set,
+        targetReps: [before.targetReps[0], before.targetReps[1]],
+        targetRir: before.targetRir,
+      };
+    });
+    const present = new Set(entry.sets.map((set) => set.index));
+    const drops = was.filter(
+      (set) => set.kind === 'drop' && toCome(set.index) && !present.has(set.index),
+    );
+    if (drops.length > 0) {
+      entry.sets = [...entry.sets, ...drops.map(cloneSet)];
+      entry.dropSet = true;
+    }
+  }
+  return bare;
 }
 
 /** The reserve the day asks of a lift as the plan holds it: its effort and the catch-up's kept. */
@@ -1487,6 +1678,7 @@ function dayReserve(
     prescriptionToday(request, exercise, entry.role),
     heldShift(request, workout, exercise, entry.role, dayShiftOf(request, workout, entry)),
     exercise,
+    dayFloor(request.constraints),
   ).rir;
 }
 
@@ -1504,17 +1696,23 @@ function asBackOffs(
   sets: readonly SetPrescription[],
   isDone: SetDonePredicate,
   hand = false,
+  /**
+   * The plan's own top set, where an ease changed the one the lift shows (Maintenance 33: "Lighter"
+   * taken before it): the back-offs' reps and reserve are the plan's, for the ease to lay once.
+   */
+  planTop?: Pick<SetPrescription, 'targetReps' | 'targetRir' | 'asked'>,
 ): SetPrescription[] {
   const after = afterTopSet(request, entry, isDone, hand);
   if (!after) return [...sets];
-  const reserve = backOffRir(after.top.targetRir, dayReserve(request, workout, entry));
+  const shape = planTop ?? after.top;
+  const reserve = backOffRir(shape.targetRir, dayReserve(request, workout, entry));
   const handReps = hand && entry.manual?.reps === true;
   // At the top set's own reps, never a stand-in's (the thirteenth review of round N: a set added
   // took the reps a stand-in for the weights here added); a set added keeps the reps set by hand. A
   // lift picked up again drops them, so the top set's as the plan has them: the mark is the lift's,
   // and a rep range set after its top set reaches only the sets after it (the fourteenth review: the
   // back-offs picked up again took the reps a top set standing in added).
-  const reps = ownRepsOf(after.top, false);
+  const reps = ownRepsOf(shape, false);
   return sets.map((set) => {
     if (set.kind !== 'working') return set;
     const own = handReps ? set.targetReps : reps;
@@ -1632,7 +1830,7 @@ function targetBuilt(
     prescription,
     suits: backOffsSuit(exercise, role, request.profile),
     profile: request.profile,
-    day: backOffs && !fatigueHigh(request),
+    day: backOffs && !straightToday(request),
     exerciseId: exercise.id,
     history: request.history,
     load: { step: loading.step, floor: barWeightFor(exercise, request.profile.units), loading },
@@ -1646,16 +1844,18 @@ function targetBuilt(
   };
 }
 
-/** A prescription carrying an effort shift, within the reserve its exercise allows. */
+/** A prescription carrying an effort shift, within the reserve its exercise and the day allow. */
 function shifted(
   prescription: Prescription,
   shift: number,
   exercise: CatalogExercise,
+  /** The day's own floor (a head cold, Maintenance 33). */
+  floor = 0,
 ): Prescription {
   if (shift === 0) return prescription;
   return {
     ...prescription,
-    rir: Math.min(4, Math.max(rirFloor(exercise), prescription.rir + shift)),
+    rir: Math.min(4, Math.max(rirFloor(exercise), floor, prescription.rir + shift)),
   };
 }
 
@@ -1684,7 +1884,7 @@ function targetToday(
     prescription,
     history: request.history,
     profile: request.profile,
-    fatigueLevel: interpretFatigue(log, request.timestamp, request.constraints.readiness).level,
+    fatigueLevel: interpretFatigue(log, request.timestamp).level,
     now: request.timestamp,
     maxes: request.maxes,
     session: { precedingSets: context.precedingSets },
@@ -2296,6 +2496,7 @@ function refitEntry(
     plain,
     heldShift(request, workout, exercise, entry.role, effortShift(request, entry, plainTarget.rir)),
     exercise,
+    dayFloor(request.constraints),
   );
   const working = entry.sets.filter((set) => set.kind === 'working').length || prescription.sets;
   const context = sessionContextFor(request, workout, entry.id, exercise);
@@ -2362,7 +2563,10 @@ function refitEntry(
 }
 
 /** What this exercise can be loaded to at the request's place today. */
-function loadingOf(request: RecalibrationRequest, exercise: CatalogExercise): Loading {
+function loadingOf(
+  request: Pick<RecalibrationRequest, 'location' | 'loading' | 'profile'>,
+  exercise: CatalogExercise,
+): Loading {
   return loadingFor(request.location?.loading, request.loading, exercise, request.profile.units);
 }
 
@@ -2438,6 +2642,7 @@ function targetedSets(
     prescriptionToday(request, exercise, role),
     options.shift ?? 0,
     exercise,
+    dayFloor(request.constraints),
   );
   const context = sessionContextFor(request, workout, entryId, exercise, options.through);
   const loading = loadingOf(request, exercise);
@@ -2455,11 +2660,7 @@ function targetedSets(
         prescription: asked,
         history,
         profile: request.profile,
-        fatigueLevel: interpretFatigue(
-          request.history,
-          request.timestamp,
-          request.constraints.readiness,
-        ).level,
+        fatigueLevel: interpretFatigue(request.history, request.timestamp).level,
         now: request.timestamp,
         maxes: request.maxes,
         session: { precedingSets: context.precedingSets },
@@ -2477,7 +2678,7 @@ function targetedSets(
     prescription,
     suits: backOffsSuit(exercise, role, request.profile),
     profile: request.profile,
-    day: options.backOffs === true && !fatigueHigh(request),
+    day: options.backOffs === true && !straightToday(request),
     exerciseId: exercise.id,
     history: request.history,
     load: { step: loading.step, floor, loading },
@@ -2668,16 +2869,26 @@ function easeTheRest(
   request: RecalibrationRequest,
   constraints: SessionConstraints,
 ): GeneratedWorkout {
-  const { fewer, reserve } = easeOf(constraints);
-  if (fewer === 0 && reserve === 0) return workout;
+  const day = easeOf(constraints);
+  // A muscle the lifter chose to go lighter on (Maintenance 33, the "too soon" card) takes the hard
+  // start's ease too, never on top of one: the larger of each part.
+  const lighter = new Set(constraints.lighter ?? []);
+  if (day.fewer === 0 && day.reserve === 0 && lighter.size === 0) return workout;
+  // With no hard start in force, a mark that keeps a lift's sets has nothing to keep them from, the
+  // lighter option in force or not (the first review of Maintenance 33: a lift begun and undone kept
+  // its mark, and neither "Lighter" for its own muscle nor a hard start eased it).
+  const hardStart = constraints.badStart === true;
   const begun = new Set(request.completed.sets.map((set) => set.entryId));
-  const eased = cloneWorkout(workout);
+  const eased = cloneWorkout(hardStart ? workout : withoutMarks(workout));
   for (const block of eased.blocks) {
     if (block.entries.some((entry) => begun.has(entry.id))) {
       // Under way before the ease, a lift keeps its sets for good: an undo of them never brings the
-      // ease on unsaid (the eighth pass of item 42).
-      for (const entry of block.entries) {
-        entry.eased ??= { exerciseId: entry.exerciseId, kept: true };
+      // ease on unsaid (the eighth pass of item 42). The lighter option's own lifts under way are
+      // eased when it is taken (`lightenUnderWay`), and keep its record.
+      if (hardStart) {
+        for (const entry of block.entries) {
+          entry.eased ??= { exerciseId: entry.exerciseId, kept: true };
+        }
       }
       continue;
     }
@@ -2686,8 +2897,20 @@ function easeTheRest(
       const working = entry.sets.filter((set) => set.kind === 'working');
       if (entry.eased || isStopped(entry) || working.length === 0) continue;
       const exercise = requireExercise(entry.exerciseId);
-      const take = easeTake(entry, eased.blocks, fewer, working.length);
-      if (easeEntry(entry, block, take, reserve, exercise, request)) changed = true;
+      const light = exercise.primaryMuscles.filter((muscle) => lighter.has(muscle));
+      const fewer = Math.max(day.fewer, light.length > 0 ? LIGHTER.sets : 0);
+      const reserve = Math.max(day.reserve, light.length > 0 ? LIGHTER.rir : 0);
+      if (fewer === 0 && reserve === 0) continue;
+      // The hard start's ease takes the loads down as it always has (item 42); the lighter option
+      // alone keeps them.
+      const hard = day.fewer > 0 || day.reserve > 0;
+      const take = easeTake(entry, eased.blocks, fewer, working.length, hard);
+      const why = hard
+        ? 'Eased for a hard start'
+        : `Lighter today for the ${musclesInWords(light)}`;
+      if (easeEntry(entry, block, take, reserve, exercise, request, take, why, !hard)) {
+        changed = true;
+      }
     }
     if (changed) {
       syncRounds(block);
@@ -2725,12 +2948,29 @@ function easeTake(
   blocks: readonly WorkoutBlock[],
   fewer: number,
   count: number,
+  /** The hard start's ease, or the lighter option's alone (Maintenance 33). */
+  hard = true,
 ): number {
+  // A count a stopped lift handed on: the hard start never takes from it (item 42's ninth pass);
+  // the lighter option takes from it unless an ease took from that lift first, which its record of
+  // the plan shows (the fifth review of Maintenance 33: taken after a swap, it took no set off what
+  // stood in, a set more for the chest than the other order).
+  const handed = stoppedBefore(blocks, entry);
   const kept =
     entry.manual?.sets === true ||
     entry.slot === undefined ||
-    stoppedBefore(blocks, entry).length > 0;
-  return kept ? 0 : Math.min(fewer, Math.max(0, count - setFloor(entry.role)));
+    (hard ? handed.length > 0 : handed.some((lift) => lift.stopped?.record?.sets !== undefined));
+  // The floor is the slot's: what stands in counts the sets the lift it took over did, and keeps one
+  // of its own, as the lift under way would have kept its sets to the floor.
+  const did = handed.reduce(
+    (sum, lift) => sum + lift.sets.filter((set) => set.kind === 'working').length,
+    0,
+  );
+  const room =
+    did > 0
+      ? Math.min(count + did - setFloor(entry.role), count - 1)
+      : count - setFloor(entry.role);
+  return kept ? 0 : Math.min(fewer, Math.max(0, room));
 }
 
 /**
@@ -2747,6 +2987,10 @@ function easeEntry(
   request: RecalibrationRequest,
   /** The sets the ease itself took, for its words, where `take` holds others too. */
   said = take,
+  /** Why, in the lift's reasons: a hard start, or the lighter option (Maintenance 33). */
+  why = 'Eased for a hard start',
+  /** The lighter option's ease: the loads kept (`easedSet`). */
+  keepLoad = false,
 ): boolean {
   const working = entry.sets.filter((set) => set.kind === 'working');
   const gone = new Set(working.slice(working.length - take));
@@ -2757,7 +3001,9 @@ function easeEntry(
     entry,
     kept,
     kept.map((set) =>
-      set.kind === 'working' ? easedSet(set, reserve, exercise, entry.manual, loading, bar) : set,
+      set.kind === 'working'
+        ? easedSet(set, reserve, exercise, entry.manual, loading, bar, keepLoad)
+        : set,
     ),
     reserve,
     loading,
@@ -2775,10 +3021,136 @@ function easeEntry(
   if (entry.progression && what) {
     entry.progression = {
       ...entry.progression,
-      evidence: [`Eased for a hard start: ${what}.`, ...entry.progression.evidence],
+      evidence: [`${why}: ${what}.`, ...entry.progression.evidence],
     };
   }
   return true;
+}
+
+/**
+ * The lighter option on a lift under way, or paired with one (Maintenance 33): a set fewer off its
+ * sets still to come, above the floor and never off a count the lifter set, and each set still to
+ * come a rep more in reserve at its load (`easedSet`). Its record is kept for good: the workout
+ * never gives it back, a saved copy does.
+ */
+function lightenUnderWay(
+  entry: WorkoutEntry,
+  block: WorkoutBlock,
+  request: RecalibrationRequest,
+  isDone: SetDonePredicate,
+  why: string,
+): boolean {
+  const exercise = requireExercise(entry.exerciseId);
+  const working = entry.sets.filter((set) => set.kind === 'working');
+  const toCome = working.filter((set) => !isDone(entry.id, set.index));
+  if (toCome.length === 0) return false;
+  const take =
+    entry.manual?.sets === true
+      ? 0
+      : Math.min(LIGHTER.sets, Math.max(0, working.length - setFloor(entry.role)), toCome.length);
+  const gone = new Set(toCome.slice(toCome.length - take));
+  const loading = loadingOf(request, exercise);
+  const bar = barWeightFor(exercise, request.profile.units);
+  const sets = entry.sets
+    .filter((set) => !gone.has(set))
+    .map((set) =>
+      set.kind === 'working' && !isDone(entry.id, set.index)
+        ? easedSet(set, LIGHTER.rir, exercise, entry.manual, loading, bar, true)
+        : set,
+    );
+  const moved = sets.some((set) => !entry.sets.includes(set));
+  if (take === 0 && !moved) return false;
+  entry.eased = { ...recordOf(entry, block), kept: true, lighter: true };
+  entry.sets = sets;
+  entry.dropSet = sets.some((set) => set.kind === 'drop');
+  const what = [take > 0 ? 'a set fewer' : '', moved ? 'a rep more in reserve' : '']
+    .filter(Boolean)
+    .join(' and ');
+  if (entry.progression) {
+    entry.progression = {
+      ...entry.progression,
+      evidence: [`${why}: ${what}.`, ...entry.progression.evidence],
+    };
+  }
+  return true;
+}
+
+/**
+ * A lift stopped at a place and picked up again where it fits, its muscle under "Lighter": what it
+ * owes comes back eased as it went, its loads kept, with the record of the plan the stop kept, as a
+ * swap back gives it (`swapBack`; the fourth review of Maintenance 33: the generator's pick-up built
+ * it at the plan's level, and the ease, which never lands on a lift begun, passed it by).
+ */
+function lighterPickedUp(
+  workout: GeneratedWorkout,
+  request: RecalibrationRequest,
+  constraints: SessionConstraints,
+): GeneratedWorkout {
+  const lighter = new Set(constraints.lighter ?? []);
+  if (lighter.size === 0) return workout;
+  const stopped = new Map(
+    allEntries(request.workout.blocks)
+      .filter((entry) => entry.stopped !== undefined)
+      .map((entry) => [entry.id, entry]),
+  );
+  const picked = (entry: WorkoutEntry) =>
+    stopped.has(entry.id) &&
+    !isStopped(entry) &&
+    entry.eased === undefined &&
+    requireExercise(entry.exerciseId).primaryMuscles.some((muscle) => lighter.has(muscle));
+  if (!allEntries(workout.blocks).some(picked)) return workout;
+  const { isDone } = classify(request);
+  const next = cloneWorkout(workout);
+  for (const block of next.blocks) {
+    for (const entry of block.entries) {
+      if (!picked(entry)) continue;
+      const exercise = requireExercise(entry.exerciseId);
+      const loading = loadingOf(request, exercise);
+      const bar = barWeightFor(exercise, request.profile.units);
+      const record = stopped.get(entry.id)?.stopped?.record;
+      entry.eased = { ...(record?.sets ? record : recordOf(entry, block)), kept: true };
+      // Its top set done under the ease, the back-offs the pick-up built off it take the plan's own
+      // top set's reps and reserve first, as a swap back works them out (`asBackOffs`' `planTop`),
+      // so the ease is laid once (the fifth review of Maintenance 33: "Lighter" taken before the top
+      // set, back at the gym they came back eased twice).
+      const planTop = record?.sets?.find((set) => set.tier === 'top');
+      const top = entry.sets.find((set) => set.tier === 'top');
+      const shape =
+        planTop && top && isDone(entry.id, top.index)
+          ? {
+              targetReps: ownRepsOf(planTop, false),
+              targetRir: backOffRir(planTop.targetRir, dayReserve(request, workout, entry)),
+            }
+          : null;
+      // Stopped before the ease reached it (no record), it takes the ease's set as a lift under way
+      // does (`lightenUnderWay`), as what stood in for it took it (the fifth review of Maintenance
+      // 33: "Lighter" taken at home, the bench press came back at the gym with the set the dumbbells
+      // had given up); one the ease reached before it stopped owes the ease's count already.
+      const working = entry.sets.filter((set) => set.kind === 'working');
+      const toCome = working.filter((set) => !isDone(entry.id, set.index));
+      const take =
+        record?.sets || entry.manual?.sets === true
+          ? 0
+          : Math.min(
+              LIGHTER.sets,
+              Math.max(0, working.length - setFloor(entry.role)),
+              toCome.length,
+            );
+      const gone = new Set(toCome.slice(toCome.length - take));
+      entry.sets = entry.sets
+        .filter((set) => !gone.has(set))
+        .map((set) => {
+          if (set.kind !== 'working' || isDone(entry.id, set.index)) return set;
+          const planned = shape && set.tier === 'back-off' ? { ...set, ...shape } : set;
+          return easedSet(planned, LIGHTER.rir, exercise, entry.manual, loading, bar, true);
+        });
+      if (take > 0) {
+        syncRounds(block);
+        relabel(block);
+      }
+    }
+  }
+  return next;
 }
 
 /**
@@ -2817,9 +3189,10 @@ function recordOf(entry: WorkoutEntry, block: WorkoutBlock): NonNullable<Workout
  * A working set `up` reps more in reserve, never heavier (Maintenance 26, the sixth pass of item
  * 42). Its reps stay on the load the place makes nearest the plan's own rule for that reserve
  * (`loadAtMoreReserve`), where that load is lighter; otherwise it keeps its load and does a rep
- * fewer, a rep more in reserve by the reserve's own meaning. A hold's seconds stay, as the plan
- * keeps them; a set pushed past what the weights here make keeps its load; a weight set by hand
- * keeps its load, and reps set by hand their reps. The reserve stops at four, as the plan's does.
+ * fewer, a rep more in reserve by the reserve's own meaning. The lighter option keeps every load so
+ * (`keepLoad`, Maintenance 33). A hold's seconds stay, as the plan keeps them; a set pushed past what
+ * the weights here make keeps its load; a weight set by hand keeps its load, and reps set by hand
+ * their reps. The reserve stops at four, as the plan's does.
  */
 function easedSet(
   set: SetPrescription,
@@ -2828,13 +3201,14 @@ function easedSet(
   manual: WorkoutEntry['manual'],
   loading: Loading,
   bar: number | null,
+  keepLoad = false,
 ): SetPrescription {
   const rir = Math.min(4, set.targetRir + up);
   const more = rir - set.targetRir;
   if (more <= 0 || exercise.measure === 'seconds') return set;
   const [low, high] = set.targetReps;
   const weight = set.targetWeight;
-  if (!manual?.weight && !set.asked && weight !== null && weight > 0) {
+  if (!keepLoad && !manual?.weight && !set.asked && weight !== null && weight > 0) {
     const exact = loadAtMoreReserve(weight, high, set.targetRir, more);
     let load = weight;
     for (;;) {
@@ -2902,10 +3276,49 @@ function easedBackOffs(
  * kept; a lift stopped on the day goes, its sets to what stood in for it, as a copy loads; and the
  * copy is timed, warmed up and summed up whole for its own length, not for the minutes a rebuild
  * under way left or an end time of the day (the ninth pass: "about 38 min, 8 over" a 30 min left).
- * A saved workout is a plan for another day, and the ease was today's.
+ * A saved workout is a plan for another day, and the ease was today's, as an illness's floor is:
+ * every set it holds has back what it had, logged or not, and no record of it is kept (the fourth
+ * review of Maintenance 33: a copy saved under a head cold gave its plan back at a change to another
+ * lift, the day the copy was loaded).
  */
+/**
+ * What stands in for lifts the lighter option eased under way, once they stopped, holds with their
+ * sets done no fewer working sets than their records of the plan (`lighter`): the ease took a set
+ * from the lift, and the stand-in came in with what was left, so a copy gives the slot the plan's
+ * sets back (the fifth review of Maintenance 33: "Lighter", then a swap or a place, saved the
+ * chest's main lift a set short). A hard start's copy keeps what its ease left (item 42's known
+ * limit); a slot whose own lift came back holds the plan already (`swapBack`'s record).
+ */
+function withLighterTaken(workout: GeneratedWorkout): GeneratedWorkout {
+  const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
+  for (const block of workout.blocks) {
+    const [entry] = block.entries;
+    if (block.kind !== 'straight' || block.entries.length !== 1 || !entry || isStopped(entry)) {
+      continue;
+    }
+    const handed = stoppedBefore(workout.blocks, entry);
+    const eased = handed.filter(
+      (lift) => lift.stopped?.record?.lighter && lift.stopped.record.sets,
+    );
+    const last = working(entry).at(-1);
+    if (eased.length === 0 || !last) continue;
+    const planned = eased.reduce(
+      (sum, lift) =>
+        sum + (lift.stopped?.record?.sets ?? []).filter((set) => set.kind === 'working').length,
+      0,
+    );
+    const have =
+      working(entry).length + handed.reduce((sum, lift) => sum + working(lift).length, 0);
+    let index = Math.max(...entry.sets.map((set) => set.index)) + 1;
+    for (let more = planned - have; more > 0; more -= 1) {
+      entry.sets.push({ ...cloneSet(last), index: index++ });
+    }
+  }
+  return workout;
+}
+
 export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
-  const restored = cloneWorkout(workout);
+  const restored = cloneWorkout(underTheFloor(workout, emptyCompleted()));
   for (const block of restored.blocks) {
     let changed = false;
     for (const entry of block.entries) {
@@ -2922,7 +3335,7 @@ export function planUnderTheEase(workout: GeneratedWorkout): GeneratedWorkout {
       relabel(block);
     }
   }
-  const plan = withoutStops(restored);
+  const plan = withoutStops(withLighterTaken(restored));
   const target = planLength(plan.duration.choice, plan.duration.defaultMinutes, plan.templateId);
   const general = generalWarmupMinutes(target);
   const time = estimateWorkout(
@@ -3393,7 +3806,20 @@ function applySubstitution(
   // part of them (the seventh pass of item 42: a later change put the old exercise's back).
   delete entry.eased;
   if (plan) {
-    easeEntry(entry, block, taken, ease.reserve, exercise, request, said);
+    // Eased under way by the lighter option alone (`lightenUnderWay`), what comes in is eased as it
+    // eases, its loads kept and in its words (the first review of Maintenance 33).
+    const lighter = new Set(
+      request.constraints.badStart ? [] : (request.constraints.lighter ?? []),
+    );
+    const light = requireExercise(previousId).primaryMuscles.filter((muscle) =>
+      lighter.has(muscle),
+    );
+    if (light.length > 0) {
+      const why = `Lighter today for the ${musclesInWords(light)}`;
+      easeEntry(entry, block, taken, LIGHTER.rir, exercise, request, said, why, true);
+    } else {
+      easeEntry(entry, block, taken, ease.reserve, exercise, request, said);
+    }
     entry.eased = { ...(entry.eased ?? recordOf(entry, block)), kept: true };
   } else if (marked) {
     entry.eased = { exerciseId: exercise.id, kept: true };
@@ -3495,6 +3921,14 @@ function swapBack(
   lock: boolean,
 ): void {
   const { isDone } = classify(request);
+  // The stand-in's own record, read before it stops (which drops it): the plan's sets it had still
+  // to come where "Lighter" took one off it (the third review of Maintenance 33).
+  const standIn =
+    entry.eased?.sets &&
+    (entry.eased.exerciseId === undefined || entry.eased.exerciseId === entry.exerciseId)
+      ? entry.eased.sets.filter((set) => set.kind === 'working' && !isDone(entry.id, set.index))
+          .length
+      : 0;
   // The lift owes what it shows still to come, eased or set by hand (the ninth pass of item 42).
   const owed = entry.sets.filter(
     (set) => set.kind === 'working' && !isDone(entry.id, set.index),
@@ -3566,8 +4000,75 @@ function swapBack(
     if (built.atBackOffs && !own) stopped.atBackOffs = true;
     else delete stopped.atBackOffs;
   }
-  // Its top set done, what it owes are its back-offs (item 11).
-  stopped.sets = [...stopped.sets, ...asBackOffs(request, workout, stopped, built.sets, isDone)];
+  // A lift the lighter option eases (`lightenUnderWay`: the lift under way): what it owes comes back
+  // eased as it went, its loads kept (the second review of Maintenance 33: swapped back, its sets
+  // came back at the plan's reserve with "Lighter" still in force for its muscle), a hard start in
+  // force too, whose ease never lands on a lift begun (the third: eased by neither).
+  const lighter = new Set(request.constraints.lighter ?? []);
+  const eased = exercise.primaryMuscles.some((muscle) => lighter.has(muscle));
+  // Its record is the plan's: the one the lighter option kept when it eased the lift under way,
+  // kept when it stopped (one whose sets this copy cannot read is none), or the lift with what it
+  // owes as the plan has it, which a saved copy gives back (the third review: recorded before what
+  // it owes was put back, the copy kept its top set alone, the line "Lighter today" with it).
+  const stoppedBlock = findEntry(workout, stopped.id).block;
+  const kept = stopped.stopped?.record?.sets ? stopped.stopped.record : null;
+  // Its top set done, what it owes are its back-offs (item 11), worked out from the plan's own top
+  // set where the ease changed the one it shows, so the ease is laid once (the fourth review of
+  // Maintenance 33: "Lighter" taken before the top set, they came back eased twice).
+  const owes = asBackOffs(
+    request,
+    workout,
+    stopped,
+    built.sets,
+    isDone,
+    false,
+    eased ? kept?.sets?.find((set) => set.tier === 'top') : undefined,
+  );
+  // With none kept, the plan's own sets for what it owes, as many as the stand-in's record had,
+  // at the plan's effort.
+  const planned = spec ? Math.min(Math.max(count, standIn), room) : Math.max(count, standIn);
+  const planOwes =
+    eased && !kept && planned > count
+      ? asBackOffs(
+          request,
+          workout,
+          stopped,
+          targetedSets(
+            request,
+            workout,
+            stopped.id,
+            exercise,
+            stopped.role,
+            planned,
+            stopped.restSeconds,
+            {
+              from: nextSetIndex(stopped),
+              through: true,
+              shift: heldShift(request, workout, exercise, stopped.role, shift),
+              // On the structure as what it owes was built, by one rule (the sixteenth review of
+              // round N's pick-up).
+              backOffs: built.backOffDrop !== undefined,
+            },
+          ).sets,
+          isDone,
+        )
+      : owes;
+  const recorded = eased
+    ? (kept ?? recordOf({ ...stopped, sets: [...stopped.sets, ...planOwes] }, stoppedBlock))
+    : null;
+  const loading = loadingOf(request, exercise);
+  const bar = barWeightFor(exercise, request.profile.units);
+  stopped.sets = [
+    ...stopped.sets,
+    ...(eased
+      ? owes.map((set) =>
+          set.kind === 'working'
+            ? easedSet(set, LIGHTER.rir, exercise, stopped.manual, loading, bar, true)
+            : set,
+        )
+      : owes),
+  ];
+  if (recorded) stopped.eased = { ...recorded, kept: true };
   withoutHandTargets(stopped);
   if (dropOwed && exercise.dropSetSafe && !entryPushedToEffort(stopped)) {
     stopped.sets.push(dropSetAt(nextSetIndex(stopped)));
@@ -3938,18 +4439,45 @@ function formatClock(iso: string): string {
 }
 
 /**
- * A check-in that eases the day (low energy, sleep or motivation, or soreness): a day a reserve
- * check never takes (Maintenance 27, item 43). The same rule that eases it.
+ * A day a reserve check never takes (Maintenance 27, item 43, docs/research/reserve-check.md: none
+ * "after a low or sore check-in"): a low or sore one as item 43 has always read it (energy, sleep or
+ * motivation at 2 or under, soreness at 4 or over), a check-in that lowers what the app expects of
+ * the day's first sets, or any illness (Maintenance 33, `readCheckIn`). The owner's decision 1 took
+ * those single answers off the plan's sets, never off this rule: the check asks for a set to failure
+ * (the first review of Maintenance 33: it came back on a "Wrecked" day).
  */
-export function lowCheckIn(readiness: Readiness | null): boolean {
-  return readiness !== null && readinessAdjustment(readiness) !== undefined;
+export function lowCheckIn(
+  readiness: Readiness | null,
+  history: readonly WorkoutRecord[],
+  nowIso: string,
+): boolean {
+  if (readiness === null) return false;
+  const lowOrSore =
+    readiness.energy <= 2 ||
+    readiness.sleep <= 2 ||
+    readiness.motivation <= 2 ||
+    readiness.soreness >= 4;
+  const read = readCheckIn(readiness, history, nowIso);
+  return lowOrSore || read.lowered || read.illness !== null;
 }
 
+/**
+ * What a check-in changes in the plan (Maintenance 33, the owner's decision 1 on the readiness
+ * model, docs/research/readiness-and-soreness.md): energy, sleep, motivation and soreness lower
+ * what the app expects, never the plan; a head cold keeps every set 2 or more short of failure. A
+ * fever or aches all over are a rest day, and a workout already under way keeps at least the head
+ * cold's floor (the first review of Maintenance 33: a fever told after a head cold gave the full
+ * effort back, its drop set too).
+ */
 function readinessAdjustment(readiness: Readiness): PrescriptionAdjustment | undefined {
-  const low = readiness.energy <= 2 || readiness.sleep <= 2 || readiness.motivation <= 2;
-  const sore = readiness.soreness >= 4;
-  if (!low && !sore) return undefined;
-  return { sets: -1, rir: low ? 1 : 0, restFactor: 1 };
+  return illnessOf(readiness) !== null
+    ? { sets: 0, rir: 0, restFactor: 1, rirFloor: RULES.headColdRir.value }
+    : undefined;
+}
+
+/** The illness a day's check-in names, in words: the head cold, or the fever or aches. */
+function illnessWords(readiness: Readiness | null): string {
+  return illnessOf(readiness) === 'body' ? 'the fever or aches' : 'the head cold';
 }
 
 /** Changes that make no sense on an exercise that has stopped: its sets went to a stand-in. */
@@ -4580,6 +5108,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
           prescriptionToday(request, exercise, role),
           dayAdjust(constraints)?.rir ?? 0,
           exercise,
+          dayFloor(constraints),
         ),
         sets: Math.max(1, Math.round(trigger.sets)),
       };
@@ -4713,6 +5242,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
               effortShift(from, entry, plainTarget.rir),
             ),
             exercise,
+            dayFloor(from.constraints),
           );
           // A load read from an estimate for a rep range, with reps set by hand: the load for those
           // reps, as the max sheet shows it, never the heavier one for the plan's (Maintenance 23).
@@ -4784,7 +5314,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
               prescription,
               suits,
               profile: from.profile,
-              day: backOffDay(from, workout, entry) && !fatigueHigh(from),
+              day: backOffDay(from, workout, entry) && !straightToday(from),
               exerciseId: exercise.id,
               history: from.history,
               load: {
@@ -5076,6 +5606,11 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
     case 'readiness': {
       const readiness = trigger.readiness;
       constraints.readiness = { ...readiness, jointDiscomfort: [...readiness.jointDiscomfort] };
+      // The check-in of the day it is told (the fourth review of Maintenance 33).
+      constraints.checkInAt = request.timestamp;
+      // Told with a hard start in force, it leaves the start's reading as it was.
+      if (constraints.badStart) constraints.checkInAfterStart = true;
+      else delete constraints.checkInAfterStart;
       constraints.painJoints = [
         ...new Set([...constraints.painJoints, ...readiness.jointDiscomfort]),
       ];
@@ -5086,6 +5621,18 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
         ? readinessAdjustment(request.constraints.readiness)
         : undefined;
       const restored = !adjust && earlier !== undefined;
+      // What the check-in reads (Maintenance 33, the owner's decision 1): its items against the
+      // lifter's own lower what the app expects of the day's first sets, never the plan; soreness at
+      // its worst is a line; a fever or aches all over are a rest day.
+      const read = readCheckIn(readiness, request.history, request.timestamp);
+      // "Feeling good" only where every answer sits at the scale's middle or better and none is
+      // under the lifter's own: a low or sore answer the plan keeps is still a check-in.
+      const good =
+        read.illness === null &&
+        read.worse.length === 0 &&
+        readiness.soreness <= 3 &&
+        CHECK_IN_ITEMS.every((item) => readiness[item] >= 3);
+      const checked = good ? 'Feeling good' : 'Checked in';
       // Short on time asks for 45 minutes, never longer than a catch-up's own shorter length (the
       // second review of round M).
       const defaultMinutes = request.profile.schedule.typicalDurationMinutes;
@@ -5103,12 +5650,25 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
       ) {
         // A hard start still eases the rest: never "full workout kept" while it does (the review
         // of item 42).
+        const headline =
+          read.illness === 'body'
+            ? REST_TODAY
+            : constraints.badStart
+              ? `${checked}: the rest stays eased for the hard start.`
+              : read.lowered
+                ? `Checked in: ${worseWords(read)}. The plan stays; today's first sets are judged a step easier.`
+                : `${checked}: full workout kept.`;
         return {
           ...base,
           constraints,
-          headline: constraints.badStart
-            ? 'Feeling good: the rest stays eased for the hard start.'
-            : 'Feeling good: full workout kept.',
+          headline,
+          // The headline says a lowered expectation itself unless it names the hard start or the
+          // rest day; the line says it then, beside the hard start only.
+          notes: checkInNotes(
+            read,
+            read.lowered && constraints.badStart === true && read.illness !== 'body',
+            true,
+          ),
         };
       }
       const settled = settleKept(request, constraints);
@@ -5123,8 +5683,13 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
         constraints,
       );
       // The words say what changed on the lifts still to come, as the lifter sees them: at their
-      // fewest sets a cut takes none, and only the reserve moves (Maintenance 24).
-      const change = dayChange({ ...request, workout: layer.shown }, workout);
+      // fewest sets a cut takes none, and only the reserve moves (Maintenance 24); with the day's
+      // floor laid again, as it is after every change (the fourth review of Maintenance 33: told
+      // again with a lift held at a head cold's floor, the words named "the planned effort back").
+      const change = dayChange(
+        { ...request, workout: layer.shown },
+        heldToTheDay(workout, request, constraints),
+      );
       // Sets are named only where the day's settings moved them that way: the rebuild also fits
       // the time (the minutes left once started, a new length), which is no part of the check-in.
       // The reserve moves with the settings alone.
@@ -5134,7 +5699,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
       const more = sets > 0 && change.more;
       const { easier, harder } = change;
       const parts: string[] = [];
-      const cut = [fewer ? 'fewer sets' : '', easier ? 'an extra rep in reserve' : ''];
+      // A head cold's floor says what it is, never "an extra rep" (Maintenance 33).
+      const floorNow = dayRirFloor(adjust) > dayRirFloor(earlier);
+      const cut = [
+        fewer ? 'fewer sets' : '',
+        easier
+          ? floorNow
+            ? `every set ${dayRirFloor(adjust)} or more short of failure for ${illnessWords(readiness)}`
+            : 'an extra rep in reserve'
+          : '',
+      ];
       if (fewer || easier) parts.push(cut.filter(Boolean).join(' with '));
       if (more || harder) {
         parts.push(
@@ -5146,6 +5720,10 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
         );
       }
       const back = restored && parts.length === 1 && (more || harder);
+      // A head cold's floor taken back under a hard start: the lifts come back up only as far as
+      // the hard start's ease lets them, and the words say it stays (Maintenance 33).
+      const stillEased = back && constraints.badStart === true;
+      const upWords = [more ? 'sets' : '', harder ? 'effort' : ''].filter(Boolean).join(' and ');
       // A sore joint is named only where a lift it rules out, with sets still to come, left the plan
       // or stopped for it.
       const { isDone } = classify(request);
@@ -5180,20 +5758,21 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
         workout,
         constraints,
         duration: choice,
-        ...(stays
-          ? {
-              headline: `${adjust ? 'Checked in' : 'Feeling good'}: the rest stays eased for the hard start.`,
-            }
-          : {}),
-        prefix: only
-          ? `${only.charAt(4).toUpperCase()}${only.slice(5)}`
-          : parts.length > 0
-            ? `Adjusted for today (${parts.join(', ')})`
-            : asShown
-              ? adjust
-                ? 'Checked in (the rest eased for it and the hard start)'
-                : 'Feeling good (the rest eased for the hard start)'
-              : 'Checked in',
+        ...(stays ? { headline: `${checked}: the rest stays eased for the hard start.` } : {}),
+        // A fever or aches all over are a rest day, whatever the plan now holds.
+        ...(read.illness === 'body' ? { headline: REST_TODAY } : {}),
+        notes: checkInNotes(read, read.lowered),
+        prefix: stillEased
+          ? `${checked} (${upWords} back up; the rest still eased for the hard start)`
+          : only
+            ? `${only.charAt(4).toUpperCase()}${only.slice(5)}`
+            : parts.length > 0
+              ? `Adjusted for today (${parts.join(', ')})`
+              : asShown
+                ? adjust
+                  ? 'Checked in (the rest eased for it and the hard start)'
+                  : 'Feeling good (the rest eased for the hard start)'
+                : 'Checked in',
         // Nothing left to bring back (the lift under way keeps its sets, and sets at their fewest
         // stay): no claim that anything came back. Otherwise the words name only what changed.
         unchanged:
@@ -5264,26 +5843,61 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
       };
     }
 
+    case 'lighter': {
+      // Maintenance 33, the owner's decision 2: lighter today on a muscle the "too soon" card names.
+      // A lift under way, or paired with one, takes it on its sets still to come, for good; every
+      // other lift of the muscle takes it from the layer, as every change lays it (`easeTheRest`).
+      const workout = cloneWorkout(request.workout);
+      const muscle = trigger.muscle;
+      constraints.lighter = [...new Set([...(constraints.lighter ?? []), muscle])];
+      const { isDone } = classify(request);
+      const begun = new Set(request.completed.sets.map((set) => set.entryId));
+      const words = musclesInWords([muscle]);
+      for (const block of workout.blocks) {
+        if (!block.entries.some((entry) => begun.has(entry.id))) continue;
+        let changed = false;
+        for (const entry of block.entries) {
+          // Never on top of a hard start's ease the lift keeps.
+          if (isStopped(entry) || keepsTheEase(entry)) continue;
+          if (!requireExercise(entry.exerciseId).primaryMuscles.includes(muscle)) continue;
+          if (lightenUnderWay(entry, block, request, isDone, `Lighter today for the ${words}`)) {
+            changed = true;
+          }
+        }
+        if (changed) {
+          syncRounds(block);
+          relabel(block);
+        }
+      }
+      return {
+        ...base,
+        workout,
+        constraints,
+        prefix: `Lighter today for the ${words}`,
+        unchanged: `Lighter today for the ${words}: nothing left to lighten.`,
+      };
+    }
+
     case 'bad-start': {
       // Maintenance 26, item 42 (docs/research/bad-start.md): the first two lifts that can be
       // judged fell well short, or no longer do after an undo or a correction.
       if (trigger.low) constraints.badStart = true;
-      else delete constraints.badStart;
+      else {
+        delete constraints.badStart;
+        // A check-in told under the hard start is read again once it is gone (the third review
+        // of Maintenance 33: the mark outlived the hard start it was for).
+        delete constraints.checkInAfterStart;
+      }
       const before = shownAdjust(request.constraints);
       const after = shownAdjust(constraints);
       const names = trigger.lifts.map((id) => requireExercise(id).name).join(' and ');
-      if (sameAdjust(before, after)) {
-        return {
-          ...base,
-          constraints,
-          headline: trigger.low
-            ? `A hard start (${names} fell well short): your check-in already eased the rest.`
-            : 'Your start no longer falls short: your check-in still eases the rest.',
-        };
-      }
+      // No check-in eases the day as a hard start does since Maintenance 33 (a head cold's floor
+      // takes no set and adds no rep to a lift above it), so the hard start always changes it.
       // The ease is laid over the plan, or taken off it, as a layer (the sixth pass).
       const workout = layer.finish(request.workout, constraints);
-      // As a check-in's words: only what changed on the lifts still to come (Maintenance 24).
+      // As a check-in's words: only what changed on the lifts still to come (Maintenance 24). The
+      // day's floor never moves them: a hard start taken names what it eased, and one taken back
+      // the eased lifts it gives back (the fourth review of Maintenance 33).
       const change = dayChange({ ...request, workout: layer.shown }, workout);
       const sets = (after?.sets ?? 0) - (before?.sets ?? 0);
       const fewer = sets < 0 && change.fewer;
@@ -5301,7 +5915,7 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
               : '';
       // "Back to plan" only when nothing else of the day's settings stays (a check-in, harder or
       // easier): otherwise the lifts come back to those (the review of item 42).
-      const settings = after !== undefined;
+      const settings = after !== undefined || (constraints.lighter?.length ?? 0) > 0;
       const up = [more ? 'sets' : '', change.harder ? 'effort' : ''].filter(Boolean).join(' and ');
       return {
         ...base,
@@ -5619,6 +6233,16 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
       const existing = entry.sets.find((set) => set.kind === 'drop');
       if (trigger.on) {
         if (!exercise.dropSetSafe) throw new Error(`${exercise.name} is not safe for a drop set.`);
+        // A drop set goes to failure; an illness keeps every set 2 or more short of it (Maintenance 33).
+        if (keepsShortOfFailure(request.constraints)) {
+          const ill =
+            illnessOf(request.constraints.readiness) === 'body'
+              ? 'A fever or aches'
+              : 'A head cold';
+          throw new Error(
+            `${ill} today: every set stops ${dayFloor(request.constraints)} or more short of failure, so no drop set.`,
+          );
+        }
         if (existing)
           return { ...base, workout, headline: `${exercise.name} already has a drop set.` };
         // The load comes from a working set actually lifted, never from the plan. Until the

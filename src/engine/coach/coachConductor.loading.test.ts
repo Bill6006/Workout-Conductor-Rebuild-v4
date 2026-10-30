@@ -63,7 +63,7 @@ function heldAtTheHeaviest(
   }));
   const entry = allEntries(blocks).find((candidate) => candidate.id === first.id);
   if (!entry) throw new Error('entry lost');
-  const fatigue = interpretFatigue([], NOW, null);
+  const fatigue = interpretFatigue([], NOW);
   return {
     entry,
     input: {
@@ -173,7 +173,7 @@ describe('the coach’s optional drop set', () => {
       programStyle: 'hypertrophy-focus',
       techniques: { ...profile.techniques, dropSets: true },
     };
-    const fatigue = interpretFatigue([], NOW, null);
+    const fatigue = interpretFatigue([], NOW);
     return {
       workout: {
         ...workout,

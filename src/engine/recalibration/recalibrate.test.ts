@@ -430,30 +430,66 @@ describe('recalibration: techniques and effort', () => {
     expect(result.summary.headline).toBe('Target 185 lb for Barbell Bench Press.');
   });
 
-  it('low readiness reduces volume and effort instead of cancelling', () => {
+  it('a low check-in keeps the plan, and a head cold eases it instead of cancelling (Maintenance 33)', () => {
     const before = build();
-    const tired = run(
+    const low = {
+      energy: 2,
+      soreness: 3,
+      sleep: 2,
+      motivation: 3,
+      jointDiscomfort: [],
+      timePressure: false,
+    };
+    // The owner's decision 1: low answers lower what the app expects of the first sets, never the
+    // plan, and the words say so.
+    const tired = run({ type: 'readiness', readiness: low }, { workout: before });
+    expect(tired.workout.blocks).toEqual(before.blocks);
+    expect(tired.summary.headline).toBe(
+      "Checked in: energy and sleep low. The plan stays; today's first sets are judged a step easier.",
+    );
+    expect(tired.summary.details).not.toContain(
+      "Energy and sleep low: today's first sets are judged a step easier; the plan stays.",
+    );
+    // Above the neck: trainable, every set 2 or more short of failure, no set taken.
+    const cold = run(
+      { type: 'readiness', readiness: { ...low, energy: 3, sleep: 3, illness: 'head' } },
+      { workout: before },
+    );
+    expect(cold.scope).toBe('partial');
+    expect(allEntries(cold.workout.blocks).length).toBeGreaterThanOrEqual(4);
+    for (const entry of allEntries(before.blocks)) {
+      const was = working(before, entry.id);
+      const now = working(cold.workout, entry.id);
+      expect(now.length).toBe(was.length);
+      now.forEach((set, at) => expect(set.targetRir).toBe(Math.max(2, was[at]!.targetRir)));
+    }
+    expect(cold.summary.headline).toMatch(
+      /^Adjusted for today \(every set 2 or more short of failure for the head cold\): /,
+    );
+    // A fever or aches all over: a rest day, said even where the check-in changes something else.
+    const body = run(
+      { type: 'readiness', readiness: { ...low, energy: 3, sleep: 3, illness: 'body' } },
+      { workout: before },
+    );
+    expect(body.summary.headline).toBe(
+      'Fever or aches all over: rest today, and train again once they have gone.',
+    );
+    // The day keeps at least a head cold's floor, so nothing later plans a set to failure on it (the
+    // first review of Maintenance 33: told under way, the fever gave the full effort back).
+    for (const entry of allEntries(body.workout.blocks)) {
+      for (const set of entry.sets.filter((each) => each.kind === 'working')) {
+        expect(set.targetRir).toBeGreaterThanOrEqual(2);
+      }
+    }
+    const bodyKnee = run(
       {
         type: 'readiness',
-        readiness: {
-          energy: 2,
-          soreness: 3,
-          sleep: 2,
-          motivation: 3,
-          jointDiscomfort: [],
-          timePressure: false,
-        },
+        readiness: { ...low, energy: 3, sleep: 3, illness: 'body', jointDiscomfort: ['knee'] },
       },
       { workout: before },
     );
-    expect(tired.scope).toBe('partial');
-    expect(allEntries(tired.workout.blocks).length).toBeGreaterThanOrEqual(4);
-    expect(working(tired.workout, 'e1').length).toBe(working(before, 'e1').length - 1);
-    expect(working(tired.workout, 'e1')[0]?.targetRir).toBe(
-      (working(before, 'e1')[0]?.targetRir ?? 0) + 1,
-    );
-    expect(tired.summary.headline).toMatch(
-      /^Adjusted for today \(fewer sets with an extra rep in reserve\): /,
+    expect(bodyKnee.summary.details).toContain(
+      'Fever or aches all over: rest today, and train again once they have gone.',
     );
 
     const fresh = run(

@@ -112,7 +112,7 @@ function coverageLabel(place: LocationProfile, history: WorkoutRecord[], swaps: 
     duration: 'default',
     constraints: { templateId: 'upper', swaps },
   });
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   const input: CoachInput = {
     workout: {
       ...upper,

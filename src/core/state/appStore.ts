@@ -90,15 +90,18 @@ import {
 } from '../../engine/progression/maxes';
 import { barWeightFor, loggedLoad } from '../../engine/progression/startingLoad';
 import {
+  floorLaidAgain,
   lowCheckIn,
   planAtPace,
   planUnderTheEase,
   recalibrate as runRecalibration,
 } from '../../engine/recalibration/recalibrate';
+import { illnessOf } from '../../engine/readiness/checkIn';
 import { personalPace } from '../../engine/duration/trainingTime';
 import { wouldPair } from '../../engine/progression/personalCurve';
 import {
   measuredReserve,
+  readLoggedReserve,
   readReserve,
   reserveCheckSet,
   reserveCheckStatus,
@@ -168,8 +171,13 @@ import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
 import { normalizeName } from '../backup/legacyImport';
 import {
   COACH_DECLINES_ID,
+  COACH_SHOWN_ID,
   UNFINISHED_SOURCE,
   acceptKey,
+  declineKey,
+  emptyShown,
+  isNudge,
+  recordShown,
   restLengthened,
   restOfferStands,
   restRunning,
@@ -180,6 +188,7 @@ import {
   setAsideKey,
   type CoachAction,
   type CoachDeclines,
+  type CoachShown,
   type CoachSignal,
 } from '../../engine/coach/coachConductor';
 import { coachingPolicy } from '../../engine/coach/experience';
@@ -314,6 +323,7 @@ import {
   readKeptSessions,
   readSessionOrKeep,
   writeSession,
+  checkInDayOf,
   type CalibrationState,
   type CompletionSummary,
   type HoldState,
@@ -355,6 +365,11 @@ export interface AppState {
    * the log, its exports and its copies use `history`.
    */
   readHistory: WorkoutHistoryRecord[];
+  /**
+   * The reserve-check estimate the log is read through (`readHistory`), or none: today's sets are
+   * read through it too (the second review of Maintenance 33).
+   */
+  readEstimate: ReserveEstimate | null;
   /** Today's workout session: the generated workout plus session-only state. */
   session: WorkoutSession | null;
   /** Today asked for the end-of-workout sheet; the workout screen opens it and clears this. */
@@ -407,6 +422,8 @@ export interface AppState {
   coachRoutes: CoachRoutes;
   /** Declined coach offers, kept in the meta store and backed up. */
   coachDeclines: CoachDeclines;
+  /** The new coaching cards the lifter has seen (Maintenance 33): the card limits read it. */
+  coachShown: CoachShown;
   /** A planned deload week, kept in the meta store and backed up; null when none. */
   deloadWeek: DeloadWeek | null;
   /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
@@ -496,6 +513,27 @@ function parseDeloadWeek(raw: unknown, now: string): DeloadWeek | null {
       : [],
   };
   return windowIsPast(week, now) ? null : week;
+}
+
+/** The new cards seen as stored (Maintenance 33): an entry without a time is dropped, never the rest. */
+function parseCoachShown(raw: unknown): CoachShown {
+  const shown = raw && typeof raw === 'object' ? (raw as { shown?: unknown }).shown : undefined;
+  if (!shown || typeof shown !== 'object' || Array.isArray(shown)) return emptyShown();
+  const kept: CoachShown['shown'] = {};
+  for (const [key, at] of Object.entries(shown as Record<string, unknown>)) {
+    if (typeof at === 'string' && Number.isFinite(Date.parse(at))) kept[key] = at;
+  }
+  return { id: COACH_SHOWN_ID, shown: kept };
+}
+
+/** Two records of new cards seen as one: every card either holds, the earlier time where both do. */
+function mergeShown(saved: CoachShown, shown: CoachShown): CoachShown {
+  const merged = { ...saved.shown };
+  for (const [key, at] of Object.entries(shown.shown)) {
+    const other = merged[key];
+    merged[key] = other !== undefined && Date.parse(other) <= Date.parse(at) ? other : at;
+  }
+  return { id: COACH_SHOWN_ID, shown: merged };
 }
 
 /**
@@ -812,6 +850,12 @@ function withBackOffAtKept(
   };
 }
 
+/** Whether two reserve-check estimates read the log alike (both none, or the same correction). */
+function sameEstimate(a: ReserveEstimate | null, b: ReserveEstimate | null): boolean {
+  if (a === null || b === null) return a === b;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** A timer frozen by a pause, running again from now with what it had left. */
 function rearmed<T extends { endsAt: string; pausedRemaining: number | null }>(
   timer: T | null,
@@ -891,8 +935,10 @@ export class AppStore {
    */
   private resetsVersion = 0;
   private declinesVersion = 0;
+  private shownVersion = 0;
   private resetsQueue: Promise<unknown> = Promise.resolve();
   private declinesQueue: Promise<unknown> = Promise.resolve();
+  private shownQueue: Promise<unknown> = Promise.resolve();
   /**
    * Bumped by every write of the lifter's own demonstrations: a read of the data begun before one
    * keeps the count it made (Maintenance 26, the re-check of item 50: a hydrate across a pick put
@@ -970,6 +1016,7 @@ export class AppStore {
       workoutCount: 0,
       history: [],
       readHistory: [],
+      readEstimate: null,
       savedWorkouts: [],
       session: null,
       finishRequested: false,
@@ -988,6 +1035,7 @@ export class AppStore {
       customMediaGone: {},
       coachRoutes: emptyRoutes(),
       coachDeclines: emptyDeclines(),
+      coachShown: emptyShown(),
       deloadWeek: null,
       strengthMaxes: emptyMaxes(),
       coachFocus: null,
@@ -1009,6 +1057,7 @@ export class AppStore {
     // The log the rules read follows the log and the profile (Maintenance 27, item 43).
     if ('history' in patch || 'profile' in patch || 'learnedResets' in patch) {
       next.readHistory = this.readHistoryOf(next);
+      next.readEstimate = this.reserveReadOf(next);
     }
     this.state = next;
     for (const listener of this.listeners) listener();
@@ -1066,7 +1115,7 @@ export class AppStore {
       now,
       day: {
         deload: session.constraints.deload !== null,
-        lowCheckIn: lowCheckIn(session.constraints.readiness),
+        lowCheckIn: lowCheckIn(session.constraints.readiness, this.state.history, now),
         hardStart: session.constraints.badStart === true,
         offPlan: offPlanSpec(session.constraints, session.workout) !== null,
       },
@@ -1106,6 +1155,7 @@ export class AppStore {
     const swapsSeen = this.swapsVersion;
     const resetsSeen = this.resetsVersion;
     const declinesSeen = this.declinesVersion;
+    const shownSeen = this.shownVersion;
     const mediaSeen = this.mediaVersion;
     const barcodesSeen = this.barcodesVersion;
     try {
@@ -1129,6 +1179,7 @@ export class AppStore {
         swapsRaw,
         resetsRaw,
         deviceRaw,
+        shownRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -1145,6 +1196,7 @@ export class AppStore {
         db.get<Identified>('meta', LASTING_SWAPS_ID),
         db.get<Identified>('meta', LEARNED_RESETS_ID),
         db.getAll<Identified>('device'),
+        db.get<Identified>('meta', COACH_SHOWN_ID),
       ]);
       const deviceId = ensureDeviceId(this.storage);
       // Finds the token in either of its copies and heals the other. A copy that
@@ -1163,9 +1215,16 @@ export class AppStore {
           customInstructions.length +
           savedRaw.length ===
           0 &&
-        [routesRaw, declinesRaw, deloadRaw, maxesRaw, focusRaw, swapsRaw, resetsRaw].every(
-          (record) => record === undefined,
-        );
+        [
+          routesRaw,
+          declinesRaw,
+          deloadRaw,
+          maxesRaw,
+          focusRaw,
+          swapsRaw,
+          resetsRaw,
+          shownRaw,
+        ].every((record) => record === undefined);
       await noteDatabaseBirth(db, this.now(), empty).catch(() => null);
       // A barcode the database lost comes back from the phone's second copy.
       const barcodes = await this.reconcileBarcodes(db, parsePlaceBarcodes(deviceRaw));
@@ -1219,6 +1278,8 @@ export class AppStore {
           this.declinesVersion === declinesSeen
             ? parseCoachDeclines(declinesRaw)
             : this.state.coachDeclines,
+        coachShown:
+          this.shownVersion === shownSeen ? parseCoachShown(shownRaw) : this.state.coachShown,
         learnedResets:
           this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
@@ -1309,9 +1370,13 @@ export class AppStore {
    * otherwise (first run, a new day, an edited profile, new history) generates
    * a fresh Default session silently. A started or completed workout is never
    * replaced underneath the user. `carry` is a preview just put aside to be built again, whose
-   * choices for the day carry over as the one on the screen's would.
+   * choices for the day carry over as the one on the screen's would. `checkIn` is the session whose
+   * check-in of today the new plan keeps (`withDayCheckIn`): by default the one it replaces.
    */
-  private ensureSession(carry: WorkoutSession | null = null): void {
+  private ensureSession(
+    carry: WorkoutSession | null = null,
+    checkIn: WorkoutSession | null | undefined = undefined,
+  ): void {
     const key = this.baseKey();
     const { profile } = this.state;
     if (!key || !profile) {
@@ -1381,7 +1446,7 @@ export class AppStore {
       resets: this.state.learnedResets,
     });
     const session = createSession(key, workout, now);
-    this.setSession({
+    const made: WorkoutSession = {
       ...session,
       constraints: {
         ...session.constraints,
@@ -1394,7 +1459,115 @@ export class AppStore {
         ...(marked.length > 0 ? { emptied: marked.map((plan) => ({ ...plan })) } : {}),
         ...(away.length > 0 ? { swappedAway: [...away] } : {}),
       },
-    });
+    };
+    // The day's check-in holds on it, as on every plan of the day.
+    this.setSession(this.withDayCheckIn(made, checkIn === undefined ? before : checkIn));
+  }
+
+  /**
+   * A plan made today with the day's check-in on it, as told on it, at the time it was told: a
+   * check-in is the day's (`checkInDayOf`), its illness a gate (Maintenance 33, the owner's decision
+   * 1; the fourth review: a saved workout loaded, a workout discarded, the completion closed, gave a
+   * plan with none, Start back on a fever's rest day and a head cold's floor gone). `from` is the
+   * session the check-in was told on; one told another day is none of today's. "Lighter" taken today
+   * holds on it too, the plan made with its muscles under the ease, as a preview made again keeps it
+   * (the fifth review of Maintenance 33: a workout landing from another device, a discard or a copy
+   * loaded made the plan again without it).
+   */
+  private withDayCheckIn(session: WorkoutSession, from: WorkoutSession | null): WorkoutSession {
+    const lighter =
+      from &&
+      (session.constraints.lighter?.length ?? 0) === 0 &&
+      localDayKey(from.createdAt) === localDayKey(this.now())
+        ? (from.constraints.lighter ?? [])
+        : [];
+    const base: WorkoutSession =
+      lighter.length > 0
+        ? { ...session, constraints: { ...session.constraints, lighter: [...lighter] } }
+        : session;
+    const carried = this.withCheckInKept(base, from);
+    if (carried !== base || lighter.length === 0) return carried;
+    const { profile } = this.state;
+    if (!profile) return base;
+    let result: RecalibrationResult;
+    try {
+      result = this.engine(
+        this.calibrationRequest(
+          { type: 'duration', choice: base.duration },
+          base,
+          profile,
+          '"Lighter" kept',
+        ),
+      );
+    } catch {
+      return base;
+    }
+    if (!result.ok) return base;
+    return {
+      ...base,
+      workout: result.workout,
+      duration: result.duration,
+      constraints: {
+        ...result.constraints,
+        ...(base.constraints.checkInAt ? { checkInAt: base.constraints.checkInAt } : {}),
+      },
+      defaultEstimatedMinutes:
+        result.duration === 'default'
+          ? result.workout.duration.estimatedMinutes
+          : base.defaultEstimatedMinutes,
+    };
+  }
+
+  /** The day's check-in carried onto a plan (`withDayCheckIn`); the same session where none is. */
+  private withCheckInKept(session: WorkoutSession, from: WorkoutSession | null): WorkoutSession {
+    const readiness = from?.constraints.readiness;
+    const { profile } = this.state;
+    if (!from || !readiness || !profile || session.constraints.readiness) return session;
+    const told = checkInDayOf(from);
+    if (localDayKey(told) !== localDayKey(this.now())) return session;
+    const kept = {
+      ...session.constraints,
+      readiness: { ...readiness, jointDiscomfort: [...readiness.jointDiscomfort] },
+      checkInAt: told,
+    };
+    let result: RecalibrationResult;
+    try {
+      result = this.engine(
+        this.calibrationRequest(
+          { type: 'readiness', readiness },
+          session,
+          profile,
+          "Today's check-in kept",
+        ),
+      );
+    } catch {
+      return { ...session, constraints: kept };
+    }
+    // Where the plan cannot take it, the check-in is still the day's: its gate and its words hold.
+    if (!result.ok) return { ...session, constraints: kept };
+    const summary = session.lastSummary;
+    return {
+      ...session,
+      workout: result.workout,
+      duration: result.duration,
+      constraints: { ...result.constraints, checkInAt: told },
+      defaultEstimatedMinutes:
+        result.duration === 'default'
+          ? result.workout.duration.estimatedMinutes
+          : session.defaultEstimatedMinutes,
+      // What it changed is said with what the plan says of itself (the fifth review of Maintenance
+      // 33: a copy loaded on a day checked in was changed under "Loaded" and "as saved" alone).
+      ...(summary && result.changes.length > 0
+        ? {
+            lastSummary: {
+              ...summary,
+              details: [...summary.details, `Today's check-in kept: ${result.summary.headline}`],
+              counts: result.summary.counts,
+            },
+            lastChanges: result.changes,
+          }
+        : {}),
+    };
   }
 
   /** The deload week planned that covers `now`, as a plan's constraints hold it, or none. */
@@ -1514,8 +1687,17 @@ export class AppStore {
   /** Re-checks the session against today's inputs; a new day starts a fresh session. */
   refreshSession(): void {
     if (this.state.status !== 'ready') return;
+    // The log the rules read and the estimate it is read through go together: a new day can lapse
+    // the estimate (item 43's restart), and the coach reads both (the third review of Maintenance
+    // 33: the log was read again alone, its estimate kept).
+    const readEstimate = this.reserveReadOf(this.state);
     const readHistory = this.readHistoryOf(this.state);
-    if (readHistory !== this.state.readHistory) this.setState({ readHistory });
+    if (
+      readHistory !== this.state.readHistory ||
+      !sameEstimate(readEstimate, this.state.readEstimate)
+    ) {
+      this.setState({ readHistory, readEstimate });
+    }
     this.ensureSession();
   }
 
@@ -2344,19 +2526,23 @@ export class AppStore {
   private readStartOf(session: WorkoutSession): StartReading | null {
     const profile = this.state.profile;
     if (!profile) return null;
-    const estimate = this.reserveReadOf(this.state);
+    // The estimate kept beside the read log, the one every rule reads (the third review of
+    // Maintenance 33).
+    const estimate = this.state.readEstimate;
     // A check set's measured reserve, whatever the estimate; the error only where one is in force.
     const sets = session.completed.sets.map((done) => {
-      const rir =
-        measuredReserve(done) ??
-        (estimate
-          ? readReserve(getExercise(done.exerciseId), done.reps, done.rir, estimate)
-          : done.rir);
+      const rir = readLoggedReserve(done, estimate);
       return rir === done.rir ? done : { ...done, rir };
     });
+    // The log as the rules read it, as the coach and the Plan screen read it (the first review of
+    // Maintenance 33).
     return readStart(session.workout.blocks, sets, {
       profile,
-      history: this.state.history,
+      history: this.state.readHistory,
+      readiness: session.constraints.readiness,
+      checkInAfterStart: session.constraints.checkInAfterStart === true,
+      madeAt: checkInDayOf(session),
+      resets: this.state.learnedResets,
     });
   }
 
@@ -2487,6 +2673,23 @@ export class AppStore {
     this.markSkipped(session, entryId, entry.exerciseId, pending);
   }
 
+  /**
+   * The workout with the day's floor laid again over the sets still to come (`floorLaidAgain`): a
+   * log taken back here, outside the engine, brings its set back to do at the floor, and no drop set
+   * on a day with none (the fifth review of Maintenance 33).
+   */
+  private underDayFloor(session: WorkoutSession, workout: GeneratedWorkout): GeneratedWorkout {
+    const profile = this.state.profile;
+    if (!profile) return workout;
+    return floorLaidAgain(workout, {
+      profile,
+      location: this.currentLocation(),
+      loading: session.loading,
+      completed: session.completed,
+      constraints: session.constraints,
+    });
+  }
+
   /** Removes the most recently logged set and cancels its rest. */
   undoLastSet(): void {
     const session = this.requireSession();
@@ -2499,7 +2702,10 @@ export class AppStore {
     const left = { ...session, completed: { ...session.completed, sets } };
     this.setSession({
       ...session,
-      workout: this.backOffsAsPlanned(left, session.completed.sets.at(-1), isDone),
+      workout: this.underDayFloor(
+        left,
+        this.backOffsAsPlanned(left, session.completed.sets.at(-1), isDone),
+      ),
       completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
       rest: null,
       hold: null,
@@ -2522,7 +2728,10 @@ export class AppStore {
     const left = { ...session, completed: { ...session.completed, sets } };
     this.setSession({
       ...session,
-      workout: this.backOffsAsPlanned(left, { entryId, setIndex }, isDone),
+      workout: this.underDayFloor(
+        left,
+        this.backOffsAsPlanned(left, { entryId, setIndex }, isDone),
+      ),
       completed: { ...session.completed, sets, currentEntryId: next?.entryId ?? null },
       // A countdown stays only while its set is still the one in front of the lifter.
       hold: hold && next?.entryId === hold.entryId && next.setIndex === hold.setIndex ? hold : null,
@@ -2985,7 +3194,7 @@ export class AppStore {
       duration: session.duration,
       // The plan under a hard start's ease, with no marks: the ease of today is no part of a plan
       // for another day (Maintenance 26, the sixth and seventh passes of item 42).
-      workout: planUnderTheEase(session.workout),
+      workout: planUnderTheEase(this.planWithoutIllness(session)),
       // The catch-up or second workout it was laid out for, so a copy loaded is that plan again (the
       // twenty-third review of round M).
       ...(own ? { catchUp: own } : {}),
@@ -2996,6 +3205,30 @@ export class AppStore {
     const receipt = await putVerified(db, 'savedWorkouts', saved, { now: this.now });
     this.setState({ savedWorkouts: [saved, ...this.state.savedWorkouts], lastReceipt: receipt });
     return saved;
+  }
+
+  /**
+   * The plan as a copy keeps it: before the start, on a day an illness holds, the plan was made under
+   * its floor, with no layer to give back (`heldToTheDay` lays one under way), so the copy is the plan
+   * the day's check-in makes without the illness (the fifth review of Maintenance 33: a copy saved on
+   * a head-cold preview kept the head cold for good). Where that cannot be made, the plan as it is.
+   */
+  private planWithoutIllness(session: WorkoutSession): GeneratedWorkout {
+    const readiness = session.constraints.readiness;
+    const { profile } = this.state;
+    if (session.status !== 'preview' || !profile || illnessOf(readiness) === null || !readiness) {
+      return session.workout;
+    }
+    const well = { ...readiness, jointDiscomfort: [...readiness.jointDiscomfort] };
+    delete well.illness;
+    try {
+      const result = this.engine(
+        this.calibrationRequest({ type: 'readiness', readiness: well }, session, profile, 'Saved'),
+      );
+      return result.ok ? result.workout : session.workout;
+    } catch {
+      return session.workout;
+    }
   }
 
   async deleteSavedWorkout(id: string): Promise<void> {
@@ -3085,7 +3318,7 @@ export class AppStore {
       (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),
     );
     const marks = day.emptied.filter((plan) => !ofOffer(plan));
-    this.setSession({
+    const loaded: WorkoutSession = {
       ...made,
       constraints: {
         ...made.constraints,
@@ -3128,7 +3361,9 @@ export class AppStore {
           durationMs: 0,
         },
       ],
-    });
+    };
+    // The day's check-in holds on it, as on every plan of the day (`withDayCheckIn`).
+    this.setSession(this.withDayCheckIn(loaded, session));
   }
 
   /** Leaves the completion surface; the next session is generated from the new history. */
@@ -3141,7 +3376,8 @@ export class AppStore {
     // next plan, as a workout discarded holds them (the twenty-first review of round M: the plans
     // emptied and the full session taken were lost).
     const trained = session.completed.sets.some((set) => set.kind !== 'warmup' && !set.skipped);
-    this.ensureSession(trained ? null : session);
+    // The day's check-in holds for it whether or not the workout was one (`withDayCheckIn`).
+    this.ensureSession(trained ? null : session, session);
   }
 
   /** Ends the workout without saving anything; a fresh preview is generated as usual. */
@@ -4277,7 +4513,8 @@ export class AppStore {
     }
     clearSession(this.storage);
     this.setState({ session: null });
-    this.ensureSession(session);
+    // The day's choices, the check-in among them, are applied to it below.
+    this.ensureSession(session, null);
     const fresh = this.state.session;
     const { profile, readHistory: history } = this.state;
     if (!fresh || !profile || this.fromEarlierDay(session)) return;
@@ -4312,6 +4549,8 @@ export class AppStore {
     // the same day is, without them, but for one the lifter puts back (above; the twentieth to
     // twenty-second reviews of round M).
     const chosen =
+      // "Lighter" taken today stays taken (the second review of Maintenance 33).
+      (today.lighter?.length ?? 0) > 0 ||
       session.duration !== fresh.duration ||
       today.readiness !== null ||
       today.intensity !== 0 ||
@@ -4862,6 +5101,27 @@ export class AppStore {
     this.resetsQueue = run.catch(() => undefined);
     await run;
     await this.regeneratePreview();
+  }
+
+  /**
+   * A new coaching card on screen (Maintenance 33, the owner's decision 5): remembered when first
+   * seen, so the card limits (one a day, three a week) count it. One change at a time, from the
+   * record as saved and as shown.
+   */
+  async noteCoachShown(signal: Pick<CoachSignal, 'source' | 'exerciseId'>): Promise<void> {
+    if (!isNudge(signal) || this.state.coachShown.shown[declineKey(signal)] !== undefined) return;
+    const run = this.shownQueue.then(async () => {
+      const db = await this.getDatabase();
+      const saved = parseCoachShown(await db.get<Identified>('meta', COACH_SHOWN_ID));
+      const current = mergeShown(saved, this.state.coachShown);
+      const next = recordShown(current, signal, this.now());
+      if (next === current && current === this.state.coachShown) return;
+      await putVerified(db, 'meta', next, { now: this.now });
+      this.shownVersion += 1;
+      this.setState({ coachShown: next });
+    });
+    this.shownQueue = run.catch(() => undefined);
+    await run;
   }
 
   /** Forgets every offer the lifter declined (item 47): each may come again. */

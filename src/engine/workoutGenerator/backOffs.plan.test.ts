@@ -53,6 +53,25 @@ const trained = (): WorkoutRecord[] =>
       2,
     ),
   );
+/**
+ * Fatigue high from the sessions' own signs (Maintenance 33: no day count scores): rows the last
+ * three days, each logged with nothing in reserve where two were asked, each rated too hard, the
+ * last with pain.
+ */
+const worn = (): WorkoutRecord[] =>
+  [3, 2, 1].map((daysAgo) =>
+    record(
+      daysAgo + 0.5,
+      'barbell-row',
+      [
+        [8, 135, 0],
+        [8, 135, 0],
+      ],
+      [8, 12],
+      2,
+      { rating: { effort: 'too-hard', pain: daysAgo === 1, energyAfter: 2, note: '' } },
+    ),
+  );
 /** A session on the structure: a top set, then back-offs, `daysAgo`, at a drop. */
 function structured(daysAgo: number, top: SetSpec, backOffs: SetSpec[], drop = 0.05) {
   const done = record(daysAgo, BENCH, [top, ...backOffs], [4, 6], 2);
@@ -130,8 +149,11 @@ describe('a main lift planned as a top set and back-offs', () => {
       sitOut: [],
     };
     expect(straight(bench(plan(trained(), profileOf(), { catchUp })))).toBe(true);
-    // Fatigue high: rows five days running, and a low check-in today.
-    const tired = [
+    // Fatigue high, from the sessions' own signs.
+    expect(straight(bench(plan([...trained(), ...worn()], profileOf())))).toBe(true);
+    // Days in a row alone are no sign since Maintenance 33: rows five days running, lifted as
+    // asked, leave the top set and back-offs.
+    const running = [
       ...trained(),
       ...[5, 4, 3, 2, 1].map((daysAgo) =>
         record(daysAgo + 0.5, 'barbell-row', [
@@ -140,17 +162,7 @@ describe('a main lift planned as a top set and back-offs', () => {
         ]),
       ),
     ];
-    const readiness = {
-      energy: 1,
-      soreness: 4,
-      sleep: 1,
-      motivation: 2,
-      jointDiscomfort: [],
-      timePressure: false,
-    };
-    expect(straight(bench(plan(tired, profileOf(), { readiness })))).toBe(true);
-    // Without the check-in, fatigue is only elevated: the top set and back-offs.
-    expect(straight(bench(plan(tired, profileOf())))).toBe(false);
+    expect(straight(bench(plan(running, profileOf())))).toBe(false);
     // The lift to push keeps the push's sets.
     const pushLift = { exerciseId: BENCH, target: 225, units: 'lb' as const, since: RECORD_NOW };
     const pushed = plan(trained(), profileOf('hybrid', { pushLift }));
@@ -449,14 +461,8 @@ describe('through a change to the plan', () => {
   });
 
   it('high fatigue keeps a change of weights and a swap on straight sets', () => {
-    const tired = [
+    const fresh = [
       ...trained(),
-      ...[5, 4, 3, 2, 1].map((daysAgo) =>
-        record(daysAgo + 0.5, 'barbell-row', [
-          [8, 135, 2],
-          [8, 135, 2],
-        ]),
-      ),
       ...[7, 3].map((daysAgo) =>
         record(daysAgo + 1, 'dumbbell-bench-press', [
           [5, 70, 2],
@@ -465,20 +471,11 @@ describe('through a change to the plan', () => {
         ]),
       ),
     ];
-    const readiness = {
-      energy: 1,
-      soreness: 4,
-      sleep: 1,
-      motivation: 2,
-      jointDiscomfort: [],
-      timePressure: false,
-    };
-    const workout = plan(tired);
+    // Planned before fatigue was high; changed once it is (from the sessions' own signs since
+    // Maintenance 33).
+    const workout = plan(fresh);
     expect(bench(workout).backOffDrop).toBe(0.05);
-    const options = {
-      history: tired,
-      constraints: { ...emptyConstraints(), readiness },
-    };
+    const options = { history: [...fresh, ...worn()], constraints: emptyConstraints() };
     const refit = run({ type: 'loading' }, workout, {
       ...options,
       loading: { missingPlates: [35] },

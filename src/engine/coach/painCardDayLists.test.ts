@@ -146,7 +146,7 @@ function lowerDay() {
     },
     /** The four-week swaps the coach's cards offer, as "from -> to". */
     lastingSwaps(): string[] {
-      const fatigue = interpretFatigue(history, NOW, null);
+      const fatigue = interpretFatigue(history, NOW);
       const input: CoachInput = {
         workout,
         status: 'preview',

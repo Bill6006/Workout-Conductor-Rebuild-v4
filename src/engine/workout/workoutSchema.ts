@@ -72,6 +72,39 @@ const EntryProgressionSchema = z.looseObject({
   otherRange: z.boolean().optional().catch(undefined),
 });
 
+// The lift as the plan had it under an ease (a hard start's, Maintenance 26, the sixth pass of
+// item 42; the lighter option's, Maintenance 33): dropped when unreadable.
+const EasedRecordSchema = z.looseObject({
+  // The exercise it was for: a mark left on another one is no record of it (the seventh pass).
+  exerciseId: z.string().optional().catch(undefined),
+  sets: z.array(SetPrescriptionSchema).optional().catch(undefined),
+  progression: EntryProgressionSchema.optional().catch(undefined),
+  // The lift's own settings with those sets (the ninth pass): dropped when unreadable, the
+  // sets then given back alone.
+  settings: z
+    .looseObject({
+      restSeconds: z.number().min(0),
+      warmupSets: z.number().int().min(0),
+      dropSet: z.boolean(),
+      manual: z
+        .looseObject({
+          weight: z.boolean().optional(),
+          backOffs: z.number().min(0).optional().catch(undefined),
+          reps: z.boolean().optional(),
+          sets: z.boolean().optional(),
+          rest: z.boolean().optional(),
+        })
+        .optional(),
+      blockRest: z.number().min(0).optional(),
+    })
+    .optional()
+    .catch(undefined),
+  // Under way: kept for good (the eighth pass).
+  kept: z.boolean().optional().catch(undefined),
+  // The lighter option's (Maintenance 33, the fifth review): a record before has none.
+  lighter: z.literal(true).optional().catch(undefined),
+});
+
 export const WorkoutEntrySchema = z.looseObject({
   id: z.string().min(1),
   exerciseId: z.string().min(1),
@@ -116,42 +149,18 @@ export const WorkoutEntrySchema = z.looseObject({
     .looseObject({
       owed: z.number().int().min(0),
       why: z.enum(['place', 'swap', 'skip']).optional().catch(undefined),
+      // The plan an ease kept on the lift when it stopped (the third review of Maintenance 33):
+      // optional, and dropped alone when unreadable.
+      record: EasedRecordSchema.optional().catch(undefined),
     })
     .optional()
     .catch(undefined),
   // The lift as the plan had it under a hard start's ease (Maintenance 26, the sixth pass of
   // item 42): dropped when unreadable, the lift then kept as it shows.
-  eased: z
-    .looseObject({
-      // The exercise it was for: a mark left on another one is no record of it (the seventh pass).
-      exerciseId: z.string().optional().catch(undefined),
-      sets: z.array(SetPrescriptionSchema).optional().catch(undefined),
-      progression: EntryProgressionSchema.optional().catch(undefined),
-      // The lift's own settings with those sets (the ninth pass): dropped when unreadable, the
-      // sets then given back alone.
-      settings: z
-        .looseObject({
-          restSeconds: z.number().min(0),
-          warmupSets: z.number().int().min(0),
-          dropSet: z.boolean(),
-          manual: z
-            .looseObject({
-              weight: z.boolean().optional(),
-              backOffs: z.number().min(0).optional().catch(undefined),
-              reps: z.boolean().optional(),
-              sets: z.boolean().optional(),
-              rest: z.boolean().optional(),
-            })
-            .optional(),
-          blockRest: z.number().min(0).optional(),
-        })
-        .optional()
-        .catch(undefined),
-      // Under way: kept for good (the eighth pass).
-      kept: z.boolean().optional().catch(undefined),
-    })
-    .optional()
-    .catch(undefined),
+  eased: EasedRecordSchema.optional().catch(undefined),
+  // The sets the day's floor holds as they were (the third review of Maintenance 33): optional, and
+  // dropped alone when unreadable, the lift then kept as it shows.
+  floored: z.array(SetPrescriptionSchema).optional().catch(undefined),
 });
 
 export const WorkoutBlockSchema = z.looseObject({

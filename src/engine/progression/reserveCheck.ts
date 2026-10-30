@@ -321,11 +321,12 @@ export function reserveCheckSet(input: {
   }, null);
   if (latest !== null && daysBetween(latest, input.now) >= RESERVE_CHECK.RETURN_DAYS) return null;
   // A straight set or a superset's: a circuit runs on with short rests, where a set to failure
-  // would hold up the round.
+  // would hold up the round. Never on a lift the plan eases today, "Lighter" for its muscle as a
+  // hard start does for the day (the second review of Maintenance 33).
   const candidates = input.blocks
     .filter((block) => block.kind !== 'circuit')
     .flatMap((block) => block.entries)
-    .filter(takesReserveCheck);
+    .filter((entry) => takesReserveCheck(entry) && !entry.eased?.sets);
   if (candidates.length === 0) return null;
   // Sessions in the last twelve weeks that logged the lift.
   const regular = (exerciseId: string) =>
@@ -381,6 +382,26 @@ export function measuredReserve(set: {
   if (check.failedEarly) return 0;
   if (check.total < set.reps || check.total > RESERVE_CHECK.MAX_TOTAL) return null;
   return Math.min(10, check.total - set.reps);
+}
+
+/**
+ * A logged set's reserve as the rules read it: a check set's as it measured it, else with the
+ * lifter's typical error read in where the estimate covers the set (`readReserve`). Today's sets are
+ * read so wherever the log is (the second review of Maintenance 33: "too soon" read today's first
+ * set as logged against rested sessions read through the estimate).
+ */
+export function readLoggedReserve(
+  set: {
+    exerciseId: string;
+    reps: number;
+    rir: number | null;
+    reserveCheck?: { total: number; failedEarly?: boolean; stopped?: boolean };
+  },
+  estimate: Pick<ReserveEstimate, 'correction' | 'band'> | null,
+): number | null {
+  return (
+    measuredReserve(set) ?? readReserve(getExercise(set.exerciseId), set.reps, set.rir, estimate)
+  );
 }
 
 /**

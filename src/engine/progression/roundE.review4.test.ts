@@ -465,7 +465,7 @@ describe('a weight the coach sets on a lift the light dumbbells pushed', () => {
 
   it('gets no offer of a weight the light dumbbells do not make (Maintenance 24)', () => {
     const workout = plan(lightHome, history);
-    const fatigue = interpretFatigue(history, NOW, null);
+    const fatigue = interpretFatigue(history, NOW);
     const input: CoachInput = {
       workout,
       status: 'preview',

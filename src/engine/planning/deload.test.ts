@@ -6,22 +6,49 @@ import { formatWindow, inDeloadWindow, nextWindow, recommendDeload, windowIsPast
 
 const profile = createDefaultProfile(RECORD_NOW);
 
-/** Eight sessions in a fortnight with maxes slipping and sets at failure. */
+/**
+ * Eight sessions in a fortnight with maxes slipping, sets at failure, and the two newest rated too
+ * hard (Maintenance 33: the sessions in a week and the days in a row no longer score).
+ */
 function heavyFortnight() {
   const sessions = [];
   for (let i = 0; i < 8; i += 1) {
     const daysAgo = 1 + i * 1.5;
     const weight = i < 2 ? 175 : 185;
     sessions.push(
-      record(daysAgo, 'barbell-bench-press', [
-        [5, weight, 0],
-        [4, weight, 0],
-        [4, weight, 0],
-      ]),
+      record(
+        daysAgo,
+        'barbell-bench-press',
+        [
+          [5, weight, 0],
+          [4, weight, 0],
+          [4, weight, 0],
+        ],
+        [4, 6],
+        2,
+        i < 2 ? { rating: { effort: 'too-hard', pain: false, energyAfter: 2, note: '' } } : {},
+      ),
     );
   }
   return sessions;
 }
+
+describe('the deload advice says a fall as the fatigue reads it (Maintenance 33)', () => {
+  it('against what the sets asked, where they were read so', () => {
+    const fatigue = {
+      ...interpretFatigue([], RECORD_NOW),
+      performanceDrift: -8,
+      performanceAgainstAsked: true,
+    };
+    expect(recommendDeload([], fatigue, profile, RECORD_NOW).reasons).toContain(
+      'Lifts fell 8% against what their sets asked over the last two sessions.',
+    );
+    const untargeted = { ...fatigue, performanceAgainstAsked: false };
+    expect(recommendDeload([], untargeted, profile, RECORD_NOW).reasons).toContain(
+      'Estimated maxes fell 8% over the last two sessions.',
+    );
+  });
+});
 
 describe('deload week', () => {
   it('is recommended after a dense fortnight with signs of not keeping up', () => {

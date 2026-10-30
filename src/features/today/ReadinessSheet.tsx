@@ -6,6 +6,7 @@ import { ChoiceGroup } from '../../components/Form/ChoiceGroup';
 import { Toggle } from '../../components/Form/Toggle';
 import formStyles from '../../components/Form/Form.module.css';
 import { Sheet } from '../../components/Sheet/Sheet';
+import type { Illness } from '../../engine/readiness/checkIn';
 import type { Readiness } from '../../engine/recalibration/types';
 
 interface ReadinessSheetProps {
@@ -25,15 +26,25 @@ const WORDS: Record<'energy' | 'soreness' | 'sleep' | 'motivation', readonly str
 };
 const scaleOptions = (words: readonly string[]): { value: Scale; label: string }[] =>
   words.map((label, index) => ({ value: String(index + 1) as Scale, label }));
+type Unwell = 'no' | Illness;
+/** Unwell today (Maintenance 33): above the neck is trainable, a fever or aches all over are not. */
+const UNWELL_OPTIONS: { value: Unwell; label: string }[] = [
+  { value: 'no', label: 'No' },
+  { value: 'head', label: 'Head cold' },
+  { value: 'body', label: 'Fever or aches' },
+];
 const JOINT_OPTIONS = JOINTS.map((joint) => ({
   value: joint,
   label: joint.replace('-', ' ').replace(/^\w/, (letter) => letter.toUpperCase()),
 }));
 
 /**
- * The fast readiness check-in: energy, soreness, sleep, motivation, joint
- * discomfort, and time pressure. Applying it runs the readiness recalibration,
- * which adjusts sets, effort, picks, or the length instead of cancelling.
+ * The fast readiness check-in: energy, soreness, sleep, motivation, whether the lifter is unwell,
+ * joint discomfort, and time pressure. Applying it runs the readiness recalibration (Maintenance 33,
+ * the owner's decision 1): energy, sleep and motivation against the lifter's own lower what the app
+ * expects of the first sets, never the plan; a head cold keeps every set 2 or more short of
+ * failure; a fever or aches all over make it a rest day; a sore joint and time pressure change the
+ * picks and the length, as before.
  */
 export function ReadinessSheet({ open, initial, onClose, onSubmit }: ReadinessSheetProps) {
   const [energy, setEnergy] = useState<Scale>(String(initial?.energy ?? 3) as Scale);
@@ -42,6 +53,7 @@ export function ReadinessSheet({ open, initial, onClose, onSubmit }: ReadinessSh
   const [motivation, setMotivation] = useState<Scale>(String(initial?.motivation ?? 3) as Scale);
   const [joints, setJoints] = useState<Joint[]>(initial?.jointDiscomfort ?? []);
   const [timePressure, setTimePressure] = useState(initial?.timePressure ?? false);
+  const [unwell, setUnwell] = useState<Unwell>(initial?.illness ?? 'no');
 
   const scale = (
     label: string,
@@ -78,6 +90,7 @@ export function ReadinessSheet({ open, initial, onClose, onSubmit }: ReadinessSh
               motivation: Number(motivation),
               jointDiscomfort: joints,
               timePressure,
+              ...(unwell === 'no' ? {} : { illness: unwell }),
             })
           }
         >
@@ -89,6 +102,16 @@ export function ReadinessSheet({ open, initial, onClose, onSubmit }: ReadinessSh
       {scale('Soreness', WORDS.soreness, soreness, setSoreness)}
       {scale('Sleep', WORDS.sleep, sleep, setSleep)}
       {scale('Motivation', WORDS.motivation, motivation, setMotivation)}
+      <div>
+        <p className={formStyles.label}>Unwell</p>
+        <ChoiceGroup
+          label="Unwell"
+          value={unwell}
+          options={UNWELL_OPTIONS}
+          onChange={setUnwell}
+          compact
+        />
+      </div>
       <p className={formStyles.label}>Joint discomfort</p>
       <ChipSelect
         label="Joint discomfort"

@@ -44,6 +44,7 @@ The raw notes and saved abstracts stayed on the working machine and are not in t
 
 **Signals, strongest first:**
 1. First working set's e1RM versus that exercise's median over its last 3-5 rested exposures. Act on a single session only at >=8% below (PJ, from SD 4.4%, 15705040).
+   - Each set is read against what it asked (PJ, added 2026-10-24 by the first review of Maintenance 33; the app also reads the fatigue drift and the learning below so). At the same load, range and reserve, sets compare as lifted. Where the plan asked otherwise (a load step, a deload, a lift later in the session), reps anywhere in the range at the asked load and reserve read as asked: a set stopped where the plan asked shows only that the ask was met, and reserve far from failure is read poorly (Halperin 2022, 34542869; Zourdos 2021, 30747900). Uncertainty: a fall that stays within the range at a changed ask is not seen.
 2. RIR at a known load 2+ worse (PJ).
 3. Perceived recovery 3+ below the person's normal, on 0-10 (PJ; within-person only).
 4. Soreness: a local tie-break only.

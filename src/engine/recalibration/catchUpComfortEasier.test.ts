@@ -117,7 +117,9 @@ describe('"Make it easier" eases what came in for comfort, the fourteenth review
     expect(eased(byId(comfort.workout, id), byId(easier.workout, id)), details).toBe(true);
   });
 
-  it('the curl in for the EZ-bar curl, then a low check-in', () => {
+  it('the curl in for the EZ-bar curl, then a head cold', () => {
+    // Since Maintenance 33 a head cold is the check-in's own change to the plan: every set 2 or
+    // more short of failure.
     const { comfort, id } = comfortable();
     const low = succeeded(
       recalibrate(
@@ -125,12 +127,13 @@ describe('"Make it easier" eases what came in for comfort, the fourteenth review
           {
             type: 'readiness',
             readiness: {
-              energy: 2,
+              energy: 3,
               soreness: 2,
               sleep: 3,
               motivation: 3,
               jointDiscomfort: [],
               timePressure: false,
+              illness: 'head',
             },
           },
           comfort.workout,

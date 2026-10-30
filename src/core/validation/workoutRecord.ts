@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
+import { ILLNESSES } from '../../engine/readiness/checkIn';
 import { MAX_BACK_OFF_DROP, SET_TIERS } from '../../engine/workout/types';
 
 /**
@@ -158,9 +159,17 @@ export const WorkoutRecordSchema = z.looseObject({
       motivation: z.number(),
       jointDiscomfort: z.array(z.string()),
       timePressure: z.boolean(),
+      // Maintenance 33: a record saved before has none; one this copy cannot read is none.
+      illness: z.enum(ILLNESSES).optional().catch(undefined),
     })
     .nullable()
     .default(null),
+  /**
+   * When its check-in was told (Maintenance 33, the fifth review): a check-in holds for every plan
+   * of its day and is saved with each workout of it, read as the one check-in told wherever check-ins
+   * are counted (`oncePerCheckIn`). A record saved before has none: its check-in is its own.
+   */
+  checkInAt: z.iso.datetime().optional().catch(undefined),
   /** Personal records set by this session, detected when it was saved. */
   prs: z.array(PersonalRecordSchema).default([]),
 });

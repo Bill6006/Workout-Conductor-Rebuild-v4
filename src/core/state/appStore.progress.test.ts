@@ -87,13 +87,32 @@ describe('AppStore saved workouts, records, and the session summary', () => {
     expect(target.store.getSnapshot().savedWorkouts.map((item) => item.name)).toEqual(['Keeper']);
   });
 
+  it('names only the muscles the session worked hard in its recovery line', async () => {
+    // Maintenance 33: the bench press session first, then the next one the plan builds; the second's
+    // line names its own muscles, never the chest still recovering from the first.
+    const handle = await seeded();
+    await trainMainLift(handle, 185);
+    handle.store.dismissCompletion();
+    expect(allEntries(session(handle).workout.blocks)[0]?.exerciseId).toBe(
+      'incline-dumbbell-press',
+    );
+    const second = await trainMainLift(handle, 100, 8);
+    expect(second.recoveryNote).toBe(
+      'Recovery before loading them hard again: Upper chest and Front delts about 36 h.',
+    );
+  });
+
   it('detects personal records on the second session and fills the session summary', async () => {
     const handle = await seeded();
     const first = await trainMainLift(handle, 185);
     expect(first.prs).toEqual([]);
     expect(first.nextTargets[0]).toMatch(/^Barbell Bench Press: 190 lb × 4-6 \(load up\)$/);
     expect(first.nextFocus).toMatch(/^Next focus: /);
-    expect(first.recoveryNote).toMatch(/about 48 h before loading them again\./);
+    // Each muscle's own window from the session's hard work (Maintenance 33), not a flat 48 h.
+    // The bench press at 2 in reserve: the chest and the triceps, upper body, about 36 h.
+    expect(first.recoveryNote).toMatch(
+      /^Recovery before loading them hard again: Chest and Triceps about 36 h\./,
+    );
     // Save the completed session before leaving it, then repeat it: the next generated
     // session may rotate to another template.
     const saved = await handle.store.saveCurrentWorkout('Repeat');

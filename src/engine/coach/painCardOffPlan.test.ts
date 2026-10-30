@@ -126,7 +126,7 @@ function day(spec: CatchUpSpec, extra: WorkoutRecord[], base: WorkoutRecord[] = 
     constraints: { catchUp: spec },
   });
   const constraints: SessionConstraints = { ...emptyConstraints(), catchUp: spec };
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   const input: CoachInput = {
     workout,
     status: 'preview',

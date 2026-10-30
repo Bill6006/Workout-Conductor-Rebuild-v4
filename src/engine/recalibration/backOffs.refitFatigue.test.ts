@@ -65,6 +65,10 @@ function history(): WorkoutRecord[] {
   );
   upper.entries[0]!.role = 'secondary-strength';
   upper.entries[0]!.atBackOffs = true;
+  // Maintenance 33: days in a row no longer score, so two sessions rated too hard and long rests
+  // carry the day's fatigue: elevated off the whole log, high off it with the row's day taken out.
+  upper.rating = { effort: 'too-hard', pain: false, energyAfter: 2, note: '' };
+  const start = Date.parse(upper.startedAt);
   const incline: SetSpec[] = [
     [8, 50, 0],
     [8, 50, 0],
@@ -83,6 +87,7 @@ function history(): WorkoutRecord[] {
       setIndex: index,
       targetReps: [6, 10] as [number, number],
       targetRir: 2,
+      loggedAt: new Date(start + index * 6 * 60_000).toISOString(),
     })),
   });
   const others = (['leg-curl', 'lateral-raise', 'ez-bar-curl'] as const).map((exerciseId, at) =>
@@ -95,6 +100,7 @@ function history(): WorkoutRecord[] {
       ],
       [10, 15],
       2,
+      at === 0 ? { rating: { effort: 'too-hard', pain: false, energyAfter: 2, note: '' } } : {},
     ),
   );
   return [

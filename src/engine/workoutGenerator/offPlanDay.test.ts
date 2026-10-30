@@ -198,7 +198,7 @@ describe('what is left of a muscle trained today', () => {
     const [remainder] = allEntries(workout.blocks);
     expect(working(remainder!).every((set) => set.targetRir >= 3)).toBe(true);
     const harder = (catchUp: CatchUpSpec, full: boolean) => {
-      const fatigue = interpretFatigue(days, now, null);
+      const fatigue = interpretFatigue(days, now);
       const input: CoachInput = {
         workout,
         status: 'preview',
@@ -252,7 +252,7 @@ describe('the coach on a catch-up', () => {
     const workout = build(spec, days, now);
     expect(workout.templateId).toBe('catch-up');
     const offers = (full: boolean) => {
-      const fatigue = interpretFatigue(days, now, null);
+      const fatigue = interpretFatigue(days, now);
       const input: CoachInput = {
         workout,
         status: 'preview',

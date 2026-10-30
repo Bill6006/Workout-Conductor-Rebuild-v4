@@ -1,4 +1,5 @@
 import type { Joint } from '../../catalog/exercises/exerciseSchema';
+import { muscleName } from '../../catalog/muscles/muscles';
 import type { RecalibrationScope, RecalibrationTrigger, TriggerType } from './types';
 
 /**
@@ -174,6 +175,11 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
     scope: 'partial',
     evaluating: ['Reading how your first lifts went', 'Adjusting sets and effort', REMAINING],
   },
+  lighter: {
+    label: 'Lighter today',
+    scope: 'partial',
+    evaluating: ['Reading its recovery', 'Easing its lifts', REMAINING],
+  },
   'end-by': {
     label: 'End by exact time',
     scope: 'partial',
@@ -261,6 +267,8 @@ export function triggerTitle(trigger: RecalibrationTrigger, context: TriggerCont
       return trigger.low
         ? 'Easing the rest after a hard start'
         : 'Your start no longer falls short';
+    case 'lighter':
+      return `Going lighter on the ${muscleName(trigger.muscle).toLowerCase()}`;
     case 'end-by':
       return trigger.time ? 'Fitting to an exact end time' : 'Returning to the chosen length';
     case 'session-kind':

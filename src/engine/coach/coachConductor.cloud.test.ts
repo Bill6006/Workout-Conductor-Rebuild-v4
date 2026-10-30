@@ -19,7 +19,7 @@ function input(overrides: Partial<CoachInput> = {}): CoachInput {
     now: NOW,
     duration: 'default',
   });
-  const fatigue = interpretFatigue([], NOW, null);
+  const fatigue = interpretFatigue([], NOW);
   return {
     workout,
     status: 'preview',

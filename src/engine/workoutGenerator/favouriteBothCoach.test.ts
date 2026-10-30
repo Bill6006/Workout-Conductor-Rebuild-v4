@@ -64,7 +64,7 @@ function upperDay(profile: UserProfile): CoachInput {
     duration: 'default',
     constraints: { templateId: 'upper' },
   });
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   return {
     workout: {
       ...workout,

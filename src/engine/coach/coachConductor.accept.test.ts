@@ -46,7 +46,7 @@ function input(overrides: Partial<CoachInput> = {}): CoachInput {
     profile,
     history: [],
     now: NOW,
-    fatigue: interpretFatigue([], NOW, null),
+    fatigue: interpretFatigue([], NOW),
     strategy: [tricepsGap],
     lastExportAt: NOW,
     workoutCount: 6,

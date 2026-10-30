@@ -1,9 +1,14 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { AppState } from '../../core/state/appStore';
-import { elapsedSeconds } from '../../core/state/session';
-import { useAppSelector } from '../../core/state/useAppStore';
+import { checkInDayOf, elapsedSeconds } from '../../core/state/session';
+import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { useMomentReached, useNow } from '../../core/time/clock';
-import { conductCoach, type CoachCard } from '../../engine/coach/coachConductor';
+import {
+  conductCoach,
+  declineKey,
+  isNudge,
+  type CoachCard,
+} from '../../engine/coach/coachConductor';
 import { coachingPolicy, type CoachingPolicy } from '../../engine/coach/experience';
 import { swapIsPast } from '../../engine/planning/lastingSwaps';
 import { planWeek } from '../../engine/planning/weeklyPlan';
@@ -32,8 +37,12 @@ export type CoachParts = Pick<
   | 'lastingSwaps'
 > & {
   lastExportAt: AppState['localSettings']['lastExportAt'];
+  /** The new cards the lifter has seen (Maintenance 33): the card limits read it. */
+  coachShown?: AppState['coachShown'];
   /** What the lifter reset of what the app learned (Maintenance 27, item 47). */
   learnedResets?: AppState['learnedResets'];
+  /** The reserve-check estimate the history is read through (the second review of Maintenance 33). */
+  readEstimate?: AppState['readEstimate'];
 };
 
 /**
@@ -44,13 +53,14 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
   const { session, profile, history, locations, cloud } = parts;
   if (!session || !profile) return null;
   const now = nowEpoch ? new Date(nowEpoch).toISOString() : session.createdAt;
-  const fatigue = interpretFatigue(history, now, session.constraints.readiness);
+  const fatigue = interpretFatigue(history, now);
   const strategy = analyzeStrategy({ history, profile, now, fatigue });
   const policy = coachingPolicy(profile.experience);
   const location = locations.find((candidate) => candidate.id === profile.currentLocationId);
   const card = conductCoach({
     workout: session.workout,
     status: session.status,
+    madeAt: checkInDayOf(session),
     duration: session.duration,
     completed: session.completed,
     constraints: session.constraints,
@@ -80,12 +90,14 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
     policy,
     routes: parts.coachRoutes,
     declines: parts.coachDeclines,
+    ...(parts.coachShown ? { shown: parts.coachShown } : {}),
     location,
     loading: session.loading,
     upcoming: planWeek(profile, location, history, now, parts.learnedResets ?? null),
     focus: parts.coachFocus?.muscle ?? null,
     swaps: parts.lastingSwaps.filter((swap) => !swapIsPast(swap, now)),
     resets: parts.learnedResets ?? null,
+    reserveEstimate: parts.readEstimate ?? null,
   });
   return { card, fatigue, strategy, policy };
 }
@@ -109,6 +121,9 @@ export function useCoach(): CoachContext | null {
   const cloud = useAppSelector((state) => state.cloud);
   const lastingSwaps = useAppSelector((state) => state.lastingSwaps);
   const learnedResets = useAppSelector((state) => state.learnedResets);
+  const coachShown = useAppSelector((state) => state.coachShown);
+  const readEstimate = useAppSelector((state) => state.readEstimate);
+  const store = useAppStore();
   const minute = useNow();
   // The minute clock, brought to a running rest's end when it comes, so an offer about the rest
   // goes as the rest ends (Maintenance 25).
@@ -117,7 +132,7 @@ export function useCoach(): CoachContext | null {
   const restOver = useMomentReached(restEnd);
   const nowEpoch = restOver && restEnd !== null ? Math.max(minute, restEnd) : minute;
 
-  return useMemo(
+  const context = useMemo(
     () =>
       coachContextOf(
         {
@@ -133,6 +148,8 @@ export function useCoach(): CoachContext | null {
           cloud,
           lastingSwaps,
           learnedResets,
+          coachShown,
+          readEstimate,
         },
         nowEpoch,
       ),
@@ -149,7 +166,17 @@ export function useCoach(): CoachContext | null {
       cloud,
       lastingSwaps,
       learnedResets,
+      coachShown,
+      readEstimate,
       nowEpoch,
     ],
   );
+  // A new coaching card on screen is remembered, for the card limits (Maintenance 33).
+  const signal = context?.card?.signal;
+  const unseen =
+    signal !== undefined && isNudge(signal) && coachShown.shown[declineKey(signal)] === undefined;
+  useEffect(() => {
+    if (unseen && signal) void store.noteCoachShown(signal).catch(() => undefined);
+  }, [unseen, signal, store]);
+  return context;
 }

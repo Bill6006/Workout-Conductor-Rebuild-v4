@@ -29,7 +29,10 @@ function structured(
   return done;
 }
 
-/** Two sessions on the structure, and rows five days running: with a low check-in, fatigue high. */
+/**
+ * Two sessions on the structure, and rows five days running (no sign of fatigue in themselves since
+ * Maintenance 33).
+ */
 const history = (): WorkoutRecord[] => [
   structured(
     7,
@@ -58,7 +61,7 @@ const history = (): WorkoutRecord[] => [
 ];
 
 describe('a main lift on straight sets after sessions on top set plus back-offs, the second review of round N', () => {
-  it('a low check-in eases the lift: no set heavier than the back-offs it had', () => {
+  it('a head cold runs the lift straight: no set heavier than the back-offs it had', () => {
     const before = plan(history());
     expect(shape(bench(before))).toEqual([
       [195, 1, 'top'],
@@ -66,19 +69,23 @@ describe('a main lift on straight sets after sessions on top set plus back-offs,
       [185, 2, 'back-off'],
       [185, 2, 'back-off'],
     ]);
+    // Since Maintenance 33 a head cold is the check-in's change to the plan: every set 2 or more
+    // short of failure, over the top set's reserve.
     const readiness = {
-      energy: 1,
-      soreness: 4,
-      sleep: 1,
-      motivation: 2,
+      energy: 3,
+      soreness: 2,
+      sleep: 3,
+      motivation: 3,
       jointDiscomfort: [],
       timePressure: false,
+      illness: 'head' as const,
     };
     const after = run({ type: 'readiness', readiness }, before, { history: history() });
     const sets = shape(bench(after.workout));
-    // Straight sets, as fatigue high asks...
+    // Straight sets, as a floor over the top set's reserve asks...
     expect(sets.every((set) => set[2] === 'straight')).toBe(true);
-    // ...and eased: none heavier than the back-offs were before the check-in.
+    expect(sets.every((set) => (set[1] as number) >= 2)).toBe(true);
+    // ...and none heavier than the back-offs were before the check-in.
     expect(Math.max(...sets.map((set) => set[0] as number))).toBeLessThanOrEqual(185);
   });
 
@@ -143,15 +150,16 @@ describe('a main lift on straight sets after sessions on top set plus back-offs,
   });
 
   describe('a change to the plan on such a day keeps the back-offs’ load', () => {
-    /** The plan after a low check-in: fatigue high, the bench press straight. */
+    /** The plan after a head cold: its floor over the top set's reserve, the bench press straight. */
     function spent() {
       const readiness = {
-        energy: 1,
-        soreness: 4,
-        sleep: 1,
-        motivation: 2,
+        energy: 3,
+        soreness: 2,
+        sleep: 3,
+        motivation: 3,
         jointDiscomfort: [],
         timePressure: false,
+        illness: 'head' as const,
       };
       return run({ type: 'readiness', readiness }, plan(history()), { history: history() });
     }
@@ -206,7 +214,7 @@ describe('a main lift on straight sets after sessions on top set plus back-offs,
         history: history(),
         constraints: day.constraints,
       });
-      // As the day had it: the back-offs' load at the low check-in's reserve.
+      // As the day had it: the back-offs' load at the head cold's reserve.
       expect(shape(bench(entered.workout))).toEqual(shape(bench(day.workout)));
       expect(shape(bench(day.workout)).every((set) => set[2] === 'straight')).toBe(true);
       expect(Math.max(...shape(bench(day.workout)).map((set) => set[0] as number))).toBeLessThan(

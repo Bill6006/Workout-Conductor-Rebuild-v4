@@ -83,12 +83,8 @@ MUTATIONS = [
     ("1e a window planned in another zone names its own days", DELOAD,
      "  return `${format(dayOfBoundary(window.startsAt))} to ${format(lastDay)}`;",
      "  return `${format(window.startsAt)} to ${format(lastDay)}`;", [T_LOCAL, T_DELOAD], None),
-    ("1f a run of training days counts the device's days", FATIGUE,
-     "const dayKey = localDayKey;", "const dayKey = (iso: string) => iso.slice(0, 10);",
-     [T_LOCAL], None),
-    ("1g a run of training days counts a workout on the day it began", FATIGUE,
-     "qualifying.map((record) => dayKey(record.startedAt))",
-     "qualifying.map((record) => dayKey(record.completedAt ?? record.startedAt))", [T_LOCAL], None),
+    # 1f and 1g (a run of training days on the device's days) left with the fatigue score's day
+    # counts in Maintenance 33; the whole-body layer's run of hard days is in the M33 table.
     ("1h Progress weeks start on the device's Monday", ANALYTICS,
      "  const day = (new Date(iso).getDay() + 6) % 7;\n  return startOfLocalDay(addLocalDays(iso, -day));",
      "  const date = new Date(iso);\n  const day = (date.getUTCDay() + 6) % 7;\n  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - day)).toISOString();",

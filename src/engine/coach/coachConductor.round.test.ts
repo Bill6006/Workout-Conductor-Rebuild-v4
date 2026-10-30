@@ -29,7 +29,7 @@ function input(history: WorkoutRecord[], overrides: Partial<CoachInput> = {}): C
     now: NOW,
     duration: 'default',
   });
-  const fatigue = interpretFatigue(history, NOW, null);
+  const fatigue = interpretFatigue(history, NOW);
   return {
     workout,
     status: 'preview',

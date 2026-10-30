@@ -62,7 +62,7 @@ describe('the coachâ€™s load step on a day the main lift runs at its back-offsâ€
       profile: profileOf(),
       history,
       now: RECORD_NOW,
-      fatigue: interpretFatigue(history, RECORD_NOW, null),
+      fatigue: interpretFatigue(history, RECORD_NOW),
       strategy: [],
       lastExportAt: RECORD_NOW,
       workoutCount: 1,
