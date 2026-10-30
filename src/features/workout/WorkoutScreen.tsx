@@ -4,6 +4,7 @@ import { Card } from '../../components/Card/Card';
 import { ScreenHeader } from '../../components/Screen/Screen';
 import { useAppStore } from '../../core/state/useAppStore';
 import { durationLabel } from '../../engine/duration/duration';
+import { REST_TODAY, illnessOf } from '../../engine/readiness/checkIn';
 import { useTodayWorkout } from '../today/useTodayWorkout';
 import { ActiveWorkoutScreen } from './ActiveWorkoutScreen';
 import { WorkoutCompletion } from './WorkoutCompletion';
@@ -31,6 +32,9 @@ export function WorkoutScreen() {
   if (session.status === 'active' || session.status === 'paused') return <ActiveWorkoutScreen />;
   if (session.status === 'completed')
     return <WorkoutCompletion session={session} units={today.profile.units} />;
+  // A fever or aches all over (Maintenance 33): a rest day here too, as on Today, with nothing to
+  // start; the plan is kept, so a check-in changed back gives it again.
+  const resting = illnessOf(session.constraints.readiness) === 'body';
 
   return (
     <>
@@ -58,9 +62,19 @@ export function WorkoutScreen() {
             </li>
           ))}
         </ol>
-        <Button variant="primary" onClick={() => store.startWorkout()} data-testid="start-workout">
-          Start Workout
-        </Button>
+        {resting ? (
+          <p className={styles.meta} role="status" data-testid="rest-today">
+            {REST_TODAY} <a href={routeHref('today')}>Update check-in</a> on Today.
+          </p>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={() => store.startWorkout()}
+            data-testid="start-workout"
+          >
+            Start Workout
+          </Button>
+        )}
         <p className={styles.meta}>
           Change the length, swap, pin, or skip an exercise on{' '}
           <a href={routeHref('today')}>Today</a> or here once started.

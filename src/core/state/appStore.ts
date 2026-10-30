@@ -2099,6 +2099,9 @@ export class AppStore {
     this.leaveEarlierDay();
     const session = this.requireSession();
     if (session.status !== 'preview') return;
+    // A fever or aches all over (Maintenance 33): a rest day, with nothing to start from any screen
+    // (the fresh review: the Workout tab's Start went round the one Today hides).
+    if (illnessOf(session.constraints.readiness) === 'body') return;
     const now = this.now();
     const position = currentPosition(session.workout, this.isDoneFor(session));
     this.setSession({

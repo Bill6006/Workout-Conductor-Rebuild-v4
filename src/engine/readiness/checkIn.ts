@@ -90,6 +90,15 @@ export function oncePerCheckIn<T extends Pick<WorkoutRecord, 'checkInAt'>>(
   });
 }
 
+/**
+ * When a saved check-in was told: its own time where the record keeps it (`checkInAt`), else when
+ * its workout began. One told past midnight is that day's, so it is never also the night before's
+ * of the plan it was carried onto (the fresh review before shipping).
+ */
+function toldAt(record: Pick<WorkoutRecord, 'checkInAt' | 'startedAt'>): string {
+  return record.checkInAt ?? record.startedAt;
+}
+
 /** The saved check-ins of the four weeks before today, newest first, each told once. */
 function savedCheckIns(history: readonly WorkoutRecord[], nowIso: string) {
   const today = localDayKey(nowIso);
@@ -99,12 +108,12 @@ function savedCheckIns(history: readonly WorkoutRecord[], nowIso: string) {
       .filter(
         (record) =>
           record.readiness !== null &&
-          localDayKey(record.startedAt) !== today &&
-          Date.parse(record.startedAt) <= now &&
-          now - Date.parse(record.startedAt) <= RULES.baselineDays.value * DAY_MS,
+          localDayKey(toldAt(record)) !== today &&
+          Date.parse(toldAt(record)) <= now &&
+          now - Date.parse(toldAt(record)) <= RULES.baselineDays.value * DAY_MS,
       )
-      .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
-  ).map((record) => ({ at: record.startedAt, readiness: record.readiness as Readiness }));
+      .sort((a, b) => toldAt(b).localeCompare(toldAt(a))),
+  ).map((record) => ({ at: toldAt(record), readiness: record.readiness as Readiness }));
 }
 
 /** Words for the items clearly worse: "energy and sleep under your usual". */

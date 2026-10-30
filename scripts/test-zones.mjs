@@ -22,6 +22,7 @@ const FILES = [
   'src/engine/planning/weekModel.test.ts',
   'src/core/state/secondRebuiltPastMidnight.store.test.ts',
   'src/core/state/checkInCarried.store.test.ts',
+  'src/engine/readiness/checkInPastMidnight.test.ts',
 ];
 
 for (const { zone, offset } of ZONES) {

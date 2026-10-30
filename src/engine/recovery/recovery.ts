@@ -197,7 +197,9 @@ export function recoveryWindows(
   const layer = wholeBodyLayer(history, context);
   const windows = new Map<MuscleId, RecoveryWindow>();
   for (const muscle of MUSCLE_IDS) {
-    const newest = (index.windows.get(muscle) ?? []).at(-1);
+    // The window that ends latest, not just the newest: a lighter session after a hard one never
+    // shortens the recovery the hard one still needs (the fresh review before shipping).
+    const newest = latestEnding(index.windows.get(muscle) ?? []);
     if (newest) {
       const window = { ...newest.window, reasons: [...newest.window.reasons] };
       const shift = learned.get(muscle)?.shift ?? 0;
@@ -218,6 +220,18 @@ export function recoveryWindows(
     }
   }
   return windows;
+}
+
+/** Of a muscle's windows, the one that ends latest (its start plus its hours); the newer on a tie. */
+function latestEnding<T extends { window: RecoveryWindow; time: number }>(
+  list: readonly T[],
+): T | undefined {
+  let latest: T | undefined;
+  for (const item of list) {
+    const end = item.time + item.window.hours * HOUR_MS;
+    if (latest === undefined || end >= latest.time + latest.window.hours * HOUR_MS) latest = item;
+  }
+  return latest;
 }
 
 /** A learned window within its bounds: 12 to 96 hours, and half to half again its estimate. */
@@ -262,9 +276,17 @@ function windowFrom(
   muscle: MuscleId,
   lifts: LiftTimes,
 ): RecoveryWindow | null {
-  let hardest: { rir: number; reps: number } | null = null;
+  // The window is the longest any one lift's hardest set asks in its own region: a lower-body
+  // isolation set to failure takes the upper-body values beside a squat a lifter stopped two short
+  // of failure, never the squat's region with the curl's effort (the fresh review before shipping;
+  // recovery-time-course.md: "Calves and lower-body isolation use the upper-body values").
+  let base: {
+    hours: number;
+    region: 'lower' | 'upper';
+    failure: boolean;
+    rir: number;
+  } | null = null;
   let dose = 0;
-  let lower = false;
   let longLength = false;
   let newLift: string | null = null;
   for (const entry of record.entries) {
@@ -281,9 +303,9 @@ function windowFrom(
     if (hard.length === 0) continue;
     dose += hard.length * weight;
     if (!prime) continue;
-    if (lowerCompound(exercise)) lower = true;
     if (LONG_LENGTH_LIFTS.has(exercise.id)) longLength = true;
     if (newLift === null && isNewTo(exercise.id, record, lifts)) newLift = exercise.name;
+    let hardest: { rir: number; reps: number } | null = null;
     for (const set of hard) {
       const rir = reserveOf(set) as number;
       if (
@@ -294,21 +316,32 @@ function windowFrom(
         hardest = { rir, reps: set.reps };
       }
     }
+    if (hardest === null) continue;
+    const region = lowerCompound(exercise) ? 'lower' : 'upper';
+    const failure =
+      hardest.rir === 0 || (hardest.rir <= 1 && hardest.reps >= RECOVERY.LONG_SET_REPS);
+    const hours: number = failure
+      ? RECOVERY.FAILURE_HOURS[region]
+      : hardest.rir <= 2
+        ? RECOVERY.MID_HOURS[region]
+        : RECOVERY.EASY_HOURS;
+    if (
+      base === null ||
+      hours > base.hours ||
+      (hours === base.hours && region === 'lower' && base.region === 'upper')
+    ) {
+      base = { hours, region, failure, rir: hardest.rir };
+    }
   }
-  if (hardest === null) return null;
-  const region = lower ? 'lower' : 'upper';
+  if (base === null) return null;
+  const { region, failure } = base;
   const reasons: string[] = [];
-  const failure = hardest.rir === 0 || (hardest.rir <= 1 && hardest.reps >= RECOVERY.LONG_SET_REPS);
-  let hours: number = failure
-    ? RECOVERY.FAILURE_HOURS[region]
-    : hardest.rir <= 2
-      ? RECOVERY.MID_HOURS[region]
-      : RECOVERY.EASY_HOURS;
+  let hours: number = base.hours;
   reasons.push(
     failure
       ? `a set to failure or near it: ${hours} h`
-      : hardest.rir <= 2
-        ? `sets ${hardest.rir === 1 ? 'one rep' : 'two reps'} short of failure: ${hours} h`
+      : base.rir <= 2
+        ? `sets ${base.rir === 1 ? 'one rep' : 'two reps'} short of failure: ${hours} h`
         : `sets three or more reps short of failure: ${hours} h`,
   );
   if (dose >= RECOVERY.BIG_DOSE_SETS) {
@@ -506,12 +539,11 @@ function exposureIndex(history: readonly WorkoutRecord[]): ExposureIndex {
 function restedAt(exercise: CatalogExercise, record: WorkoutRecord, index: ExposureIndex): boolean {
   const start = Date.parse(record.startedAt);
   for (const muscle of exercise.primaryMuscles) {
-    let last: { window: RecoveryWindow; time: number } | null = null;
     for (const item of index.windows.get(muscle) ?? []) {
       if (item.time >= start) break;
-      last = item;
+      // Inside any earlier window still running, not only the newest one (the fresh review).
+      if ((start - item.time) / HOUR_MS < item.window.prior) return false;
     }
-    if (last && (start - last.time) / HOUR_MS < last.window.prior) return false;
   }
   return true;
 }
@@ -590,11 +622,11 @@ export function learnedWindows(
   for (const muscle of MUSCLE_IDS) {
     const early: number[] = [];
     const rested: number[] = [];
-    let previous: RecoveryWindow | null = null;
+    const before: RecoveryWindow[] = [];
     for (const { record, window } of index.windows.get(muscle) ?? []) {
-      const last = previous;
-      previous = window;
-      if (last === null || Date.parse(record.startedAt) < from || offDay(record)) continue;
+      const earlier = [...before];
+      before.push(window);
+      if (earlier.length === 0 || Date.parse(record.startedAt) < from || offDay(record)) continue;
       const ratios = record.entries.flatMap((entry) => {
         const exercise = getExercise(entry.exerciseId);
         if (!exercise?.primaryMuscles.includes(muscle) || !entry.sets.some(isHard)) return [];
@@ -605,8 +637,10 @@ export function learnedWindows(
       });
       if (ratios.length === 0) continue;
       const ratio = ratios.reduce((sum, value) => sum + value, 0) / ratios.length;
-      const gap = (Date.parse(record.startedAt) - Date.parse(last.at)) / HOUR_MS;
-      (gap < last.prior ? early : rested).push(ratio);
+      // Early inside any earlier window still running, not only the last one (the fresh review).
+      const start = Date.parse(record.startedAt);
+      const inside = earlier.some((last) => (start - Date.parse(last.at)) / HOUR_MS < last.prior);
+      (inside ? early : rested).push(ratio);
     }
     const mean = (values: number[]) =>
       values.reduce((sum, value) => sum + value, 0) / values.length;
