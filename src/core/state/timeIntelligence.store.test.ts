@@ -6,6 +6,7 @@ import { COACH_SWITCHES_ID } from '../validation/coachSwitches';
 import { TIME_OFFERS_ID } from '../validation/timeOffers';
 import { GOALS_TIME_SOURCE } from '../../engine/coach/coachConductor';
 import { todaysNeedOf, weekModel } from '../../engine/planning/weekModel';
+import { interpretFatigue } from '../../engine/recovery/fatigue';
 import { allEntries, type DurationChoice } from '../../engine/workout/types';
 import { record } from '../../test/records';
 import { TEST_NOW, createTestStore } from '../../test/testStore';
@@ -287,28 +288,29 @@ describe('"Longer would help" is held back', () => {
   it('on a day of high fatigue', async () => {
     const handle = await lifter();
     const db = await handle.store.getDatabase();
-    // Three hard row sessions in the last three days: two reps nearer failure than planned, rated
-    // too hard, the last with pain.
+    // Three hard squat sessions in the last three days, two reps nearer failure than planned, rated
+    // too hard, the last with pain: no muscle the suggestion is for is worked, nor resting.
     for (const daysAgo of [3, 2, 1]) {
       const when = new Date(Date.parse(TEST_NOW) - (daysAgo + 0.5) * DAY).toISOString();
       await db.put('workouts', {
         ...record(
           0,
-          'barbell-row',
+          'back-squat',
           [
-            [8, 135, 0],
-            [8, 135, 0],
+            [8, 185, 0],
+            [8, 185, 0],
           ],
           [8, 12],
           2,
           { rating: { effort: 'too-hard', pain: daysAgo === 1, energyAfter: 2, note: '' } },
         ),
-        id: `w-rows-${daysAgo}`,
+        id: `w-squats-${daysAgo}`,
         startedAt: when,
         completedAt: when,
       });
     }
     await handle.store.hydrate();
+    expect(interpretFatigue(handle.store.getSnapshot().readHistory, TEST_NOW).level).toBe('high');
     await neverOffered(handle);
   });
 
@@ -368,6 +370,11 @@ describe('"Longer would help" taken', () => {
     const handle = await lifter();
     const offer = await offered(handle);
     expect((await handle.store.takeLonger(offer))?.ok).toBe(true);
+    expect(handle.store.longerOfferFor()).toBeNull();
+    // Taken back down to where it was offered: still nothing, the take answered at the end.
+    const before = handle.store.getSnapshot().timeOffers.pending!;
+    const back = ([15, 30, 45] as const).find((length) => length === before.from) ?? 'default';
+    expect((await handle.store.setDurationChoice(back))?.ok).toBe(true);
     expect(handle.store.longerOfferFor()).toBeNull();
   });
 
