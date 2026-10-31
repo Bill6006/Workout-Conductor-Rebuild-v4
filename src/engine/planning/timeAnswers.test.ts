@@ -61,15 +61,16 @@ describe('the pattern of the answers', () => {
   });
 
   it('reads only the latest four answers, and a tie as the newer kind', () => {
-    // Five answers: the oldest "Not now" falls out; two "longer" and two "same" tie, the newer wins.
+    // Five answers: two "same" and two "longer" tie among the latest four, and the newer, "longer",
+    // wins; the oldest, a third "same", falls out, or "same" would lead.
     const record = answered(
-      [20, 'not-now'],
-      [22, 'longer'],
-      [24, 'same'],
-      [26, 'longer'],
-      [28, 'same'],
+      [20, 'same'],
+      [22, 'same'],
+      [24, 'longer'],
+      [26, 'same'],
+      [28, 'longer'],
     );
-    expect(timePattern(record, NOW)?.pattern).toBe('limited');
+    expect(timePattern(record, NOW)?.pattern).toBe('has-time');
   });
 
   it('reads only the last eight weeks', () => {
@@ -120,6 +121,12 @@ describe('the cooldowns', () => {
     expect(mayShowLonger(record, at(26 + 7, 10))).toBe(true);
   });
 
+  it('keep the day’s showing on all day, the second day of two in seven', () => {
+    const record = withShown(withShown(emptyTimeOffers(), at(25, 9)), at(26, 9));
+    expect(mayShowLonger(record, at(26, 18))).toBe(true);
+    expect(mayShowLonger(record, at(27, 9))).toBe(false);
+  });
+
   it('keep one showing a day', () => {
     const record = withShown(withShown(emptyTimeOffers(), at(26, 9)), at(26, 20));
     expect(record.shown).toEqual([at(26, 9)]);
@@ -147,23 +154,52 @@ describe('a suggestion taken, answered at the workout’s end', () => {
   };
 
   it('says the time was there past halfway to the length taken', () => {
-    const record = resolvePending(taken, { at: at(30, 9), trainedMinutes: 40, chosenMinutes: 45 });
+    const record = resolvePending(taken, {
+      began: at(30, 9),
+      trainedMinutes: 40,
+      chosenMinutes: 45,
+    });
     expect(record.pending).toBeNull();
     expect(record.answers.map((answer) => answer.answer)).toEqual(['longer']);
   });
 
   it('says the time ran short under halfway', () => {
-    const record = resolvePending(taken, { at: at(30, 9), trainedMinutes: 34, chosenMinutes: 45 });
+    const record = resolvePending(taken, {
+      began: at(30, 9),
+      trainedMinutes: 34,
+      chosenMinutes: 45,
+    });
     expect(record.answers.map((answer) => answer.answer)).toEqual(['same']);
   });
 
   it('says the shorter session was chosen after all where the length went back down', () => {
-    const record = resolvePending(taken, { at: at(30, 9), trainedMinutes: 30, chosenMinutes: 30 });
+    const record = resolvePending(taken, {
+      began: at(30, 9),
+      trainedMinutes: 30,
+      chosenMinutes: 30,
+    });
     expect(record.answers.map((answer) => answer.answer)).toEqual(['not-now']);
   });
 
+  it('answers one taken before midnight and trained past it, by the day the workout began', () => {
+    const late: TimeOffers = {
+      ...taken,
+      pending: { ...taken.pending!, at: new Date(2026, 9, 30, 23, 40).toISOString() },
+    };
+    const record = resolvePending(late, {
+      began: new Date(2026, 9, 30, 23, 45).toISOString(),
+      trainedMinutes: 44,
+      chosenMinutes: 45,
+    });
+    expect(record.answers.map((answer) => answer.answer)).toEqual(['longer']);
+  });
+
   it('says nothing of a day whose workout never ended', () => {
-    const record = resolvePending(taken, { at: at(31, 9), trainedMinutes: 50, chosenMinutes: 45 });
+    const record = resolvePending(taken, {
+      began: at(31, 9),
+      trainedMinutes: 50,
+      chosenMinutes: 45,
+    });
     expect(record.pending).toBeNull();
     expect(record.answers).toEqual([]);
   });
@@ -184,5 +220,84 @@ describe('the record', () => {
     const merged = mergeTimeOffers(a, b);
     expect(merged.shown).toEqual([at(27), at(29)]);
     expect(merged.answers.map((answer) => answer.answer)).toEqual(['not-now', 'longer']);
+    const pending = (day: number): TimeOffers['pending'] => ({
+      at: at(day, 8),
+      week: localWeekKey(at(day)),
+      muscles: ['chest'],
+      from: 30,
+      to: 45,
+      choice: 45,
+    });
+    // The saved copy's pending older than the one shown, and the other way round.
+    expect(
+      mergeTimeOffers({ ...a, pending: pending(28) }, { ...b, pending: pending(30) }).pending?.at,
+    ).toBe(at(30, 8));
+    expect(
+      mergeTimeOffers({ ...a, pending: pending(30) }, { ...b, pending: pending(28) }).pending?.at,
+    ).toBe(at(30, 8));
+  });
+
+  it('keeps one answer a suggestion: a second for it takes its place', () => {
+    const one = {
+      at: at(29),
+      week: localWeekKey(at(29)),
+      muscles: ['chest' as const],
+      from: 30,
+      to: 45,
+    };
+    const record = withAnswer(withAnswer(emptyTimeOffers(), { ...one, answer: 'same' }), {
+      ...one,
+      answer: 'longer',
+    });
+    expect(record.answers.map((answer) => answer.answer)).toEqual(['longer']);
+  });
+
+  it('drops a pending suggestion either copy has answered', () => {
+    const asked = {
+      at: at(30, 8),
+      week: localWeekKey(at(30)),
+      muscles: ['chest' as const],
+      from: 30,
+      to: 45,
+    };
+    const waiting: TimeOffers = { ...emptyTimeOffers(), pending: { ...asked, choice: 45 } };
+    const answeredCopy = withAnswer(emptyTimeOffers(), { ...asked, answer: 'longer' });
+    expect(mergeTimeOffers(waiting, answeredCopy).pending).toBeNull();
+    expect(mergeTimeOffers(answeredCopy, waiting).pending).toBeNull();
+    expect(mergeTimeOffers(waiting, emptyTimeOffers()).pending).toEqual(waiting.pending);
+  });
+
+  it('keeps an answer only for the weeks a pattern reads', () => {
+    const old = new Date(2026, 7, 1, 12).toISOString();
+    const record = withAnswer(
+      withAnswer(emptyTimeOffers(), {
+        at: old,
+        week: localWeekKey(old),
+        muscles: ['chest'],
+        from: 30,
+        to: 45,
+        answer: 'not-now',
+      }),
+      {
+        at: at(31),
+        week: localWeekKey(at(31)),
+        muscles: ['chest'],
+        from: 30,
+        to: 45,
+        answer: 'longer',
+      },
+    );
+    expect(record.answers.map((answer) => answer.at)).toEqual([at(31)]);
+  });
+
+  it('drops alone a showing it cannot read, and a pending one', () => {
+    const record = withShown(answered([27, 'not-now']), at(27));
+    const raw = JSON.parse(JSON.stringify(record));
+    raw.shown = ['yesterday', ...raw.shown];
+    raw.pending = { at: at(30), week: 'soon', muscles: ['chest'], from: 30, to: 45, choice: 20 };
+    const read = parseTimeOffers(raw);
+    expect(read?.shown).toEqual([at(27)]);
+    expect(read?.pending).toBeNull();
+    expect(read?.answers.map((answer) => answer.answer)).toEqual(['not-now']);
   });
 });

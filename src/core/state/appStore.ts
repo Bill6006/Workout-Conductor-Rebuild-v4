@@ -3269,7 +3269,7 @@ export class AppStore {
       );
       await this.changeTimeOffers((current) =>
         resolvePending(current, {
-          at: now,
+          began: record.startedAt,
           trainedMinutes: (record.trainingSeconds ?? 0) / 60,
           chosenMinutes,
         }),
@@ -5335,6 +5335,10 @@ export class AppStore {
     const history = this.state.readHistory;
     if (interpretFatigue(history, now).level === 'high') return null;
     if (!mayShowLonger(this.state.timeOffers, now)) return null;
+    // Taken today, it waits for the workout's end: no length beyond it is offered on top (the review
+    // of Maintenance 34: a second take would put the first one's answer aside).
+    const pending = this.state.timeOffers.pending;
+    if (pending && localDayKey(pending.at) === localDayKey(now)) return null;
     const next = nextLonger(session.duration, profile.schedule.typicalDurationMinutes);
     if (!next) return null;
     // Today's plan at the next length, by the rebuild its tap runs; none where that fails.

@@ -118,5 +118,14 @@ describe('the schedule card on screen for the default profile', () => {
     const shown = conductCoach(input)!.signal;
     expect(shown.source).toBe(SCHEDULE_SOURCE);
     expect(shown.footnote).toBe(LINE);
+    // With the "too soon" card off in Settings (Maintenance 34), the line offers no lighter option:
+    // the card that would offer it is off.
+    const off = gatherSignals({
+      ...input,
+      switches: { tooSoon: false, goalsTime: true },
+    }).find((signal) => signal.source === SCHEDULE_SOURCE)!;
+    expect(off.footnote).toBe(
+      'On Wed the plan would work the side delts, lats, biceps and triceps hard again when they may not have recovered.',
+    );
   });
 });

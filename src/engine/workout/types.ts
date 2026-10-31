@@ -208,6 +208,8 @@ export interface WorkoutEntry {
    * forward): its last sets. Absent on a lift with none.
    */
   carried?: number;
+  /** The muscles those sets are for (Maintenance 34): their lines name them. */
+  carriedFor?: MuscleId[];
   progression?: EntryProgression;
   manual?: ManualEdits;
   /**

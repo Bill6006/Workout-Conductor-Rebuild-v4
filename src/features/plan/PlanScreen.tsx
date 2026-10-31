@@ -48,9 +48,18 @@ export function PlanScreen() {
     ? new Date(nowEpoch).toISOString()
     : (profile?.updatedAt ?? '2026-01-01T00:00:00.000Z');
   const location = state.locations.find((item) => item.id === profile?.currentLocationId);
+  // Today's plan at the length it has now (Maintenance 34): the lifter's choice stands over the
+  // forecast.
+  const todayLength =
+    state.session && localDayKey(state.session.createdAt) === localDayKey(nowIso)
+      ? state.session.duration
+      : 'default';
   const week = useMemo(
-    () => (profile ? planWeek(profile, location, state.history, nowIso, state.learnedResets) : []),
-    [profile, location, state.history, nowIso, state.learnedResets],
+    () =>
+      profile
+        ? planWeek(profile, location, state.history, nowIso, state.learnedResets, todayLength)
+        : [],
+    [profile, location, state.history, nowIso, state.learnedResets, todayLength],
   );
   const coverage = useMemo(
     () =>

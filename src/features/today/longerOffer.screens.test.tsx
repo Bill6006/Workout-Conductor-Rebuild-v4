@@ -5,9 +5,11 @@ import { App } from '../../app/App';
 import type { AppStore } from '../../core/state/appStore';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
+import type { LongerOffer } from '../../engine/planning/longerOffer';
 import type { DurationChoice } from '../../engine/workout/types';
 import { record } from '../../test/records';
 import { Providers, TEST_NOW, createTestStore } from '../../test/testStore';
+import { longerWords } from './useLongerOffer';
 
 vi.mock('../library/useCustomMedia', () => ({ useCustomMedia: () => null }));
 
@@ -72,6 +74,8 @@ describe('"Longer would help" on Today', () => {
     expect(await screen.findByTestId('longer-text')).toHaveTextContent(
       new RegExp(`^${offer.minutes} min would close (most of )?this week’s .+ gap$`),
     );
+    // On screen, its showing is kept for the cooldowns.
+    await waitFor(() => expect(store.getSnapshot().timeOffers.shown).toHaveLength(1));
     await userEvent.setup().click(screen.getByTestId('longer-take'));
     await waitFor(() => expect(store.getSnapshot().session?.duration).toBe(offer.choice));
   });
@@ -85,6 +89,31 @@ describe('"Longer would help" on Today', () => {
       expect(store.getSnapshot().timeOffers.answers.map((answer) => answer.answer)).toEqual([
         'not-now',
       ]),
+    );
+  });
+});
+
+describe('the suggestion’s words', () => {
+  const offer = (extra: Partial<LongerOffer> = {}): LongerOffer => ({
+    choice: 45,
+    minutes: 45,
+    muscles: ['biceps'],
+    closesAll: false,
+    week: '2026-08-31',
+    ...extra,
+  });
+
+  it('say most of the gap, or the gap where the length closes it whole', () => {
+    expect(longerWords(offer()).text).toBe('45 min would close most of this week’s biceps gap');
+    expect(longerWords(offer({ closesAll: true })).text).toBe(
+      '45 min would close this week’s biceps gap',
+    );
+  });
+
+  it('name the length to take, the Default by name', () => {
+    expect(longerWords(offer()).take).toBe('Use 45 min');
+    expect(longerWords(offer({ choice: 'default', minutes: 60 })).take).toBe(
+      'Use your Default (60 min)',
     );
   });
 });

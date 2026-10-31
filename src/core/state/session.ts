@@ -304,10 +304,7 @@ const ConstraintsSchema = z.looseObject({
   focus: z.enum(MUSCLE_IDS).nullable().default(null),
   // Maintenance 34, the need carried forward: a session saved before has none; one that fails to
   // read is dropped, and the plan carries nothing.
-  carry: z
-    .partialRecord(z.enum(MUSCLE_IDS), z.number().min(0))
-    .optional()
-    .catch(undefined),
+  carry: z.partialRecord(z.enum(MUSCLE_IDS), z.number().min(0)).optional().catch(undefined),
   // Maintenance 31 (items 12 and 32): a session saved before has none; one that fails to read is
   // dropped, and the day plans as usual.
   catchUp: CatchUpSpecSchema.nullable().optional().catch(undefined),

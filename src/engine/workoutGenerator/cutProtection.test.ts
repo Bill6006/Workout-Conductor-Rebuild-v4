@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { requireExercise } from '../../catalog/exercises/catalog';
-import type { MuscleId } from '../../catalog/muscles/muscles';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
@@ -11,12 +9,13 @@ import { cutRunning, generateWorkout } from './generate';
  * Maintenance 34, what keeps getting cut (the approved proposal: "Store what the time fit left out
  * of each workout. A muscle cut last time is protected next time. If a muscle is cut twice running,
  * trim a set from an already well-covered muscle instead ... Rotate which isolation move goes, so no
- * muscle loses every short day"). The default lifter at the gym, 15 minutes. Synthetic data only.
+ * muscle loses every short day"). The default lifter at the gym, 15 minutes, or at home on a full-body
+ * day of 30. A muscle is cut where the fit left out a lift that works it directly. Synthetic data only.
  */
 
 const NOW = '2026-09-10T12:00:00.000Z';
 const profile = createDefaultProfile(NOW);
-const [, gym] = createDefaultLocations({ gymAccess: true }, NOW);
+const [home, gym] = createDefaultLocations({ gymAccess: true }, NOW);
 const daysBefore = (days: number) => new Date(Date.parse(NOW) - days * 86_400_000).toISOString();
 
 const plan = (history: readonly WorkoutRecord[], now = NOW) =>
@@ -53,12 +52,6 @@ function done(workout: GeneratedWorkout, days: number, keepCut = true): WorkoutR
   };
 }
 
-/** The muscles a plan's lifts work directly. */
-const worked = (workout: GeneratedWorkout) =>
-  new Set<MuscleId>(
-    allEntries(workout.blocks).flatMap((entry) => requireExercise(entry.exerciseId).primaryMuscles),
-  );
-
 describe('what the time fit cut', () => {
   it('is kept on the plan: the muscles it left fewer direct sets than the plan gave', () => {
     const short = plan([]);
@@ -76,21 +69,73 @@ describe('what the time fit cut', () => {
   it('reads as cut once, then twice running, from the latest sessions', () => {
     const short = plan([]);
     const cut = short.fitCut![0]!;
-    expect(cutRunning([done(short, 3)], NOW).get(cut)).toBe(1);
-    expect(cutRunning([done(short, 3), done(short, 5)], NOW).get(cut)).toBe(2);
+    expect(cutRunning([done(short, 3)], NOW, short.templateId).get(cut)).toBe(1);
+    expect(cutRunning([done(short, 3), done(short, 5)], NOW, short.templateId).get(cut)).toBe(2);
     // A session between with the muscle not cut ends the run.
-    expect(cutRunning([done(short, 3, false), done(short, 5)], NOW).get(cut)).toBeUndefined();
+    expect(
+      cutRunning([done(short, 3, false), done(short, 5)], NOW, short.templateId).get(cut),
+    ).toBeUndefined();
     // A session from before the record kept it cut nothing.
-    expect(cutRunning([done(short, 3, false)], NOW).size).toBe(0);
+    expect(cutRunning([done(short, 3, false)], NOW, short.templateId).size).toBe(0);
   });
 
-  it('is spared next time: a muscle cut last time keeps its lift where another goes instead', () => {
-    const first = plan([]);
-    const cut = new Set(first.fitCut);
-    const spared = plan([done(first, 2)]);
-    const unspared = plan([done(first, 2, false)]);
-    const kept = (workout: GeneratedWorkout) => [...worked(workout)].filter((one) => cut.has(one));
-    expect(kept(spared).length).toBeGreaterThanOrEqual(kept(unspared).length);
-    expect(kept(spared).length).toBeGreaterThan(0);
+  it('names the muscles of the lifts it left out, never one only trimmed', () => {
+    // At 15 minutes the push day's bench press and incline press stay, trimmed; the rest go.
+    const short = plan([]);
+    expect(allEntries(short.blocks).map((entry) => entry.exerciseId)).toEqual([
+      'barbell-bench-press',
+      'incline-dumbbell-press',
+    ]);
+    // The upper chest only lost a set of its incline press; the chest lost its cable fly, the side
+    // delts their lateral raise.
+    expect(short.fitCut).not.toContain('upper-chest');
+    expect(short.fitCut).toEqual(expect.arrayContaining(['chest', 'side-delts']));
+  });
+
+  it('reads the same day of the split: a pull day between two push days ends no run', () => {
+    const short = plan([]);
+    const cut = short.fitCut![0]!;
+    const pull = { ...done(short, 4), id: 'w-pull', templateId: 'pull-arms' };
+    expect(short.templateId).toBe('push-arms');
+    expect(cutRunning([done(short, 3), pull, done(short, 5)], NOW, 'push-arms').get(cut)).toBe(2);
+    // The pull day itself reads only its own.
+    expect(cutRunning([done(short, 3), pull, done(short, 5)], NOW, 'pull-arms').get(cut)).toBe(1);
+  });
+
+  it('reads only sessions with work in them', () => {
+    const short = plan([]);
+    const cut = short.fitCut![0]!;
+    // The newest, a session with nothing logged that kept the cut: it says nothing.
+    const empty: WorkoutRecord = { ...done(short, 1), id: 'w-empty', entries: [] };
+    expect(
+      cutRunning([empty, done(short, 3, false)], NOW, short.templateId).get(cut),
+    ).toBeUndefined();
+    expect(cutRunning([empty, done(short, 3)], NOW, short.templateId).get(cut)).toBe(1);
+  });
+
+  it('is spared next time: a lift for a muscle cut last time stays where another goes instead', () => {
+    // At home, a full-body day of 30 minutes leaves out the Romanian deadlift and the arms' moves:
+    // the hamstrings, glutes, biceps and triceps are cut.
+    const atHome = (history: readonly WorkoutRecord[]) =>
+      generateWorkout({
+        profile,
+        location: home,
+        history,
+        now: NOW,
+        duration: 30,
+        constraints: { templateId: 'full-body' },
+      });
+    const first = atHome([]);
+    expect(first.fitCut).toEqual(['biceps', 'triceps', 'hamstrings', 'glutes']);
+    const lifts = (workout: GeneratedWorkout) =>
+      allEntries(workout.blocks).map((entry) => entry.exerciseId);
+    // The cut kept: the shoulder press, for the triceps, stays, and the row goes instead.
+    const spared = atHome([done(first, 2)]);
+    expect(lifts(spared)).toContain('dumbbell-shoulder-press');
+    expect(lifts(spared)).not.toContain('chest-supported-row');
+    // Without it, the row stays and the shoulder press, the triceps' lift, goes again.
+    const unspared = atHome([done(first, 2, false)]);
+    expect(lifts(unspared)).toContain('chest-supported-row');
+    expect(lifts(unspared)).not.toContain('dumbbell-shoulder-press');
   });
 });

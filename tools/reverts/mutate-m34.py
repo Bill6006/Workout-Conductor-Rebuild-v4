@@ -1,0 +1,573 @@
+"""Maintenance 34's mutation checks (2026-10-31): time intelligence. Revert each part alone, run its
+tests, expect a failure, restore. Prints KILLED (a test failed) or SURVIVED (every test still passed).
+
+  python mutate-m34.py --repo=PATH            run every entry in a copy of the repository
+  python mutate-m34.py --repo=PATH L1 C3      run the entries whose names start with these
+  python mutate-m34.py --repo=PATH --check    only check that every anchor is found once
+  python mutate-m34.py --repo=PATH --utc      run the tests in UTC, then the day rules' zones
+
+The table below is data: nothing in it runs.
+"""
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+# The repository this runner sits in (tools/reverts/ -> the root). Run it in a copy instead, with
+# --repo=PATH; see tools/reverts/README.md.
+ROOT = pathlib.Path(__file__).resolve().parents[2] if "__file__" in globals() else pathlib.Path.cwd()
+for _flag in sys.argv[1:]:
+    if _flag.startswith("--repo="):
+        ROOT = pathlib.Path(_flag.split("=", 1)[1])
+
+LENGTHS = "src/engine/planning/expectedLengths.ts"
+WEEK = "src/engine/planning/weekModel.ts"
+WEEKLY = "src/engine/planning/weeklyPlan.ts"
+GENERATE = "src/engine/workoutGenerator/generate.ts"
+BUILDER = "src/core/state/workoutRecordBuilder.ts"
+RECAL = "src/engine/recalibration/recalibrate.ts"
+STORE = "src/core/state/appStore.ts"
+LONGER = "src/engine/planning/longerOffer.ts"
+ANSWERS = "src/engine/planning/timeAnswers.ts"
+OFFERS = "src/core/validation/timeOffers.ts"
+GOALS = "src/engine/planning/goalsTime.ts"
+COACH = "src/engine/coach/coachConductor.ts"
+SWITCHES = "src/core/validation/coachSwitches.ts"
+CARD = "src/features/today/WorkoutPreviewCard.tsx"
+USELONGER = "src/features/today/useLongerOffer.ts"
+TODAY = "src/features/today/TodayScreen.tsx"
+USECOACH = "src/features/coach/useCoach.ts"
+PLAN = "src/features/plan/PlanScreen.tsx"
+
+T_LENGTHS = "src/engine/planning/expectedLengths.test.ts"
+T_REAL = "src/engine/planning/weekModel.realLengths.test.ts"
+T_CARRY = "src/engine/workoutGenerator/carry.test.ts"
+T_CUT = "src/engine/workoutGenerator/cutProtection.test.ts"
+T_LONGER = "src/engine/planning/longerOffer.test.ts"
+T_ANSWERS = "src/engine/planning/timeAnswers.test.ts"
+T_GOALS = "src/engine/planning/goalsTime.test.ts"
+T_COACH_GOALS = "src/engine/coach/coachConductor.goalsTime.test.ts"
+T_STORE = "src/core/state/timeIntelligence.store.test.ts"
+T_SCREEN = "src/features/today/longerOffer.screens.test.tsx"
+T_SWITCHES = "src/features/settings/coachSwitches.screens.test.tsx"
+T_GOALS_SCREEN = "src/features/today/goalsTimeCard.screens.test.tsx"
+T_HELD = "src/core/state/carryHeld.store.test.ts"
+T_WEEK_SCREEN = "src/features/plan/weekLength.test.tsx"
+T_SCHEDULE_LINE = "src/engine/coach/scheduleLineCut.test.ts"
+
+# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
+MUTATIONS = [
+    # The forecast at real lengths: each weekday's expected length.
+    ("L1 a weekday's length is read from its own sessions", LENGTHS,
+     "    if (localWeekday(record.startedAt) !== weekday) continue;\n", "",
+     [T_LENGTHS, T_REAL], None),
+    ("L2 ... of the last four weeks", LENGTHS,
+     "    if (ago < 0 || ago > window) continue;\n", "    if (ago < 0) continue;\n",
+     [T_LENGTHS], None),
+    ("L3 ... a day once, by its first session", LENGTHS,
+     "    if (!first || record.startedAt < first.startedAt) firsts.set(day, record);\n",
+     "    if (!first || record.startedAt > first.startedAt) firsts.set(day, record);\n",
+     [T_LENGTHS], None),
+    ("L4 ... only sessions with work in them", LENGTHS,
+     "    if (record.startedAt > now || !trainedIn(record)) continue;\n",
+     "    if (record.startedAt > now) continue;\n", [T_LENGTHS], None),
+    ("L5 ... the Default with none", LENGTHS,
+     "  if (latest.length === 0) return 'default';\n", "  if (latest.length === 0) return 15;\n",
+     [T_LENGTHS], None),
+    ("L6 ... the latest of two", LENGTHS,
+     "  if (latest.length < RULES.lengthSessions.value) return latest[0] as DurationChoice;\n",
+     "  if (latest.length < RULES.lengthSessions.value) return 'default';\n", [T_LENGTHS], None),
+    ("L7 ... the median of the latest three", LENGTHS,
+     "  return sorted[Math.floor(sorted.length / 2)] as DurationChoice;\n",
+     "  return sorted[0] as DurationChoice;\n", [T_LENGTHS], None),
+    ("L8 ... the Default ordered at the lifter's own minutes", LENGTHS,
+     "    (a, b) => choiceMinutes(a, defaultMinutes) - choiceMinutes(b, defaultMinutes),\n  );\n  return sorted",
+     "    (a, b) => choiceMinutes(a, 60) - choiceMinutes(b, 60),\n  );\n  return sorted",
+     [T_LENGTHS], None),
+    ("L9 ... a session from before lengths were kept read as the Default", LENGTHS,
+     "    .map((record) => record.durationChoice ?? 'default');\n",
+     "    .map((record) => record.durationChoice ?? 15);\n", [T_LENGTHS], None),
+
+    # The week model and the week ahead at those lengths, today's at its own.
+    ("W1 the week model plans each day to come at its expected length", WEEK,
+     "        : expectedLength(history, localWeekday(date), now, profile.schedule.typicalDurationMinutes),\n",
+     "        : 'default',\n", [T_REAL], None),
+    ("W2 ... and today at today's own", WEEK,
+     "        ? (input.todayLength ?? 'default')\n", "        ? 'default'\n", [T_REAL], None),
+    ("W3 ... today's own sets counted apart", WEEK,
+     "      if (own) credit(muscles, entry.exerciseId, sets, 'plannedToday');\n", "",
+     [T_REAL, T_STORE], None),
+    ("W4 today owes what the week lacks once the days after it are counted", WEEK,
+     "  Math.max(0, muscle.target - muscle.done - (muscle.planned - muscle.plannedToday));\n",
+     "  Math.max(0, muscle.target - muscle.done - muscle.planned);\n", [T_REAL], None),
+    ("W5 a session the model plans keeps what its fit cut", WEEK,
+     "    ...(workout.fitCut ? { fitCut: [...workout.fitCut] } : {}),\n", "", [T_REAL], None),
+    ("W6 the week ahead plans each day at its expected length", WEEKLY,
+     "          : expectedLength(history, weekday, now, profile.schedule.typicalDurationMinutes),\n",
+     "          : 'default',\n", [T_REAL], None),
+    ("W7 ... and today at today's own", WEEKLY,
+     "        offset === 0\n          ? todayLength\n", "        offset === 0\n          ? 'default'\n",
+     [T_REAL], None),
+    ("W8 ... each day kept with what its fit cut", WEEKLY,
+     "    ...(workout.fitCut ? { fitCut: [...workout.fitCut] } : {}),\n", "", [T_REAL], None),
+    ("LW6 the Plan screen's week reads today at its own length", WEEKLY,
+     "    resets,\n    todayLength,\n  )) {\n", "    resets,\n  )) {\n", [T_REAL, T_WEEK_SCREEN], None),
+    ("LW7 ... the coach's", USECOACH,
+     "      localDayKey(session.createdAt) === localDayKey(now) ? session.duration : 'default',\n",
+     "      'default',\n", [T_WEEK_SCREEN], None),
+    ("LW8 ... the Plan screen's", PLAN,
+     "        ? planWeek(profile, location, state.history, nowIso, state.learnedResets, todayLength)\n",
+     "        ? planWeek(profile, location, state.history, nowIso, state.learnedResets)\n",
+     [T_WEEK_SCREEN], None),
+
+    # The need carried into a day of the plan's plan.
+    ("C1 none on a catch-up or a second workout", GENERATE,
+     "        offPlan ||\n        deload !== null ||\n", "        deload !== null ||\n",
+     [T_CARRY], None),
+    ("C2 none in a deload week", GENERATE,
+     "        offPlan ||\n        deload !== null ||\n        (constraints.adjust",
+     "        offPlan ||\n        (constraints.adjust", [T_CARRY], None),
+    ("C3 none on a day of high fatigue", GENERATE,
+     "    illnessOf(input.readiness) !== null ||\n    interpretFatigue(input.history, input.now).level === 'high';\n",
+     "    illnessOf(input.readiness) !== null;\n", [T_CARRY], None),
+    ("C4 none on a day of an illness", GENERATE,
+     "    input.closed ||\n    illnessOf(input.readiness) !== null ||\n", "    input.closed ||\n",
+     [T_CARRY, T_HELD], None),
+    ("C5 none under Make it easier", GENERATE,
+     "        deload !== null ||\n        (constraints.adjust?.sets ?? 0) < 0,\n",
+     "        deload !== null ||\n        false,\n", [T_CARRY], None),
+    ("C6 none for a muscle inside its recovery window", GENERATE,
+     "      return window !== undefined && hoursSince(window, input.now) < window.hours;\n",
+     "      return window !== undefined && false;\n", [T_CARRY, T_HELD], None),
+    # C7 (none onto a lift in a circuit) and C9 (none onto a lone top set) have no case to meet:
+    # a circuit is built at 30 minutes or less, and a lift is down to its top set only once the fit
+    # trimmed its back-offs, each plan fitted to its length with no room for a set. The checks stay.
+    ("C8 only onto a lift that works the muscle directly", GENERATE,
+     "        exerciseOf(entry.exerciseId).primaryMuscles.includes(muscle) &&\n        last !== undefined &&\n",
+     "        (exerciseOf(entry.exerciseId).primaryMuscles.includes(muscle) ||\n          exerciseOf(entry.exerciseId).secondaryMuscles.includes(muscle)) &&\n        last !== undefined &&\n",
+     [T_CARRY], None),
+    # C10, C11, C13 and C15 went with their checks in the run: a lift begun, locked, pinned or set
+    # by hand reaches the generator only as a kept lift, which C12's check covers.
+    ("C12 none onto a lift kept", GENERATE,
+     "        !keptIds.has(entry.id) &&\n        !entry.dropSet &&\n", "        !entry.dropSet &&\n",
+     [T_CARRY], None),
+    ("C14 none onto a lift with a drop set", GENERATE,
+     "        !entry.dropSet &&\n        // The lift to push", "        // The lift to push",
+     [T_CARRY], None),
+    ("C16 at most two sets over a lift's own", GENERATE,
+     "        (entry.carried ?? 0) < RULES.carryLiftSets.value &&\n", "        true &&\n",
+     [T_CARRY], None),
+    ("C17 never a muscle over 11 sets today", GENERATE,
+     "        exercise.primaryMuscles.every(\n          (muscle) => setsToday(muscle) + 1 <= RULES.carryMuscleSets.value,\n        )\n",
+     "        true\n", [T_CARRY], None),
+    ("C18 only into the room the length leaves", GENERATE,
+     "        if (estimate().totalMinutes > limit) {\n          lift.sets.pop();\n",
+     "        if (false) {\n          lift.sets.pop();\n", [T_CARRY], None),
+    ("C19 accessories first", GENERATE,
+     "              Number(a.role === 'primary-strength') - Number(b.role === 'primary-strength') ||\n",
+     "", [T_CARRY], None),
+    ("C20 what today owes counts what today's plan gives", GENERATE,
+     "    const owed = (muscle: MuscleId) => (carry[muscle] ?? 0) - setsToday(muscle);\n",
+     "    const owed = (muscle: MuscleId) => carry[muscle] ?? 0;\n", [T_CARRY], None),
+    ("C21 the lift says why it has a set more", GENERATE,
+     "      evidence: count > 0 ? [line, ...others] : others,\n", "      evidence: others,\n",
+     [T_CARRY, T_HELD], None),
+    ("C22 ... and so does the plan", GENERATE,
+     "  if (carried) reasons.push(carried);\n", "", [T_CARRY], None),
+    # The review of Maintenance 34: every prime mover of a lift, the lift to push, the lifts kept.
+    ("RV1 no set on a lift whose other prime mover is held", GENERATE,
+     "        !exercise.primaryMuscles.some(held) &&\n",
+     "        !exercise.primaryMuscles.slice(0, 1).some(held) &&\n", [T_CARRY], None),
+    ("RV2 ... nor one another prime mover of passes 11 sets with", GENERATE,
+     "        exercise.primaryMuscles.every(\n          (muscle) => setsToday(muscle) + 1 <= RULES.carryMuscleSets.value,\n        )\n",
+     "        exercise.primaryMuscles\n          .slice(0, 1)\n          .every((muscle) => setsToday(muscle) + 1 <= RULES.carryMuscleSets.value)\n",
+     [T_CARRY], None),
+    ("RV3 a muscle gone lighter is held", GENERATE,
+     "      if (lighter.has(muscle)) return true;\n", "", [T_CARRY, T_HELD], None),
+    ("RV4 no set on the lift to push", GENERATE,
+     "        entry.push === undefined &&\n", "", [T_CARRY], None),
+    ("RV5 a kept lift's carried sets off where the day holds one of its muscles", GENERATE,
+     "    if ((entry.carried ?? 0) > 0 && !holdsCarry(gate(), entry.exerciseId)) {\n",
+     "    if (false) {\n", [T_CARRY], None),
+    # C23 went with the trim's count in the review: the carried sets go first (RV6), their count with
+    # them.
+    ("RV6 the carried sets go first when the time runs short, before anything of the plan's own", GENERATE,
+     "    if (trimCarried()) continue;\n", "", [T_CARRY], None),
+
+    # What keeps getting cut.
+    ("K1 cut counts the latest sessions running", GENERATE,
+     "      if (!(record.fitCut ?? []).includes(muscle)) break;\n",
+     "      if (!(record.fitCut ?? []).includes(muscle)) continue;\n", [T_CUT], None),
+    ("K2 ... of sessions with work in them", GENERATE,
+     "      (record) => record.startedAt <= now && record.templateId === templateId && trainedIn(record),\n",
+     "      (record) => record.startedAt <= now && record.templateId === templateId,\n",
+     [T_CUT], None),
+    ("K9 ... of the same day of the split", GENERATE,
+     "      (record) => record.startedAt <= now && record.templateId === templateId && trainedIn(record),\n",
+     "      (record) => record.startedAt <= now && trainedIn(record),\n", [T_CUT], None),
+    ("K3 the leave-out order spares a muscle cut last time", GENERATE,
+     "        blockCutRank(a) - blockCutRank(b) ||\n", "", [T_CUT], None),
+    # K4 went with its rank in the run: the fit trims every lift to its fewest sets before it leaves
+    # one out, so no trim order changed a plan.
+    ("K5 the plan keeps the muscles its fit cut", GENERATE,
+     "      (afterFit.get(muscle) ?? 0) < (beforeFit.get(muscle) ?? 0) &&\n",
+     "      (afterFit.get(muscle) ?? 0) > (beforeFit.get(muscle) ?? 0) &&\n", [T_CUT], None),
+    ("K8 ... only where a lift that works it was left out, never a set trimmed", GENERATE,
+     "          !liftsAfterFit.has(entry.exerciseId) &&\n", "", [T_CUT], None),
+    ("K6 ... on the workout", GENERATE,
+     "    ...(fitCut.length > 0 ? { fitCut } : {}),\n", "", [T_CUT], None),
+    ("K7 ... and the saved workout keeps them", BUILDER,
+     "    ...(workout.fitCut && workout.fitCut.length > 0 ? { fitCut: [...workout.fitCut] } : {}),\n",
+     "", [T_STORE], None),
+
+    # The need through every rebuild, and where it is made.
+    ("R1 a rebuild carries the need", RECAL, "    ...carryOf(constraints),\n", "",
+     [T_CARRY, T_STORE], None),
+    ("R2 ... none under a hard start", RECAL,
+     "    ...(constraints.carry && !constraints.badStart ? { carry: { ...constraints.carry } } : {}),\n",
+     "    ...(constraints.carry ? { carry: { ...constraints.carry } } : {}),\n", [T_CARRY], None),
+    ("R3 ... the muscles gone lighter held, their room given to the rest", RECAL,
+     "    ...((constraints.lighter?.length ?? 0) > 0 ? { carryHold: [...constraints.lighter!] } : {}),\n",
+     "", [T_CARRY], None),
+    ("H1 the carried sets checked after every change, with nothing built again", RECAL,
+     "    const held = heldCarry(carried, plain, constraints);\n", "    const held = carried;\n",
+     [T_HELD, T_CARRY], None),
+    ("H2 ... and the change says why", RECAL,
+     "      notes: held === carried ? outcome.notes : [...(outcome.notes ?? []), CARRY_HELD],\n",
+     "      notes: outcome.notes,\n", [T_HELD], None),
+    ("H3 ... a hard start closes the day to them", RECAL,
+     "      constraints.badStart === true ||\n      (dayAdjust(constraints)", "      (dayAdjust(constraints)",
+     [T_CARRY], None),
+    ("H4 \"Lighter\" on a lift under way takes its carried sets first", RECAL,
+     "          if (dropCarried(entry, isDone) > 0) {\n            sayCarried(workout);\n            changed = true;\n          }\n",
+     "", [T_HELD], None),
+    ("R4 ... kept with the plan's constraints", RECAL,
+     "    ...(constraints.carry ? { carry: { ...constraints.carry } } : {}),\n", "",
+     [T_STORE], None),
+    ("S1 the need is made on a day of the plan alone", STORE,
+     "    const owed = catchUp === null && deload === null ? this.weekNeed(profile, now) : null;\n",
+     "    const owed = deload === null ? this.weekNeed(profile, now) : null;\n", [T_STORE], None),
+    ("S2 ... never in a deload week", STORE,
+     "    const owed = catchUp === null && deload === null ? this.weekNeed(profile, now) : null;\n",
+     "    const owed = catchUp === null ? this.weekNeed(profile, now) : null;\n", [T_STORE], None),
+    ("S3 the plan is built with it", STORE,
+     "        ...(owed ? { carry: owed } : {}),\n      },\n      maxes: this.state.strengthMaxes,\n",
+     "      },\n      maxes: this.state.strengthMaxes,\n", [T_STORE], None),
+    ("S4 ... and keeps it", STORE,
+     "        ...(owed ? { carry: { ...owed } } : {}),\n", "", [T_STORE], None),
+    ("S5 a plan made again takes the fresh plan's need", STORE,
+     "    delete today.carry;\n    if (fresh.constraints.carry) today.carry = { ...fresh.constraints.carry };\n",
+     "", [T_STORE], None),
+    ("S6 the need is a set at least", STORE,
+     "      if (need >= 1) owed[muscle] = Math.round(need * 2) / 2;\n",
+     "      if (need > 0) owed[muscle] = Math.round(need * 2) / 2;\n", [T_STORE], None),
+    ("S7 the need reads the week with the coach focus and the lasting swaps", STORE,
+     "      history: this.state.readHistory,\n      now,\n      resets: this.state.learnedResets,\n      focus: this.state.coachFocus,\n      swaps: this.activeSwaps(),\n    });\n    const owed",
+     "      history: this.state.readHistory,\n      now,\n      resets: this.state.learnedResets,\n    });\n    const owed",
+     [T_STORE], None),
+
+    # "Longer would help": the suggestion.
+    ("O1 the next length up, by minutes", LONGER,
+     "  const longer = LENGTHS.filter((one) => choiceMinutes(one, defaultMinutes) > minutes).sort(\n",
+     "  const longer = LENGTHS.filter((one) => choiceMinutes(one, defaultMinutes) >= minutes).sort(\n",
+     [T_LONGER], None),
+    ("O2 the muscles the goals weight up", LONGER,
+     "  return MUSCLE_IDS.filter((muscle) => weights[muscle] > 1 + 1e-6);\n",
+     "  return MUSCLE_IDS.filter((muscle) => weights[muscle] >= 1);\n", [T_LONGER], None),
+    ("O3 none for a muscle recovering", LONGER,
+     "    if (input.recovering(muscle) || input.skipped.has(muscle)) continue;\n",
+     "    if (input.skipped.has(muscle)) continue;\n", [T_LONGER], None),
+    ("O4 none for a muscle Not now was said to this week", LONGER,
+     "    if (input.recovering(muscle) || input.skipped.has(muscle)) continue;\n",
+     "    if (input.recovering(muscle)) continue;\n", [T_LONGER], None),
+    ("O5 the gap read without today's own plan", LONGER,
+     "    const without = it.done + (it.planned - it.plannedToday);\n",
+     "    const without = it.done + it.planned;\n", [T_LONGER], None),
+    ("O6 a gap of a set at least", LONGER,
+     "    if (now < 1) continue;\n", "    if (now <= 0) continue;\n", [T_LONGER], None),
+    ("O7 the next length closes half of it", LONGER,
+     "    if (now - then >= RULES.longerShare.value * now) found.push({ muscle, now, then });\n",
+     "    if (now - then > 0) found.push({ muscle, now, then });\n", [T_LONGER], None),
+    ("O8 the furthest behind first", LONGER,
+     "  found.sort((a, b) => b.now - a.now);\n", "", [T_LONGER], None),
+    ("O9 it says where it closes every gap", LONGER,
+     "    closesAll: found.every((item) => item.then < 1),\n", "    closesAll: false,\n",
+     [T_LONGER], None),
+    ("O10 a synergist's sets at half", LONGER,
+     "    if (exercise.secondaryMuscles.includes(muscle)) return sum + working * INDIRECT_SET_WEIGHT;\n",
+     "    if (exercise.secondaryMuscles.includes(muscle)) return sum + working;\n", [T_LONGER], None),
+
+    # What the answers teach, and the cooldowns.
+    ("A1 a pattern reads the last eight weeks", ANSWERS,
+     "    .filter((answer) => answer.at <= now && Date.parse(answer.at) >= since)\n",
+     "    .filter((answer) => answer.at <= now)\n", [T_ANSWERS], None),
+    ("A2 ... the latest four answers", ANSWERS,
+     "    .slice(0, RULES.offersRead.value);\n", "    .slice(0);\n", [T_ANSWERS], None),
+    ("A3 ... two of a kind at least", ANSWERS,
+     "  if (most < RULES.offersPattern.value) return null;\n", "  if (most < 1) return null;\n",
+     [T_ANSWERS], None),
+    ("A4 ... the newer kind where two tie", ANSWERS,
+     "  const lead = recent.find((answer) => counts.get(answer.answer) === most)!;\n",
+     "  const lead = [...recent].reverse().find((answer) => counts.get(answer.answer) === most)!;\n",
+     [T_ANSWERS], None),
+    ("A5 taken and not trained longer is the time running short", ANSWERS,
+     "  same: 'limited',\n", "  same: 'chooses-short',\n", [T_ANSWERS], None),
+    ("A6 time available rests nothing", ANSWERS,
+     "  if (!read || read.pattern === 'has-time') return null;\n", "  if (!read) return null;\n",
+     [T_ANSWERS], None),
+    ("A7 two weeks for the shorter session chosen, four for the time running short", ANSWERS,
+     "    read.pattern === 'chooses-short' ? RULES.chosenPauseDays.value : RULES.limitedPauseDays.value;\n",
+     "    read.pattern === 'chooses-short' ? RULES.limitedPauseDays.value : RULES.chosenPauseDays.value;\n",
+     [T_ANSWERS], None),
+    ("A8 Not now skips its muscles for its own week", ANSWERS,
+     "      .filter((answer) => answer.answer === 'not-now' && answer.week === week)\n",
+     "      .filter((answer) => answer.answer === 'not-now')\n", [T_ANSWERS], None),
+    ("A9 the day's showing goes on all day", ANSWERS,
+     "  if (days.has(today)) return true;\n", "", [T_ANSWERS], None),
+    ("A10 ... on two days in seven", ANSWERS,
+     "  return days.size < RULES.longerPerWeek.value;\n", "  return true;\n", [T_ANSWERS], None),
+    ("A11 ... the seven days before now", ANSWERS,
+     "      .filter((at) => at <= now && Date.parse(now) - Date.parse(at) < 7 * DAY_MS)\n",
+     "      .filter((at) => at <= now)\n", [T_ANSWERS], None),
+    ("A12 one showing kept a day", ANSWERS,
+     "  if (record.shown.some((at) => localDayKey(at) === today)) return record;\n  const since",
+     "  const since", [T_ANSWERS], None),
+    ("A13 a suggestion taken another day answers nothing", ANSWERS,
+     "  if (localDayKey(pending.at) !== localDayKey(done.began)) return settled;\n", "",
+     [T_ANSWERS], None),
+    ("A14 the length taken back down is the shorter session chosen", ANSWERS,
+     "    done.chosenMinutes < pending.to - 1e-6\n", "    false\n", [T_ANSWERS], None),
+    ("A15 trained past halfway is the time there", ANSWERS,
+     "      : done.trainedMinutes >= pending.from + RULES.trainedLonger.value * step\n",
+     "      : done.trainedMinutes >= pending.to\n", [T_ANSWERS], None),
+    ("A16 two copies merged keep every answer", ANSWERS,
+     "  for (const answer of [...saved.answers, ...shown.answers]) {\n",
+     "  for (const answer of [...saved.answers]) {\n", [T_ANSWERS], None),
+    ("A17 ... the newer pending", ANSWERS,
+     "  const pending = newer(saved.pending, shown.pending);\n", "  const pending = saved.pending;\n",
+     [T_ANSWERS], None),
+    ("A18 ... every showing", ANSWERS,
+     "  for (const at of [...saved.shown, ...shown.shown]) {\n",
+     "  for (const at of [...saved.shown]) {\n", [T_ANSWERS], None),
+    ("A19 an answer kept, the record held to the weeks a pattern reads", ANSWERS,
+     "        (one) => Date.parse(one.at) >= since && !(one.at === answer.at && one.week === answer.week),\n",
+     "        (one) => !(one.at === answer.at && one.week === answer.week),\n", [T_ANSWERS], None),
+    ("LW1 one answer a suggestion", ANSWERS,
+     "        (one) => Date.parse(one.at) >= since && !(one.at === answer.at && one.week === answer.week),\n",
+     "        (one) => Date.parse(one.at) >= since,\n", [T_ANSWERS], None),
+    ("LW2 a pending suggestion either copy answered is dropped", ANSWERS,
+     "    pending !== null && answers.has(`${pending.at}|${pending.week}`) ? null : pending;\n",
+     "    pending;\n", [T_ANSWERS], None),
+    # LW3 (the take's day read against the day the workout began) is A13's own line now.
+    ("V1 an answer that does not read is dropped alone", OFFERS,
+     "    .array(TimeAnswerSchema.nullable().catch(null))\n", "    .array(TimeAnswerSchema)\n",
+     [T_ANSWERS], None),
+    ("V2 ... and so is a showing", OFFERS,
+     "    .array(z.iso.datetime().nullable().catch(null))\n", "    .array(z.iso.datetime())\n",
+     [T_ANSWERS], None),
+    ("V3 ... and the pending answer", OFFERS,
+     "  pending: AskedSchema.extend({ choice: DurationChoiceSchema })\n    .nullable()\n    .catch(null)\n",
+     "  pending: AskedSchema.extend({ choice: DurationChoiceSchema })\n    .nullable()\n",
+     [T_ANSWERS], None),
+
+    # The suggestion in the store.
+    ("SL1 never offered once Settings turns it off", STORE,
+     "    if (!this.state.coachSwitches.longer) return null;\n", "", [T_STORE], None),
+    ("SL2 only on a day of the plan, no deload week or illness", STORE,
+     "    if (constraints.catchUp || constraints.deload || illnessOf(constraints.readiness) !== null) {\n      return null;\n    }\n",
+     "", [T_STORE], None),
+    ("SL3 never on a day of high fatigue", STORE,
+     "    if (interpretFatigue(history, now).level === 'high') return null;\n", "", [T_STORE], None),
+    ("SL4 within the cooldowns", STORE,
+     "    if (!mayShowLonger(this.state.timeOffers, now)) return null;\n", "", [T_STORE], None),
+    ("SL5 only before the workout starts", STORE,
+     "    if (!session || !profile || session.status !== 'preview' || this.fromEarlierDay(session)) {\n      return null;\n    }\n    const now = this.now();\n    const refs",
+     "    if (!session || !profile) {\n      return null;\n    }\n    const now = this.now();\n    const refs",
+     [T_STORE], None),
+    ("SL6 the day's one showing written once", STORE,
+     "    if (this.state.timeOffers.shown.some((at) => localDayKey(at) === localDayKey(now))) return;\n",
+     "", [T_STORE], None),
+    ("SL7 taken, its answer waits for the workout's end", STORE,
+     "    await this.changeTimeOffers((current) => ({ ...current, pending }));\n", "",
+     [T_STORE], None),
+    ("SL8 ... the length taken", STORE,
+     "    return this.setDurationChoice(offer.choice);\n",
+     "    return this.setDurationChoice(session.duration);\n", [T_STORE, T_SCREEN], None),
+    ("SL9 Not now kept as the shorter session chosen", STORE,
+     "        answer: 'not-now',\n", "        answer: 'same',\n", [T_STORE, T_SCREEN], None),
+    ("SL10 a workout with nothing logged answers nothing", STORE,
+     "    if (this.state.timeOffers.pending && trainedIn(record)) {\n",
+     "    if (this.state.timeOffers.pending) {\n", [T_STORE], None),
+    ("SL11 the time trained read from the sets' own clock", STORE,
+     "          trainedMinutes: (record.trainingSeconds ?? 0) / 60,\n",
+     "          trainedMinutes: 999,\n", [T_STORE], None),
+    ("LW4 ... the store gives it when the workout began", STORE,
+     "          began: record.startedAt,\n", "          began: now,\n", [T_STORE], None),
+    ("LW5 nothing more offered while today's take waits", STORE,
+     "    if (pending && localDayKey(pending.at) === localDayKey(now)) return null;\n", "",
+     [T_STORE], None),
+    # SL12 and SL13 have no case to meet: each part of the two records that fails to read is dropped
+    # alone, so a stored record always reads. The guards stay.
+    ("SL14 the honest card put away keeps its reading", STORE,
+     "    if (signal.source === GOALS_TIME_SOURCE && signal.goalsTime) {\n", "    if (false) {\n",
+     [T_STORE], None),
+
+    # The honest goals-versus-time check.
+    ("G1 three completed weeks, each with a session", GOALS,
+     "  if (byWeek.some((records) => records.length === 0)) return null;\n", "", [T_GOALS], None),
+    ("G2 ... the weeks before this one", GOALS,
+     "    localWeekKey(addLocalDays(now, -7 * (back + 1))),\n",
+     "    localWeekKey(addLocalDays(now, -7 * back)),\n", [T_GOALS], None),
+    ("G3 a muscle under the floor in every one of them", GOALS,
+     "    byWeek.every((records) => setsDone(records, muscle) < RULES.floorSets.value),\n",
+     "    byWeek.some((records) => setsDone(records, muscle) < RULES.floorSets.value),\n",
+     [T_GOALS], None),
+    ("G4 ... only where the sessions ran shorter than the Default", GOALS,
+     "  if (minutes >= defaultMinutes) return null;\n", "", [T_GOALS], None),
+    ("G5 the goals' muscles, the major ones where none is weighted", GOALS,
+     "    priority.length > 0 ? priority : MUSCLE_IDS.filter((muscle) => targets[muscle] >= 10);\n",
+     "    MUSCLE_IDS.filter((muscle) => targets[muscle] >= 10);\n", [T_GOALS], None),
+    ("G6 a synergist's sets at half", GOALS,
+     "      else if (exercise.secondaryMuscles.includes(muscle)) sets += done * INDIRECT_SET_WEIGHT;\n",
+     "      else if (exercise.secondaryMuscles.includes(muscle)) sets += done;\n", [T_GOALS], None),
+    ("G7 a material change: other muscles", GOALS,
+     "  if (same(reading.muscles) !== same(kept.muscles)) return true;\n", "", [T_GOALS], None),
+    ("G8 ... or the minutes moved by a quarter", GOALS,
+     "  return Math.abs(reading.minutes - kept.minutes) >= RULES.materialShare.value * kept.minutes;\n",
+     "  return Math.abs(reading.minutes - kept.minutes) > 0;\n", [T_GOALS], None),
+    ("G9 the card on Today's plan before it starts", COACH,
+     "  if (input.status !== 'preview' || input.switches?.goalsTime === false) return [];\n",
+     "  if (input.switches?.goalsTime === false) return [];\n", [T_COACH_GOALS], None),
+    ("G10 ... off when Settings turns it off", COACH,
+     "  if (input.status !== 'preview' || input.switches?.goalsTime === false) return [];\n",
+     "  if (input.status !== 'preview') return [];\n", [T_COACH_GOALS], None),
+    ("G11 ... back only on a material change", COACH,
+     "  if (!reading || !goalsTimeChanged(reading, input.timeOffers?.goalsTime ?? null)) return [];\n",
+     "  if (!reading) return [];\n", [T_COACH_GOALS], None),
+    ("G12 ... saying what the suggestion learned", COACH,
+     "        ? 'When a longer session was offered, you chose the shorter one.'\n",
+     "        ? null\n", [T_COACH_GOALS], None),
+    ("G13 ... held to the card limits", COACH,
+     "export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE, GOALS_TIME_SOURCE];\n",
+     "export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE];\n", [T_COACH_GOALS], None),
+    ("G14 ... with Adjust time", COACH,
+     "      action: { kind: 'settings', section: 'schedule', label: 'Adjust time' },\n",
+     "      action: { kind: 'none' },\n", [T_COACH_GOALS], None),
+    ("G15 the too-soon card off when Settings turns it off", COACH,
+     "        input.switches?.tooSoon !== false ||\n", "        true ||\n", [T_COACH_GOALS], None),
+    ("LW9 the schedule card offers no lighter option with the too-soon card off", COACH,
+     "    input.switches?.tooSoon === false\n      ? ''\n", "    false\n      ? ''\n",
+     [T_SCHEDULE_LINE], None),
+
+    # Settings and the screens.
+    ("X1 each kind of coaching on until turned off", SWITCHES,
+     "  return { id: COACH_SWITCHES_ID, tooSoon: true, longer: true, goalsTime: true };\n",
+     "  return { id: COACH_SWITCHES_ID, tooSoon: true, longer: false, goalsTime: true };\n",
+     [T_SWITCHES], None),
+    ("U1 Today shows the suggestion", CARD,
+     "      {longer ? (\n        <p className={styles.dayNote} data-testid=\"longer-offer\">\n",
+     "      {longer && false ? (\n        <p className={styles.dayNote} data-testid=\"longer-offer\">\n",
+     [T_SCREEN], None),
+    ("U2 its words: most of the gap, or the gap", USELONGER,
+     "    text: `${offer.minutes} min would close ${offer.closesAll ? '' : 'most of '}this week’s ${musclesInWords(offer.muscles)} gap`,\n",
+     "    text: `${offer.minutes} min would close most of this week’s ${musclesInWords(offer.muscles)} gap`,\n",
+     [T_SCREEN], None),
+    ("U3 ... the Default named", USELONGER,
+     "        ? `Use your Default (${offer.minutes} min)`\n", "        ? `Use ${offer.minutes} min`\n",
+     [T_SCREEN], None),
+    ("U4 its showing kept for the cooldowns", USELONGER,
+     "    if (offer) void store.noteLongerShown().catch(() => undefined);\n", "", [T_SCREEN], None),
+    ("U5 Adjust time opens the schedule", TODAY,
+     "        window.location.hash = '#/settings/schedule';\n", "", [T_GOALS_SCREEN], None),
+    ("U6 the coach reads what the suggestion learned", USECOACH,
+     "    ...(parts.timeOffers ? { timeOffers: parts.timeOffers } : {}),\n", "", [T_GOALS_SCREEN], None),
+    ("U7 ... and the switches", USECOACH,
+     "    ...(parts.coachSwitches ? { switches: parts.coachSwitches } : {}),\n", "", [T_GOALS_SCREEN], None),
+]
+
+
+def apply(original, old, new, nth):
+    pairs = old if isinstance(old, list) else [(old, new)]
+    mutated = original
+    for part_old, part_new in pairs:
+        count = mutated.count(part_old)
+        if (nth is None and count != 1) or (nth is not None and count <= nth):
+            return None, f"ANCHOR x{count}"
+        at = -1
+        for _ in range((nth or 0) + 1):
+            at = mutated.index(part_old, at + 1)
+        mutated = mutated[:at] + part_new + mutated[at + len(part_old):]
+    return mutated, None
+
+
+args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
+check = "--check" in sys.argv
+utc = "--utc" in sys.argv
+results = []
+for name, rel, old, new, tests, nth in MUTATIONS:
+    if args and not any(name.startswith(prefix) for prefix in args):
+        continue
+    path = ROOT / rel
+    original = path.read_bytes().decode("utf-8")
+    mutated, bad = apply(original, old, new, nth)
+    if bad:
+        results.append((name, bad, ""))
+        print(f"{bad:9} {name}", flush=True)
+        continue
+    if check:
+        continue
+    try:
+        path.write_bytes(mutated.encode("utf-8"))
+        env = dict(os.environ, TZ="UTC") if utc else None
+        run = subprocess.run(
+            "npx vitest run " + " ".join(tests),
+            shell=True, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env,
+        )
+        out = run.stdout + run.stderr
+        summary = re.search(r"Tests\s+(.*)", out)
+        line = summary.group(1).strip() if summary else "no summary (compile error?)"
+        # A compile error, or a failure that is only a time-out, is no catch (as
+        # mutate-install-icon.py reads it): WRONG FAILURE, to run again alone or mend.
+        asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
+        # A test file that did not load (a syntax error) is a failed file with no test failed.
+        files = re.search(r"Test Files\s+(.*)", out)
+        unloaded = files is not None and "failed" in files.group(1) and "failed" not in line
+        wrong = (
+            summary is None
+            or unloaded
+            or (re.search(r"Test timed out", out) is not None and not asserted)
+        )
+        killed = "failed" in line and not wrong
+        if utc:
+            # As the CI runner: the tests in UTC, then the day rules' tests in two zones.
+            zones = subprocess.run(
+                "node scripts/test-zones.mjs",
+                shell=True, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", env=env,
+            )
+            line = f"UTC: {line}; zones: {'failed' if zones.returncode != 0 else 'passed'}"
+            zones_out = zones.stdout + zones.stderr
+            zones_asserted = re.search(
+                r"AssertionError|TestingLibraryElementError|expected .* to ", zones_out
+            )
+            if zones.returncode != 0 and not killed and not wrong:
+                if zones_asserted:
+                    killed = True
+                else:
+                    wrong = True
+        verdict = "WRONG FAILURE" if wrong else "KILLED" if killed else "SURVIVED"
+        results.append((name, verdict, line))
+    finally:
+        path.write_bytes(original.encode("utf-8"))
+    print(f"{results[-1][1]:9} {name}: {results[-1][2]}", flush=True)
+
+if check:
+    print(f"anchors checked: {len(MUTATIONS)} entries, {len(results)} not found")
+    sys.exit(0)
+print("\n==== summary")
+for name, verdict, line in results:
+    print(f"{verdict:9} {name}  [{line}]")
+survived = [r for r in results if r[1] != "KILLED"]
+print(f"\n{len(results) - len(survived)} killed, {len(survived)} not killed")

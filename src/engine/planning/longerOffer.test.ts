@@ -34,18 +34,26 @@ const curls = (sets: number): Pick<GeneratedWorkout, 'blocks'> => ({
   ],
 });
 
-/** A week where every muscle has its target met except the biceps, `done` sets in and none ahead. */
-function weekFor(done: number): WeekModel {
+/**
+ * A week where every muscle has its target met except the biceps, `done` sets in and none ahead
+ * (or `ahead`, today's own plan among them), and the triceps where `triceps` says what they did.
+ */
+function weekFor(
+  done: number,
+  ahead: { planned: number; plannedToday: number } = { planned: 0, plannedToday: 0 },
+  triceps?: number,
+): WeekModel {
   const muscles = Object.fromEntries(
     MUSCLE_IDS.map((muscle) => [
       muscle,
       {
-        done: muscle === 'biceps' ? done : 20,
+        done:
+          muscle === 'biceps' ? done : muscle === 'triceps' && triceps !== undefined ? triceps : 20,
         today: 0,
         todayDirect: 0,
-        planned: 0,
-        plannedToday: 0,
-        target: muscle === 'biceps' ? 13 : 10,
+        planned: muscle === 'biceps' ? ahead.planned : 0,
+        plannedToday: muscle === 'biceps' ? ahead.plannedToday : 0,
+        target: muscle === 'biceps' || muscle === 'triceps' ? 13 : 10,
         daysSince: null,
         daysBefore: null,
       },
@@ -53,6 +61,27 @@ function weekFor(done: number): WeekModel {
   ) as WeekModel['muscles'];
   return { week: '2026-09-07', sessionsAhead: 1, trainedToday: false, muscles };
 }
+
+/** A plan of curls and pushdowns, each lift's working sets. */
+const armsDay = (curl: number, pushdown: number): Pick<GeneratedWorkout, 'blocks'> => ({
+  blocks: [
+    ...curls(curl).blocks,
+    {
+      id: 'b2',
+      kind: 'straight',
+      label: 'B',
+      rounds: pushdown,
+      restBetweenRoundsSeconds: 60,
+      entries: [
+        {
+          id: 'e2',
+          exerciseId: 'cable-triceps-pushdown',
+          sets: Array.from({ length: pushdown }, (_, index) => ({ index, kind: 'working' })),
+        } as unknown as WorkoutEntry,
+      ],
+    },
+  ],
+});
 
 const offerFor = (
   plan: number,
@@ -112,6 +141,27 @@ describe('the suggestion', () => {
     expect(offerFor(2, 8, { recovering: (muscle) => muscle === 'biceps' })).toBeNull();
     expect(offerFor(2, 8, { skipped: new Set<MuscleId>(['biceps']) })).toBeNull();
     expect(offerFor(2, 8, { next: null })).toBeNull();
+  });
+
+  it('reads the gap without today’s own plan, which the week counts among the sessions ahead', () => {
+    // Today's 2 sets are in the week's planned sets: the gap is 13 - 5 - 2 = 6, and 6 at 45 leave 2.
+    const offer = offerFor(2, 6, { week: weekFor(5, { planned: 2, plannedToday: 2 }) });
+    expect(offer).toMatchObject({ muscles: ['biceps'], closesAll: false });
+  });
+
+  it('says nothing for a gap under a set', () => {
+    // 10.5 done and 2 today: half a set short.
+    expect(offerFor(2, 6, { week: weekFor(10.5) })).toBeNull();
+  });
+
+  it('names the muscle furthest behind first', () => {
+    // The biceps 6 short with today's 2 curls; the triceps, none done, 13 short.
+    const offer = offerFor(2, 6, {
+      week: weekFor(5, undefined, 0),
+      plan: armsDay(2, 0),
+      trial: armsDay(8, 10),
+    });
+    expect(offer?.muscles).toEqual(['triceps', 'biceps']);
   });
 
   it('counts a synergist at half, as the week does', () => {

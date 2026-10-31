@@ -64,6 +64,26 @@ describe('the honest goals-versus-time reading', () => {
     expect(goalsTimeReading(profile, shortWeeks(60), NOW)).toBeNull();
   });
 
+  it('counts a synergist’s sets at half: rows alone leave the biceps under the floor', () => {
+    // Two 30-minute days of three sets of rows a week: 6 sets for the back, 3 for the biceps.
+    const rows = (date: number) => {
+      const when = at(9, date);
+      return {
+        ...record(0, 'barbell-row', [
+          [8, 135, 2],
+          [8, 135, 2],
+          [8, 135, 2],
+        ]),
+        id: `w-rows-${date}`,
+        startedAt: when,
+        completedAt: when,
+        plannedMinutes: 30,
+      };
+    };
+    const history = [6, 8, 13, 15, 20, 22].map(rows);
+    expect(goalsTimeReading(profile, history, NOW)?.muscles).toEqual(['biceps', 'triceps']);
+  });
+
   it('reads nothing of a muscle at the floor in any one week', () => {
     // Four sets of curls in the middle week: the biceps reach the floor there.
     const history = [...shortWeeks(), day(9, 14, 4, 30)];

@@ -140,6 +140,11 @@ export function planWeek(
   now: string,
   /** What the lifter reset (Maintenance 27, item 47): the week reads as today's plan does. */
   resets: LearnedResets | null = null,
+  /**
+   * Today's plan's own length (Maintenance 34; the review: the Plan screen's Today ran at the
+   * Default while today's plan ran at 15 minutes): the Default without one.
+   */
+  todayLength: DurationChoice = 'default',
 ): PlannedSession[] {
   const sessions: PlannedSession[] = [];
   for (const { date, weekday, offset, workout } of plannedWorkouts(
@@ -148,6 +153,7 @@ export function planWeek(
     history,
     now,
     resets,
+    todayLength,
   )) {
     const counts = new Map<MuscleId, number>();
     for (const entry of allEntries(workout.blocks)) {

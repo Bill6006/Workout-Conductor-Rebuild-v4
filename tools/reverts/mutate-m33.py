@@ -522,9 +522,10 @@ MUTATIONS = [
      "  const shape = planTop ?? entry.floored?.find((set) => set.tier === 'top') ?? after.top;",
      "  const shape = entry.floored?.find((set) => set.tier === 'top') ?? after.top;",
      [T_LIGHTER_BEFORE_TOP], None),
+    # Z35 re-anchored in Maintenance 34: the carried sets are checked between the two.
     ("Z35 a lift picked up again under \"Lighter\" comes back eased as it went", ENGINE,
-     "      layer.finish(lighterPickedUp(outcome.workout, plain, constraints), constraints),",
-     "      layer.finish(outcome.workout, constraints),", [T_LIGHTER_PICKED_UP], None),
+     "    const carried = lighterPickedUp(outcome.workout, plain, constraints);\n",
+     "    const carried = outcome.workout;\n", [T_LIGHTER_PICKED_UP], None),
     ("Z36 ... with the record of the plan its stop kept", ENGINE,
      "      entry.eased = { ...(record?.sets ? record : recordOf(entry, block)), kept: true };\n",
      "", [T_LIGHTER_PICKED_UP], None),

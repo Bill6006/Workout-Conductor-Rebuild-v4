@@ -341,6 +341,11 @@ export interface GenerationConstraints {
    */
   carry?: Partial<Record<MuscleId, number>>;
   /**
+   * Muscles the lifter chose to go lighter on today (Maintenance 33, the "too soon" card): no lift
+   * that works one directly takes or keeps a set the week's need gave (the review of Maintenance 34).
+   */
+  carryHold?: readonly MuscleId[];
+  /**
    * The catch-up's slots as the plan laid them out (the seventh review of round M): a rebuild
    * around kept lifts fills these, never a layout made again from what the place has.
    */
@@ -932,21 +937,139 @@ function catchUpLines(spec: CatchUpSpec, blocks: readonly WorkoutBlock[]): strin
 
 /** A lift's line for the sets the week's need gave it (Maintenance 34). */
 const CARRIED_LINE = /^(?:A set|\d+ sets) more for the .+, which this week is short of\.$/;
+/** The plan's line for them in "Why this workout" (Maintenance 34). */
+const CARRY_REASON =
+  /^This week is short of the .+: (?:a set|\d+ sets) more for (?:it|them), in the room \d+ min leaves\.$/;
+
+/** The plan's line for the sets the week's need gave its lifts; null with none. */
+function carryReason(entries: readonly WorkoutEntry[], minutes: number): string | null {
+  const lifts = entries.filter((entry) => (entry.carried ?? 0) > 0);
+  if (lifts.length === 0) return null;
+  const sets = lifts.reduce((sum, entry) => sum + (entry.carried ?? 0), 0);
+  const muscles = [...new Set(lifts.flatMap((entry) => entry.carriedFor ?? []))];
+  return `This week is short of the ${musclesInWords(muscles)}: ${sets === 1 ? 'a set' : `${sets} sets`} more for ${muscles.length === 1 ? 'it' : 'them'}, in the room ${minutes} min leaves.`;
+}
+
+/** Each lift's line for the sets the week's need gave it, from what it holds now. */
+function sayLiftsCarried(entries: readonly WorkoutEntry[]): void {
+  for (const entry of entries) {
+    if (!entry.progression) continue;
+    const others = entry.progression.evidence.filter((one) => !CARRIED_LINE.test(one));
+    const count = entry.carried ?? 0;
+    if (count === 0 && others.length === entry.progression.evidence.length) continue;
+    const line = `${count === 1 ? 'A set' : `${count} sets`} more for the ${musclesInWords(entry.carriedFor ?? [])}, which this week is short of.`;
+    entry.progression = {
+      ...entry.progression,
+      evidence: count > 0 ? [line, ...others] : others,
+    };
+  }
+}
+
+/**
+ * The lines the sets the week's need gave say (Maintenance 34), from what each lift holds now:
+ * each lift's, and the plan's in "Why this workout", in its place; none where none is left.
+ */
+export function sayCarried(workout: GeneratedWorkout): void {
+  sayLiftsCarried(allEntries(workout.blocks));
+  const at = workout.explanation.reasons.findIndex((one) => CARRY_REASON.test(one));
+  const reasons = workout.explanation.reasons.filter((one) => !CARRY_REASON.test(one));
+  const line = carryReason(allEntries(workout.blocks), workout.duration.targetMinutes);
+  if (line) reasons.splice(at >= 0 ? at : reasons.length, 0, line);
+  workout.explanation = { ...workout.explanation, reasons };
+}
+
+/**
+ * Where the week's need may put a set today (Maintenance 34): nowhere on a day `closed` to it (the
+ * caller's: off the plan, a deload week, a hard start, fewer sets), of an illness (Maintenance
+ * 33's gate) or of high fatigue; and on no lift a `held` muscle moves, one inside its recovery
+ * window or gone lighter (the review of Maintenance 34: a set for the chest on the bench press
+ * worked the triceps resting).
+ */
+export interface CarryGate {
+  closed: boolean;
+  held: (muscle: MuscleId) => boolean;
+}
+
+export function carryGate(input: {
+  history: readonly WorkoutRecord[];
+  now: string;
+  readiness: Readiness | null;
+  resets: LearnedResets | null;
+  closed: boolean;
+  lighter?: readonly MuscleId[];
+}): CarryGate {
+  const closed =
+    input.closed ||
+    illnessOf(input.readiness) !== null ||
+    interpretFatigue(input.history, input.now).level === 'high';
+  const windows = recoveryWindows(
+    input.history,
+    dayRecovery({
+      readiness: input.readiness,
+      history: input.history,
+      now: input.now,
+      resets: input.resets,
+    }),
+  );
+  const lighter = new Set(input.lighter ?? []);
+  return {
+    closed,
+    held: (muscle) => {
+      if (lighter.has(muscle)) return true;
+      const window = windows.get(muscle);
+      return window !== undefined && hoursSince(window, input.now) < window.hours;
+    },
+  };
+}
+
+/** Whether a lift may hold sets the week's need gave: the day open to them, no prime mover held. */
+export function holdsCarry(gate: CarryGate, exerciseId: string): boolean {
+  return !gate.closed && !requireExercise(exerciseId).primaryMuscles.some(gate.held);
+}
+
+/**
+ * The sets the week's need gave a lift, still to do, taken off its end (Maintenance 34): at most
+ * `most`, never one logged; its count goes with them. Returns how many went.
+ */
+export function dropCarried(
+  entry: WorkoutEntry,
+  isDone: SetDonePredicate,
+  most = Infinity,
+): number {
+  let gone = 0;
+  while ((entry.carried ?? 0) > 0 && gone < most) {
+    const last = [...entry.sets].reverse().find((set) => set.kind === 'working');
+    if (!last || isDone(entry.id, last.index)) break;
+    entry.sets = entry.sets.filter((set) => set !== last);
+    entry.carried = (entry.carried ?? 0) - 1;
+    gone += 1;
+  }
+  if ((entry.carried ?? 0) <= 0) {
+    delete entry.carried;
+    delete entry.carriedFor;
+  }
+  return gone;
+}
 
 /**
  * What the time fit cut in the latest sessions (Maintenance 34, the approved proposal: "Carry
  * forward what keeps getting cut. Store what the time fit left out of each workout. A muscle cut
  * last time is protected next time. If a muscle is cut twice running, trim a set from an already
  * well-covered muscle instead ... Rotate which isolation move goes, so no muscle loses every short
- * day"): for each muscle, in how many of the latest sessions running, newest first, the fit cut
- * it, up to two. A session from before the record kept it cut nothing.
+ * day"): for each muscle, in how many of the latest sessions of the same day of the split running,
+ * newest first, the fit cut it, up to two. Another day of the split ends no run: a pull day cuts
+ * nothing of the push day's (the review of Maintenance 34: on a split, the day between ended every
+ * run). A session from before the record kept it cut nothing.
  */
 export function cutRunning(
   history: readonly WorkoutRecord[],
   now: string,
+  templateId: string | null,
 ): Map<MuscleId, number> {
   const latest = history
-    .filter((record) => record.startedAt <= now && trainedIn(record))
+    .filter(
+      (record) => record.startedAt <= now && record.templateId === templateId && trainedIn(record),
+    )
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
     .slice(0, RULES.cutRunning.value);
   const levels = new Map<MuscleId, number>();
@@ -1921,6 +2044,20 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     ...(resting.size > 0 ? { resting } : {}),
   };
   const fatigue = interpretFatigue(history, now);
+  // Where the week's need may put a set today (Maintenance 34), read once it is asked.
+  let gateRead: CarryGate | undefined;
+  const gate = (): CarryGate =>
+    (gateRead ??= carryGate({
+      history,
+      now,
+      readiness: constraints.readiness ?? null,
+      resets: input.resets ?? null,
+      closed:
+        offPlan ||
+        deload !== null ||
+        (constraints.adjust?.sets ?? 0) < 0,
+      lighter: constraints.carryHold,
+    }));
 
   // Entries the caller keeps: logged work is frozen; pinned picks, explicit
   // selections, and accepted alternatives stay in their slots.
@@ -1938,6 +2075,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   for (const kept of keep) {
     const entry = cloneEntry(kept.entry);
     if (kept.closed) closeAtLogged(entry, isDone);
+    // A lift kept holds the sets the week's need gave it only where the day still allows them
+    // (the review of Maintenance 34: a pinned lift kept its sets under a head cold).
+    if ((entry.carried ?? 0) > 0 && !holdsCarry(gate(), entry.exerciseId)) {
+      dropCarried(entry, isDone);
+      sayLiftsCarried([entry]);
+    }
     if (entry.slot !== undefined && entry.slot < template.slots.length) {
       keptBySlot.set(entry.slot, [...(keptBySlot.get(entry.slot) ?? []), entry]);
     } else {
@@ -2833,10 +2976,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const estimate = (): TimeBreakdown =>
     estimateWorkout(blocks, generalWarmup, exerciseOf, isDone, pace.factor);
 
-  // What keeps getting cut (Maintenance 34): a muscle the time fit cut last session is spared
-  // next, after every muscle not cut, and one cut twice running after those, within the same
-  // rank of the leave-out order: the main lifts still stay, and the isolation moves take turns.
-  const cutBefore = cutRunning(history, now);
+  // What keeps getting cut (Maintenance 34): a lift for a muscle the time fit cut the last time the
+  // split had this day is left out after every lift for a muscle not cut, and one cut twice running
+  // after those, within the same rank of the leave-out order: the main lifts still stay, and the
+  // moves take turns. The set trims read no cut: the fit trims every lift to its fewest sets before
+  // it leaves one out.
+  const cutBefore = cutRunning(history, now, template.id);
   const cutRank = (entry: WorkoutEntry) =>
     Math.max(
       0,
@@ -3004,8 +3149,10 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     }
   }
 
-  // The plan's own sets before the fit: what it cuts is kept on the workout (Maintenance 34).
-  const beforeFit = directSets(allEntries(blocks), exerciseOf);
+  // The plan's own lifts and sets before the fit: what it leaves out is kept on the workout
+  // (Maintenance 34).
+  const liftsBeforeFit = allEntries(blocks);
+  const beforeFit = directSets(liftsBeforeFit, exerciseOf);
   // 3. Cap the number of list rows for the chosen length; paired rows count once.
   const cap = capFor(targetMinutes);
   while (blocks.length > cap) {
@@ -3086,9 +3233,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     const ordered = allEntries(blocks)
       .filter(trimmable)
       .sort(
-        (a, b) =>
-          cutRank(a) - cutRank(b) ||
-          entryValue(a, weightOf, preferredIds) - entryValue(b, weightOf, preferredIds),
+        (a, b) => entryValue(a, weightOf, preferredIds) - entryValue(b, weightOf, preferredIds),
       );
     const target = ordered[0];
     if (!target) return false;
@@ -3096,11 +3241,6 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     if (!lastWorking) return false;
     trimmed.push({ entry: target, set: lastWorking, at: target.sets.indexOf(lastWorking) });
     target.sets = target.sets.filter((set) => set !== lastWorking);
-    // A set the week's need gave it goes first (Maintenance 34): its count goes with it.
-    if (target.carried !== undefined) {
-      if (target.carried > 1) target.carried -= 1;
-      else delete target.carried;
-    }
     syncRoundsOf(target);
     const trimmedName = exerciseOf(target.exerciseId).name;
     fitLog.add(`trimmed|${trimmedName}`, trimmedLine(trimmedName));
@@ -3196,8 +3336,21 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const overAtPlanPace = (): boolean =>
     pace.factor === 1 ||
     estimateWorkout(blocks, generalWarmup, exerciseOf, isDone).totalMinutes > limit;
+  // A set the week's need gave a lift goes before anything of the plan's own (Maintenance 34, the
+  // review: a pinned lift kept its sets through a shorter length, and the plan's own went).
+  const trimCarried = (): boolean => {
+    for (const entry of [...allEntries(blocks)].reverse()) {
+      if ((entry.carried ?? 0) > 0 && dropCarried(entry, isDone, 1) > 0) {
+        syncRoundsOf(entry);
+        sayLiftsCarried([entry]);
+        return true;
+      }
+    }
+    return false;
+  };
   while (estimate().totalMinutes > limit && guard < 40) {
     guard += 1;
+    if (trimCarried()) continue;
     if (!restsExhausted && overAtPlanPace() && shortenRests()) continue;
     restsExhausted = true;
     if (trimSets()) continue;
@@ -3229,10 +3382,20 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   // With an exact end time the rows went one by one to fit it: the lifts left take back the sets
   // the fit trimmed from them while the time still fits them (Maintenance 24).
   if (hardCap) giveBackTrimmed();
-  // The muscles the fit cut: fewer direct sets than the plan gave them (Maintenance 34).
+  // The muscles the fit cut (Maintenance 34, the proposal: "Store what the time fit left out of each
+  // workout"): a lift that works one directly left out, and the muscle left with fewer direct sets
+  // than the plan gave it. A set trimmed is no cut: at a short length the fit trims nearly every
+  // lift, and a cut named every muscle would spare none (the revert run of Maintenance 34).
+  const liftsAfterFit = new Set(allEntries(blocks).map((entry) => entry.exerciseId));
   const afterFit = directSets(allEntries(blocks), exerciseOf);
   const fitCut = MUSCLE_IDS.filter(
-    (muscle) => (afterFit.get(muscle) ?? 0) < (beforeFit.get(muscle) ?? 0),
+    (muscle) =>
+      (afterFit.get(muscle) ?? 0) < (beforeFit.get(muscle) ?? 0) &&
+      liftsBeforeFit.some(
+        (entry) =>
+          !liftsAfterFit.has(entry.exerciseId) &&
+          exerciseOf(entry.exerciseId).primaryMuscles.includes(muscle),
+      ),
   );
 
   // 5. One optional, intelligent drop set on a safe isolation move. A drop set is a set taken
@@ -3316,29 +3479,9 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   // recovery window (Maintenance 33): its sets wait for it. A lift begun, kept, set by hand, in a
   // circuit or with a drop set takes none (a pair runs its longer member's rounds, so a set more on
   // one is a round more for it).
-  const carriedFor = new Map<WorkoutEntry, MuscleId[]>();
   const carry = constraints.carry ?? {};
-  if (
-    !offPlan &&
-    deload === null &&
-    fatigue.level !== 'high' &&
-    illnessOf(constraints.readiness ?? null) === null &&
-    (constraints.adjust?.sets ?? 0) >= 0 &&
-    Object.keys(carry).length > 0
-  ) {
-    const windows = recoveryWindows(
-      history,
-      dayRecovery({
-        readiness: constraints.readiness ?? null,
-        history,
-        now,
-        resets: input.resets ?? null,
-      }),
-    );
-    const recovering = (muscle: MuscleId) => {
-      const window = windows.get(muscle);
-      return window !== undefined && hoursSince(window, now) < window.hours;
-    };
+  if (Object.keys(carry).length > 0 && !gate().closed) {
+    const { held } = gate();
     const setsToday = (muscle: MuscleId) =>
       allEntries(blocks).reduce((sum, entry) => {
         const exercise = exerciseOf(entry.exerciseId);
@@ -3348,6 +3491,18 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
         return sum;
       }, 0);
     const owed = (muscle: MuscleId) => (carry[muscle] ?? 0) - setsToday(muscle);
+    // Every prime mover of the lift, not the muscle the set is for alone (the review of Maintenance
+    // 34: a set for the chest on the bench press worked the triceps resting, and past 11): none
+    // held, and none over 11 sets today with it. A synergist's half set is no part of the cap.
+    const fits = (entry: WorkoutEntry) => {
+      const exercise = exerciseOf(entry.exerciseId);
+      return (
+        !exercise.primaryMuscles.some(held) &&
+        exercise.primaryMuscles.every(
+          (muscle) => setsToday(muscle) + 1 <= RULES.carryMuscleSets.value,
+        )
+      );
+    };
     const takes = (block: WorkoutBlock, entry: WorkoutEntry, muscle: MuscleId) => {
       const last = [...entry.sets].reverse().find((set) => set.kind === 'working');
       return (
@@ -3355,21 +3510,22 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
         exerciseOf(entry.exerciseId).primaryMuscles.includes(muscle) &&
         last !== undefined &&
         last.tier !== 'top' &&
-        !entry.locked &&
-        !entry.pinned &&
+        // A lift kept takes none: every lift begun, locked, pinned or set by hand is a kept one.
         !keptIds.has(entry.id) &&
-        entry.manual?.sets !== true &&
         !entry.dropSet &&
-        !entry.sets.some((set) => isDone(entry.id, set.index)) &&
-        (entry.carried ?? 0) < RULES.carryLiftSets.value
+        // The lift to push keeps to its own sets (Maintenance 27, item 44: "a harder day adds no
+        // set to it"; the review of Maintenance 34).
+        entry.push === undefined &&
+        (entry.carried ?? 0) < RULES.carryLiftSets.value &&
+        fits(entry)
       );
     };
     const owing = (Object.keys(carry) as MuscleId[])
-      .filter((muscle) => !recovering(muscle) && owed(muscle) >= 1)
+      .filter((muscle) => !held(muscle) && owed(muscle) >= 1)
       .sort((a, b) => owed(b) - owed(a));
     let room = true;
     for (const muscle of owing) {
-      while (room && owed(muscle) >= 1 && setsToday(muscle) + 1 <= RULES.carryMuscleSets.value) {
+      while (room && owed(muscle) >= 1) {
         const lift = blocks
           .flatMap((block) => block.entries.filter((entry) => takes(block, entry, muscle)))
           .sort(
@@ -3388,19 +3544,12 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
           break;
         }
         lift.carried = (lift.carried ?? 0) + 1;
-        carriedFor.set(lift, [...new Set([...(carriedFor.get(lift) ?? []), muscle])]);
+        lift.carriedFor = [...new Set([...(lift.carriedFor ?? []), muscle])];
       }
     }
-    for (const [entry, muscles] of carriedFor) {
-      if (!entry.progression) continue;
-      const count = entry.carried ?? 0;
-      const line = `${count === 1 ? 'A set' : `${count} sets`} more for the ${musclesInWords(muscles)}, which this week is short of.`;
-      entry.progression = {
-        ...entry.progression,
-        evidence: [line, ...entry.progression.evidence.filter((one) => !CARRIED_LINE.test(one))],
-      };
-    }
   }
+  // Each lift says the sets the week's need gave it, a lift kept from before too.
+  sayLiftsCarried(allEntries(blocks));
 
   const time = estimate();
   const overBy = Math.max(0, Math.round((time.totalMinutes - targetMinutes) * 10) / 10);
@@ -3528,13 +3677,8 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
       }: ${template.title.toLowerCase()} today.`,
     );
   }
-  if (carriedFor.size > 0) {
-    const sets = [...carriedFor.keys()].reduce((sum, entry) => sum + (entry.carried ?? 0), 0);
-    const muscles = [...new Set([...carriedFor.values()].flat())];
-    reasons.push(
-      `This week is short of the ${musclesInWords(muscles)}: ${sets === 1 ? 'a set' : `${sets} sets`} more for ${muscles.length === 1 ? 'it' : 'them'}, in the room ${targetMinutes} min leaves.`,
-    );
-  }
+  const carried = carryReason(allEntries(blocks), targetMinutes);
+  if (carried) reasons.push(carried);
   if (behindNames.length > 0) {
     reasons.push(
       `${behindNames.slice(0, 3).join(', ')} ${behindNames.length === 1 ? 'is' : 'are'} behind this week: the accessories lead with ${behindNames.length === 1 ? 'it' : 'them'}.`,

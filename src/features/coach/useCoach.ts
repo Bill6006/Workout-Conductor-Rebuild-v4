@@ -3,6 +3,7 @@ import type { AppState } from '../../core/state/appStore';
 import { checkInDayOf, elapsedSeconds } from '../../core/state/session';
 import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { useMomentReached, useNow } from '../../core/time/clock';
+import { localDayKey } from '../../core/time/localDate';
 import {
   conductCoach,
   declineKey,
@@ -97,7 +98,16 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
     ...(parts.coachShown ? { shown: parts.coachShown } : {}),
     location,
     loading: session.loading,
-    upcoming: planWeek(profile, location, history, now, parts.learnedResets ?? null),
+    // Today's plan at the length it has now (Maintenance 34): the lifter's choice stands over the
+    // forecast.
+    upcoming: planWeek(
+      profile,
+      location,
+      history,
+      now,
+      parts.learnedResets ?? null,
+      localDayKey(session.createdAt) === localDayKey(now) ? session.duration : 'default',
+    ),
     focus: parts.coachFocus?.muscle ?? null,
     swaps: parts.lastingSwaps.filter((swap) => !swapIsPast(swap, now)),
     resets: parts.learnedResets ?? null,

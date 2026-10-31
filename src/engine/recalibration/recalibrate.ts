@@ -123,6 +123,10 @@ import {
   marksOfDay,
   offerKey,
   withSwapLines,
+  carryGate,
+  dropCarried,
+  holdsCarry,
+  sayCarried,
 } from '../workoutGenerator/generate';
 import {
   allEntries,
@@ -301,11 +305,9 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult 
     };
     const outcome = execute(plain, scope, layer);
     const constraints = outcome.constraints;
-    const next = heldToTheDay(
-      layer.finish(lighterPickedUp(outcome.workout, plain, constraints), constraints),
-      request,
-      constraints,
-    );
+    const carried = lighterPickedUp(outcome.workout, plain, constraints);
+    const held = heldCarry(carried, plain, constraints);
+    const next = heldToTheDay(layer.finish(held, constraints), request, constraints);
     markEmptied(constraints, request, next);
     // The time and the lines say what the plan now holds, eased or given back.
     if (next !== outcome.workout || bare !== shown) {
@@ -328,7 +330,7 @@ export function recalibrate(request: RecalibrationRequest): RecalibrationResult 
       previous: shown,
       next,
       changes,
-      notes: outcome.notes,
+      notes: held === carried ? outcome.notes : [...(outcome.notes ?? []), CARRY_HELD],
     });
     const workout: GeneratedWorkout = {
       ...next,
@@ -805,16 +807,63 @@ function rebuild(
 
 /**
  * The week's need the plan carries into a rebuild (Maintenance 34): none under a hard start, whose
- * ease takes work off the day, and none for a muscle the lifter chose to go lighter on (Maintenance
- * 33, the "too soon" card's option).
+ * ease takes work off the day, and with the muscles the lifter chose to go lighter on (Maintenance
+ * 33, the "too soon" card's option), whose lifts take none of it (the review of Maintenance 34: a
+ * set for the chest stayed on the bench press with the triceps gone lighter). What a lift kept
+ * holds from before is checked after every change (`heldCarry`).
  */
-function carryOf(constraints: SessionConstraints): Pick<GenerationConstraints, 'carry'> {
-  if (!constraints.carry || constraints.badStart) return {};
-  const lighter = new Set(constraints.lighter ?? []);
-  const kept = Object.fromEntries(
-    Object.entries(constraints.carry).filter(([muscle]) => !lighter.has(muscle as MuscleId)),
-  ) as Partial<Record<MuscleId, number>>;
-  return Object.keys(kept).length > 0 ? { carry: kept } : {};
+function carryOf(constraints: SessionConstraints): Pick<GenerationConstraints, 'carry' | 'carryHold'> {
+  return {
+    ...(constraints.carry && !constraints.badStart ? { carry: { ...constraints.carry } } : {}),
+    ...((constraints.lighter?.length ?? 0) > 0 ? { carryHold: [...constraints.lighter!] } : {}),
+  };
+}
+
+/** The line a change says where the sets the week's need gave came off (Maintenance 34). */
+const CARRY_HELD = 'Sets for what this week is short of wait for another day.';
+
+/**
+ * The sets the week's need gave, kept only where the day still allows them after a change (the
+ * review of Maintenance 34): "Lighter", a check-in or a hard start can hold a muscle back with
+ * nothing built again. Their sets still to do go, never one logged; the lines say what is left.
+ */
+function heldCarry(
+  workout: GeneratedWorkout,
+  request: RecalibrationRequest,
+  constraints: SessionConstraints,
+): GeneratedWorkout {
+  if (!allEntries(workout.blocks).some((entry) => (entry.carried ?? 0) > 0)) return workout;
+  const gate = carryGate({
+    history: request.history,
+    now: request.timestamp,
+    readiness: constraints.readiness,
+    resets: request.resets ?? null,
+    closed:
+      offPlanSpec(constraints, workout) !== null ||
+      constraints.deload !== null ||
+      constraints.badStart === true ||
+      (dayAdjust(constraints)?.sets ?? 0) < 0,
+    lighter: constraints.lighter,
+  });
+  const { isDone } = classify(request);
+  const held = cloneWorkout(workout);
+  let changed = false;
+  for (const block of held.blocks) {
+    let gone = 0;
+    for (const entry of block.entries) {
+      if ((entry.carried ?? 0) > 0 && !holdsCarry(gate, entry.exerciseId)) {
+        gone += dropCarried(entry, isDone);
+      }
+    }
+    if (gone > 0) {
+      syncRounds(block);
+      relabel(block);
+      changed = true;
+    }
+  }
+  if (!changed) return workout;
+  sayCarried(held);
+  return held;
 }
 
 /**
@@ -5884,6 +5933,11 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
           // Never on top of a hard start's ease the lift keeps.
           if (isStopped(entry) || keepsTheEase(entry)) continue;
           if (!requireExercise(entry.exerciseId).primaryMuscles.includes(muscle)) continue;
+          // The sets the week's need gave it go first: the lighter option takes from its own.
+          if (dropCarried(entry, isDone) > 0) {
+            sayCarried(workout);
+            changed = true;
+          }
           if (lightenUnderWay(entry, block, request, isDone, `Lighter today for the ${words}`)) {
             changed = true;
           }

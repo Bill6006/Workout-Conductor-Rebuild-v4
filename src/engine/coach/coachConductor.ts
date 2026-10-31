@@ -2608,9 +2608,15 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
   const muscles = MUSCLE_IDS.filter((muscle) =>
     ahead.some((item) => item.muscles.includes(muscle)),
   );
+  // The lighter option is the "too soon" card's: with the card off in Settings, the line says the
+  // days alone (the review of Maintenance 34).
+  const offered =
+    input.switches?.tooSoon === false
+      ? ''
+      : `; the coach offers a lighter option ${days.length === 1 ? 'that day' : 'those days'}`;
   const crowded =
     ahead.length > 0
-      ? `On ${dayList(days)} the plan would work the ${musclesInWords(muscles)} hard again when ${muscles.length === 1 ? 'it' : 'they'} may not have recovered; the coach offers a lighter option ${days.length === 1 ? 'that day' : 'those days'}.`
+      ? `On ${dayList(days)} the plan would work the ${musclesInWords(muscles)} hard again when ${muscles.length === 1 ? 'it' : 'they'} may not have recovered${offered}.`
       : '';
   return [
     {

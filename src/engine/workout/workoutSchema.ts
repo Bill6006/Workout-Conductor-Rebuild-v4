@@ -134,6 +134,7 @@ export const WorkoutEntrySchema = z.looseObject({
   // The sets the week's need gave the lift (Maintenance 34): optional, and dropped rather than
   // refused, the sets then the lift's own.
   carried: z.number().int().min(1).optional().catch(undefined),
+  carriedFor: z.array(z.enum(MUSCLE_IDS)).optional().catch(undefined),
   progression: EntryProgressionSchema.optional().catch(undefined),
   manual: z
     .looseObject({

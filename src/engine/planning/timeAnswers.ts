@@ -103,29 +103,40 @@ export function withShown(record: TimeOffers, now: string): TimeOffers {
   };
 }
 
-/** An answer kept, the record kept to the weeks a pattern reads. */
+/**
+ * An answer kept, the record kept to the weeks a pattern reads. One suggestion has one answer: a
+ * second for the same one takes its place (the review of Maintenance 34: a copy from another device
+ * brought a suggestion back, answered twice, and one occasion made a pattern).
+ */
 export function withAnswer(record: TimeOffers, answer: TimeAnswer): TimeOffers {
   const since = Date.parse(answer.at) - RULES.offersWeeks.value * 7 * DAY_MS;
   return {
     ...record,
-    answers: [...record.answers.filter((one) => Date.parse(one.at) >= since), answer],
+    answers: [
+      ...record.answers.filter(
+        (one) => Date.parse(one.at) >= since && !(one.at === answer.at && one.week === answer.week),
+      ),
+      answer,
+    ],
   };
 }
 
 /**
  * The suggestion taken, answered once the workout ends (`resolvePending`): trained past halfway
  * from the length it was to the length taken, the time was there; less, it ran short; the length
- * picked back down before the end, the shorter session was chosen after all.
+ * picked back down before the end, the shorter session was chosen after all. `began` is when the
+ * workout began: one taken before midnight and trained past it is answered (the review of
+ * Maintenance 34).
  */
 export function resolvePending(
   record: TimeOffers,
-  done: { at: string; trainedMinutes: number; chosenMinutes: number },
+  done: { began: string; trainedMinutes: number; chosenMinutes: number },
 ): TimeOffers {
   const pending = record.pending;
   if (!pending) return record;
   const settled: TimeOffers = { ...record, pending: null };
   // Taken on another day: that day's workout never ended, and says nothing.
-  if (localDayKey(pending.at) !== localDayKey(done.at)) return settled;
+  if (localDayKey(pending.at) !== localDayKey(done.began)) return settled;
   const step = pending.to - pending.from;
   const answer: LongerAnswer =
     done.chosenMinutes < pending.to - 1e-6
@@ -143,7 +154,11 @@ export function resolvePending(
   });
 }
 
-/** Two records of the answers as one: every showing and answer either holds, the newer pending. */
+/**
+ * Two records of the answers as one: every showing and answer either holds, the newer pending, and
+ * none that either has answered already (the review of Maintenance 34: a copy from before the
+ * answer brought it back).
+ */
 export function mergeTimeOffers(saved: TimeOffers, shown: TimeOffers): TimeOffers {
   const days = new Map<string, string>();
   for (const at of [...saved.shown, ...shown.shown]) {
@@ -157,12 +172,15 @@ export function mergeTimeOffers(saved: TimeOffers, shown: TimeOffers): TimeOffer
   }
   const newer = <T extends { at: string }>(a: T | null | undefined, b: T | null | undefined) =>
     !a ? (b ?? null) : !b ? a : a.at >= b.at ? a : b;
+  const pending = newer(saved.pending, shown.pending);
+  const answered =
+    pending !== null && answers.has(`${pending.at}|${pending.week}`) ? null : pending;
   return {
     ...saved,
     ...shown,
     shown: [...days.values()].sort(),
     answers: [...answers.values()].sort((a, b) => a.at.localeCompare(b.at)),
-    pending: newer(saved.pending, shown.pending),
+    pending: answered,
     goalsTime: newer(saved.goalsTime, shown.goalsTime),
   };
 }
