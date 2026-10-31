@@ -348,14 +348,10 @@ MUTATIONS = [
      "        ...(catchUp ? { catchUp } : {}),\n", "", [T_STORE], None),
 
     # Today.
-    ("T1 the line for a catch-up", NOTE,
-     "      action: { label: 'Full session', full: true },", "      action: undefined,",
-     [T_STORE, T_SCREEN], 2),
-    ("T2 ... and for the full session taken", NOTE,
-     "{ action: { label: 'Catch-up instead', full: false } }", "{}", [T_STORE, T_SCREEN], None),
-    ("T3 the button takes the session it names", TODAY,
-     "                      const full = note.action!.full;", "                      const full = true;",
-     [T_SCREEN], None),
+    # T1, T2 and T3 went (the owner's word, 2026-10-31: the app chooses the day's one workout, and
+    # nothing on Today chooses its kind): each reverted the full session's button, or the catch-up's
+    # way back, away, and the button is gone. The catch-up decision's table guards its absence
+    # (`mutate-catch-up-decision.py`, D1 to D5).
 
     # The review of round M: what a catch-up or a second workout leaves alone.
     ("R1 a second workout gives no lift for a muscle that sits out", CATCH,
@@ -405,12 +401,9 @@ MUTATIONS = [
     ("R16 Today reads the plan as it was built", NOTE,
      "  const built = builtCatchUp(stored, session.workout).muscles.length > 0;",
      "  const built = stored.muscles.length > 0;", [T_NOTE], None),
-    ("R17 a second workout's full session, and back", NOTE,
-     "    return { text: 'You trained today.', action: { label: 'Go easy instead', full: false } };",
-     "    return { text: 'You trained today.' };", [T_NOTE, T_STORE], None),
-    ("R18 nothing more for today, the full session a tap away", NOTE,
-     "    text: `You trained today${nothingBehind}: nothing more for today.`,\n    action: { label: 'Full session', full: true },",
-     "    text: `You trained today${nothingBehind}: nothing more for today.`,", [T_NOTE], None),
+    # R17 and R18 went with the button (the owner's word, 2026-10-31): they reverted "Go easy
+    # instead" and the full session a tap away from nothing more for today; D4 and D5 of the catch-up
+    # decision's table guard that neither comes back.
     ("R19 nothing to start when nothing is left", CARD,
      "    (dayNote !== null && sessionStatus === 'preview' && allEntries(workout.blocks).length === 0) ||",
      "    false ||", [T_NOTE], None),
@@ -1214,12 +1207,19 @@ MUTATIONS = [
     ("H195 Today's line tells a loaded copy as the day's offer only where the day offers its kind", NOTE,
      "  const stored = day && own && offers !== own.kind ? null : own;",
      "  const stored = own;", [T_SAVED_DAY_WORDS], None),
+    # H196 and H197: a copy with no lift is no longer loaded (the owner's word, 2026-10-31), so their
+    # cases are copies with lifts (the twenty-third and twenty-fifth reviews' own tests).
     ("H196 a saved workout's marks of its offer are its own alone", STORE,
      "    const marks = day.emptied.filter((plan) => !ofOffer(plan));",
-     "    const marks = day.emptied;", [T_EMPTY_COPY], None),
+     "    const marks = day.emptied;",
+     ["src/core/state/savedCatchUpLoadedAfterEmptied.store.test.ts",
+      "src/core/state/savedWorkoutLoaded.store.test.ts",
+      "src/core/state/laterPlanSwappedAway.store.test.ts",
+      "src/core/state/keptSwapAwayFrom.store.test.ts"], None),
     ("H197 ... and kept as its own", STORE,
      "    const ownMarks = day.emptied.filter(\n      (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),\n    );",
-     "    const ownMarks: EmptiedPlan[] = [];", [T_EMPTY_COPY], None),
+     "    const ownMarks: EmptiedPlan[] = [];",
+     ["src/core/state/copyRebuiltIntoEmptiedLayout.store.test.ts"], None),
     ("H198 a saved workout loaded keeps the deload week that covers today", STORE,
      "        deload: this.deloadToday(now),\n", "", [T_SAVED_DELOAD], None),
     # The twenty-fifth review of round M.
@@ -1247,13 +1247,12 @@ MUTATIONS = [
     ("H206 a loaded catch-up is the day's offer only where something is behind", NOTE,
      "    offered && (offered.kind === 'second' || offered.muscles.length > 0) ? offered.kind : null;",
      "    offered ? offered.kind : null;", [T_NOTHING_BEHIND_NOTE], None),
-    ("H207 an empty copy that is none of the day's offer keeps the full session a tap away", NOTE,
+    ("H207 a copy that is none of the day's offer, left with no lift, says nothing more for today", NOTE,
      "  if (day && !stored && allEntries(session.workout.blocks).length === 0) {",
-     "  if (false) {", [T_EMPTY_SECOND], None),
+     "  if (false) {", [T_NOTE], None),
     # The twenty-sixth review of round M.
-    ("H208 the full session from a copy that stands for none of the day's offer is the day's own", ENGINE,
-     "        if (day && offer && offers !== null && constraints.catchUp?.kind !== offers) {\n          constraints.catchUp = cloneSpec(offer);\n          const marks = marksOfDay(day.emptied ?? [], constraints.emptied ?? []);\n          if (marks.length > 0) constraints.emptied = marks;\n          else delete constraints.emptied;\n          delete constraints.dayChoices;\n        }\n",
-     "", [T_EMPTY_FULL_WAY_BACK], None),
+    # H208 went (the owner's word, 2026-10-31): no screen offers the full session, so it is never
+    # taken from a loaded copy; the engine's path stays for a session saved with it taken.
     ("H209 a copy records the day its plan was made", STORE,
      "      planDay: localDayKey(session.createdAt),\n", "", [T_REBUILT_MIDNIGHT], None),
     ("H210 ... the day its session was made, never its workout's last rebuild", STORE,
@@ -1263,11 +1262,7 @@ MUTATIONS = [
      "    const planDay = saved.planDay ?? localDayKey(saved.workout.generatedAt);",
      "    const planDay = localDayKey(saved.workout.generatedAt);", [T_REBUILT_MIDNIGHT], None),
     # The twenty-seventh review of round M.
-    ("H212 the full session from such a copy takes the plans emptied today as its own", ENGINE,
-     "          if (marks.length > 0) constraints.emptied = marks;\n          else delete constraints.emptied;\n",
-     "", [T_COPY_FULL_EMPTIED], None),
-    ("H213 ... and keeps nothing aside: the plan is the day's own", ENGINE,
-     "          delete constraints.dayChoices;\n", "", [T_COPY_FULL_READ_AGAIN, T_COPY_FULL_HOLDS], None),
+    # H212 and H213 went with H208: the full session from such a copy is never taken now.
     # The fresh review before shipping (2026-10-30).
     ("F1 the store's week reads the coach focus and the lasting swaps", STORE,
      "      focus: this.state.coachFocus,\n      swaps: this.activeSwaps(),\n", "",

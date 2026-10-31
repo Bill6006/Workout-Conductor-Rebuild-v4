@@ -355,7 +355,7 @@ MUTATIONS = [
      "    this.setSession(this.withDayCheckIn(made, checkIn === undefined ? before : checkIn));",
      "    this.setSession(made);", [T_LOADED_ILLNESS, T_CHECKIN_CARRIED], None),
     ("Z25 ... a saved workout loaded too", STORE,
-     "    this.setSession(this.withDayCheckIn(loaded, session));", "    this.setSession(loaded);",
+     "    const checked = this.withDayCheckIn(loaded, session);", "    const checked = loaded;",
      [T_LOADED_ILLNESS, T_CHECKIN_CARRIED], None),
     ("Z26 ... the plan after the completion closed, a workout done or not", STORE,
      "    this.ensureSession(trained ? null : session, session);",

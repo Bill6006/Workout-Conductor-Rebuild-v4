@@ -132,6 +132,26 @@ describe('a day already trained', () => {
     });
   });
 
+  it('says nothing more for today of a loaded copy, none of the day’s offer, its lifts skipped', () => {
+    // A saved workout loaded stands in for the plan, the day's offer kept aside (`dayChoices`); one
+    // that is none of the offer, every lift skipped, has nothing to start, and says so (Round M's
+    // twenty-fifth review).
+    const offer: CatchUpSpec = {
+      kind: 'catch-up',
+      muscles: [{ muscle: 'chest', sets: 3, minRir: 1, why: 'behind' }],
+      sitOut: [],
+    };
+    const base = sessionFor({ kind: 'second', muscles: [], sitOut: [...MUSCLE_IDS] }, []);
+    const copy = {
+      ...base,
+      constraints: { ...base.constraints, catchUp: undefined, dayChoices: { catchUp: offer } },
+    } as WorkoutSession;
+    expect(dayNoteOf(copy, true)).toEqual({ text: 'Nothing more for today.' });
+    expect(dayNoteOf(copy, false)).toEqual({
+      text: 'Not one of your training days: nothing more for today.',
+    });
+  });
+
   it('shows nothing to start when nothing is left: the line in its place, and no choice of kind', () => {
     const today = sessionFor({ kind: 'second', muscles: [], sitOut: [...MUSCLE_IDS] }, []);
     const note = dayNoteOf(today)!;

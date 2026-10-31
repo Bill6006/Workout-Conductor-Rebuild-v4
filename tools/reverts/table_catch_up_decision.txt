@@ -21,13 +21,12 @@ MUTATIONS = [
      "  return { text: `You trained today${nothingBehind}: nothing more for today.` };\n}",
      "  return {\n    text: `You trained today${nothingBehind}: nothing more for today.`,\n    action: { label: 'Full session', full: true },\n  } as DayNote;\n}",
      [T_NOTE, T_SECOND_EMPTIED], None),
-    # A copy with nothing to start today is never loaded: today's plan stays, untouched.
-    ("D6 an empty copy stands in for nothing", STORE,
-     "    if (!lifts) return 'empty';", "    if (false) return 'empty';",
-     [T_EMPTY_SECOND, T_EMPTY_COPY, T_COPY_HOLDS, T_COPY_READ, T_MARKS], None),
-    ("D7 ... nor one the day's check-in leaves with nothing", STORE,
+    # A copy with nothing to start today, the day's check-in laid on it, is never loaded: today's plan
+    # stays, untouched. (D6, an early refusal of a copy with no lift, went: this one check covers it.)
+    ("D7 a copy with nothing to start stands in for nothing, the day's check-in laid on", STORE,
      "    if (allEntries(checked.workout.blocks).length === 0) return 'empty';\n", "",
-     [T_CHECKED_COPY, T_PLAN_USE], None),
+     [T_CHECKED_COPY, T_PLAN_USE, T_EMPTY_SECOND, T_EMPTY_COPY, T_COPY_HOLDS, T_COPY_READ, T_MARKS],
+     None),
     ("D8 the Plan screen gives a copy with no exercise no Use", PLAN,
      "                  {state.session?.status === 'preview' &&\n                  allEntries(saved.workout.blocks).length > 0 ? (",
      "                  {state.session?.status === 'preview' ? (",
@@ -37,6 +36,6 @@ MUTATIONS = [
      "", [T_PLAN_USE], None),
     ("D10 ... never Loaded for a copy refused", PLAN,
      "                        if (loaded === 'loaded') toast.show(`Loaded \"${saved.name}\"`, 'success');",
-     "                        toast.show(`Loaded \"${saved.name}\"`, 'success');",
+     "                        if (loaded !== null) toast.show(`Loaded \"${saved.name}\"`, 'success');",
      [T_PLAN_USE], None),
 ]

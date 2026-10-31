@@ -3329,7 +3329,6 @@ export class AppStore {
     const offer = own ? offerKey({ catchUp: own }) : null;
     const ofOffer = (plan: EmptiedPlan) => offer !== null && plan.offer === offer;
     const lifts = allEntries(copy.workout.blocks).length > 0;
-    if (!lifts) return 'empty';
     const ownMarks = day.emptied.filter(
       (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),
     );
