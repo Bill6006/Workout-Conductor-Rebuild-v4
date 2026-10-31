@@ -13,8 +13,14 @@ still pass means the rule has no test that guards it.
 | `mutate-m28.py` | Maintenance 28 (round J) | 83 |
 | `mutate-m29.py` | Maintenance 29 (round K) | 32 |
 | `mutate-m30.py` | Maintenance 30 (round L) | 121 |
-| `mutate-m31.py` | Maintenance 31 (round M), with `--utc` | M31_ENTRIES |
-| `mutate-m32.py` | Maintenance 32 (round N) | M32_ENTRIES |
+| `mutate-m31.py` | Maintenance 31 (round M), with `--utc` | 347 |
+| `mutate-m32.py` | Maintenance 32 (round N) | 322 |
+| `mutate-m33.py` | Maintenance 33 (the recovery and readiness core), with `--utc` | 170 |
+| `mutate-install-icon.py` | Install the app and the launcher icon | 54 |
+| `mutate-harder-variation.py` | The harder-variation fix | 24 |
+| `mutate-catch-up-decision.py` | The app chooses the day's workout | 9 |
+| `mutate-m34.py` | Maintenance 34 (time intelligence) | 136 |
+| `mutate-item48.py` | Maintenance 35 (item 48, Life Mirror's daily check-in) | 64 |
 
 The tables are data: each row is `(name, file, old, new, tests, nth)`. From M30 on, a round's table
 is written from its `table_mNN.txt`: edit the `.txt`, then run `python3 table_mNN.py`. Never write a

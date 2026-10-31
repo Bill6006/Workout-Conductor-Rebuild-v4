@@ -9,14 +9,14 @@ _Last updated: 2026-10-31_
 | Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Current phase | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 21, 25, 27, 28, 29, 30, 31, 32 and 33 YELLOW at their review gates. The agreed backlog is being built round after round without pausing at the gates (the owner, 2026-10-11) |
-| Phase gate | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 34 YELLOW (time intelligence, `docs/reports/maintenance-34.md`). The app chooses the day's workout YELLOW (2026-10-31, `docs/reports/catch-up-decision.md`). The harder-variation fix YELLOW (2026-10-31, `docs/reports/harder-variation-fix.md`). Maintenance 33 YELLOW (the recovery and readiness core). Maintenance 32 YELLOW (round N: item 11). Maintenance 31 YELLOW (round M: items 12, 32). Install the app and the launcher icon YELLOW (2026-10-24, `docs/reports/install-and-launcher-icon.md`). Maintenance 30 YELLOW (round L: items 6, 30, 31). Maintenance 29 YELLOW (round K: items 7, 8, 10, 14). Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
+| Current phase | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 21, 25, 27, 28, 29, 30, 31, 32, 33, 34 and 35 YELLOW at their review gates. The agreed backlog is being built round after round without pausing at the gates (the owner, 2026-10-11) |
+| Phase gate | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 35 YELLOW (item 48, Life Mirror's daily check-in, `docs/reports/maintenance-35.md`). Maintenance 34 YELLOW (time intelligence, `docs/reports/maintenance-34.md`). The app chooses the day's workout YELLOW (2026-10-31, `docs/reports/catch-up-decision.md`). The harder-variation fix YELLOW (2026-10-31, `docs/reports/harder-variation-fix.md`). Maintenance 33 YELLOW (the recovery and readiness core). Maintenance 32 YELLOW (round N: item 11). Maintenance 31 YELLOW (round M: items 12, 32). Install the app and the launcher icon YELLOW (2026-10-24, `docs/reports/install-and-launcher-icon.md`). Maintenance 30 YELLOW (round L: items 6, 30, 31). Maintenance 29 YELLOW (round K: items 7, 8, 10, 14). Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
 | Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Work in progress | On the owner's word of 2026-10-31, each chunk reviewed, reverted, verified and shipped live before the next: the harder-variation fix, the catch-up decision and Maintenance 34 (time intelligence) live; next, item 48 (Life Mirror's daily check-in, behind a switch that stays off), then the schedule watch, custom equipment presets, and the final reconciliation with one consolidated phone review |
-| Latest commit | `6531357` Tests: the fatigue gate and the take still waiting, as the revert run asked. Before it: `75597e8` what the revert run's second pass asked for; `c08b0f1` the review's fixes, and the tests the revert run asked for; `bbc6d92` Maintenance 34: time intelligence |
-| Latest deployment | `6531357` deployed by Deploy Pages run 41212353087 (success), its checks as the branch's CI run 41209993802: unit 3799 passed + 5 skipped by design, the browser suite 443 passed + 14 skipped by design. Live marker `shortCommit` `6531357`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed. Before it: `1152a15`, run 41204102489 |
-| Test totals | Unit: 3799 passed + 5 skipped by design (632 files), and the day rules in two more zones; in UTC in CI. Browser/mobile: 443 passed + 14 skipped by design locally (`npm run verify`), in UTC on a day the schedule does not tick, and in CI. Reverts, every table on the final code, every entry caught: M23 to M26 1,190, M27 193, M28 81 (UTC), M29 32, M30 121, M31 347, M32 322, M33 170, the install button and icons 54, the harder-variation fix 24, the catch-up decision 9, Maintenance 34 136 (`docs/reports/maintenance-31.md`, The complete revert run) |
+| Work in progress | On the owner's word of 2026-10-31, each chunk reviewed, reverted, verified and shipped live before the next: the harder-variation fix, the catch-up decision, Maintenance 34 (time intelligence) and Maintenance 35 (item 48, Life Mirror's daily check-in, behind a switch that stays off) live; next, the schedule watch, then custom equipment presets, and the final reconciliation with one consolidated phone review |
+| Latest commit | `d11fe71` CI: the checks' time limit at 40 minutes. Before it: `a4d9d0d` Revert tools: item 48's run, its entries settled; `52f5478` Item 48: the review's fixes; `5138d59` Item 48: Life Mirror's daily check-in |
+| Latest deployment | `d11fe71` deployed by Deploy Pages run 41224835430 (success), its checks as the branch's CI run 41223045092: unit 3841 passed + 5 skipped by design, the browser suite 443 passed + 14 skipped by design. Live marker `shortCommit` `d11fe71`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed. Before it: `6531357`, run 41212353087 |
+| Test totals | Unit: 3841 passed + 5 skipped by design (640 files), and the day rules in two more zones; in UTC in CI. Browser/mobile: 443 passed + 14 skipped by design locally (`npm run verify`), in UTC on a day the schedule does not tick, and in CI. Reverts, every table on the final code, every entry caught: M23 to M26 1,190, M27 193, M28 81 (UTC), M29 32, M30 121, M31 347, M32 322, M33 170, the install button and icons 54, the harder-variation fix 24, the catch-up decision 9, Maintenance 34 136, item 48 64 (`docs/reports/maintenance-31.md`, The complete revert run) |
 | Build marker           | Under Settings, About this app (since Maintenance 25; before, under every screen's header): `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ## Agreed and waiting
@@ -28,9 +28,6 @@ the uncertainty and the reason for each final rule are written down; a number in
 not a rule until the evidence backs it. Product and screen choices follow ordinary judgement (the
 owner, 2026-10-09).
 
-- **48.** Life Mirror's daily check-in, read-only, behind a switch that stays off until the owner
-  turns it on (back in scope 2026-10-11, approved 2026-10-17;
-  `docs/proposals/item-48-life-mirror-check-in.md`).
 - **The schedule watch** (approved 2026-10-17): it needs 8+ weeks of data after a move, so it
   switches on last.
 - **Custom equipment presets** (approved 2026-10-17; defined by the owner on 2026-10-31, in
@@ -75,7 +72,8 @@ Proposed in Maintenance 30, not agreed (the owner's decision): a move's load whe
 another way (a face pull with a band at home is planned in pounds), and a loaded calf raise at home
 (`docs/reports/maintenance-30.md`, Proposed).
 
-Item 48, not approved on 2026-10-09, came back in scope on 2026-10-11 and is agreed (above).
+Item 48, not approved on 2026-10-09, came back in scope on 2026-10-11 and is live in Maintenance
+35 (below).
 
 ## Waiting for the owner's phone acceptance
 
@@ -87,6 +85,8 @@ what the owner has already passed:
   phone review 2 (2026-10-25) saw the angled icon arrive as an update, in place. The fourth
   artwork's icon, reaching toward the tile's edges, arrives the same way: its five phone steps
   (`docs/reports/install-and-launcher-icon.md`, Review on the phone), not yet run.
+- **Maintenance 35** (item 48, Life Mirror's daily check-in): its three phone steps
+  (`docs/reports/maintenance-35.md`, Review on the phone), not yet run.
 - **Maintenance 34** (time intelligence): its four phone steps (`docs/reports/maintenance-34.md`,
   Review on the phone), not yet run.
 - **The app chooses the day's workout** (2026-10-31): its two phone steps
@@ -227,6 +227,21 @@ what the owner has already passed:
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 35: Life Mirror's daily check-in, item 48 (YELLOW)
+
+- Built on the owner's word of 2026-10-31: "keep it OFF until explicitly enabled; read only the
+  approved daily check-in signals; keep Workout-specific soreness, pain/joints, illness, and
+  available-time questions; never read unrelated/private Life Mirror content."
+- A switch in Settings, off until the lifter turns it on. With it on, a token and the cloud copy
+  at Life Mirror's own database, the check-in reads today's Life Mirror check-ins read-only, the
+  approved readings taken out of each body in the database itself, each only of its type: energy,
+  the night and motivation fill in the check-in, Life Mirror's stress and mood show in its own
+  words, each labelled with its time and changed with a tap. Soreness, joints, illness and time
+  are always asked here.
+- Reviewed once, fresh: one MEDIUM (stress and mood acted unseen) and nine LOW, all fixed with
+  tests; the revert run caught 63 of 64 at first, the last once a test reached the read alone.
+- Report: `docs/reports/maintenance-35.md`.
 
 ## Maintenance 34: time intelligence (YELLOW)
 
@@ -713,8 +728,8 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Rounds M and N and Maintenance 33 are live. Next, on the owner's word once those three are confirmed
-live: Maintenance 34, time intelligence (its work so far is the cloud branch's saved patch,
-`docs/handoff/CLOUD_HANDOFF.md`), then item 48 and the schedule watch, without pausing at the
-gates; the custom equipment presets once the owner defines them. Once every agreed item is live,
-the one consolidated phone review (Waiting for the owner's phone acceptance).
+Maintenance 34 (time intelligence) and Maintenance 35 (item 48) are live. Next, in the owner's
+order of 2026-10-31, each chunk shipped live before the next and without pausing at the gates:
+the schedule watch, then the custom equipment presets as the owner defined them
+(`docs/handoff/CLOUD_HANDOFF.md`), then the final reconciliation of the approved backlog and the
+one consolidated phone review (Waiting for the owner's phone acceptance).
