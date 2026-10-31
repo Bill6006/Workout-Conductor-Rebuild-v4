@@ -192,6 +192,14 @@ import {
   type CoachSwitch,
   type CoachSwitches,
 } from '../validation/coachSwitches';
+import {
+  LIFE_MIRROR_LINK_ID,
+  defaultLifeMirrorLink,
+  parseLifeMirrorLink,
+  type LifeMirrorLink,
+} from '../validation/lifeMirrorLink';
+import { readLifeMirrorDay } from '../cloud/lifeMirror';
+import { lifeMirrorPrefill, type LifeMirrorPrefill } from '../../engine/readiness/lifeMirror';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
 import { normalizeName } from '../backup/legacyImport';
 import {
@@ -457,6 +465,8 @@ export interface AppState {
   timeOffers: TimeOffers;
   /** The kinds of coaching the lifter turned off in Settings (Maintenance 34). */
   coachSwitches: CoachSwitches;
+  /** Whether today's check-in reads Life Mirror's (item 48): off until the lifter turns it on. */
+  lifeMirrorLink: LifeMirrorLink;
   /** A planned deload week, kept in the meta store and backed up; null when none. */
   deloadWeek: DeloadWeek | null;
   /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
@@ -971,11 +981,13 @@ export class AppStore {
   private shownVersion = 0;
   private timeOffersVersion = 0;
   private switchesVersion = 0;
+  private lifeMirrorVersion = 0;
   private resetsQueue: Promise<unknown> = Promise.resolve();
   private declinesQueue: Promise<unknown> = Promise.resolve();
   private shownQueue: Promise<unknown> = Promise.resolve();
   private timeOffersQueue: Promise<unknown> = Promise.resolve();
   private switchesQueue: Promise<unknown> = Promise.resolve();
+  private lifeMirrorQueue: Promise<unknown> = Promise.resolve();
   /** "Longer would help" worked out for the inputs it read (`longerOfferFor`): kept while they hold. */
   private longerKept: { refs: readonly unknown[]; offer: LongerOffer | null } | null = null;
   /**
@@ -1077,6 +1089,7 @@ export class AppStore {
       coachShown: emptyShown(),
       timeOffers: emptyTimeOffers(),
       coachSwitches: defaultCoachSwitches(),
+      lifeMirrorLink: defaultLifeMirrorLink(),
       deloadWeek: null,
       strengthMaxes: emptyMaxes(),
       coachFocus: null,
@@ -1199,6 +1212,7 @@ export class AppStore {
     const shownSeen = this.shownVersion;
     const timeOffersSeen = this.timeOffersVersion;
     const switchesSeen = this.switchesVersion;
+    const lifeMirrorSeen = this.lifeMirrorVersion;
     const mediaSeen = this.mediaVersion;
     const barcodesSeen = this.barcodesVersion;
     try {
@@ -1225,6 +1239,7 @@ export class AppStore {
         shownRaw,
         timeOffersRaw,
         switchesRaw,
+        lifeMirrorRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -1244,6 +1259,7 @@ export class AppStore {
         db.get<Identified>('meta', COACH_SHOWN_ID),
         db.get<Identified>('meta', TIME_OFFERS_ID),
         db.get<Identified>('meta', COACH_SWITCHES_ID),
+        db.get<Identified>('meta', LIFE_MIRROR_LINK_ID),
       ]);
       const deviceId = ensureDeviceId(this.storage);
       // Finds the token in either of its copies and heals the other. A copy that
@@ -1273,6 +1289,7 @@ export class AppStore {
           shownRaw,
           timeOffersRaw,
           switchesRaw,
+          lifeMirrorRaw,
         ].every((record) => record === undefined);
       await noteDatabaseBirth(db, this.now(), empty).catch(() => null);
       // A barcode the database lost comes back from the phone's second copy.
@@ -1338,6 +1355,10 @@ export class AppStore {
           this.switchesVersion === switchesSeen
             ? (parseCoachSwitches(switchesRaw) ?? defaultCoachSwitches())
             : this.state.coachSwitches,
+        lifeMirrorLink:
+          this.lifeMirrorVersion === lifeMirrorSeen
+            ? (parseLifeMirrorLink(lifeMirrorRaw) ?? defaultLifeMirrorLink())
+            : this.state.lifeMirrorLink,
         learnedResets:
           this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
@@ -5446,6 +5467,46 @@ export class AppStore {
     });
     this.switchesQueue = run.catch(() => undefined);
     await run;
+  }
+
+  /** Turns the reading of Life Mirror's check-in on or off (item 48): the lifter's own switch. */
+  async setLifeMirrorLink(on: boolean): Promise<void> {
+    const run = this.lifeMirrorQueue.then(async () => {
+      const db = await this.getDatabase();
+      const raw = await db.get<Identified>('meta', LIFE_MIRROR_LINK_ID);
+      const saved = raw === undefined ? defaultLifeMirrorLink() : parseLifeMirrorLink(raw);
+      // A record that does not read is never written over.
+      if (saved === null) throw new Error('The Life Mirror switch could not be read.');
+      const next: LifeMirrorLink = { ...saved, on };
+      await putVerified(db, 'meta', next, { now: this.now });
+      this.lifeMirrorVersion += 1;
+      this.setState({ lifeMirrorLink: next });
+    });
+    this.lifeMirrorQueue = run.catch(() => undefined);
+    await run;
+  }
+
+  /**
+   * Today's Life Mirror check-in for the check-in sheet (item 48), read when the sheet opens: only
+   * with the lifter's switch on, a token, and the cloud copy at Life Mirror's own database, since
+   * Life Mirror's address is fixed and another database holds none of its rows. Null otherwise, and
+   * on anything missing or unreadable: the sheet asks as it always does, without a word. Before
+   * 04:00 Life Mirror's evening is still the day before's, so there is nothing of today yet.
+   */
+  async lifeMirrorPrefill(): Promise<LifeMirrorPrefill | null> {
+    if (!this.state.lifeMirrorLink.on) return null;
+    const now = this.now();
+    if (new Date(now).getHours() < 4) return null;
+    try {
+      const db = await this.getDatabase();
+      const resolved = await resolveToken(db, this.storage, now);
+      const url = await resolveCloudUrl(db, this.storage, now);
+      if (!resolved.token || url !== DEFAULT_CLOUD_URL) return null;
+      const client = await withinBound(this.cloudClientFor(resolved.token, url));
+      return lifeMirrorPrefill(await withinBound(readLifeMirrorDay(client, localDayKey(now))));
+    } catch {
+      return null;
+    }
   }
 
   /** Changes the suggestion's answers one change at a time, from the record as saved and as shown. */

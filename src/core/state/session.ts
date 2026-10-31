@@ -1,3 +1,4 @@
+import { FILLED } from '../../engine/readiness/lifeMirror';
 import { z } from 'zod';
 import type { LastingSwap } from '../../engine/planning/lastingSwaps';
 import type { SessionLoading } from '../../engine/loading/loading';
@@ -245,6 +246,11 @@ const ReadinessSchema = z.looseObject({
   timePressure: z.boolean(),
   // Maintenance 33: a check-in saved before has none; one this copy cannot read is none.
   illness: z.enum(ILLNESSES).optional().catch(undefined),
+  // Item 48: Life Mirror's own, and where each value came from; a check-in saved before has none,
+  // and one this copy cannot read is none.
+  stress: z.number().int().min(1).max(5).optional().catch(undefined),
+  mood: z.number().int().min(1).max(5).optional().catch(undefined),
+  fromLifeMirror: z.partialRecord(z.enum(FILLED), z.iso.datetime()).optional().catch(undefined),
 });
 
 /** A plan the lifter emptied today (`EmptiedPlan`): its offer, and the layout it was laid out on. */

@@ -1,3 +1,4 @@
+import type { Filled } from '../readiness/lifeMirror';
 import type { Illness } from '../readiness/checkIn';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import type { StrengthMaxes } from '../progression/maxes';
@@ -35,6 +36,14 @@ export interface Readiness {
   jointDiscomfort: Joint[];
   timePressure: boolean;
   illness?: Illness;
+  /**
+   * Life Mirror's own (item 48), where its check-in gave them with the lifter's switch on: this app
+   * never asks them. 1 to 5; stress 5 is the worst.
+   */
+  stress?: number;
+  mood?: number;
+  /** The values Life Mirror filled in (item 48), each with its check-in's time; one changed is none. */
+  fromLifeMirror?: Partial<Record<Filled, string>>;
 }
 
 export type RecalibrationTrigger =

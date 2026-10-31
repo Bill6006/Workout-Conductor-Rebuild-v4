@@ -14,7 +14,14 @@ import { RULES } from '../rules/ruleTable';
 
 /** The check-in's items read against the lifter's own; soreness is not one of them. */
 export const CHECK_IN_ITEMS = ['energy', 'sleep', 'motivation'] as const;
-export type CheckInItem = (typeof CHECK_IN_ITEMS)[number];
+/**
+ * Life Mirror's own (item 48; the approved proposal: "item 48 supplies sleep, stress and mood when
+ * available"): read only against the lifter's own, where enough saved check-ins have them, since
+ * this app never asks them and the scale's middle says nothing of a person (Hopkins 2000,
+ * 10907753). Stress runs the other way: 5 is its worst.
+ */
+export const SHARED_ITEMS = ['mood', 'stress'] as const;
+export type CheckInItem = (typeof CHECK_IN_ITEMS)[number] | (typeof SHARED_ITEMS)[number];
 
 /**
  * The illness gate's answers, as stored on a check-in (the stored schemas share this list): symptoms
@@ -45,6 +52,8 @@ const ITEM_WORDS: Record<CheckInItem, string> = {
   energy: 'energy',
   sleep: 'sleep',
   motivation: 'motivation',
+  mood: 'mood',
+  stress: 'stress',
 };
 
 export interface CheckInRead {
@@ -119,12 +128,15 @@ function savedCheckIns(history: readonly WorkoutRecord[], nowIso: string) {
 /** Words for the items clearly worse: "energy and sleep under your usual". */
 export function worseWords(read: Pick<CheckInRead, 'worse' | 'extreme' | 'baseline'>): string {
   if (read.extreme) return read.extreme;
-  const names = read.worse.map((item) => ITEM_WORDS[item]);
+  const names = read.worse.filter((item) => item !== 'stress').map((item) => ITEM_WORDS[item]);
   const list =
     names.length <= 1
       ? (names[0] ?? '')
       : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1] as string}`;
-  return read.baseline === 'own' ? `${list} under your usual` : `${list} low`;
+  const under = read.baseline === 'own' ? `${list} under your usual` : `${list} low`;
+  // Stress is worse above the lifter's own (item 48: only ever read against it).
+  if (!read.worse.includes('stress')) return under;
+  return names.length > 0 ? `${under}, stress above it` : 'stress above your usual';
 }
 
 /**
@@ -152,6 +164,23 @@ export function readCheckIn(
       : 1;
     return readiness[item] <= mean - Math.max(1, spread * RULES.worseSpread.value);
   });
+  // Life Mirror's mood and stress, where today's check-in has them (item 48): each against the
+  // saved check-ins that have it, enough of them, as the others are; never against the scale.
+  const shared = SHARED_ITEMS.filter((item) => {
+    const today = readiness[item];
+    if (today === undefined) return false;
+    const values = saved
+      .map((entry) => entry.readiness[item])
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    if (values.length < RULES.baselineLeast.value) return false;
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const spread = Math.sqrt(
+      values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length,
+    );
+    const margin = Math.max(1, spread * RULES.worseSpread.value);
+    return item === 'stress' ? today >= mean + margin : today <= mean - margin;
+  });
+  const worseAll: CheckInItem[] = [...worse, ...shared];
   // Two short nights running: today's sleep and the night before's, from the check-in saved on the
   // day before (8112265, 29422383).
   const yesterday = localDayKey(addLocalDays(nowIso, -1));
@@ -163,9 +192,9 @@ export function readCheckIn(
       ? 'two short nights running'
       : null;
   return {
-    worse,
+    worse: worseAll,
     extreme,
-    lowered: worse.length >= RULES.worseItems.value || extreme !== null,
+    lowered: worseAll.length >= RULES.worseItems.value || extreme !== null,
     baseline: own ? 'own' : 'scale',
     wrecked: readiness.soreness >= WRECKED,
     illness,

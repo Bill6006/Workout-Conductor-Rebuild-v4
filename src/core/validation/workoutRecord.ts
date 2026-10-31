@@ -1,3 +1,4 @@
+import { FILLED } from '../../engine/readiness/lifeMirror';
 import { z } from 'zod';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
@@ -162,6 +163,11 @@ export const WorkoutRecordSchema = z.looseObject({
       timePressure: z.boolean(),
       // Maintenance 33: a record saved before has none; one this copy cannot read is none.
       illness: z.enum(ILLNESSES).optional().catch(undefined),
+      // Item 48: Life Mirror's own, and where each value came from; a check-in saved before has none,
+      // and one this copy cannot read is none.
+      stress: z.number().int().min(1).max(5).optional().catch(undefined),
+      mood: z.number().int().min(1).max(5).optional().catch(undefined),
+      fromLifeMirror: z.partialRecord(z.enum(FILLED), z.iso.datetime()).optional().catch(undefined),
     })
     .nullable()
     .default(null),

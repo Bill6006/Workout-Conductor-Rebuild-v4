@@ -174,6 +174,47 @@ export function createFakeCloud(): FakeCloud {
         }));
       return { rows, rowsAffected: 0 };
     }
+    if (sql.startsWith('SELECT updated_at, json_extract(body')) {
+      // Life Mirror's check-ins (item 48): each column the query names taken out of the body, as
+      // SQLite's json_extract does (an object as its JSON text, true and false as 1 and 0, nothing
+      // as NULL), and a body that is not JSON skipped, as json_valid skips it. Nothing else of a
+      // body is returned.
+      const [app, store, day] = [text(args[0]), text(args[1]), text(args[2])];
+      const columns = [...sql.matchAll(/json_extract\(body, '\$\.([\w.]+)'\) AS (\w+)/g)].map(
+        (match) => ({ path: (match[1] as string).split('.'), name: match[2] as string }),
+      );
+      const extracted = (value: unknown): CloudValue => {
+        if (value === undefined || value === null) return null;
+        if (typeof value === 'boolean') return value ? 1 : 0;
+        if (typeof value === 'object') return JSON.stringify(value);
+        return value as CloudValue;
+      };
+      const rows = [...records.values()]
+        .filter(
+          (row) => row.app === app && row.store === store && row.deleted === 0 && row.day === day,
+        )
+        .flatMap((row) => {
+          let body: unknown;
+          try {
+            body = JSON.parse(row.body ?? '');
+          } catch {
+            return [];
+          }
+          const read: Record<string, unknown> = { updated_at: row.updated_at };
+          for (const { path, name } of columns) {
+            let value: unknown = body;
+            for (const part of path) {
+              value =
+                value !== null && typeof value === 'object'
+                  ? (value as Record<string, unknown>)[part]
+                  : undefined;
+            }
+            read[name] = extracted(value);
+          }
+          return [read];
+        });
+      return { rows, rowsAffected: 0 };
+    }
     if (sql.startsWith('UPDATE devices')) {
       const [lastSync, label, deviceId, app] = [
         text(args[0]),

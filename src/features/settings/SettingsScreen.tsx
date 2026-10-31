@@ -28,6 +28,7 @@ import { LegacyImportCard } from './LegacyImportCard';
 import { LearnedValues } from './LearnedValues';
 import { MediaCreditsCard } from './MediaCreditsCard';
 import { CoachSwitchesRows } from './CoachSwitchesRows';
+import { LifeMirrorRow } from './LifeMirrorRow';
 import { PlaceWeights } from './PlaceWeights';
 import { SnapshotsCard } from './SnapshotsCard';
 import { StorageCard } from './StorageCard';
@@ -153,6 +154,10 @@ export function SettingsScreen() {
 
             <Group title="Coaching" testId="settings-coaching">
               <CoachSwitchesRows />
+            </Group>
+
+            <Group title="Life Mirror" testId="settings-life-mirror">
+              <LifeMirrorRow />
             </Group>
 
             <Group title="What the app has learned" testId="settings-learned">

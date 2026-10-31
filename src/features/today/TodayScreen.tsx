@@ -26,6 +26,7 @@ import { useCoach } from '../coach/useCoach';
 import { GOAL_OPTIONS, labelFor, styleLabel } from '../profile/labels';
 import { LocationSheet } from './LocationSheet';
 import { ReadinessSheet } from './ReadinessSheet';
+import { useLifeMirrorPrefill } from './useLifeMirrorPrefill';
 import { WorkoutPreviewCard } from './WorkoutPreviewCard';
 import { dayNoteOf } from './dayNote';
 import { longerWords, useLongerOffer } from './useLongerOffer';
@@ -60,6 +61,8 @@ export function TodayScreen() {
   const today = useTodayWorkout();
   const [selected, setSelected] = useState<Selection | null>(null);
   const [checkingIn, setCheckingIn] = useState(false);
+  // Item 48: today's Life Mirror check-in, read as the check-in opens.
+  const lifeMirror = useLifeMirrorPrefill(checkingIn);
   const [choosingPlace, setChoosingPlace] = useState(false);
   const coach = useCoach();
   // "Longer would help" beside the length control (Maintenance 34).
@@ -318,6 +321,7 @@ export function TodayScreen() {
         key={readiness ? 'set' : 'unset'}
         open={checkingIn}
         initial={readiness}
+        lifeMirror={lifeMirror}
         onClose={() => setCheckingIn(false)}
         onSubmit={(next) => {
           setCheckingIn(false);
