@@ -19,8 +19,10 @@ MUTATIONS = [
      "    if (offset === 0 && trainedToday) continue;\n", "", [T_WEEK], None),
     ("W7 only the sessions the week has left, with more days ticked", WEEK,
      "  return capped ? days.slice(0, left) : days;", "  return days;", [T_WEEK], None),
+    # W8 re-anchored in Maintenance 34: the credit is one line now, today's own counted apart.
     ("W8 the sessions to come count", WEEK,
-     "        'planned',\n", "        'done',\n", [T_WEEK], None),
+     "      credit(muscles, entry.exerciseId, sets, 'planned');\n",
+     "      credit(muscles, entry.exerciseId, sets, 'done');\n", [T_WEEK], None),
 
     # The catch-up rule.
     ("C1 the 48-hour rule", CATCH,
@@ -1079,8 +1081,11 @@ MUTATIONS = [
     # The twenty-seventh review of round M.
     # H212 and H213 went with H208: the full session from such a copy is never taken now.
     # The fresh review before shipping (2026-10-30).
+    # F1 re-anchored in Maintenance 34: the week's need and "Longer would help" read the week with
+    # the same two lines.
     ("F1 the store's week reads the coach focus and the lasting swaps", STORE,
-     "      focus: this.state.coachFocus,\n      swaps: this.activeSwaps(),\n", "",
+     "      resets: this.state.learnedResets,\n      focus: this.state.coachFocus,\n      swaps: this.activeSwaps(),\n    });\n    // What is left of a muscle trained today",
+     "      resets: this.state.learnedResets,\n    });\n    // What is left of a muscle trained today",
      [T_WEEK_FOCUS], None),
     ("F2 the week's sessions ahead take the coach focus", WEEK,
      "        ...(focus ? { focusMuscle: focus.muscle } : {}),\n", "", [T_WEEK_FOCUS], None),

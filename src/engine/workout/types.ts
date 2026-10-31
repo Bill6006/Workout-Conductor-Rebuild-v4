@@ -203,6 +203,11 @@ export interface WorkoutEntry {
    * review of round N): its top set reads past such a day, as past its back-offs.
    */
   atBackOffs?: true;
+  /**
+   * The sets the week's need gave this lift beyond the plan's own (Maintenance 34, the need carried
+   * forward): its last sets. Absent on a lift with none.
+   */
+  carried?: number;
   progression?: EntryProgression;
   manual?: ManualEdits;
   /**
@@ -364,6 +369,11 @@ export interface GeneratedWorkout {
    * whole lays them out again from what the place has.
    */
   catchUpSlots?: CatchUpSlot[];
+  /**
+   * The muscles the time fit cut from the plan's own sets (Maintenance 34): the next plans spare
+   * them. Absent when the fit cut none.
+   */
+  fitCut?: MuscleId[];
 }
 
 export interface ResolvedEntry {

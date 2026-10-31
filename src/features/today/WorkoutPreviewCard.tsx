@@ -54,6 +54,11 @@ interface WorkoutPreviewCardProps {
   dayNote?: { text: string; actionLabel?: string; onAction?: () => void } | null;
   /** A rest day from the check-in (Maintenance 33): the day's line says so, and nothing starts. */
   restToday?: boolean;
+  /**
+   * "Longer would help" (Maintenance 34): an inline suggestion beside the length control, never a
+   * question, with the length to take and Not now.
+   */
+  longer?: { text: string; take: string; onTake: () => void; onDecline: () => void } | null;
 }
 
 const NONE_LOGGED: ReadonlySet<string> = new Set();
@@ -187,6 +192,7 @@ export function WorkoutPreviewCard({
   onShowBarcode,
   logged = NONE_LOGGED,
   dayNote = null,
+  longer = null,
   restToday = false,
 }: WorkoutPreviewCardProps) {
   const { duration } = workout;
@@ -254,6 +260,28 @@ export function WorkoutPreviewCard({
           </a>
         )}
       </div>
+
+      {longer ? (
+        <p className={styles.dayNote} data-testid="longer-offer">
+          <span data-testid="longer-text">{longer.text}</span>
+          <button
+            type="button"
+            className={styles.link}
+            onClick={longer.onTake}
+            data-testid="longer-take"
+          >
+            {longer.take}
+          </button>
+          <button
+            type="button"
+            className={styles.link}
+            onClick={longer.onDecline}
+            data-testid="longer-decline"
+          >
+            Not now
+          </button>
+        </p>
+      ) : null}
 
       {onShowBarcode ? (
         <button

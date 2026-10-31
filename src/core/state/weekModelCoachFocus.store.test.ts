@@ -36,10 +36,11 @@ import {
  *    push, lower (no upper day), so the chest gets the push day's sets alone and is short, and the
  *    catch-up leaves it out ("traps, rear-delts, upper-chest, side-delts"). Read with the focus as
  *    the store applies it, the catch-up takes the chest too.
- * 2. Strength, five days (Monday, Tuesday, Thursday, Friday, Saturday). Wednesday the 9th, focus on
- *    the lats: the week model reads lower, push, pull; the store builds upper, lower, push, and with
- *    those nothing is behind, but the catch-up gives the chest, upper chest and side delts three
- *    sets each the evening before an upper day.
+ * 2. Five days (Monday, Tuesday, Thursday, Friday, Saturday). Wednesday the 16th, focus on the lats:
+ *    the store builds upper, lower, push, the chest's 10 sets covered (11 to come, none done), but the
+ *    week model without the focus counts 7 to come, and the catch-up gives the chest the evening
+ *    before an upper day. (Until Maintenance 34 this was a strength lifter on Wednesday the 9th: the
+ *    sets the week's need carries since then made that week's Thursday a pull day, focus or none.)
  */
 
 const schedule = createDefaultProfile(at(0)).schedule;
@@ -94,8 +95,7 @@ function setsFor(plans: readonly GeneratedWorkout[], muscle: MuscleId): number {
 const fourDays: Partial<UserProfile> = {
   schedule: { ...schedule, availableDays: ['tue', 'wed', 'fri', 'sat'], weeklyFrequency: 4 },
 };
-const strengthFive: Partial<UserProfile> = {
-  goals: { primary: 'strength', secondary: 'none' },
+const fiveDays: Partial<UserProfile> = {
   schedule: {
     ...schedule,
     availableDays: ['mon', 'tue', 'thu', 'fri', 'sat'],
@@ -141,15 +141,27 @@ describe('the week model and the coach focus every plan reads', () => {
   }, 120_000);
 
   it('offers no catch-up of the chest the evening before the upper day the store builds', async () => {
-    const lifter = await offDayWithFocus(strengthFive, 9, 'lats');
+    const lifter = await offDayWithFocus(fiveDays, 16, 'lats');
     const wednesday = sessionOf(lifter);
     const caught = wednesday.constraints.catchUp!.muscles.map((item) => item.muscle);
+    const snapshot = lifter.store.getSnapshot();
+    const profile = snapshot.profile!;
+    // The week model as it read before the fix: without the focus.
+    const chest = weekModel({
+      profile,
+      location: snapshot.locations.find((place) => place.id === profile.currentLocationId),
+      history: snapshot.readHistory,
+      now: lifter.clock.now,
+    }).muscles.chest;
     const plans = await restOfWeek(lifter);
-    // Baseline: Thursday is the upper day, the bench press in it.
+    // Baseline: Thursday is the upper day, the bench press in it, and the week as built covers the
+    // chest, which the model without the focus counts well short.
     expect(plans.map((plan) => plan.templateId)).toEqual(['upper', 'lower', 'push-arms']);
     expect(setsFor(plans.slice(0, 1), 'chest')).toBeGreaterThan(0);
-    // On b826d24: ["upper-chest", "side-delts", "chest"], three sets each; read with the focus as
-    // the store applies it, nothing is behind this week.
+    expect(chest.done + setsFor(plans, 'chest')).toBeGreaterThanOrEqual(chest.target);
+    expect(chest.done + chest.planned).toBeLessThan(chest.target - 2);
+    // Read without the focus: ["upper-chest", "side-delts", "chest"], three sets each, the chest's a
+    // cable fly; read with the focus as the store applies it, the chest is covered.
     expect(caught, describeWorkout(wednesday.workout).join(' | ')).not.toContain('chest');
   }, 120_000);
 });

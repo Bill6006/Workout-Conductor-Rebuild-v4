@@ -436,6 +436,8 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
     ...(constraints.emptied ? { emptied: constraints.emptied.map((plan) => ({ ...plan })) } : {}),
     ...(constraints.closedSlots ? { closedSlots: [...constraints.closedSlots] } : {}),
     ...(constraints.swappedAway ? { swappedAway: [...constraints.swappedAway] } : {}),
+    // The week's need the plan was made with goes with it through every change (Maintenance 34).
+    ...(constraints.carry ? { carry: { ...constraints.carry } } : {}),
     // The day's own choices a saved workout loaded keeps aside go with it through every change (the
     // twenty-third review of round M).
     ...(constraints.dayChoices
@@ -770,6 +772,7 @@ function rebuild(
     ...(constraints.closedSlots ? { closedSlots: constraints.closedSlots } : {}),
     ...(constraints.swappedAway ? { awayIds: constraints.swappedAway } : {}),
     ...emptiedLayoutsFor(constraints),
+    ...carryOf(constraints),
     sessionLoading: request.loading,
     swaps: request.swaps,
   };
@@ -798,6 +801,20 @@ function rebuild(
     refresh(workout, { ...request, duration: choice }, constraints, workout.warmup.generalMinutes);
   }
   return workout;
+}
+
+/**
+ * The week's need the plan carries into a rebuild (Maintenance 34): none under a hard start, whose
+ * ease takes work off the day, and none for a muscle the lifter chose to go lighter on (Maintenance
+ * 33, the "too soon" card's option).
+ */
+function carryOf(constraints: SessionConstraints): Pick<GenerationConstraints, 'carry'> {
+  if (!constraints.carry || constraints.badStart) return {};
+  const lighter = new Set(constraints.lighter ?? []);
+  const kept = Object.fromEntries(
+    Object.entries(constraints.carry).filter(([muscle]) => !lighter.has(muscle as MuscleId)),
+  ) as Partial<Record<MuscleId, number>>;
+  return Object.keys(kept).length > 0 ? { carry: kept } : {};
 }
 
 /**

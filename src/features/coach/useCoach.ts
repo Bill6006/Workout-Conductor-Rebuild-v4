@@ -43,6 +43,10 @@ export type CoachParts = Pick<
   learnedResets?: AppState['learnedResets'];
   /** The reserve-check estimate the history is read through (the second review of Maintenance 33). */
   readEstimate?: AppState['readEstimate'];
+  /** What "Longer would help" learned, and the honest card put away (Maintenance 34). */
+  timeOffers?: AppState['timeOffers'];
+  /** The kinds of coaching turned off in Settings (Maintenance 34). */
+  coachSwitches?: AppState['coachSwitches'];
 };
 
 /**
@@ -98,6 +102,8 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
     swaps: parts.lastingSwaps.filter((swap) => !swapIsPast(swap, now)),
     resets: parts.learnedResets ?? null,
     reserveEstimate: parts.readEstimate ?? null,
+    ...(parts.timeOffers ? { timeOffers: parts.timeOffers } : {}),
+    ...(parts.coachSwitches ? { switches: parts.coachSwitches } : {}),
   });
   return { card, fatigue, strategy, policy };
 }
@@ -123,6 +129,8 @@ export function useCoach(): CoachContext | null {
   const learnedResets = useAppSelector((state) => state.learnedResets);
   const coachShown = useAppSelector((state) => state.coachShown);
   const readEstimate = useAppSelector((state) => state.readEstimate);
+  const timeOffers = useAppSelector((state) => state.timeOffers);
+  const coachSwitches = useAppSelector((state) => state.coachSwitches);
   const store = useAppStore();
   const minute = useNow();
   // The minute clock, brought to a running rest's end when it comes, so an offer about the rest
@@ -150,6 +158,8 @@ export function useCoach(): CoachContext | null {
           learnedResets,
           coachShown,
           readEstimate,
+          timeOffers,
+          coachSwitches,
         },
         nowEpoch,
       ),
@@ -168,6 +178,8 @@ export function useCoach(): CoachContext | null {
       learnedResets,
       coachShown,
       readEstimate,
+      timeOffers,
+      coachSwitches,
       nowEpoch,
     ],
   );

@@ -20,6 +20,8 @@ const FILES = [
   'src/features/today/useTodayWorkout.localDay.test.tsx',
   'src/engine/planning/deload.test.ts',
   'src/engine/planning/weekModel.test.ts',
+  'src/engine/planning/weekModel.realLengths.test.ts',
+  'src/engine/planning/expectedLengths.test.ts',
   'src/core/state/secondRebuiltPastMidnight.store.test.ts',
   'src/core/state/checkInCarried.store.test.ts',
   'src/engine/readiness/checkInPastMidnight.test.ts',

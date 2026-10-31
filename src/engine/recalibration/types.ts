@@ -237,6 +237,12 @@ export interface SessionConstraints {
   /** A coach focus: the session leads with this muscle. */
   focus: MuscleId | null;
   /**
+   * The sets today's plan owes each muscle for the week (Maintenance 34, the need carried forward),
+   * as the plan was made: every rebuild carries them into the room its length leaves. Absent on a
+   * session saved before, and on a day off the plan.
+   */
+  carry?: Partial<Record<MuscleId, number>>;
+  /**
    * A catch-up on a day not ticked, or a second workout on a day trained (Maintenance 31, items 12
    * and 32): what the day offers, with no muscles when nothing calls for one. Absent on a session
    * saved before, and on a day that offers neither.

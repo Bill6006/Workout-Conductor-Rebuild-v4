@@ -13,8 +13,9 @@ import {
   type RecoveryContext,
 } from '../recovery/recovery';
 import { computeExposure } from '../volume/weeklyVolume';
-import { allEntries, pushMarkOf } from '../workout/types';
+import { allEntries, pushMarkOf, type DurationChoice } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
+import { expectedLength } from './expectedLengths';
 
 /**
  * Weekly planning: the upcoming sessions the generator would produce on the
@@ -56,6 +57,8 @@ function syntheticRecord(date: string, workout: ReturnType<typeof generateWorkou
     painJoints: [],
     readiness: null,
     prs: [],
+    // What its time fit cut: the plans after it spare those muscles (Maintenance 34).
+    ...(workout.fitCut ? { fitCut: [...workout.fitCut] } : {}),
     entries: allEntries(workout.blocks).map((entry) => ({
       exerciseId: entry.exerciseId,
       // The week's extra exposure of a lift to push counts as one in the days after it (item 44).
@@ -73,7 +76,7 @@ function syntheticRecord(date: string, workout: ReturnType<typeof generateWorkou
   };
 }
 
-/** A day of the week ahead as the plan would build it, at Default length. */
+/** A day of the week ahead as the plan would build it, at the length the lifter trains it. */
 export interface PlannedWorkout {
   date: string;
   weekday: Weekday;
@@ -92,6 +95,8 @@ export function plannedWorkouts(
   history: readonly WorkoutRecord[],
   now: string,
   resets: LearnedResets | null = null,
+  /** Today's plan's own length (Maintenance 34): the Default without one. */
+  todayLength: DurationChoice = 'default',
 ): PlannedWorkout[] {
   const available = new Set(profile.schedule.availableDays);
   // The device's day: a workout counts on the day it began (Maintenance 28, item 1).
@@ -107,12 +112,18 @@ export function plannedWorkouts(
     const weekday = localWeekday(date);
     if (!available.has(weekday)) continue;
     if (offset === 0 && trainedToday) continue;
+    // At the length the lifter trains that weekday (Maintenance 34, the approved proposal: "the week
+    // ahead, and the coach's 'a later session will cover it' check, use your expected length for
+    // each day instead of Default"); today's at its own.
     const workout = generateWorkout({
       profile,
       location,
       history: simulated,
       now: date,
-      duration: 'default',
+      duration:
+        offset === 0
+          ? todayLength
+          : expectedLength(history, weekday, now, profile.schedule.typicalDurationMinutes),
       resets,
     });
     planned.push({ date, weekday, offset, workout });

@@ -405,8 +405,10 @@ MUTATIONS = [
     ("Z41 ... kept through every change", ENGINE,
      "    ...(constraints.checkInAt ? { checkInAt: constraints.checkInAt } : {}),\n", "",
      [T_PAST_MIDNIGHT, T_CHECKIN_CARRIED, T_PAST_MIDNIGHT_STORE], None),
+    # Z42 re-anchored in Maintenance 34: "Longer would help" reads the recovery with the same line.
     ("Z42 ... the hard start's reading in the store", STORE,
-     "      madeAt: checkInDayOf(session),", "      madeAt: session.createdAt,",
+     "      checkInAfterStart: session.constraints.checkInAfterStart === true,\n      madeAt: checkInDayOf(session),",
+     "      checkInAfterStart: session.constraints.checkInAfterStart === true,\n      madeAt: session.createdAt,",
      [T_PAST_MIDNIGHT, T_PAST_MIDNIGHT_STORE], None),
     ("Z43 ... the coach's", USECOACH,
      "    madeAt: checkInDayOf(session),", "    madeAt: session.createdAt,",

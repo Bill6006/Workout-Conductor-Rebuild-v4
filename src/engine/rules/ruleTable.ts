@@ -2,9 +2,10 @@
  * Every number the recovery and readiness rules use, in one table with its source and evidence
  * status (the approved proposal, docs/proposals/week-model-readiness-time.md, part 2: "Every number
  * lives in one table with its source and evidence status, later tuned from your logs"). The research
- * is docs/research/recovery-time-course.md and docs/research/readiness-and-soreness.md; each source
- * below is a PubMed ID from them, or the judgement it rests on. The modules read their numbers from
- * here, never a copy of their own.
+ * is docs/research/recovery-time-course.md and docs/research/readiness-and-soreness.md, and for time
+ * (Maintenance 34) docs/research/training-dose-and-time.md and
+ * docs/research/coaching-nudges-and-cooldowns.md; each source below is a PubMed ID from them, or the
+ * judgement it rests on. The modules read their numbers from here, never a copy of their own.
  */
 
 /** How a number is known. */
@@ -285,6 +286,126 @@ export const RULES = {
     'new cards',
     'direction research, size judgement',
     "The owner's decision 5: at most three new cards a week (Ancker 2017; Klasnja 2019).",
+  ),
+
+  // The forecast at real lengths (Maintenance 34): each weekday's expected length from the lifter's
+  // own sessions on it.
+  lengthWeeks: rule(
+    4,
+    'weeks',
+    'judgement',
+    "The dose report's rolling four-week window: a weekday's lengths over the last four weeks (training-dose-and-time.md).",
+  ),
+  lengthSessions: rule(
+    3,
+    'sessions',
+    'judgement',
+    'The median of the latest three on a weekday: a change of length shows from its second week (proposal part 2: "adapts within about two weeks").',
+  ),
+
+  // The need carried forward (Maintenance 34): a muscle's missing sets this week, filled where the
+  // day's plan trains it, within the room its length leaves.
+  carryMuscleSets: rule(
+    11,
+    'sets',
+    'direction research, size judgement',
+    'Per-session gains plateau at about 11 sets per muscle, from one preprint (Remmert 2025, training-dose-and-time.md): the most a muscle takes in one session with the need carried.',
+  ),
+  carryLiftSets: rule(
+    2,
+    'sets',
+    'judgement',
+    'A lift takes at most two sets more than its own, so each stays within the two to six working sets the roles give.',
+  ),
+
+  // What keeps getting cut (Maintenance 34; the proposal's "carry forward what keeps getting cut"):
+  // the time fit spares the muscles it cut before.
+  cutRunning: rule(
+    2,
+    'sessions',
+    'direction research, size judgement',
+    'A muscle the time fit cut in each of the last two sessions is cut twice running: it gives way to any muscle not cut, as the first sets for an under-trained muscle are worth more than a fourth for a covered one (Pelland 2026, 41343037).',
+  ),
+
+  // "Longer would help" (Maintenance 34): an inline suggestion beside the length control, never a
+  // question (Hussain 2019, 31206159; Kawamoto 2005, 15767266); every number is judgement.
+  longerShare: rule(
+    0.5,
+    'share of the gap',
+    'judgement',
+    'The next length closes "most" of a muscle\'s gap (proposal part 2) when it gives it at least half of what the week is short.',
+  ),
+  longerPerDay: rule(
+    1,
+    'suggestions',
+    'direction research, size judgement',
+    'At most once a day: prompts once a day or less held their effect (Bidargaddi 2018, 30497999; Bell 2023, 37294612).',
+  ),
+  longerPerWeek: rule(
+    2,
+    'suggestions',
+    'direction research, size judgement',
+    "At most twice in seven days (the proposal's cooldowns; the nudges report: it stays noticeable).",
+  ),
+
+  // What the suggestion's answers teach (Maintenance 34, the owner's word of 2026-10-31): taken and
+  // trained longer says the time was there; "Not now" says the shorter session was chosen. A pattern
+  // over time, never one answer.
+  offersWeeks: rule(
+    8,
+    'weeks',
+    'judgement',
+    "The answers read are the last eight weeks', two of the dose report's four-week windows, so the pattern moves as the lifter's weeks do.",
+  ),
+  offersRead: rule(
+    4,
+    'answers',
+    'judgement',
+    'The latest four answers to the suggestion make the pattern.',
+  ),
+  offersPattern: rule(
+    2,
+    'answers',
+    'judgement',
+    'A pattern needs two answers of its kind at least: never a lasting reading from one answer (the owner, 2026-10-31).',
+  ),
+  trainedLonger: rule(
+    0.5,
+    'share of the step',
+    'judgement',
+    'Taken and trained longer: the training time reached past halfway from the length it was to the length taken.',
+  ),
+  chosenPauseDays: rule(
+    14,
+    'days',
+    'direction research, size judgement',
+    'A pattern of choosing the shorter session (two "Not now" among the latest answers, two in a row among them) pauses the suggestion two weeks: repeated dismissals lengthen the wait (Rankin 2009, 18854219; the nudges report doubles its week).',
+  ),
+  limitedPauseDays: rule(
+    28,
+    'days',
+    'judgement',
+    'A pattern of time running short after a longer session was taken pauses the suggestion four weeks: offering time the sessions show is not there is advice that cannot be taken (the nudges report: accept rejection, Horvitz 1999).',
+  ),
+
+  // The honest goals-versus-time check (Maintenance 34): shown only after weeks below the floor.
+  floorSets: rule(
+    4,
+    'sets a week',
+    'research',
+    'About 4 hard sets a week for a muscle still grows it (Schoenfeld 2017, 27433992; Iversen 2021, 34125411).',
+  ),
+  shortWeeks: rule(
+    3,
+    'weeks',
+    'direction research, size judgement',
+    'Never one short week: strength holds about 3 weeks (McMaster 2013, 23529287); shown after 3 weeks running below the floor.',
+  ),
+  materialShare: rule(
+    0.25,
+    'share of the weekly minutes',
+    'judgement',
+    "The card comes back only on a material change (Nahum-Shani 2018, 27663578): the weeks' time moved by a quarter or more (the nudges report: above noise).",
   ),
 } as const satisfies Record<string, Rule>;
 

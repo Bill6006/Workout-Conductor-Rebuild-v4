@@ -422,6 +422,11 @@ export function ActiveWorkoutScreen() {
           .moveSchedule(action.weeklyFrequency, action.availableDays)
           .catch(failed('The schedule could not be saved'));
         break;
+      case 'settings':
+        // The honest goals-versus-time card (Maintenance 34): the schedule, where the lifter sets
+        // their days and their Default length; nothing changes until they change it.
+        window.location.hash = '#/settings/schedule';
+        break;
     }
   };
 

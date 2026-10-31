@@ -28,6 +28,7 @@ import { LocationSheet } from './LocationSheet';
 import { ReadinessSheet } from './ReadinessSheet';
 import { WorkoutPreviewCard } from './WorkoutPreviewCard';
 import { dayNoteOf } from './dayNote';
+import { longerWords, useLongerOffer } from './useLongerOffer';
 import { doneKeys } from '../../core/state/session';
 import { postponeRefusal, postponeRefusalText } from '../../engine/workout/sequence';
 import styles from './TodayScreen.module.css';
@@ -61,6 +62,8 @@ export function TodayScreen() {
   const [checkingIn, setCheckingIn] = useState(false);
   const [choosingPlace, setChoosingPlace] = useState(false);
   const coach = useCoach();
+  // "Longer would help" beside the length control (Maintenance 34).
+  const longer = useLongerOffer();
   const history = useAppSelector((state) => state.history);
   const coachRoutes = useAppSelector((state) => state.coachRoutes);
   const hasBarcode = useAppSelector((state) =>
@@ -197,6 +200,11 @@ export function TodayScreen() {
           .moveSchedule(action.weeklyFrequency, action.availableDays)
           .catch(failed('The schedule could not be saved'));
         break;
+      case 'settings':
+        // The honest goals-versus-time card (Maintenance 34): the schedule, where the lifter sets
+        // their days and their Default length; nothing changes until they change it.
+        window.location.hash = '#/settings/schedule';
+        break;
     }
   };
   const readiness = session.constraints.readiness;
@@ -241,6 +249,29 @@ export function TodayScreen() {
         }}
         onShowBarcode={hasBarcode ? () => store.openBarcodeSheet() : undefined}
         restToday={resting}
+        longer={
+          longer && session.status === 'preview'
+            ? {
+                ...longerWords(longer),
+                onTake: () => {
+                  store.takeLonger(longer).catch((error: unknown) => {
+                    toast.show(
+                      error instanceof Error ? error.message : 'The length could not change',
+                      'error',
+                    );
+                  });
+                },
+                onDecline: () => {
+                  store.declineLonger(longer).catch((error: unknown) => {
+                    toast.show(
+                      error instanceof Error ? error.message : 'Not now could not be kept',
+                      'error',
+                    );
+                  });
+                },
+              }
+            : null
+        }
         dayNote={
           resting
             ? {

@@ -194,6 +194,8 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
     ...(session.constraints.readiness && session.constraints.checkInAt
       ? { checkInAt: session.constraints.checkInAt }
       : {}),
+    // What the plan's time fit cut: the next plans spare those muscles (Maintenance 34).
+    ...(workout.fitCut && workout.fitCut.length > 0 ? { fitCut: [...workout.fitCut] } : {}),
     prs: [],
   };
 }

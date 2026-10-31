@@ -8,8 +8,9 @@ import type { LearnedResets } from '../learned/resets';
 import { focusSatisfiedBy, type CoachFocus } from './focus';
 import type { LastingSwap } from './lastingSwaps';
 import { INDIRECT_SET_WEIGHT, computeExposure, weeklyTargets } from '../volume/weeklyVolume';
-import { allEntries, type GeneratedWorkout } from '../workout/types';
+import { allEntries, type DurationChoice, type GeneratedWorkout } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
+import { expectedLength } from './expectedLengths';
 
 /**
  * The week model (Maintenance 31, docs/proposals/week-model-readiness-time.md part 1): one picture
@@ -28,8 +29,13 @@ export interface MuscleWeek {
   today: number;
   /** Today's direct sets: a muscle with none was not trained today (the review of round M). */
   todayDirect: number;
-  /** Sets the week's sessions still to come deliver, at Default length. */
+  /**
+   * Sets the week's sessions still to come deliver, each at its expected length (Maintenance 34:
+   * the forecast at real lengths; Round M planned them at the Default), today's at its own.
+   */
   planned: number;
+  /** Of those, today's own plan's: what the need carried leaves out (Maintenance 34). */
+  plannedToday: number;
   /** The goal's weekly sets for the muscle. */
   target: number;
   /** Days since the muscle was last trained directly, as elapsed time; null when never. */
@@ -55,6 +61,15 @@ export const projectedSets = (muscle: MuscleWeek): number => muscle.done + muscl
 export const shortfallOf = (muscle: MuscleWeek): number =>
   Math.max(0, muscle.target - projectedSets(muscle));
 
+/**
+ * The sets today's plan owes a muscle for the week to reach its target (Maintenance 34, the need
+ * carried forward): its target, less what is done and what the sessions after today deliver at
+ * their expected lengths; never below 0. Today's own plan is left out, so the plan can read it
+ * against what it gives the muscle itself.
+ */
+export const todaysNeedOf = (muscle: MuscleWeek): number =>
+  Math.max(0, muscle.target - muscle.done - (muscle.planned - muscle.plannedToday));
+
 function emptyWeek(targets: Record<MuscleId, number>): Record<MuscleId, MuscleWeek> {
   return Object.fromEntries(
     MUSCLE_IDS.map((muscle) => [
@@ -64,6 +79,7 @@ function emptyWeek(targets: Record<MuscleId, number>): Record<MuscleId, MuscleWe
         today: 0,
         todayDirect: 0,
         planned: 0,
+        plannedToday: 0,
         target: targets[muscle],
         daysSince: null,
         daysBefore: null,
@@ -77,7 +93,7 @@ function credit(
   muscles: Record<MuscleId, MuscleWeek>,
   exerciseId: string,
   sets: number,
-  field: 'done' | 'today' | 'planned',
+  field: 'done' | 'today' | 'planned' | 'plannedToday',
 ): void {
   const exercise = getExercise(exerciseId);
   if (!exercise || sets <= 0) return;
@@ -104,6 +120,9 @@ function plannedRecord(date: string, workout: GeneratedWorkout): WorkoutRecord {
     painJoints: [],
     readiness: null,
     prs: [],
+    // What its time fit cut, as a saved session keeps it: the plans after it spare those muscles
+    // (Maintenance 34).
+    ...(workout.fitCut ? { fitCut: [...workout.fitCut] } : {}),
     entries: allEntries(workout.blocks).map((entry) => ({
       exerciseId: entry.exerciseId,
       sets: entry.sets
@@ -154,6 +173,11 @@ export function weekModel(input: {
    */
   focus?: CoachFocus | null;
   swaps?: readonly LastingSwap[];
+  /**
+   * Today's plan's own length, which stands at once over every forecast (Maintenance 34; the owner,
+   * 2026-10-31); the Default without one.
+   */
+  todayLength?: DurationChoice;
 }): WeekModel {
   const { profile, location, history, now } = input;
   const week = localWeekKey(now);
@@ -182,16 +206,20 @@ export function weekModel(input: {
   }
   const trainedToday = trained.has(today);
   const ahead = daysAhead(profile, now, trained.size, trainedToday);
-  // Each session to come, as the plan would build it after the ones before it.
+  // Each session to come, as the plan would build it after the ones before it, at the length the
+  // lifter trains that weekday (Maintenance 34), today's at its own.
   let simulated: WorkoutRecord[] = [...history];
   let focus = input.focus ?? null;
   for (const date of ahead) {
+    const own = localDayKey(date) === today;
     const workout = generateWorkout({
       profile,
       location,
       history: simulated,
       now: date,
-      duration: 'default',
+      duration: own
+        ? (input.todayLength ?? 'default')
+        : expectedLength(history, localWeekday(date), now, profile.schedule.typicalDurationMinutes),
       resets: input.resets ?? null,
       constraints: {
         ...(input.swaps && input.swaps.length > 0 ? { swaps: input.swaps } : {}),
@@ -199,12 +227,9 @@ export function weekModel(input: {
       },
     });
     for (const entry of allEntries(workout.blocks)) {
-      credit(
-        muscles,
-        entry.exerciseId,
-        entry.sets.filter((set) => set.kind === 'working').length,
-        'planned',
-      );
+      const sets = entry.sets.filter((set) => set.kind === 'working').length;
+      credit(muscles, entry.exerciseId, sets, 'planned');
+      if (own) credit(muscles, entry.exerciseId, sets, 'plannedToday');
     }
     const planned = plannedRecord(date, workout);
     simulated = [...simulated, planned];

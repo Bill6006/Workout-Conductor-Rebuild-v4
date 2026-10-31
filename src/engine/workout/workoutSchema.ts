@@ -131,6 +131,9 @@ export const WorkoutEntrySchema = z.looseObject({
   // Straight at the back-offs' load after a session on the structure (the fourth review of round
   // N); optional, and dropped rather than refused.
   atBackOffs: z.literal(true).optional().catch(undefined),
+  // The sets the week's need gave the lift (Maintenance 34): optional, and dropped rather than
+  // refused, the sets then the lift's own.
+  carried: z.number().int().min(1).optional().catch(undefined),
   progression: EntryProgressionSchema.optional().catch(undefined),
   manual: z
     .looseObject({
@@ -246,6 +249,8 @@ export const GeneratedWorkoutSchema = z.looseObject({
     )
     .optional()
     .catch(undefined),
+  // What the time fit cut (Maintenance 34): optional, and dropped rather than refused.
+  fitCut: z.array(z.enum(MUSCLE_IDS)).optional().catch(undefined),
 });
 
 /** The parsed shape is structurally the engine's GeneratedWorkout. */

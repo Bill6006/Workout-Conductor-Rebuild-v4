@@ -15,7 +15,7 @@ import {
 } from '../../catalog/exercises/catalog';
 import { isHold } from '../../catalog/exercises/exerciseSchema';
 import { holdById } from '../../engine/workout/setText';
-import type { MuscleId } from '../../catalog/muscles/muscles';
+import { MUSCLE_IDS, type MuscleId } from '../../catalog/muscles/muscles';
 import type { MovementPatternId } from '../../catalog/movementPatterns/movementPatterns';
 import { planLength } from '../../engine/duration/duration';
 import {
@@ -166,12 +166,38 @@ import {
   trainedIn,
   type CatchUpSpec,
 } from '../../engine/planning/catchUp';
-import { weekModel } from '../../engine/planning/weekModel';
+import { todaysNeedOf, weekModel } from '../../engine/planning/weekModel';
+import { choiceMinutes } from '../../engine/planning/expectedLengths';
+import { longerOffer, nextLonger, type LongerOffer } from '../../engine/planning/longerOffer';
+import {
+  mayShowLonger,
+  mergeTimeOffers,
+  resolvePending,
+  skippedThisWeek,
+  withAnswer,
+  withShown,
+} from '../../engine/planning/timeAnswers';
+import { dayRecovery, hoursSince, recoveryWindows } from '../../engine/recovery/recovery';
+import { interpretFatigue } from '../../engine/recovery/fatigue';
+import {
+  TIME_OFFERS_ID,
+  emptyTimeOffers,
+  parseTimeOffers,
+  type TimeOffers,
+} from '../validation/timeOffers';
+import {
+  COACH_SWITCHES_ID,
+  defaultCoachSwitches,
+  parseCoachSwitches,
+  type CoachSwitch,
+  type CoachSwitches,
+} from '../validation/coachSwitches';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
 import { normalizeName } from '../backup/legacyImport';
 import {
   COACH_DECLINES_ID,
   COACH_SHOWN_ID,
+  GOALS_TIME_SOURCE,
   UNFINISHED_SOURCE,
   acceptKey,
   declineKey,
@@ -424,6 +450,13 @@ export interface AppState {
   coachDeclines: CoachDeclines;
   /** The new coaching cards the lifter has seen (Maintenance 33): the card limits read it. */
   coachShown: CoachShown;
+  /**
+   * What "Longer would help" learned from its answers, and the honest goals-versus-time card put
+   * away (Maintenance 34), kept in the meta store and copied to the cloud.
+   */
+  timeOffers: TimeOffers;
+  /** The kinds of coaching the lifter turned off in Settings (Maintenance 34). */
+  coachSwitches: CoachSwitches;
   /** A planned deload week, kept in the meta store and backed up; null when none. */
   deloadWeek: DeloadWeek | null;
   /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
@@ -936,9 +969,15 @@ export class AppStore {
   private resetsVersion = 0;
   private declinesVersion = 0;
   private shownVersion = 0;
+  private timeOffersVersion = 0;
+  private switchesVersion = 0;
   private resetsQueue: Promise<unknown> = Promise.resolve();
   private declinesQueue: Promise<unknown> = Promise.resolve();
   private shownQueue: Promise<unknown> = Promise.resolve();
+  private timeOffersQueue: Promise<unknown> = Promise.resolve();
+  private switchesQueue: Promise<unknown> = Promise.resolve();
+  /** "Longer would help" worked out for the inputs it read (`longerOfferFor`): kept while they hold. */
+  private longerKept: { refs: readonly unknown[]; offer: LongerOffer | null } | null = null;
   /**
    * Bumped by every write of the lifter's own demonstrations: a read of the data begun before one
    * keeps the count it made (Maintenance 26, the re-check of item 50: a hydrate across a pick put
@@ -1036,6 +1075,8 @@ export class AppStore {
       coachRoutes: emptyRoutes(),
       coachDeclines: emptyDeclines(),
       coachShown: emptyShown(),
+      timeOffers: emptyTimeOffers(),
+      coachSwitches: defaultCoachSwitches(),
       deloadWeek: null,
       strengthMaxes: emptyMaxes(),
       coachFocus: null,
@@ -1156,6 +1197,8 @@ export class AppStore {
     const resetsSeen = this.resetsVersion;
     const declinesSeen = this.declinesVersion;
     const shownSeen = this.shownVersion;
+    const timeOffersSeen = this.timeOffersVersion;
+    const switchesSeen = this.switchesVersion;
     const mediaSeen = this.mediaVersion;
     const barcodesSeen = this.barcodesVersion;
     try {
@@ -1180,6 +1223,8 @@ export class AppStore {
         resetsRaw,
         deviceRaw,
         shownRaw,
+        timeOffersRaw,
+        switchesRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -1197,6 +1242,8 @@ export class AppStore {
         db.get<Identified>('meta', LEARNED_RESETS_ID),
         db.getAll<Identified>('device'),
         db.get<Identified>('meta', COACH_SHOWN_ID),
+        db.get<Identified>('meta', TIME_OFFERS_ID),
+        db.get<Identified>('meta', COACH_SWITCHES_ID),
       ]);
       const deviceId = ensureDeviceId(this.storage);
       // Finds the token in either of its copies and heals the other. A copy that
@@ -1224,6 +1271,8 @@ export class AppStore {
           swapsRaw,
           resetsRaw,
           shownRaw,
+          timeOffersRaw,
+          switchesRaw,
         ].every((record) => record === undefined);
       await noteDatabaseBirth(db, this.now(), empty).catch(() => null);
       // A barcode the database lost comes back from the phone's second copy.
@@ -1280,6 +1329,15 @@ export class AppStore {
             : this.state.coachDeclines,
         coachShown:
           this.shownVersion === shownSeen ? parseCoachShown(shownRaw) : this.state.coachShown,
+        // Maintenance 34: a record that does not read is none here, and is never written over.
+        timeOffers:
+          this.timeOffersVersion === timeOffersSeen
+            ? (parseTimeOffers(timeOffersRaw) ?? emptyTimeOffers())
+            : this.state.timeOffers,
+        coachSwitches:
+          this.switchesVersion === switchesSeen
+            ? (parseCoachSwitches(switchesRaw) ?? defaultCoachSwitches())
+            : this.state.coachSwitches,
         learnedResets:
           this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
@@ -1424,6 +1482,10 @@ export class AppStore {
     // The lifts swapped away today stay away from every later plan the same day (the eighteenth
     // review of round M; the twenty-first: a workout from another device brought one back).
     const away = sameDay ? (day?.swappedAway ?? []) : [];
+    // The week's need on a day of the plan (Maintenance 34): what today owes each muscle once the
+    // sessions after it are counted at the lengths the lifter trains them. A day off the plan builds
+    // its catch-up or second workout from the week already, and a deload week carries nothing.
+    const owed = catchUp === null && deload === null ? this.weekNeed(profile, now) : null;
     // Built afresh each time, a plan the lifter emptied too: the generator lays each layout emptied
     // for this offer out empty and says where it was built (the twenty-second review of round M: the
     // old plan handed back kept the lines of the place it was emptied at).
@@ -1441,6 +1503,7 @@ export class AppStore {
         // Each layout the lifter emptied for this offer stays empty (the nineteenth review).
         ...(keepFull ? {} : emptiedLayoutsFor({ catchUp, emptied: marked })),
         ...(away.length > 0 ? { awayIds: away } : {}),
+        ...(owed ? { carry: owed } : {}),
       },
       maxes: this.state.strengthMaxes,
       resets: this.state.learnedResets,
@@ -1458,6 +1521,8 @@ export class AppStore {
         // every later plan the same day (the eighteenth to twentieth).
         ...(marked.length > 0 ? { emptied: marked.map((plan) => ({ ...plan })) } : {}),
         ...(away.length > 0 ? { swappedAway: [...away] } : {}),
+        // Kept with the plan: every rebuild carries it (Maintenance 34).
+        ...(owed ? { carry: { ...owed } } : {}),
       },
     };
     // The day's check-in holds on it, as on every plan of the day.
@@ -1576,6 +1641,30 @@ export class AppStore {
     return week && inDeloadWindow(week, now)
       ? { startsAt: week.startsAt, endsAt: week.endsAt }
       : null;
+  }
+
+  /**
+   * The sets today's plan owes each muscle for the week (Maintenance 34, the need carried forward:
+   * `todaysNeedOf`), from the week as the app will build it, the days after today at the lengths the
+   * lifter trains them, with the coach focus and the lasting swaps every plan reads. To the half set
+   * a synergist counts for; none where today owes a muscle less than a set. Null when it owes none.
+   */
+  private weekNeed(profile: UserProfile, now: string): Partial<Record<MuscleId, number>> | null {
+    const week = weekModel({
+      profile,
+      location: this.currentLocation(),
+      history: this.state.readHistory,
+      now,
+      resets: this.state.learnedResets,
+      focus: this.state.coachFocus,
+      swaps: this.activeSwaps(),
+    });
+    const owed: Partial<Record<MuscleId, number>> = {};
+    for (const muscle of MUSCLE_IDS) {
+      const need = todaysNeedOf(week.muscles[muscle]);
+      if (need >= 1) owed[muscle] = Math.round(need * 2) / 2;
+    }
+    return Object.keys(owed).length > 0 ? owed : null;
   }
 
   /**
@@ -3171,6 +3260,21 @@ export class AppStore {
     });
     await this.reconcileCoachRoutes(db, profile, now);
     await this.reconcileCoachFocus(db, record);
+    // "Longer would help" taken today: whether the lifter trained longer answers it (Maintenance
+    // 34). A workout with nothing logged is no workout of the day, and answers nothing.
+    if (this.state.timeOffers.pending && trainedIn(record)) {
+      const chosenMinutes = choiceMinutes(
+        session.duration,
+        profile.schedule.typicalDurationMinutes,
+      );
+      await this.changeTimeOffers((current) =>
+        resolvePending(current, {
+          at: now,
+          trainedMinutes: (record.trainingSeconds ?? 0) / 60,
+          chosenMinutes,
+        }),
+      ).catch(() => undefined);
+    }
     this.setSession({
       ...session,
       status: 'completed',
@@ -4590,6 +4694,9 @@ export class AppStore {
     delete today.fullSession;
     if (fresh.constraints.catchUp !== undefined) today.catchUp = fresh.constraints.catchUp;
     if (fresh.constraints.fullSession) today.fullSession = true;
+    // So is the week's need: the fresh plan's, read from the week as it stands now (Maintenance 34).
+    delete today.carry;
+    if (fresh.constraints.carry) today.carry = { ...fresh.constraints.carry };
     // A catch-up or second workout the lifter's changes emptied stays so when the preview is built
     // again for the same offer (the sixteenth review of round M: a coach focus set brought a new
     // catch-up of other lifts for the same muscles): made again as every later plan the same day is,
@@ -5183,6 +5290,177 @@ export class AppStore {
     await run;
   }
 
+  /**
+   * "Longer would help" for today's plan not yet started (Maintenance 34, the approved proposal part
+   * 2): the next length up where it closes at least half of what the week is short for a muscle the
+   * goals weight up, today's split working it, outside its recovery window, fatigue not high. Only
+   * on a day of the plan (no catch-up, second workout, deload week or illness), within the cooldowns
+   * and the pattern the answers show, and while the lifter keeps it on. The next length is worked
+   * out by the rebuild its tap runs, so the words say what the tap gives. Kept while its inputs hold.
+   */
+  longerOfferFor(): LongerOffer | null {
+    const { session, profile } = this.state;
+    if (!session || !profile || session.status !== 'preview' || this.fromEarlierDay(session)) {
+      return null;
+    }
+    const now = this.now();
+    const refs = [
+      session,
+      profile,
+      this.state.readHistory,
+      this.state.timeOffers,
+      this.state.coachSwitches,
+      this.state.locations,
+      this.state.learnedResets,
+      localDayKey(now),
+    ];
+    if (this.longerKept && this.longerKept.refs.every((ref, at) => ref === refs[at])) {
+      return this.longerKept.offer;
+    }
+    const offer = this.workOutLonger(session, profile, now);
+    this.longerKept = { refs, offer };
+    return offer;
+  }
+
+  private workOutLonger(
+    session: WorkoutSession,
+    profile: UserProfile,
+    now: string,
+  ): LongerOffer | null {
+    const constraints = session.constraints;
+    if (!this.state.coachSwitches.longer) return null;
+    if (constraints.catchUp || constraints.deload || illnessOf(constraints.readiness) !== null) {
+      return null;
+    }
+    const history = this.state.readHistory;
+    if (interpretFatigue(history, now).level === 'high') return null;
+    if (!mayShowLonger(this.state.timeOffers, now)) return null;
+    const next = nextLonger(session.duration, profile.schedule.typicalDurationMinutes);
+    if (!next) return null;
+    // Today's plan at the next length, by the rebuild its tap runs; none where that fails.
+    const trial = ((): WorkoutSession['workout'] | null => {
+      try {
+        const result = this.engine(
+          this.calibrationRequest({ type: 'duration', choice: next }, session, profile, 'Longer'),
+        );
+        return result.ok ? result.workout : null;
+      } catch {
+        return null;
+      }
+    })();
+    const week = weekModel({
+      profile,
+      location: this.currentLocation(),
+      history,
+      now,
+      resets: this.state.learnedResets,
+      focus: this.state.coachFocus,
+      swaps: this.activeSwaps(),
+      todayLength: session.duration,
+    });
+    const windows = recoveryWindows(
+      history,
+      dayRecovery({
+        readiness: constraints.readiness,
+        madeAt: checkInDayOf(session),
+        history,
+        now,
+        resets: this.state.learnedResets,
+      }),
+    );
+    return longerOffer({
+      profile,
+      week,
+      now,
+      plan: session.workout,
+      next,
+      trial,
+      recovering: (muscle) => {
+        const window = windows.get(muscle);
+        return window !== undefined && hoursSince(window, now) < window.hours;
+      },
+      skipped: skippedThisWeek(this.state.timeOffers, now),
+    });
+  }
+
+  /** The suggestion on screen (Maintenance 34): the day's one showing, which the cooldowns count. */
+  async noteLongerShown(): Promise<void> {
+    const now = this.now();
+    if (this.state.timeOffers.shown.some((at) => localDayKey(at) === localDayKey(now))) return;
+    await this.changeTimeOffers((current) => withShown(current, now));
+  }
+
+  /**
+   * "Use 45 min" (Maintenance 34): the length taken, as the length control takes it; its answer
+   * waits for the workout's end, which says whether the time was there (`resolvePending`).
+   */
+  async takeLonger(offer: LongerOffer): Promise<RecalibrationResult | null> {
+    const { session, profile } = this.state;
+    if (!session || !profile || session.status !== 'preview') return null;
+    const now = this.now();
+    const pending = {
+      at: now,
+      week: offer.week,
+      muscles: [...offer.muscles],
+      from: choiceMinutes(session.duration, profile.schedule.typicalDurationMinutes),
+      to: offer.minutes,
+      choice: offer.choice,
+    };
+    await this.changeTimeOffers((current) => ({ ...current, pending }));
+    return this.setDurationChoice(offer.choice);
+  }
+
+  /** "Not now" (Maintenance 34): the shorter session chosen for this occasion; its muscles wait for next week. */
+  async declineLonger(offer: LongerOffer): Promise<void> {
+    const { session, profile } = this.state;
+    if (!session || !profile) return;
+    const now = this.now();
+    await this.changeTimeOffers((current) =>
+      withAnswer(current, {
+        at: now,
+        week: offer.week,
+        muscles: [...offer.muscles],
+        from: choiceMinutes(session.duration, profile.schedule.typicalDurationMinutes),
+        to: offer.minutes,
+        answer: 'not-now',
+      }),
+    );
+  }
+
+  /** Turns a kind of coaching on or off (Maintenance 34): the "too soon" card, the suggestion, the honest card. */
+  async setCoachSwitch(kind: CoachSwitch, on: boolean): Promise<void> {
+    const run = this.switchesQueue.then(async () => {
+      const db = await this.getDatabase();
+      const raw = await db.get<Identified>('meta', COACH_SWITCHES_ID);
+      const saved = raw === undefined ? defaultCoachSwitches() : parseCoachSwitches(raw);
+      // A record that does not read is never written over.
+      if (saved === null) throw new Error('The coaching switches could not be read.');
+      const next: CoachSwitches = { ...saved, [kind]: on };
+      await putVerified(db, 'meta', next, { now: this.now });
+      this.switchesVersion += 1;
+      this.setState({ coachSwitches: next });
+    });
+    this.switchesQueue = run.catch(() => undefined);
+    await run;
+  }
+
+  /** Changes the suggestion's answers one change at a time, from the record as saved and as shown. */
+  private changeTimeOffers(change: (current: TimeOffers) => TimeOffers): Promise<void> {
+    const run = this.timeOffersQueue.then(async () => {
+      const db = await this.getDatabase();
+      const raw = await db.get<Identified>('meta', TIME_OFFERS_ID);
+      const saved = raw === undefined ? emptyTimeOffers() : parseTimeOffers(raw);
+      // A record that does not read is never written over.
+      if (saved === null) throw new Error('What the suggestion learned could not be read.');
+      const next = change(mergeTimeOffers(saved, this.state.timeOffers));
+      await putVerified(db, 'meta', next, { now: this.now });
+      this.timeOffersVersion += 1;
+      this.setState({ timeOffers: next });
+    });
+    this.timeOffersQueue = run.catch(() => undefined);
+    return run;
+  }
+
   /** Forgets every offer the lifter declined (item 47): each may come again. */
   async clearDeclines(): Promise<void> {
     await this.changeDeclines(() => emptyDeclines());
@@ -5408,11 +5686,18 @@ export class AppStore {
    */
   async dismissCoachSignal(
     signal: Pick<CoachSignal, 'source' | 'exerciseId'> &
-      Partial<Pick<CoachSignal, 'domain' | 'concern' | 'action' | 'untilNew'>>,
+      Partial<Pick<CoachSignal, 'domain' | 'concern' | 'action' | 'untilNew' | 'goalsTime'>>,
   ): Promise<void> {
     // Some cards are set aside for this workout only: the one naming a workout left open, a
     // safety card, which is never declined for days, and a card with nothing to tap, which is a
     // note rather than an offer.
+    // The honest goals-versus-time card keeps its reading: it comes back only when that changes
+    // materially, never because time passed (Maintenance 34).
+    if (signal.source === GOALS_TIME_SOURCE && signal.goalsTime) {
+      const kept = { at: this.now(), ...signal.goalsTime, muscles: [...signal.goalsTime.muscles] };
+      await this.changeTimeOffers((current) => ({ ...current, goalsTime: kept }));
+      return;
+    }
     const key =
       signal.source === UNFINISHED_SOURCE
         ? UNFINISHED_SOURCE

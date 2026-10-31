@@ -27,6 +27,7 @@ import { InstallCard } from './InstallCard';
 import { LegacyImportCard } from './LegacyImportCard';
 import { LearnedValues } from './LearnedValues';
 import { MediaCreditsCard } from './MediaCreditsCard';
+import { CoachSwitchesRows } from './CoachSwitchesRows';
 import { PlaceWeights } from './PlaceWeights';
 import { SnapshotsCard } from './SnapshotsCard';
 import { StorageCard } from './StorageCard';
@@ -148,6 +149,10 @@ export function SettingsScreen() {
               >
                 <UnitsEditor draft={draft} onChange={editor.update} autosaves />
               </DisclosureRow>
+            </Group>
+
+            <Group title="Coaching" testId="settings-coaching">
+              <CoachSwitchesRows />
             </Group>
 
             <Group title="What the app has learned" testId="settings-learned">

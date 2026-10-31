@@ -17,21 +17,22 @@ import { doToday, lifterStore, sessionOf } from '../../test/lifterDays';
  *
  * The lifter (synthetic): the default profile, supersets on, every day's plan done in full at 8:00
  * from Monday the 31st of August, the days not ticked taking their catch-up; on Wednesday the 9th
- * the catch-up is cut short after two lifts and the second workout done. On Tuesday the 15th, the
- * lower day is cut short after the back squat and the Romanian deadlift. At 18:00 the second
+ * the catch-up is cut short after two lifts and the second workout done. On Tuesday the 22nd, the
+ * lower day is cut short after its first two lifts. At 18:00 the second
  * workout leads with the calves, traps, rear delts and lats, the quads, hamstrings and glutes taking
  * what is left. Its blocks: calf raise + shrug, rear-delt fly + LEG CURL (the hamstrings' remainder),
  * pull-up (the lats, missed), leg press (the remainder). "Why this workout" says it leads with what
- * was missed, "calves, traps, rear delts and lats".
+ * was missed, "calves, traps, rear delts and lats". (Until Maintenance 34 this was Tuesday the 15th:
+ * the sets the week's need carries since then left the lats a week later behind instead.)
  */
 
 async function secondAfterLowerCutShort() {
   const lifter = await lifterStore(at(0, 7));
-  for (let day = 0; day <= 15; day += 1) {
+  for (let day = 0; day <= 22; day += 1) {
     lifter.clock.now = at(day, 8);
     lifter.store.refreshSession();
     if (allEntries(sessionOf(lifter).workout.blocks).length === 0) continue;
-    const cut = day === 9 || day === 15;
+    const cut = day === 9 || day === 22;
     await doToday(lifter, cut ? { lifts: 2, endedEarly: true } : {});
     if (!cut) continue;
     lifter.clock.now = at(day, 18);

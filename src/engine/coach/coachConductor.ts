@@ -48,6 +48,10 @@ import {
   dayRecovery,
 } from '../recovery/recovery';
 import { RULES } from '../rules/ruleTable';
+import { goalsTimeChanged, goalsTimeReading } from '../planning/goalsTime';
+import { timePattern } from '../planning/timeAnswers';
+import type { TimeOffers } from '../../core/validation/timeOffers';
+import type { CoachSwitches } from '../../core/validation/coachSwitches';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { painPatterns } from '../recovery/painPattern';
 import { lastPainReport, painSourceLine } from '../recovery/painReport';
@@ -166,7 +170,12 @@ type CoachActionBase =
    * Moves the schedule to the week the lifter trains (Maintenance 27, item 46): its sessions a week
    * and its days; the split follows the new number.
    */
-  | { kind: 'schedule'; weeklyFrequency: number; availableDays: Weekday[]; label: string };
+  | { kind: 'schedule'; weeklyFrequency: number; availableDays: Weekday[]; label: string }
+  /**
+   * Opens Settings at the schedule, where the lifter sets their days and their Default length
+   * (Maintenance 34, the honest goals-versus-time card): nothing changes until they change it.
+   */
+  | { kind: 'settings'; section: 'schedule'; label: string };
 
 export type CoachAction = CoachActionBase & { route?: RouteRef };
 
@@ -201,6 +210,11 @@ export interface CoachSignal {
   untilNew?: boolean;
   /** A line under the card that is always shown, never cut with the Why lines. */
   footnote?: string;
+  /**
+   * The honest goals-versus-time card's reading (Maintenance 34): Not now keeps it, and the card
+   * comes back only when the reading changes materially (`goalsTimeChanged`).
+   */
+  goalsTime?: { muscles: MuscleId[]; minutes: number };
 }
 
 /** Declined offers, kept in the meta store: key `source|exerciseId` (or `*`). */
@@ -350,6 +364,13 @@ export interface CoachInput {
   cloudCurrent?: boolean;
   /** The new cards the lifter has seen (Maintenance 33): the card limits read it. */
   shown?: CoachShown;
+  /**
+   * What "Longer would help" learned, and the honest card put away (Maintenance 34): the card reads
+   * the pattern of the answers, and its reading put away.
+   */
+  timeOffers?: TimeOffers;
+  /** The kinds of card the lifter turned off in Settings (Maintenance 34); absent, all on. */
+  switches?: Pick<CoachSwitches, 'tooSoon' | 'goalsTime'>;
   /** Offers already taken this session (see `acceptKey`): they are not made twice. */
   accepted?: readonly string[];
   /** The rest now: when it ends, or what is left of it while paused (Maintenance 25). */
@@ -1026,12 +1047,58 @@ function tooSoonSignals(input: CoachInput): CoachSignal[] {
 /** The "too soon" card's source, before the muscle and the week (Maintenance 33). */
 export const TOO_SOON_SOURCE = 'too-soon';
 
+/** The honest goals-versus-time card's source (Maintenance 34). */
+export const GOALS_TIME_SOURCE = 'goals-time';
+
 /**
- * The approved proposal's new cards (Maintenance 33: "too soon"; time intelligence's join them),
- * held to the owner's card limits (decision 5): at most one new card a day and three a week. A card
- * the lifter has seen shows on as before; the limits hold back only one not yet seen.
+ * The honest goals-versus-time card (Maintenance 34; the approved proposal: "Compare the weekly sets
+ * your real time delivers with what your goal needs; if clearly below for several weeks, one plain
+ * card says so, with options. It's shown once, and again only if things change."): three weeks
+ * running of the goals' muscles under the floor at lengths shorter than the Default
+ * (`goalsTimeReading`), aimed at the training and paired with one step (the nudges report: Kluger
+ * 1996, Brehaut 2016): Adjust time opens the schedule. Not now keeps the reading, and the card
+ * comes back only on a material change. What "Longer would help" learned says which it is: time the
+ * lifter has, or chooses, or lacks. On Today's plan before it starts; off in Settings.
  */
-export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE];
+function goalsTimeSignals(input: CoachInput): CoachSignal[] {
+  if (input.status !== 'preview' || input.switches?.goalsTime === false) return [];
+  const reading = goalsTimeReading(input.profile, input.history, input.now);
+  if (!reading || !goalsTimeChanged(reading, input.timeOffers?.goalsTime ?? null)) return [];
+  const words = musclesInWords(reading.muscles);
+  const pattern = input.timeOffers ? timePattern(input.timeOffers, input.now)?.pattern : undefined;
+  const learned =
+    pattern === 'limited'
+      ? 'When a longer session was offered and taken, the time ran short: goals fitted to the time you have may serve you better.'
+      : pattern === 'chooses-short'
+        ? 'When a longer session was offered, you chose the shorter one.'
+        : pattern === 'has-time'
+          ? 'When a longer session was offered, you used it.'
+          : null;
+  return [
+    {
+      domain: 'coverage',
+      headline: `${words.charAt(0).toUpperCase()}${words.slice(1)} under ${RULES.floorSets.value} sets a week for ${RULES.shortWeeks.value} weeks`,
+      why: [
+        `About ${RULES.floorSets.value} hard sets a week is the least that grows a muscle.`,
+        `Your weeks held about ${reading.sessions} ${reading.sessions === 1 ? 'session' : 'sessions'} of ${reading.minutes} min.`,
+        ...(learned ? [learned] : []),
+      ],
+      action: { kind: 'settings', section: 'schedule', label: 'Adjust time' },
+      confidence: 'medium',
+      severity: 1,
+      source: GOALS_TIME_SOURCE,
+      goalsTime: { muscles: [...reading.muscles], minutes: reading.minutes },
+    },
+  ];
+}
+
+/**
+ * The approved proposal's new cards (Maintenance 33: "too soon"; Maintenance 34's honest
+ * goals-versus-time card), held to the owner's card limits (decision 5): at most one new card a day
+ * and three a week. A card the lifter has seen shows on as before; the limits hold back only one not
+ * yet seen.
+ */
+export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE, GOALS_TIME_SOURCE];
 
 export function isNudge(signal: Pick<CoachSignal, 'source'>): boolean {
   return NUDGE_SOURCES.some(
@@ -2589,10 +2656,17 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
     ...progressionSignals(input),
     ...restSignals(input),
     ...coverageSignals(input),
+    ...goalsTimeSignals(input),
     ...scheduleSignals(input),
     ...tipSignals(input),
     ...pushSignals(input),
   ]
+    // A kind of card the lifter turned off in Settings (Maintenance 34).
+    .filter(
+      (signal) =>
+        input.switches?.tooSoon !== false ||
+        !(signal.source === TOO_SOON_SOURCE || signal.source.startsWith(`${TOO_SOON_SOURCE}|`)),
+    )
     .filter((signal) => !addsToPushedMuscles(input, signal))
     .filter((signal) => !addsWork(signal) || !offPlanToday(input))
     .filter((signal) => !restToday(input) || !changesToday(signal));
