@@ -5,7 +5,40 @@ first; it holds the rules. This file holds the state and the steps._
 
 ## 1. The exact stopping point
 
-### Resumed on the owner's word, 2026-10-17 (supersedes the states below)
+### Shipped from the owner's machine, 2026-10-31 (supersedes the states below)
+
+On the owner's word (2026-10-30) the local builder took over Rounds M and N and Maintenance 33
+from the cloud session. Their saved patches (`round-m/n/o.diff` on
+`claude/workout-conductor-round-l-26i4o9` at `c683a87`, a branch nothing here changed) were made
+commits on `main` as it stood (`068413e`, with the install button and the fourth artwork's icons),
+in that order, then given the ship gate the owner set:
+
+- one fresh adversarial review of each round, every finding fixed with tests (each report's "fresh
+  review before shipping");
+- every revert table re-anchored and run on the final code, every entry caught (Maintenance 31's
+  report, "The complete revert run");
+- the complete `npm run verify`, the browser suite with its clip tests among it, and the browser
+  suite in UTC on a day the schedule does not tick, as CI meets it; CI green on the branch
+  `local/rounds-m-n-33`;
+- then `main` fast-forwarded to it, deployed, and checked live from this machine.
+
+State:
+
+- **Live**: `4da3258`, deployed by Deploy Pages run 41162608914 (success); the live marker reads
+  `4da3258`, and the live suite is in `PROJECT_STATUS.md`.
+- **Maintenance 34 is not started on `main`.** Its work so far is only the cloud branch's
+  `docs/handoff/round-p-wip/round-p.diff` (local `7f06db9` there, paused on the owner's word). It
+  applies with `git apply --3way` onto the new `main`, with one conflict in
+  `src/engine/planning/weekModel.ts`: Round M's fresh review gave the week model the coach focus
+  and the lasting swaps (F1), beside Maintenance 34's own lines there. Do not start or continue it
+  until the owner confirms Rounds M and N and Maintenance 33 live and says to go on.
+- **The cloud branch's three reviews** (Round M's twenty-eighth, Round N's seventeenth, Maintenance
+  33's sixth) were not run again: the owner's gate replaced them with one fresh review per round.
+- **Seen on the way, written up as known limits** in Maintenance 31's report: the week model reads
+  no deload week; and "Uncomfortable" on a lift whose muscles have one set left only through a set
+  added by hand says no comfortable alternative fits, where the reason is the muscles' sets.
+
+### Resumed on the owner's word, 2026-10-17 (superseded)
 
 - **Round L** is live: squashed onto `main` as `0f4b9bd` and deployed by Deploy Pages run
   39076937311 (success). The live marker and the live suite wait for the host (below). Ten review passes; the tenth found nothing new. Revert tables on

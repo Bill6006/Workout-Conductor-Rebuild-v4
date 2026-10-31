@@ -750,6 +750,34 @@ across midnight, and 72 fixed cases of six kinds of copy, found nothing else.
 - The revert run caught all 7 new and affected entries: 2 new (H212, H213), 2 re-anchored onto
   the pass's code (H172 onto the shared merge, H208) and 3 beside it.
 
+**The fresh review before shipping** (2026-10-30). The work moved from the cloud session to the
+owner's machine on the owner's word: the three rounds' saved work was made commits on `main` as it
+stood, with its install button and icons, and each round had one fresh, independent adversarial
+review of its rules as they stand with Round N and Maintenance 33 beside them. This one found three,
+each shown by a failing test, all fixed with tests and revert entries:
+
+- MEDIUM: the week model planned the week's sessions still to come without the coach focus and the
+  lasting swaps every real plan reads, so a catch-up could be built for a week that would not
+  happen. With "Lead the next session with quads" taken on Monday evening, the week read upper,
+  lower, pull and push where the store builds lower, pull, push and lower, and Monday's catch-up
+  left out the chest the week as built leaves short; on a strength week with the focus on the lats,
+  it gave the chest three sets the evening before the upper day's bench press. The week now reads
+  both, the focus held until a session trains its muscle, as a saved session clears it.
+  - Read so, a coach focus set can move which muscles are behind, and a catch-up the lifter had
+    emptied came back for the muscles left: the sixteenth review's case again. A catch-up or second
+    workout emptied whole now stays empty through a preview built again for an offer of the same
+    kind. A save of the profile or the place still builds a new offer whole, as before.
+- LOW: a second workout's supersets paired a lift for what was left of today's work with one for
+  what was missed (a rear-delt fly with the hamstrings' leg curl), so what was left came before
+  missed work. Off the plan, a pair's lifts are both for what was missed or both for what is left.
+- LOW: a catch-up still moved the split's rotation, through the muscles it trained rather than its
+  template: after Wednesday's catch-up of shrugs, rear-delt flies and chin-ups, Thursday was upper
+  where it would have been pull. The split's template is now chosen from the history with catch-ups
+  and second workouts left out; the lifts still read every record, the 48-hour rule among them.
+- The revert entries: F1 to F5 and F7 to F9, all caught. F6, a rule that only lifts side by side
+  pair, went: its revert survived the review's test, either rule alone keeping that order, and the
+  layout's order within a part is no rule the round set. H159 is re-anchored.
+
 ## Known limits
 
 - **The week is this device's.** Workouts logged on another device, or not logged, are not in it,
@@ -803,10 +831,81 @@ across midnight, and 72 fixed cases of six kinds of copy, found nothing else.
 - **The evidence is thin on a second dose the same day.** No trial has given a muscle a second full
   dose the same day. The rules rest on recovery studies, small and mostly in young trained men, so
   the second workout errs toward sitting out (`docs/research/catch-up-and-second-workout.md`).
+- **The week model reads no deload week** (seen in the fresh review). It plans the sessions still
+  to come at their usual dose, so in a deload week a catch-up can count on more than the week will
+  do.
+- **One set left through a set added by hand** (seen in the revert run). "Uncomfortable" on a lift
+  whose muscles have one set left only because the lifter added a set to it stops the lift at its
+  sets done, as the rule asks, but says no comfortable alternative fits, where what stops it is the
+  muscles' one set left.
 
 ## The complete revert run
 
-REVERTS
+Run on the three rounds together, as they ship (Rounds M and N and Maintenance 33): every table of
+Maintenance 23 to 33 once through on `495062d`; then every entry that run left uncaught, and every
+entry whose tests changed since, again on the final code (`4da3258`, whose source is the same),
+with the install button and launcher icons' table there too. Every entry is caught:
+
+| Table | Entries | Caught |
+| --- | --- | --- |
+| Maintenance 23 to 26 (`mutate-m26.py --all`) | 1,190 | 1,190 |
+| Maintenance 27 | 193 | 193 |
+| Maintenance 28 (in UTC, with the day rules' zones) | 81 | 81 |
+| Maintenance 29 | 32 | 32 |
+| Maintenance 30 | 121 | 121 |
+| Maintenance 31, this round | 355 | 355 |
+| Maintenance 32, Round N | 322 | 322 |
+| Maintenance 33 | 170 | 170 |
+| The install button and launcher icons (`mutate-install-icon.py`) | 54 | 54 |
+
+The first run left 44 of 2,474 uncaught. None was a fault in the code the rounds ship; each was a
+test or an entry that had stopped reaching its rule:
+
+- **Tests a later rule blinded.** Maintenance 33's decision 1 means a low check-in changes no
+  plan, and that round's tests swapped the old low check-in for a head cold, which moves the
+  reserve and no set. Fourteen of Maintenance 24's and 26's entries guard what the day's settings
+  do to a kept lift's sets: they are caught again by tests of "Make it easier" and "Make it harder",
+  which still take a set off or put one back (`recalibrate.effort.test.ts`), and of the lighter
+  option alone and "harder" on a lift keeping the ease (`recalibrate.easeLayer.test.ts`).
+- **Tests whose case later reviews sent down another path.** This round's H14, H39, H45 and Y3 and
+  Round N's N133 and N156 have tests of the case that still reaches them: a set added by hand to
+  the squat, a lift that came in for comfort pinned and unpinned under "easier", the leg curl's one
+  alternative refused for the glutes, the leg press kept over the front squat swapped in, a
+  straight day of the lifter's own after one on the structure, and a max that takes the top set
+  past the dumbbells there.
+- **Entries caught elsewhere.** A run of each against the whole unit suite found the test that
+  reaches it: H20 and H38 (`catchUpComfortUnpinned.test.ts`), N132 (`backOffs.heldStraight.test.ts`)
+  and Maintenance 33's W14 (`hardStartLighterSwapBack.test.ts`), now in their lists.
+- **Entries that drifted.** G9 (Round N put an earlier `!offPlan &&` in the generator), N225
+  (Maintenance 33 moved the eased record's schema above the entry's) and Maintenance 24's 34z2
+  (Maintenance 33 rewrote the check-in's words over lines of their own) are re-anchored onto their
+  own lines.
+- **Time-outs.** Maintenance 25's PEi, PFf and PFq take away a request's bound. Their tests waited
+  for good and failed only on the test's time-out, which the runners no longer count as a catch;
+  they now read whether the request settled once the bound has passed, so the revert fails as an
+  expectation.
+- **The time zone.** Maintenance 33's Z15, Z42, Z43 and Z44 are caught in UTC, as CI runs them; in
+  a zone hours behind UTC their tests' clock falls on another day.
+- **The runners themselves.** A revert whose test file no longer loads (34z3's no longer compiled)
+  read as SURVIVED with "no tests": every runner now calls it WRONG FAILURE.
+
+Retired, each because a later rule does what its revert takes away, so the revert changes nothing
+the lifter sees; the whole unit suite passes with each:
+
+- V7: the split's template is chosen from the history with catch-ups and second workouts left out
+  (F7, F8), so the exposure's own filter has nothing to filter.
+- X2: every rebuild holds the lifts it keeps to the offer's dose (`holdToOffer`, the seventeenth
+  review; H91, H92), and each lift a day's setting settles is one it holds. (One run of the suite
+  failed a Back-and-sheets screen test under load; it passed twice alone with the revert.)
+- Y1: a slot two muscles would share through the lift to push, which the day does not pick, is
+  filled with a lift for one of them, and the other takes a slot of its own right after (the sixth
+  to ninth reviews' slot for a muscle a lift misses): the same plan.
+- H50: a lift with every set done is said done before any refusal is read, by the sheet (the
+  twenty-second review's check) and by the swap ("nothing is left to swap"), and the coach offers
+  no swap for a lift begun.
+- Maintenance 24's 34z3, 34z5 and 34z11 and Maintenance 26's 42j and 42z63: decision 1 left them no
+  case (a check-in takes no set and adds no rep; each reason in `mutate-m26.py`).
+- Maintenance 33's Z23 (in that report).
 
 Retired in the reviews: H69, H98, H116 and H141 (the twenty-second review: the sheet's own test of a
 lift done is H157's now; the old plan handed back to a later plan, `emptiedFor`, is gone; and the
@@ -818,7 +917,22 @@ H199, so the load never reads one).
 
 ## Verification
 
-VERIFY
+On the final code of the three rounds together (`4da3258`), on the owner's machine, each run alone:
+
+- `npm run verify`: lint and the type check clean; 3,632 unit tests passed and 5 skipped by design
+  (612 files), and the day rules' 38 tests in two more zones; the build; the privacy scan (1,174
+  files, no finding); verify-build (marker `4da3258`); the browser suite, 443 passed and 14 skipped
+  by design, the clip tests among them (the cloud machine's Chromium could not play them).
+- The browser suite again in UTC on a Saturday, a day the default schedule does not tick, as CI met
+  it on the night of the push: 443 passed, 14 skipped. Run so first, the chin-up and incline specs
+  met the catch-up their seeded history makes the day's offer; they now take the full session, as
+  coachAndHints does, and the specs that seed recent workouts were each run so alone.
+- CI on the branch `local/rounds-m-n-33`, run 41160956650: every step passed, in UTC on a Saturday:
+  3,632 unit tests passed and 5 skipped, the day rules' in two more zones, the browser suite 443
+  passed and 14 skipped, none flaky.
+- Deploy Pages run 41162608914: its checks passed as the branch's did (the browser suite 443 passed
+  and 14 skipped), and the deploy. The live marker `shortCommit` reads `4da3258`; the live suite
+  from the owner's machine: 438 passed and 19 skipped by design, none flaky.
 
 ## Review on the phone
 

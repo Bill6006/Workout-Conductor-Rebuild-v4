@@ -491,6 +491,24 @@ starts and home dumbbells, under Hybrid, Strength focus and Lean-down, found not
   found a refit's replay reading a back-off logged with no weight with none, which took back the
   step its follow gave (fixed above; N323).
 
+**The fresh review before shipping** (2026-10-30): one fresh, independent adversarial review of the
+round as it stands with Round M and Maintenance 33 (see Maintenance 31's report). It found two, each
+shown by failing tests, both fixed with tests and revert entries:
+
+- MEDIUM: a lift picked up again after its top set, home and back or swapped away and back, gave
+  its back-offs the top set's reps and reserve as they stood, so what changed the top set alone
+  reached them. A head cold told with the lift under way holds the top set at 2 in reserve, a rep
+  fewer, and the back-offs came back at 3-5 at 3, kept so after the illness went; "Make it easier"
+  after the top set brought them back at 2 where the day asks 3; "easier" before the top set and
+  "harder" after it, at 3 on a plain day. The back-offs now take the plan's own top set's reps (the
+  floor's copy, where one holds it) at the day's back-off reserve, in the generator's pick-up and in
+  a swap back alike: 2 on a plain day, 3 easier, 1 harder, as delivered.
+- LOW: a drop its correction narrowed to 0% still read "0% lighter" in Why this target, and each
+  back-off's effort line "lighter than the top set". Why this target now says the back-offs are at
+  the top set's load there, and the effort line says "after the top set".
+- The revert entries: N324 to N329, all caught; N103, N104, N275 and N293 are re-anchored. N330 and
+  N331 carry Maintenance 26's BB1 and BB3, whose lines this round moved into `withoutHandTargets`.
+
 ## Known limits
 
 - **Five days running, the old fatigue score reads Fridays high.** Before Maintenance 33 it scores
@@ -542,7 +560,14 @@ starts and home dumbbells, under Hybrid, Strength focus and Lean-down, found not
 
 ## The complete revert run
 
-REVERTS
+Run with Round M and Maintenance 33, every table of Maintenance 23 to 33 together (the table and its
+account are in Maintenance 31's report). This round's 322 entries are all caught. Four needed work:
+N225 had drifted (Maintenance 33 moved the eased record's schema above the entry's, so its first
+match was the record's line) and is re-anchored onto its own; N132 is caught by
+`backOffs.heldStraight.test.ts`, now in its list; N133 and N156 passed because later reviews gave
+their tests' case another path, and each has a test of the case that still reaches it: a straight
+day of the lifter's own after a session on the structure, and a max that takes the top set past
+the dumbbells there.
 
 Retired in the reviews: N145 (the twelfth review: the step held at a weight the place has never
 goes under the bar, so its clamp was removed); N280 (the thirteenth: a skipped top set's log has no
@@ -551,7 +576,8 @@ of a back-off's log taken back under a skipped top set stands beside it).
 
 ## Verification
 
-VERIFY
+Run with Round M and Maintenance 33, on the three rounds' final code (`4da3258`): see Maintenance 31's
+report, Verification.
 
 ## Review on the phone
 

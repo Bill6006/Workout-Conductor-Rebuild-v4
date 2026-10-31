@@ -279,6 +279,38 @@ everywhere but the first finding's class, and the check-in on every later plan o
   on, so the swap back owed the set "Lighter" took for good, and the copy now gives the slot its
   sets back itself (Z56, Z57, Z66).
 
+**The fresh review before shipping** (2026-10-30): one fresh, independent adversarial review of the
+round as it stands with Rounds M and N (see Maintenance 31's report). It found four, each shown by
+failing tests, all fixed with tests and revert entries:
+
+- HIGH: on a fever or aches all over, Today hid Start, but the Workout tab, one of the five bottom
+  destinations, still offered Start Workout for the same plan, and the store started it. The store
+  now starts no workout that day from any screen, and the Workout tab says it is a rest day, with
+  Update check-in on Today (proposal part 2: "no session").
+- MEDIUM: a lower-body isolation set to failure took the lower-body compound window wherever a
+  compound lift had trained the muscle too: a squat two short and leg extensions to failure gave
+  the quads 72 h, where the table gives 48; Romanian deadlifts two short and leg curls to failure
+  gave the hamstrings 84 h, not 60. A muscle's window is now the longest any one of its lifts asks,
+  each lift's hardest set read in its own region (the research: lower-body isolation takes the
+  upper-body values), with the dose, new-lift and long-length adjusters as before.
+- MEDIUM: a lighter session after a hard one replaced the hard one's window while it still ran.
+  After a hard chest day (84 h) and a "Lighter" day next, the chest read 12 h left at 60 h where the
+  hard day left 24, and a hard chest plan was no longer flagged: "Lighter" made a muscle read
+  recovered sooner than resting it would. The window is now the one that ends latest; a rested
+  session for the first-set check, and an early re-exposure for the learned window, read every
+  earlier window still running, not only the newest.
+- LOW: a check-in told past midnight on a workout begun the evening before was read as both today's
+  and the night before's ("two short nights running"), and lowered what the day's first sets were
+  expected to do. A saved check-in is read on the day it was told (`checkInAt`).
+- The revert entries: Y1 to Y8, all caught. Y5 and Y6 have tests of their own, of a session after a
+  light day's short window, still inside the hard day's. Y8 carries Maintenance 26's 42x2, whose
+  rule now lives in this round's check-in words, out of its old store test's reach. Six entries the
+  fixes moved are re-anchored (R3, R4, R6, R7, L5, L6), and Z34, which Round N's fix moved.
+- Also found on the owner's machine: the fourth review's midnight check-in test wrote its times in
+  UTC, so it passed only where the device runs in UTC, and failed in a zone hours behind it, where
+  23:50 and 0:10 UTC are one evening. Its times are now the device's clock, and it runs with the
+  day rules in two more zones.
+
 ## Known limits
 
 - **The windows are estimates.** People differ widely (Damas 2016: the same session left some at
@@ -299,7 +331,23 @@ everywhere but the first finding's class, and the check-in on every later plan o
 
 ## The complete revert run
 
-REVERTS
+Run with Rounds M and N, every table of Maintenance 23 to 33 together (the table and its account
+are in Maintenance 31's report). This round's 170 entries are all caught, Z15, Z42, Z43 and Z44 in
+UTC, as CI runs them: in a zone hours behind UTC, their tests' clock falls on another day.
+W14 is caught by the hard start's own test (`hardStartLighterSwapBack.test.ts`, now in its list):
+without a hard start, the pick-up's own easing (`lighterPickedUp`, Z35 and Z36) eases a lift swapped
+back too, so the swap back's easing shows only under one.
+
+This round's decision 1 left fourteen of Maintenance 24's and 26's entries untested: a low check-in
+changes no plan, and the tests had swapped it for a head cold, which moves the reserve and no set.
+They are caught again by tests of "Make it easier" and "Make it harder". Five more had no case left
+and are retired in `mutate-m26.py`, each with its reason: 34z3, 34z5, 34z11, 42j and 42z63. 34z2 is
+re-anchored onto the check-in's own words, which this round rewrote.
+
+Retired in the run: Z23, because a later fix of this round does what its revert takes away (the
+whole unit suite passes with it). The swap back's record is kept for good, so a rebuild never gives
+it back, and a saved copy, the one step that reads it, does every set of the plan again whatever
+count the record holds.
 
 Retired in the reviews: V4 and W6 (the third review: the rest day's early return said what the
 rest-day filter says, and the filter is Z11's and Z12's now); Z32 (the fourth: the hard start's words
@@ -309,7 +357,8 @@ went).
 
 ## Verification
 
-VERIFY
+Run with Rounds M and N, on the three rounds' final code (`4da3258`): see Maintenance 31's
+report, Verification.
 
 ## Review on the phone
 
