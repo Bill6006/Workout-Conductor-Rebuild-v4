@@ -255,9 +255,10 @@ MUTATIONS = [
     ("C2 clearly worse: never less than a point", CHECKIN,
      "mean - Math.max(1, spread * RULES.worseSpread.value)", "mean - spread * RULES.worseSpread.value",
      [T_CHECKIN], None),
+    # C3 re-anchored for item 48: Life Mirror's stress and mood count with the others now.
     ("C3 two items lower the day", CHECKIN,
-     "    lowered: worse.length >= RULES.worseItems.value || extreme !== null,",
-     "    lowered: worse.length >= 1 || extreme !== null,", [T_CHECKIN], None),
+     "    lowered: worseAll.length >= RULES.worseItems.value || extreme !== null,",
+     "    lowered: worseAll.length >= 1 || extreme !== null,", [T_CHECKIN], None),
     ("C4 two short nights running", CHECKIN,
      "    nightBefore !== undefined &&\n    nightBefore.readiness.sleep <= RULES.extremeSleep.value", "    true",
      [T_CHECKIN], None),
