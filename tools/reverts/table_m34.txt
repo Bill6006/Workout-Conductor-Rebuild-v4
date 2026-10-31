@@ -391,8 +391,9 @@ MUTATIONS = [
      "        ? 'When a longer session was offered, you chose the shorter one.'\n",
      "        ? null\n", [T_COACH_GOALS], None),
     ("G13 ... held to the card limits", COACH,
-     "export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE, GOALS_TIME_SOURCE];\n",
-     "export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE];\n", [T_COACH_GOALS], None),
+     # Re-anchored for Maintenance 36: the schedule watch's card is held to the limits too.
+     "export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE, GOALS_TIME_SOURCE, WATCH_SOURCE];\n",
+     "export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE, WATCH_SOURCE];\n", [T_COACH_GOALS], None),
     ("G14 ... with Adjust time", COACH,
      "      action: { kind: 'settings', section: 'schedule', label: 'Adjust time' },\n",
      "      action: { kind: 'none' },\n", [T_COACH_GOALS], None),
@@ -404,8 +405,9 @@ MUTATIONS = [
 
     # Settings and the screens.
     ("X1 each kind of coaching on until turned off", SWITCHES,
-     "  return { id: COACH_SWITCHES_ID, tooSoon: true, longer: true, goalsTime: true };\n",
-     "  return { id: COACH_SWITCHES_ID, tooSoon: true, longer: false, goalsTime: true };\n",
+     # Re-anchored for Maintenance 36: the defaults hold the schedule watch's switch too.
+     "    tooSoon: true,\n    longer: true,\n    goalsTime: true,\n    scheduleWatch: true,\n",
+     "    tooSoon: true,\n    longer: false,\n    goalsTime: true,\n    scheduleWatch: true,\n",
      [T_SWITCHES], None),
     ("U1 Today shows the suggestion", CARD,
      "      {longer ? (\n        <p className={styles.dayNote} data-testid=\"longer-offer\">\n",

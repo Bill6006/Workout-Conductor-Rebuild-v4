@@ -299,9 +299,10 @@ MUTATIONS = [
      "                schedule: { ...current.schedule, weeklyFrequency: Number(value), since: nowIso() },",
      "                schedule: { ...current.schedule, weeklyFrequency: Number(value) },",
      [T_REALWEEK_STORE], None),
+    # 46j re-anchored for Maintenance 36: the move passes the way back on, one level in.
     ("46j moving the schedule sets when", STORE,
-     "        availableDays: [...availableDays],\n        since: this.now(),",
-     "        availableDays: [...availableDays],", [T_REALWEEK_STORE], None),
+     "          availableDays: [...availableDays],\n          since: this.now(),",
+     "          availableDays: [...availableDays],", [T_REALWEEK_STORE], None),
 
     # Item 47: what the app has learned.
     ("47a the habit reset reads only sessions after it", OVERRIDES,
