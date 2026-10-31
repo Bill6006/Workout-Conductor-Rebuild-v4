@@ -21,7 +21,8 @@ still pass means the rule has no test that guards it.
 | `mutate-catch-up-decision.py` | The app chooses the day's workout | 9 |
 | `mutate-m34.py` | Maintenance 34 (time intelligence) | 136 |
 | `mutate-item48.py` | Maintenance 35 (item 48, Life Mirror's daily check-in) | 64 |
-| `mutate-m36.py` | Maintenance 36 (the schedule watch) | 60 |
+| `mutate-m36.py` | Maintenance 36 (the schedule watch) | 58 |
+| `mutate-presets.py` | Maintenance 37 (custom equipment presets) | 32 |
 
 The tables are data: each row is `(name, file, old, new, tests, nth)`. From M30 on, a round's table
 is written from its `table_mNN.txt`: edit the `.txt`, then run `python3 table_mNN.py`. Never write a
