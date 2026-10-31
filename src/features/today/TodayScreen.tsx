@@ -11,16 +11,12 @@ import { undoAvailable } from '../../core/state/session';
 import { useAppState, useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { formatDayLabel, useNow } from '../../core/time/clock';
 import { localWeekday } from '../../core/time/localDate';
-import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
-import { swapsOffered } from '../../engine/recalibration/recalibrate';
+import { entryAlternatives } from '../../engine/alternatives/entryAlternatives';
 import { REST_TODAY, illnessOf } from '../../engine/readiness/checkIn';
-import { buildRankingSignals } from '../../engine/alternatives/signals';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import {
-  allEntries,
   isStopped,
   planOwnExercise,
-  stoppedBefore,
   type WorkoutBlock,
   type WorkoutEntry,
 } from '../../engine/workout/types';
@@ -97,46 +93,21 @@ export function TodayScreen() {
   // A stopped exercise has nothing left to change: its sheet says so in place of its actions.
   const selectedStopped = selected !== null && isStopped(selected.entry);
   // A catch-up offers no swap it would turn down (Maintenance 31, the thirteenth review of round M).
+  // The sheet's list is the coach's too (`entryAlternatives`): a harder variation it offers is here.
   const alternatives =
     selected && selectedExercise && !selectedStopped
-      ? swapsOffered(
-          rankAlternatives({
-            current: selectedExercise,
-            context,
-            // The exercise a stand-in took over from is offered back; swapping to it picks it up.
-            otherExercises: allEntries(workout.blocks)
-              .filter(
-                (entry) =>
-                  entry.id !== selected.entry.id &&
-                  !stoppedBefore(workout.blocks, selected.entry).includes(entry),
-              )
-              .map((entry) => requireExercise(entry.exerciseId)),
-            supersetPartner:
-              selected.block.kind === 'superset'
-                ? requireExercise(
-                    selected.block.entries.find((entry) => entry.id !== selected.entry.id)
-                      ?.exerciseId ?? selected.entry.exerciseId,
-                  )
-                : undefined,
-            dropSetPlanned: selected.entry.dropSet,
-            plannedSets: {
-              sets: selected.entry.sets.length,
-              restSeconds: selected.entry.restSeconds,
-            },
-            signals: buildRankingSignals({
-              profile,
-              history,
-              now: new Date().toISOString(),
-              sessionPainJoints: session.constraints.painJoints,
-              coachRoutes,
-              currentExerciseId: selectedExercise.id,
-            }),
-            limit: 6,
-          }),
-          { ...session, history, timestamp: new Date().toISOString() },
+      ? entryAlternatives({
+          profile,
+          location,
           workout,
-          selected.entry,
-        )
+          block: selected.block,
+          entry: selected.entry,
+          constraints: session.constraints,
+          completed: session.completed,
+          history,
+          now: new Date().toISOString(),
+          coachRoutes,
+        })
       : null;
 
   // Every session-only action closes the sheet and runs through the one Recalibration Engine.

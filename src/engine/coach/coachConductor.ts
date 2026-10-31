@@ -72,6 +72,7 @@ import {
   computeWeeklyVolume,
 } from '../volume/weeklyVolume';
 import { checkExerciseFit, isBlocked } from '../conflicts/conflictEngine';
+import { harderAlternatives } from '../alternatives/entryAlternatives';
 import { preferredIdsOf } from '../conflicts/context';
 import { barWeightFor, startRatio } from '../progression/startingLoad';
 import {
@@ -1505,7 +1506,11 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       offered = !putAway(input, extra);
     }
     // Held at the heaviest weight the place has: the reps are already climbing; the next
-    // levers are a harder variation, then an extra set. Each ends in a tap.
+    // levers are a harder variation, then an extra set. Each ends in a tap. A harder variation is
+    // offered only where the lift's sheet lists one, by the sheet's own list (the owner, 2026-10-31:
+    // the button opened a sheet that said no safe alternative fitted). With none, nothing is offered
+    // until the reps reach the top: they climb on, as the lift's own line says, and the extra set
+    // comes then.
     // A hold's seconds already climb on their own rule, so the rep levers here do not apply.
     if (
       !offered &&
@@ -1519,32 +1524,51 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       // The reps stop at twenty, or at thirty on a set run to its effort (Maintenance 23). An
       // exercise whose sets were already changed today is not offered another one.
       const ceiling = entryPushedToEffort(entry) ? EFFORT_REPS_CEILING : 20;
-      const repsAtCeiling = top >= ceiling && !entry.manual?.sets;
-      const capped: CoachSignal = {
-        domain: 'progression',
-        headline: `${exercise.name}: at the heaviest weight here (${progression.capped.at} ${units})`,
-        why: [
-          repsAtCeiling
-            ? 'The reps are already at the top of the range.'
-            : `The reps go up instead, to ${top} this session.`,
-          repsAtCeiling
-            ? 'One more working set adds volume the weight cannot.'
-            : 'A harder variation keeps the same weight heavy.',
-        ],
-        action: repsAtCeiling
-          ? {
-              kind: 'recalibrate',
-              trigger: { type: 'sets', entryId: entry.id, workingDelta: 1 },
-              label: 'Add a set',
-            }
-          : { kind: 'alternatives', entryId: entry.id, label: 'A harder variation' },
-        confidence: progression.confidence,
-        severity: 1,
-        source: 'capped',
-        exerciseId: entry.exerciseId,
-      };
-      signals.push(capped);
-      offered = !putAway(input, capped);
+      const atCeiling = top >= ceiling;
+      const repsAtCeiling = atCeiling && !entry.manual?.sets;
+      const block = input.workout.blocks.find((one) => one.entries.includes(entry));
+      const harder =
+        !repsAtCeiling &&
+        block !== undefined &&
+        harderAlternatives({
+          profile: input.profile,
+          location: input.location,
+          workout: input.workout,
+          block,
+          entry,
+          constraints: input.constraints,
+          completed: input.completed,
+          history: input.history,
+          now: input.now,
+          ...(input.routes ? { coachRoutes: input.routes } : {}),
+        }).length > 0;
+      if (repsAtCeiling || harder) {
+        const capped: CoachSignal = {
+          domain: 'progression',
+          headline: `${exercise.name}: at the heaviest weight here (${progression.capped.at} ${units})`,
+          why: [
+            atCeiling
+              ? 'The reps are already at the top of the range.'
+              : `The reps go up instead, to ${top} this session.`,
+            repsAtCeiling
+              ? 'One more working set adds volume the weight cannot.'
+              : 'A harder variation keeps the same weight heavy.',
+          ],
+          action: repsAtCeiling
+            ? {
+                kind: 'recalibrate',
+                trigger: { type: 'sets', entryId: entry.id, workingDelta: 1 },
+                label: 'Add a set',
+              }
+            : { kind: 'alternatives', entryId: entry.id, label: 'A harder variation' },
+          confidence: progression.confidence,
+          severity: 1,
+          source: 'capped',
+          exerciseId: entry.exerciseId,
+        };
+        signals.push(capped);
+        offered = !putAway(input, capped);
+      }
     }
   }
   return signals;

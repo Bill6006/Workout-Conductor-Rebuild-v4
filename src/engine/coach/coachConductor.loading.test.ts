@@ -79,6 +79,9 @@ function heldAtTheHeaviest(
       strategy: analyzeStrategy({ history: [], profile, now: NOW, fatigue }),
       lastExportAt: NOW,
       workoutCount: 0,
+      // At the gym, whose sheet for the lift lists a harder variation: the coach offers one only
+      // where the sheet does (coachConductor.harderVariation.test.ts).
+      location: gym,
     },
   };
 }

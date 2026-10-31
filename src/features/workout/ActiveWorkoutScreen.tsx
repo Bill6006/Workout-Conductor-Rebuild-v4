@@ -39,8 +39,7 @@ import { useAppSelector, useAppStore } from '../../core/state/useAppStore';
 import { useTicker } from '../../core/time/useTicker';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { SessionRating } from '../../core/validation/workoutRecord';
-import { rankAlternatives } from '../../engine/alternatives/rankAlternatives';
-import { buildRankingSignals } from '../../engine/alternatives/signals';
+import { entryAlternatives } from '../../engine/alternatives/entryAlternatives';
 import { liveSetRecords } from '../../engine/scoring/personalRecords';
 import type { CoachAction, CoachSignal } from '../../engine/coach/coachConductor';
 import { useCoach } from '../coach/useCoach';
@@ -59,7 +58,7 @@ import { enteredE1rm, enteredMaxFor } from '../../engine/progression/maxes';
 import { hasNoLoad, startRatio } from '../../engine/progression/startingLoad';
 import { repsSlip, weightSlip, type SlipQuestion } from '../../engine/progression/slips';
 import type { SetKind } from '../../engine/workout/types';
-import { contextFor, swapsOffered } from '../../engine/recalibration/recalibrate';
+import { contextFor } from '../../engine/recalibration/recalibrate';
 import type { RecalibrationTrigger } from '../../engine/recalibration/types';
 import {
   currentPosition,
@@ -69,10 +68,8 @@ import {
   workoutProgress,
 } from '../../engine/workout/sequence';
 import {
-  allEntries,
   isStopped,
   planOwnExercise,
-  stoppedBefore,
   type SetPrescription,
   type WorkoutBlock,
   type WorkoutEntry,
@@ -295,13 +292,6 @@ export function ActiveWorkoutScreen() {
       ? { entryId: lastLogged.entryId, setIndex: lastLogged.setIndex }
       : null;
   const paused = session.status === 'paused';
-
-  // A lift held at the heaviest weight here ranks variations that stay heavy with what you have.
-  const capLimitedFor = (entry: WorkoutEntry, exercise: ReturnType<typeof requireExercise>) => {
-    if (!entry.progression?.capped) return undefined;
-    const ratio = startRatio(exercise);
-    return ratio === null ? undefined : { currentRatio: ratio };
-  };
 
   // Skip today has nothing to do once every set is logged; the button says so instead of failing.
   const skipReasonFor = (entry: WorkoutEntry) =>
@@ -904,49 +894,22 @@ export function ActiveWorkoutScreen() {
   // A stopped exercise has nothing left to change: its sheet says so in place of its actions.
   const selectedStopped = selected !== null && isStopped(selected.entry);
   // A catch-up offers no swap it would turn down (Maintenance 31, the thirteenth review of round M).
+  // The sheet's list is the coach's too (`entryAlternatives`): a lift held at the heaviest weight
+  // here ranks first the variations that stay heavy with what you have.
   const alternatives =
     selected && selectedExercise && !selectedStopped
-      ? swapsOffered(
-          rankAlternatives({
-            current: selectedExercise,
-            context,
-            // The exercise a stand-in took over from is offered back; swapping to it picks it up.
-            otherExercises: allEntries(workout.blocks)
-              .filter(
-                (entry) =>
-                  entry.id !== selected.entry.id &&
-                  !stoppedBefore(workout.blocks, selected.entry).includes(entry),
-              )
-              .map((entry) => requireExercise(entry.exerciseId)),
-            supersetPartner:
-              selected.block.kind === 'superset'
-                ? requireExercise(
-                    selected.block.entries.find((entry) => entry.id !== selected.entry.id)
-                      ?.exerciseId ?? selected.entry.exerciseId,
-                  )
-                : undefined,
-            dropSetPlanned: selected.entry.dropSet,
-            plannedSets: {
-              sets: selected.entry.sets.length,
-              restSeconds: selected.entry.restSeconds,
-            },
-            signals: {
-              ...buildRankingSignals({
-                profile,
-                history,
-                now: new Date().toISOString(),
-                sessionPainJoints: session.constraints.painJoints,
-                coachRoutes,
-                currentExerciseId: selectedExercise.id,
-              }),
-              capLimited: capLimitedFor(selected.entry, selectedExercise),
-            },
-            limit: 6,
-          }),
-          { ...session, history, timestamp: new Date().toISOString() },
+      ? entryAlternatives({
+          profile,
+          location,
           workout,
-          selected.entry,
-        )
+          block: selected.block,
+          entry: selected.entry,
+          constraints: session.constraints,
+          completed: session.completed,
+          history,
+          now: new Date().toISOString(),
+          coachRoutes,
+        })
       : null;
   const selectedStarted = selected
     ? session.completed.sets.some((set) => set.entryId === selected.entry.id)
