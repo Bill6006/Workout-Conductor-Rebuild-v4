@@ -704,8 +704,9 @@ function rebuild(
     request.profile.schedule.typicalDurationMinutes,
     request.workout.templateId,
   );
-  // A catch-up or a second workout the lifter's changes emptied stays so through every rebuild,
-  // the full session a tap away (the fourteenth review of round M: a skipped lift's slot took a lift
+  // A catch-up or a second workout the lifter's changes emptied stays so through every rebuild
+  // (no screen offers the full session since the owner's word of 2026-10-31; the fourteenth review of
+  // round M: a skipped lift's slot took a lift
   // back, a length picked planned the split's day), a rebuild of the whole plan too (the sixteenth:
   // a length picked brought back the lift swapped away): the generator lays out each plan the
   // lifter emptied today, for the day's offer, with no lift (`emptiedLayouts`), and says where it

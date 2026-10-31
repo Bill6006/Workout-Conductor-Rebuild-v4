@@ -149,6 +149,8 @@ The raw notes and saved abstracts stayed on the working machine and are not in t
 ### Recommended defaults
 **Item 12: catch-up on an unplanned day**
 1. Show the one line and offer the catch-up, with the full session one tap away. Never present the catch-up as needed.
+   *Superseded by the owner's word of 2026-10-31: the app chooses the day's one workout and no button offers the full
+   session (`docs/reports/catch-up-decision.md`). The rest of these defaults still shape the catch-up it chooses.*
 2. **Which muscles:** only muscles that are behind and outside the 48-h sit-out. Keep the 48-h rule here: near-failure work depresses performance for 24 to 48 h, and a damaging repeat at 24 h adds damage.
 3. **Order:** largest relative shortfall first, with each muscle's main lift first. Strength benefits from early placement; size is unaffected.
 4. **Sets:**

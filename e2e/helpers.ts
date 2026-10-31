@@ -76,15 +76,34 @@ export async function skipWarmupIfShown(page: Page): Promise<void> {
 }
 
 /**
- * Takes the full session where Today offers a catch-up instead (Maintenance 31, item 12): a day the
- * default schedule does not tick offers one to a lifter with a workout in the last two weeks. A
- * test of the day's usual plan takes the full session first; any other day it does nothing.
+ * Ticks today on the saved profile's schedule, for a test of the day's usual plan: on a day the
+ * default schedule does not tick, a lifter with a workout in the last two weeks gets a catch-up
+ * (Maintenance 31, item 12), and since the owner's word of 2026-10-31 nothing on Today chooses the
+ * full session instead. Today by the page's own clock. The caller reloads to read it.
  */
-export async function takeFullSessionIfOffered(page: Page): Promise<void> {
-  const action = page.getByTestId('day-note-action');
-  await expect(page.getByTestId('start-workout').or(action).first()).toBeVisible();
-  if ((await action.count()) > 0 && (await action.textContent()) === 'Full session') {
-    await action.click();
-    await expect(action).toHaveText('Catch-up instead');
-  }
+export async function tickToday(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+    const today = days[new Date().getDay()];
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('workout-conductor-v4');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(['profile'], 'readwrite');
+      const store = tx.objectStore('profile');
+      const read = store.get('current');
+      read.onsuccess = () => {
+        const profile = read.result as { schedule: { availableDays: string[] } } | undefined;
+        if (profile && today && !profile.schedule.availableDays.includes(today)) {
+          profile.schedule.availableDays = [...profile.schedule.availableDays, today];
+          store.put(profile);
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  });
 }

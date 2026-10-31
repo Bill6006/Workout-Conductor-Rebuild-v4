@@ -178,7 +178,8 @@
   color: var(--color-text);
 }
 
-/* The day's one line on a catch-up or a second workout (Maintenance 31), its button beside it. */
+/* The day's one line on a catch-up or a second workout (Maintenance 31), or a rest day's, with
+   its button beside it (Maintenance 33). */
 .dayNote {
   display: flex;
   flex-wrap: wrap;

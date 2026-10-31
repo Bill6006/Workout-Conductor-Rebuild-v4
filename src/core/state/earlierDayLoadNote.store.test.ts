@@ -95,7 +95,7 @@ async function loadedOverFriday() {
 }
 
 describe('a saved catch-up loaded over a plan left on the screen from the day before', () => {
-  it('is told as the catch-up Saturday offers, the full session one tap away', async () => {
+  it('is told as the catch-up Saturday offers, with no choice of kind', async () => {
     const handle = await loadedOverFriday();
     const note = dayNoteOf(session(handle), false);
     // On 992c87d: "Not one of your training days.", no button. On ce935fe: "Not one of your
@@ -104,7 +104,7 @@ describe('a saved catch-up loaded over a plan left on the screen from the day be
     expect(note).not.toHaveProperty('action');
   });
 
-  it('keeps the full session one tap away once Today is opened', async () => {
+  it('offers no choice of kind once Today is opened', async () => {
     const handle = await loadedOverFriday();
     handle.store.refreshSession();
     expect(session(handle).workout.templateId).toBe('catch-up');

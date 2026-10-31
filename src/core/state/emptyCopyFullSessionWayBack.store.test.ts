@@ -113,15 +113,12 @@ describe('a loaded copy with no lift', () => {
     const saved = await handle.store.saveCurrentWorkout('Nothing more');
     clock.now = SATURDAY;
     handle.store.refreshSession();
-    // Saturday's own plan: a catch-up, the full session a tap away.
+    // Saturday's own plan: a catch-up, with no choice of kind.
     expect(dayNoteOf(session(handle), false)).not.toHaveProperty('action');
-    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
-    const before = session(handle).workout;
-    handle.store.loadSavedWorkout(saved.id);
-    expect(session(handle).workout).toBe(before);
-    expect(session(handle).lastSummary?.headline).toMatch(
-      /^Nothing in ".+" is left for today: today's plan stays\.$/,
-    );
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, untouched.
+    const before = session(handle);
+    expect(handle.store.loadSavedWorkout(saved.id)).toBe('empty');
+    expect(session(handle)).toBe(before);
     expect(session(handle).workout.title).toBe('Catch-up');
     expect(session(handle).constraints.fullSession).toBeUndefined();
     expect(dayNoteOf(session(handle), false)?.text).toMatch(
@@ -147,13 +144,10 @@ describe('a loaded copy with no lift', () => {
     await handle.store.hydrate();
     // Friday's own plan: the second workout.
     expect(session(handle).constraints.catchUp?.kind).toBe('second');
-    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
-    const before = session(handle).workout;
-    handle.store.loadSavedWorkout(saved.id);
-    expect(session(handle).workout).toBe(before);
-    expect(session(handle).lastSummary?.headline).toMatch(
-      /^Nothing in ".+" is left for today: today's plan stays\.$/,
-    );
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, untouched.
+    const before = session(handle);
+    expect(handle.store.loadSavedWorkout(saved.id)).toBe('empty');
+    expect(session(handle)).toBe(before);
     expect(session(handle).constraints.catchUp?.kind).toBe('second');
     expect(session(handle).constraints.fullSession).toBeUndefined();
     expect(allEntries(session(handle).workout.blocks).length).toBeGreaterThan(0);

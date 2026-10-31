@@ -28,7 +28,9 @@ import { at, describeWorkout, profileOf, session } from '../../test/clockDays';
  * Catch-up instead gives the same push day today, "The catch-up: no changes needed."; it also meets
  * `validateWorkout` reading the full session's constraints, a finding of its own, so it is not
  * asserted here.) The rules: a catch-up left with no lift has nothing more for today, through any
- * rebuild, and Today says so with the full session a tap away. Synthetic data only.
+ * rebuild, and Today says so (with no button since the owner's word of 2026-10-31: the app chooses
+ * the day's one workout, and a day off the plan whose catch-up the lifter emptied rests). Synthetic
+ * data only.
  */
 
 const [home] = createDefaultLocations(

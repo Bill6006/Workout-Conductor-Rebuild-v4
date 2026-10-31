@@ -3246,15 +3246,21 @@ export class AppStore {
     this.setState({ savedWorkouts: this.state.savedWorkouts.filter((item) => item.id !== id) });
   }
 
-  /** Starts a fresh preview session from a saved workout; everything after that recalibrates as usual. */
-  loadSavedWorkout(id: string): void {
+  /**
+   * Starts a fresh preview session from a saved workout; everything after that recalibrates as usual.
+   * A copy with nothing left to start today, the day's check-in laid on it, stands in for nothing:
+   * today's plan stays as it was (the owner, 2026-10-31: the app chooses the day's one workout, and
+   * no button gives it back from an empty copy, as "Full session" did). `'loaded'` when it stands in,
+   * `'empty'` when today's plan stays, and null when nothing could be loaded.
+   */
+  loadSavedWorkout(id: string): 'loaded' | 'empty' | null {
     const saved = this.state.savedWorkouts.find((item) => item.id === id);
     // A plan left open from an earlier day gives way to today's first, so the copy stands in for
     // today's plan with today's choices (the twenty-fifth review of round M: loaded over Friday's
     // plan on Saturday, it kept none of Saturday's offer, its full session no tap away).
     if (saved) this.leaveEarlierDay();
     const session = this.state.session;
-    if (!saved || !session || session.status !== 'preview') return;
+    if (!saved || !session || session.status !== 'preview') return null;
     const now = this.now();
     // Made fresh: an exercise stopped on the day it was saved does not come back stopped, and a
     // plan saved before Maintenance 25 says each fitting step once.
@@ -3323,28 +3329,7 @@ export class AppStore {
     const offer = own ? offerKey({ catchUp: own }) : null;
     const ofOffer = (plan: EmptiedPlan) => offer !== null && plan.offer === offer;
     const lifts = allEntries(copy.workout.blocks).length > 0;
-    // A copy with nothing left to start stands in for nothing: today's plan stays, saying so (the
-    // owner, 2026-10-31: the app chooses the day's one workout, and no button gives it back from an
-    // empty copy, as "Full session" did).
-    if (!lifts) {
-      this.setSession({
-        ...session,
-        lastSummary: {
-          headline: `Nothing in "${saved.name}" is left for today: today's plan stays.`,
-          details: [],
-          counts: {
-            added: 0,
-            removed: 0,
-            replaced: 0,
-            adjusted: 0,
-            supersetsAdded: 0,
-            supersetsRemoved: 0,
-            setsTrimmed: 0,
-          },
-        },
-      });
-      return;
-    }
+    if (!lifts) return 'empty';
     const ownMarks = day.emptied.filter(
       (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),
     );
@@ -3393,8 +3378,13 @@ export class AppStore {
         },
       ],
     };
-    // The day's check-in holds on it, as on every plan of the day (`withDayCheckIn`).
-    this.setSession(this.withDayCheckIn(loaded, session));
+    // The day's check-in holds on it, as on every plan of the day (`withDayCheckIn`); one that leaves
+    // it nothing to start leaves today's plan in place (the review of the catch-up decision: a
+    // hamstring copy loaded after a sore lower back was told replaced the plan with nothing).
+    const checked = this.withDayCheckIn(loaded, session);
+    if (allEntries(checked.workout.blocks).length === 0) return 'empty';
+    this.setSession(checked);
+    return 'loaded';
   }
 
   /** Leaves the completion surface; the next session is generated from the new history. */

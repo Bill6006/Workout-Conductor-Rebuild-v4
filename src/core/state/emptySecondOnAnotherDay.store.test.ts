@@ -93,9 +93,11 @@ async function nothingMoreLoadedOnSaturday() {
   const saved = await handle.store.saveCurrentWorkout('Nothing more');
   clock.now = SATURDAY;
   handle.store.refreshSession();
-  // Saturday's own plan: a catch-up, the full session a tap away.
+  // Saturday's own plan: a catch-up, with no choice of kind.
   expect(dayNoteOf(session(), false)).not.toHaveProperty('action');
-  handle.store.loadSavedWorkout(saved.id);
+  const before = session();
+  expect(handle.store.loadSavedWorkout(saved.id)).toBe('empty');
+  expect(session()).toBe(before);
   return session();
 }
 
@@ -108,9 +110,6 @@ describe('a second workout with nothing more for today, loaded on another day', 
     // your training days." with no button. On ce935fe: "You trained today, and nothing is behind this
     // week: nothing more for today.", with "Full session". With no choice of the day's kind (the owner,
     // 2026-10-31), an empty copy stands in for nothing: Saturday's own plan stays, saying so.
-    expect(loaded.lastSummary?.headline).toBe(
-      `Nothing in "Nothing more" is left for today: today's plan stays.`,
-    );
     expect(
       lifts > 0,
       `${loaded.workout.title}, ${lifts} exercises, "${loaded.workout.explanation.summary}"; Today: "${note?.text}"`,

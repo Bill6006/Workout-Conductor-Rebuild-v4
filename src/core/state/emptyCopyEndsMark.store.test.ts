@@ -34,6 +34,11 @@ import { TEST_NOW, createTestStore } from '../../test/testStore';
  * its own rebuilds and every later plan find it empty, and a lift brought back into it ends it, as
  * in the plan itself.
  *
+ * Since the owner's word of 2026-10-31 (the app chooses the day's one workout) a copy with no lift
+ * is not loaded at all: today's plan stays, untouched. Here that plan is the catch-up the lifter
+ * emptied, so each case now holds the day's own emptied catch-up through the same steps, and the
+ * copy's refusal is asserted where it was loaded.
+ *
  * Steps (synthetic data only): Monday's bench press in the log; on Wednesday, a day the schedule does
  * not tick, at the gym, the lifter skips each lift of the catch-up ("nothing more for today"), saves
  * today's workout as "Catch-up" and loads it. Then takes the full session and the catch-up back; or a
@@ -79,7 +84,7 @@ const ids = (handle: Handle) =>
 const lifts = (handle: Handle) => describeWorkout(session(handle).workout).join('; ');
 const note = (handle: Handle) => dayNoteOf(session(handle), false)?.text;
 
-/** The catch-up emptied by the lifter's skips, saved as it stands, and the copy loaded. */
+/** The catch-up emptied by the lifter's skips, saved as it stands, and the copy refused. */
 async function emptyCopyLoaded(handle: Handle) {
   expect(session(handle).workout.templateId).toBe('catch-up');
   for (const entry of allEntries(session(handle).workout.blocks)) {
@@ -88,12 +93,14 @@ async function emptyCopyLoaded(handle: Handle) {
   expect(note(handle)).toBe(NOTHING_MORE);
   const saved = await handle.store.saveCurrentWorkout('Catch-up');
   expect(allEntries(saved.workout.blocks)).toEqual([]);
-  handle.store.loadSavedWorkout(saved.id);
+  const before = session(handle);
+  expect(handle.store.loadSavedWorkout(saved.id)).toBe('empty');
+  expect(session(handle)).toBe(before);
   expect(ids(handle)).toEqual([]);
   expect(note(handle)).toBe(NOTHING_MORE);
 }
 
-describe('a saved copy with no lift, of the catch-up the lifter emptied, loaded', () => {
+describe('the catch-up the lifter emptied, its copy with no lift refused', () => {
   it('leaves the catch-up empty on the way back from the full session', async () => {
     const handle = await lifter();
     await emptyCopyLoaded(handle);

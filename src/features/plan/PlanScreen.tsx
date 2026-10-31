@@ -337,14 +337,22 @@ export function PlanScreen() {
                   </span>
                 </div>
                 <div className={styles.locationActions}>
-                  {state.session?.status === 'preview' ? (
+                  {/* A copy with no exercise has nothing to start: no Use (the owner, 2026-10-31). */}
+                  {state.session?.status === 'preview' &&
+                  allEntries(saved.workout.blocks).length > 0 ? (
                     <button
                       type="button"
                       className={styles.smallButton}
                       data-testid="use-saved-workout"
                       onClick={() => {
-                        store.loadSavedWorkout(saved.id);
-                        toast.show(`Loaded "${saved.name}"`, 'success');
+                        const loaded = store.loadSavedWorkout(saved.id);
+                        if (loaded === 'loaded') toast.show(`Loaded "${saved.name}"`, 'success');
+                        else if (loaded === 'empty') {
+                          toast.show(
+                            `Nothing in "${saved.name}" is left for today: today's plan stays.`,
+                            'info',
+                          );
+                        }
                       }}
                     >
                       Use

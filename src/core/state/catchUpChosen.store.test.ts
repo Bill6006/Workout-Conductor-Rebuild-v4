@@ -3,6 +3,7 @@ import { requireExercise } from '../../catalog/exercises/catalog';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import { createDefaultLocations } from '../validation/location';
 import { createDefaultProfile, type UserProfile } from '../validation/profile';
+import { restCategory } from '../../engine/progression/roles';
 import { allEntries } from '../../engine/workout/types';
 import { dayNoteOf } from '../../features/today/dayNote';
 import { record } from '../../test/records';
@@ -76,20 +77,37 @@ describe('the one workout the app chooses for the day', () => {
     expect(today.constraints.fullSession).toBeUndefined();
     const spec = today.constraints.catchUp!;
     expect(spec.kind).toBe('catch-up');
-    expect(spec.muscles.length).toBeGreaterThan(0);
-    // The muscle furthest behind leads the offer, and a lift for it leads the plan's work for it.
-    const first = spec.muscles[0]!.muscle;
+    expect(spec.muscles.length).toBeGreaterThan(1);
+    // The muscle furthest behind leads the offer (largest share short first, catchUp.test.ts), and
+    // the plan's lifts follow that order, its strength lifts first: each lift's first muscle behind
+    // comes no earlier in the offer than the one before it.
+    const behind = spec.muscles.map((item) => item.muscle);
     const entries = allEntries(today.workout.blocks);
-    const forFirst = entries.findIndex((entry) => direct(entry.exerciseId).includes(first));
-    expect(forFirst, first).toBeGreaterThanOrEqual(0);
-    // Every lift goes in for what is behind, none for a muscle trained in the last 48 hours.
-    const behind = new Set<MuscleId>(spec.muscles.map((item) => item.muscle));
+    const rank = (exerciseId: string) =>
+      Math.min(
+        ...direct(exerciseId)
+          .map((muscle) => behind.indexOf(muscle))
+          .filter((at) => at >= 0),
+      );
+    for (const strength of [true, false]) {
+      const ranks = entries
+        .filter((entry) => (restCategory(entry.role) === 'strength') === strength)
+        .map((entry) => rank(entry.exerciseId));
+      expect(ranks, `${strength ? 'strength' : 'other'} lifts`).toEqual(
+        [...ranks].sort((a, b) => a - b),
+      );
+    }
+    expect(entries.some((entry) => direct(entry.exerciseId).includes(behind[0]!))).toBe(true);
+    // Every lift goes in for what is behind, none for the chest or the triceps the bench press
+    // worked inside their 48 hours.
     for (const entry of entries) {
       expect(
-        direct(entry.exerciseId).some((muscle) => behind.has(muscle)),
+        direct(entry.exerciseId).some((muscle) => behind.includes(muscle)),
         entry.exerciseId,
       ).toBe(true);
-      expect(direct(entry.exerciseId), entry.exerciseId).not.toContain('chest');
+      for (const resting of ['chest', 'triceps'] as MuscleId[]) {
+        expect(direct(entry.exerciseId), entry.exerciseId).not.toContain(resting);
+      }
     }
     // No set to failure on a day off the plan.
     for (const set of entries.flatMap((entry) => entry.sets)) {
@@ -135,14 +153,19 @@ describe('the one workout the app chooses for the day', () => {
     const spec = today.constraints.catchUp!;
     expect(spec.kind).toBe('second');
     expect(today.constraints.fullSession).toBeUndefined();
-    // The bench press done this morning is not in it again, and the chest it trained takes at most
-    // what is left of one session.
+    // The bench press done this morning is not in it again; the chest it trained takes at most what
+    // is left of one session; and a lift for what was missed comes first.
     const entries = allEntries(today.workout.blocks);
+    expect(entries.length).toBeGreaterThan(0);
     expect(entries.map((entry) => entry.exerciseId)).not.toContain('barbell-bench-press');
+    const chestLeft = spec.muscles.find((item) => item.muscle === 'chest')?.sets ?? 0;
+    const chestSets = entries
+      .filter((entry) => direct(entry.exerciseId).includes('chest'))
+      .reduce((sum, entry) => sum + entry.sets.filter((set) => set.kind === 'working').length, 0);
+    expect(chestSets).toBeLessThanOrEqual(chestLeft);
     const missed = spec.muscles.filter((item) => item.why === 'behind').map((item) => item.muscle);
-    if (missed.length > 0 && entries.length > 0) {
-      expect(direct(entries[0]!.exerciseId).some((muscle) => missed.includes(muscle))).toBe(true);
-    }
+    expect(missed.length).toBeGreaterThan(0);
+    expect(direct(entries[0]!.exerciseId).some((muscle) => missed.includes(muscle))).toBe(true);
     expect(dayNoteOf(today, true)?.text).toMatch(/^You trained today/);
   });
 });

@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ensureProfile, takeFullSessionIfOffered } from './helpers';
+import { ensureProfile, tickToday } from './helpers';
 
 /**
  * Maintenance 21, round C. The coach talks only about the workout on the screen; a lift done at
@@ -114,6 +114,10 @@ async function seedShortChinUps(page: Page): Promise<void> {
     },
     { name: DB_NAME, list: records },
   );
+  // On a day the schedule does not tick, the chin-ups make the day a catch-up (round M), and the app
+  // chooses it, with no work added off the plan: the test is of the day's usual plan, so today is
+  // ticked.
+  await tickToday(page);
   // Opened again with the new history, the plan for today is rebuilt from it.
   await page.reload();
   await expect(page.getByTestId('start-workout')).toBeVisible();
@@ -201,9 +205,6 @@ test.describe('a lift done at bodyweight that keeps falling short', () => {
   }, testInfo) => {
     await ensureProfile(page);
     await seedShortChinUps(page);
-    // On a day the schedule does not tick, the chin-ups make a catch-up the day's offer (round M),
-    // and the coach offers no work off the plan: this is a test of the day's usual plan.
-    await takeFullSessionIfOffered(page);
     await rewrite(page, (session) => {
       without('chin-up')(session);
       firstIs('lat-pulldown', 'secondary-hypertrophy')(session);

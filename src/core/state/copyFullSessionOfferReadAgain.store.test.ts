@@ -150,13 +150,10 @@ async function saturday(load: boolean) {
   handle.store.refreshSession();
   expect(session(handle).constraints.catchUp?.kind).toBe('catch-up');
   if (load) {
-    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
-    const before = session(handle).workout;
-    handle.store.loadSavedWorkout(saved.id);
-    expect(session(handle).workout).toBe(before);
-    expect(session(handle).lastSummary?.headline).toMatch(
-      /^Nothing in ".+" is left for today: today's plan stays\.$/,
-    );
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, untouched.
+    const before = session(handle);
+    expect(handle.store.loadSavedWorkout(saved.id)).toBe('empty');
+    expect(session(handle)).toBe(before);
   }
   return handle;
 }
@@ -182,13 +179,10 @@ async function friday(load: boolean) {
       .sort(),
   ).toEqual(['chest', 'triceps']);
   if (load) {
-    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
-    const before = session(handle).workout;
-    handle.store.loadSavedWorkout(saved.id);
-    expect(session(handle).workout).toBe(before);
-    expect(session(handle).lastSummary?.headline).toMatch(
-      /^Nothing in ".+" is left for today: today's plan stays\.$/,
-    );
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, untouched.
+    const before = session(handle);
+    expect(handle.store.loadSavedWorkout(saved.id)).toBe('empty');
+    expect(session(handle)).toBe(before);
   }
   return handle;
 }

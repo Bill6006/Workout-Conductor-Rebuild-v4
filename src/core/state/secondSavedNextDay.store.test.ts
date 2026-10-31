@@ -149,7 +149,7 @@ describe('a second workout saved on a later day than it was planned, loaded that
     expect(result && !result.ok ? result.error : '').not.toMatch(/rest today/);
   });
 
-  it('keeps the full session one tap away on a day not ticked, as a copy saved on Friday does', async () => {
+  it('offers no choice of kind on a day not ticked, as a copy saved on Friday does', async () => {
     const handle = await loadedLater(SATURDAY_MORNING);
     // On 992c87d: "Not one of your training days.", no button. On ce935fe: "You trained today: this
     // one leads with what you missed and goes easy on the rest.", no button.

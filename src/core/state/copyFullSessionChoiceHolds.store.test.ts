@@ -113,13 +113,10 @@ describe('"Catch-up instead" on the full session taken from a loaded copy', () =
 
     const { handle, saved } = await saturday();
     expect((await handle.store.setFullSession(true))?.ok).toBe(true);
-    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
-    const before = session(handle).workout;
-    handle.store.loadSavedWorkout(saved.id);
-    expect(session(handle).workout).toBe(before);
-    expect(session(handle).lastSummary?.headline).toMatch(
-      /^Nothing in ".+" is left for today: today's plan stays\.$/,
-    );
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, untouched.
+    const before = session(handle);
+    expect(handle.store.loadSavedWorkout(saved.id)).toBe('empty');
+    expect(session(handle)).toBe(before);
     expect((await handle.store.setFullSession(true))?.ok).toBe(true);
     const there = dayNoteOf(session(handle), false);
     // On 1e29f22: "Not one of your training days.", no button.

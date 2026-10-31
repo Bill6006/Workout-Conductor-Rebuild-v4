@@ -19,7 +19,8 @@ import { TEST_NOW, createTestStore } from '../../test/testStore';
 
 /**
  * Maintenance 31, the owner's items 12 and 32, in the store: a day not ticked offers a catch-up to
- * a lifter in training, with the full session one tap away; a second workout the same day leads
+ * a lifter in training (the app's one workout, no choice of kind since the owner's word of
+ * 2026-10-31); a second workout the same day leads
  * with what was missed. TEST_NOW is a Wednesday, which the default schedule does not tick.
  */
 
@@ -109,7 +110,7 @@ const upperThenLower = [
 ];
 
 describe('a day not ticked (item 12)', () => {
-  it('offers a lifter in training a catch-up, saying so in one line, the full session a tap away', async () => {
+  it('gives a lifter in training a catch-up, saying so in one line, with no choice of kind', async () => {
     // Monday's bench press: the chest is done for this week's Monday, and the week goes on.
     const handle = await lifter([{ daysAgo: 2, exerciseId: 'barbell-bench-press' }]);
     const today = session(handle);

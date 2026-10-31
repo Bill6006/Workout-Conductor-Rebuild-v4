@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ensureProfile, skipWarmupIfShown, takeFullSessionIfOffered } from './helpers';
+import { ensureProfile, skipWarmupIfShown, tickToday } from './helpers';
 
 /**
  * Maintenance 23, round E: bodyweight lifts and effort. A chin-up warms up with one set of a few
@@ -79,13 +79,13 @@ async function seedChinUps(page: Page): Promise<void> {
     },
     { name: DB_NAME, list: records },
   );
+  // On a day the schedule does not tick, the history makes the day a catch-up (round M), and the app
+  // chooses it: these are tests of the day's usual plan, so today is ticked.
+  await tickToday(page);
   // Opened again with the new history, the plan for today is rebuilt from it.
   await page.reload();
   await expect(page.getByTestId('start-workout')).toBeVisible();
   await backUp(page);
-  // On a day the schedule does not tick, the history makes a catch-up the day's offer (round M):
-  // these are tests of the day's usual plan.
-  await takeFullSessionIfOffered(page);
 }
 
 type Session = { workout: { blocks: { kind: string; entries: Record<string, unknown>[] }[] } };
@@ -293,11 +293,11 @@ async function seedIncline(page: Page): Promise<void> {
     },
     { name: DB_NAME, item: done },
   );
+  // As for the chin-ups: a test of the day's usual plan, so today is ticked.
+  await tickToday(page);
   await page.reload();
   await expect(page.getByTestId('start-workout')).toBeVisible();
   await backUp(page);
-  // As for the chin-ups: on a day not ticked the history makes a catch-up the day's offer.
-  await takeFullSessionIfOffered(page);
 }
 
 test.describe('a chin-up warms up at bodyweight', () => {
