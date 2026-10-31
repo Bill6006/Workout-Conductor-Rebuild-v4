@@ -1576,7 +1576,7 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       const block = input.workout.blocks.find((one) => one.entries.includes(entry));
       // Never one the coach's own rules keep out of every offer: a lift swapped away today, or out
       // for four weeks (the nineteenth and twentieth reviews of round M). A deload week holds the
-      // card back whatever it offers, so nothing is looked for there.
+      // card back whatever it offers (`pushesForMore`).
       const keptOut = (): Set<string> =>
         new Set([
           ...dayExclusions(input),
@@ -1591,7 +1591,6 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
         ]);
       const harder =
         !setLever &&
-        !inDeloadWeek(input) &&
         block !== undefined &&
         harderAlternatives({
           profile: input.profile,

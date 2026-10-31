@@ -289,6 +289,53 @@ describe('a harder variation, on the same weights', () => {
   });
 });
 
+describe('a harder variation is heavier per pound', () => {
+  it('never counts a curl lighter per pound: the incline curl held at 20 lb has none', () => {
+    // The plain and the hammer curl are listed on the same dumbbells, each lighter per pound.
+    const workout = heldAt(only('incline-dumbbell-curl', home), 'incline-dumbbell-curl', 20, 8);
+    const input = inputFor(workout, home);
+    const curl = allEntries(workout.blocks)[0]!;
+    const listed = sheetFor(input, curl).candidates.map((candidate) => candidate.exercise.id);
+    expect(listed).toEqual(expect.arrayContaining(['dumbbell-curl', 'hammer-curl']));
+    expect(capped(input)).toBeUndefined();
+  });
+});
+
+describe('a harder variation a joint that hurts today rules out', () => {
+  // The trap-bar deadlift held at the plates' heaviest: its one harder variation left, the other
+  // ones set aside for the day, is the conventional deadlift, which loads the lower back highly.
+  const workout = heldAt(only('trap-bar-deadlift', gym), 'trap-bar-deadlift', 315, 6);
+  const lift = allEntries(workout.blocks)[0]!;
+  const others = harderAlternatives({
+    profile,
+    location: gym,
+    workout,
+    block: workout.blocks[0]!,
+    entry: lift,
+    constraints: emptyConstraints(),
+    completed: emptyCompleted(),
+    history: [],
+    now: NOW,
+  })
+    .map((candidate) => candidate.exercise.id)
+    .filter((id) => id !== 'deadlift');
+  const aside = (painJoints: Joint[]) =>
+    inputFor(workout, gym, {
+      constraints: { ...emptyConstraints(), avoidExerciseIds: others, painJoints },
+    });
+
+  it('offers the deadlift with nothing hurting', () => {
+    expect(capped(aside([]))?.action).toMatchObject({
+      kind: 'alternatives',
+      label: 'A harder variation',
+    });
+  });
+
+  it('offers none with the lower back hurting today', () => {
+    expect(capped(aside(['lower-back']))).toBeUndefined();
+  });
+});
+
 describe('a harder variation the coach’s own rules keep out', () => {
   const workout = heldAt(only('dumbbell-row', home), 'dumbbell-row', 50, 8);
 
