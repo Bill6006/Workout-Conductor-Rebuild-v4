@@ -170,15 +170,12 @@ describe('the way back from the full session taken from a loaded copy, the dayâ€
     const { handle, saved } = await saturdayEmptied();
     handle.store.loadSavedWorkout(saved.id);
     expect(count(handle)).toBe(0);
-    expect(dayNoteOf(session(handle), false)?.action).toEqual({
-      label: 'Full session',
-      full: true,
-    });
+    expect(dayNoteOf(session(handle), false)).not.toHaveProperty('action');
     expect((await handle.store.setFullSession(true))?.ok).toBe(true);
     expect(count(handle)).toBeGreaterThan(0);
     const there = dayNoteOf(session(handle), false);
     // On 1e29f22: "Not one of your training days.", no button.
-    expect(there?.action, there?.text).toEqual({ label: 'Catch-up instead', full: false });
+    expect(there, there?.text).not.toHaveProperty('action');
     expect((await handle.store.setFullSession(false))?.ok).toBe(true);
     // On f840d5b: "Not one of your training days: a 20-minute catch-up for what is behind this week."
     // with "back-squat x3 @RIR 2/2/2; barbell-shrug x2 @RIR 1/1".
@@ -197,12 +194,12 @@ describe('the way back from the full session taken from a loaded copy, the dayâ€
     const { handle, saved } = await fridayEmptied();
     handle.store.loadSavedWorkout(saved.id);
     expect(count(handle)).toBe(0);
-    expect(dayNoteOf(session(handle), true)?.action).toEqual({ label: 'Full session', full: true });
+    expect(dayNoteOf(session(handle), true)).not.toHaveProperty('action');
     expect((await handle.store.setFullSession(true))?.ok).toBe(true);
     expect(count(handle)).toBeGreaterThan(0);
     const there = dayNoteOf(session(handle), true);
     // On 1e29f22: no line at all.
-    expect(there?.action, there?.text).toEqual({ label: 'Go easy instead', full: false });
+    expect(there, there?.text).not.toHaveProperty('action');
     expect((await handle.store.setFullSession(false))?.ok).toBe(true);
     // On f840d5b: "You trained today: this one leads with what you missed and goes easy on the
     // rest." with seven lifts, "barbell-row x3 @RIR 2/2/2; barbell-bench-press x2 @RIR 2/2; ...".

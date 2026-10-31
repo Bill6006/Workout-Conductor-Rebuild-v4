@@ -1,5 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../../app/App';
 import type { AppStore } from '../../core/state/appStore';
@@ -52,7 +51,8 @@ async function inTraining(): Promise<AppStore> {
 }
 
 describe('a day not ticked, on Today', () => {
-  it('offers the catch-up in one line, the full session a tap away, and back', async () => {
+  it('shows the one workout the app chose: the catch-up first, and no choice of its kind', async () => {
+    // The owner, 2026-10-31: "the user does NOT choose between 'Catch-up' and 'Full session'".
     const store = await inTraining();
     act(() => {
       window.location.hash = '#/today';
@@ -62,25 +62,16 @@ describe('a day not ticked, on Today', () => {
         <App />
       </Providers>,
     );
-    const user = userEvent.setup();
     const note = await screen.findByTestId('day-note-text');
     expect(note).toHaveTextContent(
-      /^Not one of your training days: a \d+-minute catch-up for what is behind this week\./,
+      /^Not one of your training days: a \d+-minute catch-up for what is behind this week\.$/,
     );
     expect(screen.getByRole('heading', { name: 'Catch-up' })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Full session' }));
-    await waitFor(() =>
-      expect(screen.getByTestId('day-note-text')).toHaveTextContent(
-        /^Not one of your training days\.$/,
-      ),
-    );
-    expect(screen.queryByRole('heading', { name: 'Catch-up' })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Catch-up instead' }));
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Catch-up' })).toBeInTheDocument(),
-    );
+    expect(screen.queryByTestId('day-note-action')).not.toBeInTheDocument();
+    for (const name of ['Full session', 'Catch-up instead', 'Go easy instead']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByTestId('start-workout')).toBeInTheDocument();
   });
 });
 

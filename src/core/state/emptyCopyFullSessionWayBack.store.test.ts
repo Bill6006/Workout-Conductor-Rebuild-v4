@@ -3,7 +3,7 @@ import { createDefaultLocations } from '../validation/location';
 import { createDefaultProfile } from '../validation/profile';
 import { allEntries } from '../../engine/workout/types';
 import { dayNoteOf } from '../../features/today/dayNote';
-import { describeWorkout, session as workoutAt } from '../../test/clockDays';
+import { session as workoutAt } from '../../test/clockDays';
 import { record } from '../../test/records';
 import { createTestStore } from '../../test/testStore';
 
@@ -99,22 +99,12 @@ async function lifter(clock: { now: string }) {
 
 type Handle = Awaited<ReturnType<typeof lifter>>;
 const session = (handle: Handle) => handle.store.getSnapshot().session!;
-const lifts = (handle: Handle) => describeWorkout(session(handle).workout).join('; ');
 
-/** Taps the copy's "Full session"; Today's line on the full session it gives. */
-async function fullSessionFromCopy(handle: Handle, ticked: boolean) {
-  expect(allEntries(session(handle).workout.blocks)).toEqual([]);
-  // The twenty-fifth pass's button. On 0a82961: no button.
-  expect(dayNoteOf(session(handle), ticked)?.action).toEqual({ label: 'Full session', full: true });
-  expect((await handle.store.setFullSession(true))?.ok).toBe(true);
-  expect(allEntries(session(handle).workout.blocks).length, lifts(handle)).toBeGreaterThan(0);
-  // The day holds it as its own choice: every later plan the same day is the full session.
-  expect(session(handle).constraints.fullSession).toBe(true);
-  return dayNoteOf(session(handle), ticked);
-}
-
-describe('the full session taken from a loaded copy with no lift', () => {
-  it('gives the day’s catch-up back, as the next plan of the day does', async () => {
+// The twenty-fifth review of round M gave a copy with no lift the full session's button, and the
+// way back from it. With no choice of the day's kind (the owner, 2026-10-31), such a copy is never
+// loaded: the day's own plan stays, saying so, and is the one the app chose.
+describe('a loaded copy with no lift', () => {
+  it('leaves the day’s catch-up in place, saying so', async () => {
     const clock = { now: WEDNESDAY };
     const handle = await lifter(clock);
     const db = await handle.store.getDatabase();
@@ -124,18 +114,22 @@ describe('the full session taken from a loaded copy with no lift', () => {
     clock.now = SATURDAY;
     handle.store.refreshSession();
     // Saturday's own plan: a catch-up, the full session a tap away.
-    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
+    expect(dayNoteOf(session(handle), false)).not.toHaveProperty('action');
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
+    const before = session(handle).workout;
     handle.store.loadSavedWorkout(saved.id);
-    expect(dayNoteOf(session(handle), false)?.text).toBe(
-      'Not one of your training days: nothing more for today.',
+    expect(session(handle).workout).toBe(before);
+    expect(session(handle).lastSummary?.headline).toMatch(
+      /^Nothing in ".+" is left for today: today's plan stays\.$/,
     );
-    const there = await fullSessionFromCopy(handle, false);
-    // On 1e29f22: "Not one of your training days.", no button (begun and discarded, the same full
-    // session says "Not one of your training days." with "Catch-up instead").
-    expect(there?.action, there?.text).toEqual({ label: 'Catch-up instead', full: false });
+    expect(session(handle).workout.title).toBe('Catch-up');
+    expect(session(handle).constraints.fullSession).toBeUndefined();
+    expect(dayNoteOf(session(handle), false)?.text).toMatch(
+      /^Not one of your training days: a \d+-minute catch-up for what is behind this week\.$/,
+    );
   });
 
-  it('gives the day’s second workout back on a day trained, as the next plan does', async () => {
+  it('leaves the day’s second workout in place on a day trained, saying so', async () => {
     const clock = { now: WEDNESDAY };
     const handle = await lifter(clock);
     for (const entry of allEntries(session(handle).workout.blocks)) {
@@ -153,11 +147,15 @@ describe('the full session taken from a loaded copy with no lift', () => {
     await handle.store.hydrate();
     // Friday's own plan: the second workout.
     expect(session(handle).constraints.catchUp?.kind).toBe('second');
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
+    const before = session(handle).workout;
     handle.store.loadSavedWorkout(saved.id);
-    expect(dayNoteOf(session(handle), true)?.text).toBe('Nothing more for today.');
-    const there = await fullSessionFromCopy(handle, true);
-    // On 1e29f22: no line at all (begun and discarded, the same full session says "You trained
-    // today." with "Go easy instead").
-    expect(there?.action, there?.text).toEqual({ label: 'Go easy instead', full: false });
+    expect(session(handle).workout).toBe(before);
+    expect(session(handle).lastSummary?.headline).toMatch(
+      /^Nothing in ".+" is left for today: today's plan stays\.$/,
+    );
+    expect(session(handle).constraints.catchUp?.kind).toBe('second');
+    expect(session(handle).constraints.fullSession).toBeUndefined();
+    expect(allEntries(session(handle).workout.blocks).length).toBeGreaterThan(0);
   });
 });

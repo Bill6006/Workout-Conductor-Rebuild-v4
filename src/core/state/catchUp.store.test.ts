@@ -119,7 +119,7 @@ describe('a day not ticked (item 12)', () => {
     expect(note?.text).toBe(
       `Not one of your training days: a ${today.workout.duration.estimatedMinutes}-minute catch-up for what is behind this week.`,
     );
-    expect(note?.action).toEqual({ label: 'Full session', full: true });
+    expect(note).not.toHaveProperty('action');
     // Built only from the muscles the spec names.
     const muscles = new Set(today.constraints.catchUp!.muscles.map((item) => item.muscle));
     expect(allEntries(today.workout.blocks).length).toBeLessThanOrEqual(muscles.size);
@@ -133,7 +133,6 @@ describe('a day not ticked (item 12)', () => {
     expect(full.constraints.fullSession).toBe(true);
     expect(dayNoteOf(full)).toEqual({
       text: 'Not one of your training days.',
-      action: { label: 'Catch-up instead', full: false },
     });
     await handle.store.setFullSession(false);
     expect(session(handle).workout.templateId).toBe('catch-up');
@@ -193,7 +192,7 @@ describe('a day not ticked (item 12)', () => {
     await handle.store.setDurationChoice(45);
     expect(session(handle).workout.templateId).not.toBe('catch-up');
     expect(session(handle).constraints.fullSession).toBe(true);
-    expect(dayNoteOf(session(handle))?.action?.label).toBe('Catch-up instead');
+    expect(dayNoteOf(session(handle))).not.toHaveProperty('action');
   });
 
   it('keeps the full session through a plan built again for a coach focus', async () => {
@@ -270,7 +269,6 @@ describe('a second workout the same day (item 32)', () => {
     expect(session(handle).lastSummary?.headline).toMatch(/^The full session/);
     expect(dayNoteOf(session(handle))).toEqual({
       text: 'You trained today.',
-      action: { label: 'Go easy instead', full: false },
     });
     await handle.store.setFullSession(false);
     expect(session(handle).constraints.fullSession).toBeUndefined();

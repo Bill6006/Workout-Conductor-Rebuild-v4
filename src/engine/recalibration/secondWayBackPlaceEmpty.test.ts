@@ -120,10 +120,10 @@ describe('the way back to a second workout the lifter never emptied', () => {
 
   it('Full session at the bare home, the gym, then Go easy instead: it is built there too', () => {
     const today = day();
-    expect(today.note()?.action?.label).toBe('Full session');
+    expect(today.note()).not.toHaveProperty('action');
     today.run({ type: 'session-kind', full: true, kind: 'second' });
     today.run({ type: 'location' }, gym!);
-    expect(today.note()?.action?.label).toBe('Go easy instead');
+    expect(today.note()).not.toHaveProperty('action');
     today.run({ type: 'session-kind', full: false, kind: 'second' });
     // On 4cb40d7: nothing, "You trained today: nothing more for today.", the lateral raise the gym
     // builds for the side delts set aside as if the lifter had emptied the plan.

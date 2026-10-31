@@ -157,7 +157,6 @@ describe('a second workout with nothing behind, emptied by the lifter, has nothi
     expect(result.workout.explanation.summary).toBe('Nothing more for today.');
     expect(noteOf(result.workout, result.constraints)).toEqual({
       text: 'You trained today, and nothing is behind this week: nothing more for today.',
-      action: { label: 'Full session', full: true },
     });
   });
 });

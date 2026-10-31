@@ -3,9 +3,9 @@ import { ensureProfile } from './helpers';
 
 /**
  * Maintenance 31 (round M), the owner's items 12 and 32, in the browser:
- * - 12, a day not ticked says so in one line and offers a catch-up of what is behind this week,
- *   the full session one tap away (the default schedule ticks Monday, Tuesday, Thursday and
- *   Friday, so a Wednesday is not ticked);
+ * - 12, a day not ticked says so in one line, and its plan is a catch-up of what is behind this
+ *   week, the one workout the app chose: no button chooses its kind (the owner, 2026-10-31; the
+ *   default schedule ticks Monday, Tuesday, Thursday and Friday, so a Wednesday is not ticked);
  * - 32, a second workout the same day leads with what was missed.
  * The rules themselves are in src/engine/planning/catchUp.test.ts.
  */
@@ -60,7 +60,7 @@ function comingWednesday(): Date {
 }
 
 test.describe('a day not ticked (item 12)', () => {
-  test('offers a lifter in training a catch-up in one line, the full session a tap away', async ({
+  test('gives a lifter in training a catch-up, saying so in one line, with no choice of kind', async ({
     page,
   }) => {
     const wednesday = comingWednesday();
@@ -76,16 +76,19 @@ test.describe('a day not ticked (item 12)', () => {
     );
     await expect(page.getByRole('heading', { level: 2, name: 'Catch-up' })).toBeVisible();
 
-    await page.getByTestId('day-note-action').click();
-    await expect(note).toHaveText('Not one of your training days.');
-    await expect(page.getByTestId('day-note-action')).toHaveText('Catch-up instead');
-    await expect(page.getByRole('heading', { level: 2, name: 'Catch-up' })).toHaveCount(0);
+    // The app chose it: nothing on Today asks which kind of workout the day is.
+    await expect(page.getByTestId('day-note-action')).toHaveCount(0);
+    for (const name of ['Full session', 'Catch-up instead', 'Go easy instead']) {
+      await expect(page.getByRole('button', { name })).toHaveCount(0);
+    }
+    await expect(page.getByTestId('start-workout')).toBeVisible();
 
-    // Kept for the day: read again after a reload.
+    // The same after a reload.
     await page.reload();
-    await expect(note).toHaveText('Not one of your training days.');
-    await page.getByTestId('day-note-action').click();
-    await expect(page.getByRole('heading', { level: 2, name: 'Catch-up' })).toBeVisible();
+    await expect(note).toHaveText(
+      /^Not one of your training days: a \d+-minute catch-up for what is behind this week\.$/,
+    );
+    await expect(page.getByTestId('day-note-action')).toHaveCount(0);
   });
 });
 

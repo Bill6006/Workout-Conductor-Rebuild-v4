@@ -67,6 +67,6 @@ describe('a second workout its only lift skipped: Today says nothing more, the f
     // work.' } and no button.
     const note = dayNoteOf({ ...today, constraints: { ...today.constraints, catchUp: spec } });
     expect(note?.text, JSON.stringify(note)).toMatch(/nothing more for today/);
-    expect(note?.action, JSON.stringify(note)).toEqual({ label: 'Full session', full: true });
+    expect(note, JSON.stringify(note)).not.toHaveProperty('action');
   });
 });

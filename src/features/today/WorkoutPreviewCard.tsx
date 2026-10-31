@@ -47,8 +47,9 @@ interface WorkoutPreviewCardProps {
   /** Sets logged this session, not skipped, as `entryId:setIndex`: what a stopped exercise counts. */
   logged?: ReadonlySet<string>;
   /**
-   * The day's one line on a catch-up or a second workout (Maintenance 31), with its button: the
-   * full session, or the catch-up again.
+   * The day's one line on a catch-up or a second workout (Maintenance 31), which only says what the
+   * plan is (the owner, 2026-10-31: the app chooses the day's workout, never the lifter); a rest
+   * day's, with its button to update the check-in (Maintenance 33).
    */
   dayNote?: { text: string; actionLabel?: string; onAction?: () => void } | null;
   /** A rest day from the check-in (Maintenance 33): the day's line says so, and nothing starts. */

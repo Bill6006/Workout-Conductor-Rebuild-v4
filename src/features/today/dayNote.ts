@@ -3,18 +3,15 @@ import { builtCatchUp } from '../../engine/workoutGenerator/generate';
 import { allEntries } from '../../engine/workout/types';
 
 /**
- * The one line Today gives a day that offers a catch-up or a second workout (Maintenance 31, the
- * owner's items 12 and 32), read from the plan as it was built. Where a catch-up is offered the
- * full session is one tap away: a catch-up is offered, never pushed, and missing a session costs
- * little (docs/research/catch-up-and-second-workout.md). A second workout with nothing left to
- * give says so, and the full session is one tap away there too, the lifter's to choose. A day not
- * ticked says so even with no catch-up to offer: a new lifter's, or one in a deload week (the
- * review of round M).
+ * The one line Today gives a day off the plan or a day already trained (Maintenance 31, the owner's
+ * items 12 and 32), read from the plan as it was built. It says what the plan is, never asks: the
+ * app chooses the day's one workout (the owner, 2026-10-31: "the user does NOT choose between
+ * 'Catch-up' and 'Full session'"), from the week, the recovery, the place and the length picked. A
+ * day not ticked says so even with nothing behind: a new lifter's, or one in a deload week (the
+ * review of round M). A session saved with the full session taken before keeps it for its day.
  */
 export interface DayNote {
   text: string;
-  /** Take the full session (true) or the day's own session again (false), with the button's words. */
-  action?: { label: string; full: boolean };
 }
 
 export function dayNoteOf(
@@ -33,15 +30,15 @@ export function dayNoteOf(
   const offers =
     offered && (offered.kind === 'second' || offered.muscles.length > 0) ? offered.kind : null;
   const stored = day && own && offers !== own.kind ? null : own;
-  // A copy with no lift that is none of the day's offer has nothing to start: the full session a tap
-  // away, as on a plan of the offer emptied (the twenty-fifth review: an empty second workout
-  // loaded on another day left a day of the plan with nothing in it and no button).
+  // A copy with no lift that is none of the day's offer has nothing to start, and says so (the
+  // twenty-fifth review: an empty second workout loaded on another day left a day of the plan with
+  // nothing in it and no line). A copy with no lift is no longer loaded (the owner, 2026-10-31);
+  // one loaded before the change, its lifts emptied by hand since, still reads so.
   if (day && !stored && allEntries(session.workout.blocks).length === 0) {
     return {
       text: ticked
         ? 'Nothing more for today.'
         : 'Not one of your training days: nothing more for today.',
-      action: { label: 'Full session', full: true },
     };
   }
   if (!stored) return ticked ? null : { text: 'Not one of your training days.' };
@@ -56,23 +53,14 @@ export function dayNoteOf(
   const ledWith = stored.muscles.some((item) => item.why === 'behind' && covered.has(item.muscle));
   const nothingBehind = behind ? '' : ', and nothing is behind this week';
   if (stored.kind === 'catch-up') {
-    if (full) {
-      return {
-        text: 'Not one of your training days.',
-        ...(behind ? { action: { label: 'Catch-up instead', full: false } } : {}),
-      };
-    }
+    if (full) return { text: 'Not one of your training days.' };
     // A catch-up the lifter's changes emptied has nothing more (the thirteenth review of round M).
     if (built && allEntries(session.workout.blocks).length === 0) {
-      return {
-        text: 'Not one of your training days: nothing more for today.',
-        action: { label: 'Full session', full: true },
-      };
+      return { text: 'Not one of your training days: nothing more for today.' };
     }
     if (built) {
       return {
         text: `Not one of your training days: a ${session.workout.duration.estimatedMinutes}-minute catch-up for what is behind this week.`,
-        action: { label: 'Full session', full: true },
       };
     }
     return {
@@ -81,15 +69,11 @@ export function dayNoteOf(
         : 'Not one of your training days, and nothing is behind this week.',
     };
   }
-  if (full)
-    return { text: 'You trained today.', action: { label: 'Go easy instead', full: false } };
+  if (full) return { text: 'You trained today.' };
   // A second workout the lifter's changes emptied has nothing more either (the fourteenth review of
   // round M).
   if (built && allEntries(session.workout.blocks).length === 0) {
-    return {
-      text: `You trained today${nothingBehind}: nothing more for today.`,
-      action: { label: 'Full session', full: true },
-    };
+    return { text: `You trained today${nothingBehind}: nothing more for today.` };
   }
   if (built)
     return {
@@ -99,8 +83,5 @@ export function dayNoteOf(
     };
   if (allEntries(session.workout.blocks).length > 0)
     return { text: `You trained today${nothingBehind}: what you trained sits out.` };
-  return {
-    text: `You trained today${nothingBehind}: nothing more for today.`,
-    action: { label: 'Full session', full: true },
-  };
+  return { text: `You trained today${nothingBehind}: nothing more for today.` };
 }

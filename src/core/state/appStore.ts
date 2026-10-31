@@ -1676,7 +1676,9 @@ export class AppStore {
 
   /**
    * The full session on a day that offers a catch-up or a second workout, or the day's own session
-   * again (Maintenance 31).
+   * again (Maintenance 31). No screen offers it since the owner's word of 2026-10-31 (the app
+   * chooses the day's one workout); the engine's path stays for a session saved with the full
+   * session taken, which keeps it for its day.
    */
   setFullSession(full: boolean): Promise<RecalibrationResult | null> {
     const kind = this.state.session?.constraints.catchUp?.kind;
@@ -3321,6 +3323,28 @@ export class AppStore {
     const offer = own ? offerKey({ catchUp: own }) : null;
     const ofOffer = (plan: EmptiedPlan) => offer !== null && plan.offer === offer;
     const lifts = allEntries(copy.workout.blocks).length > 0;
+    // A copy with nothing left to start stands in for nothing: today's plan stays, saying so (the
+    // owner, 2026-10-31: the app chooses the day's one workout, and no button gives it back from an
+    // empty copy, as "Full session" did).
+    if (!lifts) {
+      this.setSession({
+        ...session,
+        lastSummary: {
+          headline: `Nothing in "${saved.name}" is left for today: today's plan stays.`,
+          details: [],
+          counts: {
+            added: 0,
+            removed: 0,
+            replaced: 0,
+            adjusted: 0,
+            supersetsAdded: 0,
+            supersetsRemoved: 0,
+            setsTrimmed: 0,
+          },
+        },
+      });
+      return;
+    }
     const ownMarks = day.emptied.filter(
       (plan) => ofOffer(plan) && !(lifts && plan.layout === copy.workout.templateId),
     );

@@ -107,7 +107,7 @@ const expectNothingMore = (
   expect(workout.templateId, detail).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
   expect(allEntries(workout.blocks), detail).toEqual([]);
   expect(note?.text, detail).toBe('Not one of your training days: nothing more for today.');
-  expect(note?.action?.full, detail).toBe(true);
+  expect(note, detail).not.toHaveProperty('action');
 };
 
 describe('a catch-up emptied by "Hurts" stays so when it is built whole again', () => {

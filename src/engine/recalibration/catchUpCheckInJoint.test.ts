@@ -124,7 +124,7 @@ describe('a catch-up emptied by a joint reported in the check-in stays so when b
     expect(again.workout.templateId, detail).toBe(CATCH_UP_TEMPLATE_IDS['catch-up']);
     expect(allEntries(again.workout.blocks), detail).toEqual([]);
     expect(note?.text, detail).toBe('Not one of your training days: nothing more for today.');
-    expect(note?.action?.full, detail).toBe(true);
+    expect(note, detail).not.toHaveProperty('action');
   });
 
   it('the full session taken, then "Catch-up instead": the way back is the catch-up again', () => {

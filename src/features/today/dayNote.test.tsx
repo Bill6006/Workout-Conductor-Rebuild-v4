@@ -50,7 +50,6 @@ describe('a catch-up day', () => {
     const today = sessionFor({ kind: 'catch-up', muscles: [glutes], sitOut: [] }, []);
     expect(dayNoteOf(today)).toEqual({
       text: `Not one of your training days: a ${today.workout.duration.estimatedMinutes}-minute catch-up for what is behind this week.`,
-      action: { label: 'Full session', full: true },
     });
   });
 
@@ -78,7 +77,6 @@ describe('a catch-up day', () => {
     const today = sessionFor({ kind: 'catch-up', muscles: [glutes], sitOut: [] }, [], true);
     expect(dayNoteOf(today)).toEqual({
       text: 'Not one of your training days.',
-      action: { label: 'Catch-up instead', full: false },
     });
   });
 });
@@ -128,15 +126,13 @@ describe('a day already trained', () => {
     const spec: CatchUpSpec = { kind: 'second', muscles: [], sitOut: [...MUSCLE_IDS] };
     expect(dayNoteOf(sessionFor(spec, []))).toEqual({
       text: 'You trained today, and nothing is behind this week: nothing more for today.',
-      action: { label: 'Full session', full: true },
     });
     expect(dayNoteOf(sessionFor(spec, [], true))).toEqual({
       text: 'You trained today.',
-      action: { label: 'Go easy instead', full: false },
     });
   });
 
-  it('shows nothing to start when nothing is left, the line and its button in its place', () => {
+  it('shows nothing to start when nothing is left: the line in its place, and no choice of kind', () => {
     const today = sessionFor({ kind: 'second', muscles: [], sitOut: [...MUSCLE_IDS] }, []);
     const note = dayNoteOf(today)!;
     render(
@@ -147,13 +143,14 @@ describe('a day already trained', () => {
           location={gym}
           onSelect={() => undefined}
           onDurationChange={() => undefined}
-          dayNote={{ text: note.text, actionLabel: note.action?.label, onAction: () => undefined }}
+          dayNote={{ text: note.text }}
         />
       </Providers>,
     );
     expect(screen.queryByTestId('start-workout')).not.toBeInTheDocument();
     expect(screen.getByTestId('day-note-text')).toHaveTextContent('nothing more for today.');
-    expect(screen.getByRole('button', { name: 'Full session' })).toBeInTheDocument();
+    // The app chooses the day's workout (the owner, 2026-10-31): no button to choose its kind.
+    expect(screen.queryByTestId('day-note-action')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Second workout' })).toBeInTheDocument();
   });
 });

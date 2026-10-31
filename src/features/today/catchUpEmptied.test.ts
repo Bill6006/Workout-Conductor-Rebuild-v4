@@ -89,7 +89,6 @@ describe('a catch-up its only lift left, the thirteenth review of round M', () =
       dayNoteOf({ ...today, constraints: { ...today.constraints, catchUp: spec } }, false),
     ).toEqual({
       text: 'Not one of your training days: nothing more for today.',
-      action: { label: 'Full session', full: true },
     });
   });
 

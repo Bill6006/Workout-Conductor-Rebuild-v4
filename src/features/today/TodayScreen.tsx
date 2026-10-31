@@ -249,21 +249,7 @@ export function TodayScreen() {
                 onAction: () => setCheckingIn(true),
               }
             : note
-              ? {
-                  text: note.text,
-                  actionLabel: note.action?.label,
-                  onAction: note.action
-                    ? () => {
-                        const full = note.action!.full;
-                        store.setFullSession(full).catch((error: unknown) => {
-                          toast.show(
-                            error instanceof Error ? error.message : 'The session could not change',
-                            'error',
-                          );
-                        });
-                      }
-                    : undefined,
-                }
+              ? { text: note.text }
               : null
         }
       />

@@ -94,7 +94,7 @@ describe('back from the full session to a catch-up or second workout the lifter 
       false,
     );
     expect(note?.text).toBe('Not one of your training days: nothing more for today.');
-    expect(note?.action?.full).toBe(true);
+    expect(note).not.toHaveProperty('action');
   });
 
   it('a second workout, the calves missed, at a bare home: the calf raise skipped, Full session, Go easy instead', () => {

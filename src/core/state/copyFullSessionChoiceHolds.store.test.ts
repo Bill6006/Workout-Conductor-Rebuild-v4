@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultLocations } from '../validation/location';
 import { createDefaultProfile } from '../validation/profile';
-import { allEntries } from '../../engine/workout/types';
 import { dayNoteOf } from '../../features/today/dayNote';
 import { describeWorkout, session as workoutAt } from '../../test/clockDays';
 import { record } from '../../test/records';
@@ -114,16 +113,20 @@ describe('"Catch-up instead" on the full session taken from a loaded copy', () =
 
     const { handle, saved } = await saturday();
     expect((await handle.store.setFullSession(true))?.ok).toBe(true);
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
+    const before = session(handle).workout;
     handle.store.loadSavedWorkout(saved.id);
-    expect(allEntries(session(handle).workout.blocks)).toEqual([]);
-    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
+    expect(session(handle).workout).toBe(before);
+    expect(session(handle).lastSummary?.headline).toMatch(
+      /^Nothing in ".+" is left for today: today's plan stays\.$/,
+    );
     expect((await handle.store.setFullSession(true))?.ok).toBe(true);
     const there = dayNoteOf(session(handle), false);
     // On 1e29f22: "Not one of your training days.", no button.
-    expect(there?.action, there?.text).toEqual({ label: 'Catch-up instead', full: false });
+    expect(there, there?.text).not.toHaveProperty('action');
     expect((await handle.store.setFullSession(false))?.ok).toBe(true);
     expect(session(handle).workout.title).toBe('Catch-up');
-    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
+    expect(dayNoteOf(session(handle), false)).not.toHaveProperty('action');
     handle.store.startWorkout();
     handle.store.discardWorkout();
     // On f840d5b: "Upper body", "Not one of your training days." with "Catch-up instead".

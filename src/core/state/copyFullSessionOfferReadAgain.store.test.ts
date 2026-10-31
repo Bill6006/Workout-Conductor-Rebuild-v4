@@ -150,9 +150,13 @@ async function saturday(load: boolean) {
   handle.store.refreshSession();
   expect(session(handle).constraints.catchUp?.kind).toBe('catch-up');
   if (load) {
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
+    const before = session(handle).workout;
     handle.store.loadSavedWorkout(saved.id);
-    expect(allEntries(session(handle).workout.blocks)).toEqual([]);
-    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
+    expect(session(handle).workout).toBe(before);
+    expect(session(handle).lastSummary?.headline).toMatch(
+      /^Nothing in ".+" is left for today: today's plan stays\.$/,
+    );
   }
   return handle;
 }
@@ -178,9 +182,13 @@ async function friday(load: boolean) {
       .sort(),
   ).toEqual(['chest', 'triceps']);
   if (load) {
+    // An empty copy stands in for nothing (the owner, 2026-10-31): today's plan stays, saying so.
+    const before = session(handle).workout;
     handle.store.loadSavedWorkout(saved.id);
-    expect(allEntries(session(handle).workout.blocks)).toEqual([]);
-    expect(dayNoteOf(session(handle), true)?.action?.label).toBe('Full session');
+    expect(session(handle).workout).toBe(before);
+    expect(session(handle).lastSummary?.headline).toMatch(
+      /^Nothing in ".+" is left for today: today's plan stays\.$/,
+    );
   }
   return handle;
 }
@@ -197,7 +205,7 @@ describe('the way back from the full session taken from a loaded copy, read agai
     expect((await handle.store.setFullSession(true))?.ok).toBe(true);
     const there = dayNoteOf(session(handle), false);
     // On 1e29f22: "Not one of your training days.", no button.
-    expect(there?.action, there?.text).toEqual({ label: 'Catch-up instead', full: false });
+    expect(there, there?.text).not.toHaveProperty('action');
     expect((await handle.store.setFullSession(false))?.ok).toBe(true);
     expect(session(handle).workout.title).toBe('Catch-up');
     await saveProfile(handle, tickSaturday);
@@ -220,7 +228,7 @@ describe('the way back from the full session taken from a loaded copy, read agai
     expect((await handle.store.setFullSession(true))?.ok).toBe(true);
     const there = dayNoteOf(session(handle), true);
     // On 1e29f22: no line at all.
-    expect(there?.action, there?.text).toEqual({ label: 'Go easy instead', full: false });
+    expect(there, there?.text).not.toHaveProperty('action');
     await saveProfile(handle, (profile) => ({ ...profile, experience: 'beginner' }));
     expect((await handle.store.setFullSession(false))?.ok).toBe(true);
     expect(session(handle).constraints.catchUp?.kind).toBe('second');

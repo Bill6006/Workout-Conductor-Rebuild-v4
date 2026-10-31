@@ -101,7 +101,7 @@ describe('a saved catch-up loaded over a plan left on the screen from the day be
     // On 992c87d: "Not one of your training days.", no button. On ce935fe: "Not one of your
     // training days: a 46-minute catch-up for what is behind this week.", with "Full session".
     expect(note?.text).toMatch(CATCH_UP_LINE);
-    expect(note?.action?.label).toBe('Full session');
+    expect(note).not.toHaveProperty('action');
   });
 
   it('keeps the full session one tap away once Today is opened', async () => {
@@ -109,6 +109,6 @@ describe('a saved catch-up loaded over a plan left on the screen from the day be
     handle.store.refreshSession();
     expect(session(handle).workout.templateId).toBe('catch-up');
     // On 992c87d: "Not one of your training days.", no button, while the copy stands.
-    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
+    expect(dayNoteOf(session(handle), false)).not.toHaveProperty('action');
   });
 });

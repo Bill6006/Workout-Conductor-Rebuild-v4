@@ -153,7 +153,7 @@ describe('a second workout saved on a later day than it was planned, loaded that
     const handle = await loadedLater(SATURDAY_MORNING);
     // On 992c87d: "Not one of your training days.", no button. On ce935fe: "You trained today: this
     // one leads with what you missed and goes easy on the rest.", no button.
-    expect(dayNoteOf(session(handle), false)?.action?.label).toBe('Full session');
+    expect(dayNoteOf(session(handle), false)).not.toHaveProperty('action');
   });
 });
 
