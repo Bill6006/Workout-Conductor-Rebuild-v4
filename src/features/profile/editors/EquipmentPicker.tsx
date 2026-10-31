@@ -7,6 +7,7 @@ import {
   normalizeEquipment,
 } from '../../../catalog/equipment/equipment';
 import { ChipSelect } from '../../../components/Form/ChipSelect';
+import { useAppSelector } from '../../../core/state/useAppStore';
 import styles from './editors.module.css';
 
 interface EquipmentPickerProps {
@@ -15,10 +16,18 @@ interface EquipmentPickerProps {
   label: string;
 }
 
-/** Grouped equipment chips with quick presets; shared by onboarding, Settings, and Plan. */
+/** A preset's button: its name, with "preset" after it unless it says so already. */
+const presetLabel = (name: string) => (/preset$/i.test(name.trim()) ? name : `${name} preset`);
+
+/**
+ * Grouped equipment chips with quick presets; shared by onboarding, Settings, and Plan. The
+ * lifter's own presets sit beside Full gym and Home (the owner, 2026-10-31): a tap copies a
+ * preset's equipment in, and nothing keeps a link to it.
+ */
 export function EquipmentPicker({ values, onChange, label }: EquipmentPickerProps) {
   const grouped = equipmentByCategory();
   const selected = new Set(values);
+  const presets = useAppSelector((state) => state.equipmentPresets);
 
   function setCategory(categoryIds: readonly string[], next: string[]) {
     const outside = values.filter((id) => !categoryIds.includes(id));
@@ -43,6 +52,17 @@ export function EquipmentPicker({ values, onChange, label }: EquipmentPickerProp
         >
           Home preset
         </button>
+        {presets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={styles.preset}
+            data-testid="custom-preset"
+            onClick={() => onChange(normalizeEquipment(preset.equipment))}
+          >
+            {presetLabel(preset.name)}
+          </button>
+        ))}
         <button type="button" className={styles.preset} onClick={() => onChange([])}>
           Clear
         </button>

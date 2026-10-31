@@ -28,6 +28,7 @@ import { LegacyImportCard } from './LegacyImportCard';
 import { LearnedValues } from './LearnedValues';
 import { MediaCreditsCard } from './MediaCreditsCard';
 import { CoachSwitchesRows } from './CoachSwitchesRows';
+import { EquipmentPresets } from './EquipmentPresets';
 import { LifeMirrorRow } from './LifeMirrorRow';
 import { PlaceWeights } from './PlaceWeights';
 import { SnapshotsCard } from './SnapshotsCard';
@@ -197,6 +198,18 @@ export function SettingsScreen() {
                 linked={section === 'weights'}
               >
                 <PlaceWeights />
+              </DisclosureRow>
+              <DisclosureRow
+                name="presets"
+                title="Equipment presets"
+                summary={
+                  state.equipmentPresets.length > 0
+                    ? `Home, Full gym and ${state.equipmentPresets.length} of your own`
+                    : 'Home and Full gym, and any of your own'
+                }
+                linked={section === 'presets'}
+              >
+                <EquipmentPresets />
               </DisclosureRow>
             </Group>
           </>

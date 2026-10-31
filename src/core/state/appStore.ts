@@ -206,6 +206,16 @@ import {
   type ScheduleMove,
 } from '../validation/scheduleMove';
 import { nextScheduleMove, type WatchedSchedule } from '../../engine/planning/scheduleWatch';
+import {
+  EquipmentPresetSchema,
+  PRESET_ID_PREFIX,
+  isPresetId,
+  parseEquipmentPreset,
+  presetNameProblem,
+  sortPresets,
+  type EquipmentPreset,
+} from '../validation/equipmentPreset';
+import { normalizeEquipment } from '../../catalog/equipment/equipment';
 import { readLifeMirrorDay } from '../cloud/lifeMirror';
 import { lifeMirrorPrefill, type LifeMirrorPrefill } from '../../engine/readiness/lifeMirror';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
@@ -480,6 +490,11 @@ export interface AppState {
    * schedules before and after it; null before the first.
    */
   scheduleMove: ScheduleMove | null;
+  /**
+   * The lifter's own equipment presets (the owner, 2026-10-31), by name: templates a place's
+   * equipment is filled from, beside the built-in Home and Full gym.
+   */
+  equipmentPresets: EquipmentPreset[];
   /** A planned deload week, kept in the meta store and backed up; null when none. */
   deloadWeek: DeloadWeek | null;
   /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
@@ -996,6 +1011,7 @@ export class AppStore {
   private switchesVersion = 0;
   private lifeMirrorVersion = 0;
   private scheduleMoveVersion = 0;
+  private presetsVersion = 0;
   private resetsQueue: Promise<unknown> = Promise.resolve();
   private declinesQueue: Promise<unknown> = Promise.resolve();
   private shownQueue: Promise<unknown> = Promise.resolve();
@@ -1003,6 +1019,7 @@ export class AppStore {
   private switchesQueue: Promise<unknown> = Promise.resolve();
   private lifeMirrorQueue: Promise<unknown> = Promise.resolve();
   private scheduleMoveQueue: Promise<unknown> = Promise.resolve();
+  private presetsQueue: Promise<unknown> = Promise.resolve();
   /** "Longer would help" worked out for the inputs it read (`longerOfferFor`): kept while they hold. */
   private longerKept: { refs: readonly unknown[]; offer: LongerOffer | null } | null = null;
   /**
@@ -1106,6 +1123,7 @@ export class AppStore {
       coachSwitches: defaultCoachSwitches(),
       lifeMirrorLink: defaultLifeMirrorLink(),
       scheduleMove: null,
+      equipmentPresets: [],
       deloadWeek: null,
       strengthMaxes: emptyMaxes(),
       coachFocus: null,
@@ -1230,6 +1248,7 @@ export class AppStore {
     const switchesSeen = this.switchesVersion;
     const lifeMirrorSeen = this.lifeMirrorVersion;
     const scheduleMoveSeen = this.scheduleMoveVersion;
+    const presetsSeen = this.presetsVersion;
     const mediaSeen = this.mediaVersion;
     const barcodesSeen = this.barcodesVersion;
     try {
@@ -1258,6 +1277,7 @@ export class AppStore {
         switchesRaw,
         lifeMirrorRaw,
         scheduleMoveRaw,
+        metaRecords,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -1279,7 +1299,11 @@ export class AppStore {
         db.get<Identified>('meta', COACH_SWITCHES_ID),
         db.get<Identified>('meta', LIFE_MIRROR_LINK_ID),
         db.get<Identified>('meta', SCHEDULE_MOVE_ID),
+        db.getAll<Identified>('meta'),
       ]);
+      // The lifter's own presets, each its own record; one that does not read is left out, and
+      // never written over.
+      const presetsRaw = metaRecords.filter((record) => isPresetId(record.id));
       const deviceId = ensureDeviceId(this.storage);
       // Finds the token in either of its copies and heals the other. A copy that
       // could not be healed must not stop the app from opening.
@@ -1295,7 +1319,8 @@ export class AppStore {
           workouts.length +
           customExercises.length +
           customInstructions.length +
-          savedRaw.length ===
+          savedRaw.length +
+          presetsRaw.length ===
           0 &&
         [
           routesRaw,
@@ -1383,6 +1408,14 @@ export class AppStore {
           this.scheduleMoveVersion === scheduleMoveSeen
             ? parseScheduleMove(scheduleMoveRaw)
             : this.state.scheduleMove,
+        equipmentPresets:
+          this.presetsVersion === presetsSeen
+            ? sortPresets(
+                presetsRaw
+                  .map((record) => parseEquipmentPreset(record))
+                  .filter((preset): preset is EquipmentPreset => preset !== null),
+              )
+            : this.state.equipmentPresets,
         learnedResets:
           this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
@@ -5506,6 +5539,67 @@ export class AppStore {
       this.setState({ coachSwitches: next });
     });
     this.switchesQueue = run.catch(() => undefined);
+    await run;
+  }
+
+  /**
+   * Keeps one of the lifter's own equipment presets (the owner, 2026-10-31): a new one, or one
+   * renamed or with other equipment. A template only: no place changes when a preset does, and
+   * none ever held a link to one. A name the built-ins or another preset have is refused, and a
+   * preset kept that does not read is never written over.
+   */
+  async saveEquipmentPreset(input: {
+    id?: string;
+    name: string;
+    equipment: readonly string[];
+  }): Promise<EquipmentPreset> {
+    const run = this.presetsQueue.then(async () => {
+      const problem = presetNameProblem(input.name, this.state.equipmentPresets, input.id ?? null);
+      if (problem) throw new Error(problem);
+      const db = await this.getDatabase();
+      const now = this.now();
+      let saved: EquipmentPreset | null = null;
+      if (input.id !== undefined) {
+        const raw = await db.get<Identified>('meta', input.id);
+        saved = raw === undefined ? null : parseEquipmentPreset(raw);
+        if (saved === null) throw new Error('That preset could not be read; it is left as it is.');
+      }
+      const next = EquipmentPresetSchema.parse({
+        ...(saved ?? {}),
+        id:
+          saved?.id ??
+          `${PRESET_ID_PREFIX}${now.replace(/\D/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`,
+        name: input.name.trim(),
+        equipment: normalizeEquipment(input.equipment),
+        createdAt: saved?.createdAt ?? now,
+        updatedAt: now,
+      });
+      await putVerified(db, 'meta', next, { now: this.now });
+      this.presetsVersion += 1;
+      this.setState({
+        equipmentPresets: sortPresets([
+          ...this.state.equipmentPresets.filter((preset) => preset.id !== next.id),
+          next,
+        ]),
+      });
+      return next;
+    });
+    this.presetsQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Deletes one of the lifter's own presets; the places filled from it stay as they are. */
+  async deleteEquipmentPreset(id: string): Promise<void> {
+    const run = this.presetsQueue.then(async () => {
+      if (!isPresetId(id)) throw new Error('Home and Full gym are built in and stay.');
+      const db = await this.getDatabase();
+      await deleteVerified(db, 'meta', id);
+      this.presetsVersion += 1;
+      this.setState({
+        equipmentPresets: this.state.equipmentPresets.filter((preset) => preset.id !== id),
+      });
+    });
+    this.presetsQueue = run.catch(() => undefined);
     await run;
   }
 
