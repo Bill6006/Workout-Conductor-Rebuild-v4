@@ -24,7 +24,9 @@ jobs:
   verify:
     name: Verify (lint, types, unit, build, privacy, smoke)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # The checks take about 20 minutes on a usual runner; a slow one took 25 for unit tests and
+    # part of the browser suite alone (2026-10-31), so the limit leaves room for one.
+    timeout-minutes: 40
     env:
       CI: true
     steps:
