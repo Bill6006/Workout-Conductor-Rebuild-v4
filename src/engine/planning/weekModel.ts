@@ -107,7 +107,7 @@ function credit(
 }
 
 /** A planned session as the record it would leave: its working sets, done at the bottom of range. */
-function plannedRecord(date: string, workout: GeneratedWorkout): WorkoutRecord {
+export function plannedRecord(date: string, workout: GeneratedWorkout): WorkoutRecord {
   return {
     id: `planned-${date}`,
     startedAt: date,

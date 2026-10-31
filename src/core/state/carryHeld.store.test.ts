@@ -134,6 +134,9 @@ describe('the sets the week’s need gave, held back after a change', () => {
     const after = lift(handle, incline);
     expect(after.carried).toBeUndefined();
     expect(working(after)).toBe(own - 1);
+    // What the ease keeps of the lift, given back if it stops and is picked up again, is the lift
+    // at its own sets, the carried ones gone.
+    expect(after.eased?.sets?.filter((set) => set.kind === 'working')).toHaveLength(own);
   });
 
   it('come off a pinned lift under a head cold, as off any', async () => {

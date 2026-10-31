@@ -240,13 +240,18 @@ describe('the need carried, with room to carry it', () => {
   });
 
   it('puts the set on an accessory before the main lift', () => {
-    // The chest: the bench press, the day's main lift, and the cable fly.
-    expect(directLifts(base, 'chest').map((entry) => entry.role)).toEqual([
-      'primary-strength',
-      'isolation',
-    ]);
-    const carried = roomyPlan({ carry: { chest: setsFor(base, 'chest') + 1 } });
-    expect(carriedOn(carried)).toEqual(['cable-fly +1']);
+    // The lower day: the back squat leads, with room in the quads and the glutes it works.
+    const lower = roomyPlan({ templateId: 'lower' });
+    const squat = directLifts(lower, 'quads').find((entry) => entry.role === 'primary-strength')!;
+    expect(squat.exerciseId).toBe('back-squat');
+    const own = setsFor(lower, 'quads');
+    const carried = roomyPlan({ templateId: 'lower', carry: { quads: own + 1 } });
+    expect(carriedOn(carried)).toHaveLength(1);
+    expect(carriedOn(carried)[0]).not.toMatch(/^back-squat /);
+    // With the accessories taken out of the running, the main lift itself can take it.
+    for (const muscle of requireExercise('back-squat').primaryMuscles) {
+      expect(setsFor(lower, muscle) + 1, muscle).toBeLessThanOrEqual(RULES.carryMuscleSets.value);
+    }
   });
 
   it('carries nothing on a day of high fatigue', () => {

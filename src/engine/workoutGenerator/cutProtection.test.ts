@@ -4,6 +4,8 @@ import { createDefaultProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import { allEntries, type GeneratedWorkout } from '../workout/types';
 import { cutRunning, generateWorkout } from './generate';
+import { plannedRecord } from '../planning/weekModel';
+import { syntheticRecord } from '../planning/weeklyPlan';
 
 /**
  * Maintenance 34, what keeps getting cut (the approved proposal: "Store what the time fit left out
@@ -90,6 +92,13 @@ describe('what the time fit cut', () => {
     // delts their lateral raise.
     expect(short.fitCut).not.toContain('upper-chest');
     expect(short.fitCut).toEqual(expect.arrayContaining(['chest', 'side-delts']));
+  });
+
+  it('is kept on each day the week model and the week ahead plan, as on a workout saved', () => {
+    const short = plan([]);
+    expect(short.fitCut?.length ?? 0).toBeGreaterThan(0);
+    expect(plannedRecord(NOW, short).fitCut).toEqual(short.fitCut);
+    expect(syntheticRecord(NOW, short).fitCut).toEqual(short.fitCut);
   });
 
   it('reads the same day of the split: a pull day between two push days ends no run', () => {

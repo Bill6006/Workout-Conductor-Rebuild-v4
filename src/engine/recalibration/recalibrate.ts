@@ -806,15 +806,17 @@ function rebuild(
 }
 
 /**
- * The week's need the plan carries into a rebuild (Maintenance 34): none under a hard start, whose
- * ease takes work off the day, and with the muscles the lifter chose to go lighter on (Maintenance
- * 33, the "too soon" card's option), whose lifts take none of it (the review of Maintenance 34: a
- * set for the chest stayed on the bench press with the triceps gone lighter). What a lift kept
- * holds from before is checked after every change (`heldCarry`).
+ * The week's need the plan carries into a rebuild (Maintenance 34), with the muscles the lifter chose
+ * to go lighter on (Maintenance 33, the "too soon" card's option), whose lifts take none of it, so
+ * their room goes to the rest (the review of Maintenance 34: a set for the chest stayed on the bench
+ * press with the triceps gone lighter). What the day holds back after the change, a hard start among
+ * it, comes off in `heldCarry`.
  */
-function carryOf(constraints: SessionConstraints): Pick<GenerationConstraints, 'carry' | 'carryHold'> {
+function carryOf(
+  constraints: SessionConstraints,
+): Pick<GenerationConstraints, 'carry' | 'carryHold'> {
   return {
-    ...(constraints.carry && !constraints.badStart ? { carry: { ...constraints.carry } } : {}),
+    ...(constraints.carry ? { carry: { ...constraints.carry } } : {}),
     ...((constraints.lighter?.length ?? 0) > 0 ? { carryHold: [...constraints.lighter!] } : {}),
   };
 }

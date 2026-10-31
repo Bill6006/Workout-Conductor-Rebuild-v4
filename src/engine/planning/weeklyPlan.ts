@@ -44,7 +44,10 @@ function dayLabel(iso: string, today: boolean): string {
   });
 }
 
-function syntheticRecord(date: string, workout: ReturnType<typeof generateWorkout>): WorkoutRecord {
+export function syntheticRecord(
+  date: string,
+  workout: ReturnType<typeof generateWorkout>,
+): WorkoutRecord {
   return {
     id: `planned-${date}`,
     startedAt: date,
