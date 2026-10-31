@@ -24,7 +24,9 @@ first:
 - **Live: `d11fe71`, item 48** (Maintenance 35, Life Mirror's daily check-in, read-only, behind a switch
   that stays off; `docs/reports/maintenance-35.md`): Deploy Pages run 41224835430; the live marker reads
   `d11fe71`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed.
-- **Next, the schedule watch** (Maintenance 36), then custom equipment presets, and the final
+- **Live: `8a4292d`, the schedule watch** (Maintenance 36, `docs/reports/maintenance-36.md`): Deploy
+  Pages run 41239957729; the live marker reads `8a4292d`. Live suite from the owner's machine: 438 passed + 19 skipped by design; one storage test on the 360 px project missed a line of the cloud card once after a page load and passed 3 of 3 alone, and the 10 PWA tests that wait on it were run after it (5 passed, 5 skipped by design).
+- **Next, custom equipment presets** (as the owner defined them, below), then the final
   reconciliation with one consolidated phone review.
 - **Custom equipment presets, as the owner defined them (2026-10-31):** Home and Full gym stay built
   in and protected (no rename, no delete); unlimited custom presets, each a name and any combination
