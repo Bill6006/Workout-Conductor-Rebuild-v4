@@ -216,8 +216,10 @@ export function ActiveWorkoutScreen() {
   // A workout ended from the coach's card is ended early, exactly like the End workout early link.
   const [endedEarly, setEndedEarly] = useState(() => store.getSnapshot().finishRequested);
   const [checkingIn, setCheckingIn] = useState(false);
-  // Item 48: today's Life Mirror check-in, read as the check-in opens.
-  const lifeMirror = useLifeMirrorPrefill(checkingIn);
+  // Item 48: today's Life Mirror check-in, read as the check-in opens with nothing told today
+  // (the review of item 48: a check-in told stands over it, so nothing is read for it).
+  const lifeMirror = useLifeMirrorPrefill(checkingIn && !session?.constraints.readiness);
+  const lifeMirrorOn = useAppSelector((state) => state.lifeMirrorLink.on);
   const [maxFor, setMaxFor] = useState<Selection | null>(null);
   // The one-time offer can be snoozed; the same sheet opened from Options cannot.
   const [maxOffer, setMaxOffer] = useState(true);
@@ -1289,6 +1291,7 @@ export function ActiveWorkoutScreen() {
         open={checkingIn}
         initial={session.constraints.readiness}
         lifeMirror={lifeMirror}
+        lifeMirrorOn={lifeMirrorOn}
         onClose={() => setCheckingIn(false)}
         onSubmit={(next) => {
           setCheckingIn(false);

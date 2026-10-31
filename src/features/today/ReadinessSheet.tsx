@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { JOINTS, type Joint } from '../../catalog/exercises/exerciseSchema';
 import { Button } from '../../components/Button/Button';
 import { ChipSelect } from '../../components/Form/ChipSelect';
@@ -18,6 +18,12 @@ interface ReadinessSheetProps {
    * check-in has not been told, each value labelled, and a tap changes it.
    */
   lifeMirror?: LifeMirrorPrefill | null;
+  /**
+   * The lifter's switch (item 48). On, Life Mirror's stress and mood are shown wherever they came,
+   * labelled and changeable; off, a check-in told here carries neither (the review of item 48: they
+   * counted in the check-in unseen).
+   */
+  lifeMirrorOn?: boolean;
   onClose: () => void;
   onSubmit: (readiness: Readiness) => void;
 }
@@ -35,6 +41,16 @@ const scaleOptions = (words: readonly string[]): { value: Scale; label: string }
 /** The items Life Mirror can fill in that this sheet asks (item 48). */
 const LIFE_FIELDS = ['energy', 'sleep', 'motivation'] as const;
 type LifeField = (typeof LIFE_FIELDS)[number];
+/**
+ * Life Mirror's own items, never asked here (item 48): shown only where it gave them, in its own
+ * words, so a value reads as it did there.
+ */
+const SHARED_FIELDS = ['stress', 'mood'] as const;
+type SharedField = (typeof SHARED_FIELDS)[number];
+const SHARED: Record<SharedField, { label: string; words: readonly string[] }> = {
+  stress: { label: 'Stress', words: ['Loose', 'Light', 'Middling', 'Wound tight', 'Crushing'] },
+  mood: { label: 'Mood', words: ['Heavy', 'Down', 'Flat', 'Warm', 'Bright'] },
+};
 /** A check-in's time on this device, as Today says times. */
 const clockOf = (iso: string) =>
   new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -56,39 +72,42 @@ const JOINT_OPTIONS = JOINTS.map((joint) => ({
  * the owner's decision 1): energy, sleep and motivation against the lifter's own lower what the app
  * expects of the first sets, never the plan; a head cold keeps every set 2 or more short of
  * failure; a fever or aches all over make it a rest day; a sore joint and time pressure change the
- * picks and the length, as before.
+ * picks and the length, as before. With the Life Mirror switch on (item 48), its stress and mood
+ * where it gave them, which count against the lifter's own like the rest.
  */
 export function ReadinessSheet({
   open,
   initial,
   lifeMirror = null,
+  lifeMirrorOn = false,
   onClose,
   onSubmit,
 }: ReadinessSheetProps) {
   // Each value: the lifter's own tap, else today's told check-in, else Life Mirror's (item 48),
-  // else the scale's middle. A value Life Mirror gave keeps its label until a tap changes it.
-  const [own, setOwn] = useState<Partial<Record<LifeField, Scale>>>({});
-  const base = (field: LifeField): { value: Scale; from?: string } => {
-    if (initial) {
-      return { value: String(initial[field]) as Scale, from: initial.fromLifeMirror?.[field] };
-    }
-    const filled = lifeMirror?.[field];
-    return filled ? { value: String(filled.value) as Scale, from: filled.at } : { value: '3' };
-  };
-  const valueOf = (field: LifeField): Scale => own[field] ?? base(field).value;
-  const fromOf = (field: LifeField): string | undefined =>
-    own[field] === undefined || own[field] === base(field).value ? base(field).from : undefined;
-  const setField = (field: LifeField) => (value: Scale) =>
-    setOwn((before) => ({ ...before, [field]: value }));
-  // Life Mirror's own, never asked here: today's told check-in's, else Life Mirror's.
-  const sharedOf = (field: 'stress' | 'mood'): { value: number; from?: string } | null => {
+  // else the scale's middle. A value Life Mirror gave keeps its label until a tap, any tap, makes it
+  // the lifter's own (the review of item 48: one tapped back was told as Life Mirror's).
+  const [own, setOwn] = useState<Partial<Record<Filled, Scale>>>({});
+  /** Today's told check-in's value, else Life Mirror's; none where neither gave one. */
+  const given = (field: Filled): { value: Scale; from?: string } | null => {
     if (initial) {
       const value = initial[field];
-      return value === undefined ? null : { value, from: initial.fromLifeMirror?.[field] };
+      return value === undefined
+        ? null
+        : { value: String(value) as Scale, from: initial.fromLifeMirror?.[field] };
     }
     const filled = lifeMirror?.[field];
-    return filled ? { value: filled.value, from: filled.at } : null;
+    return filled ? { value: String(filled.value) as Scale, from: filled.at } : null;
   };
+  const valueOf = (field: LifeField): Scale => own[field] ?? given(field)?.value ?? '3';
+  const fromOf = (field: Filled): string | undefined =>
+    own[field] === undefined ? given(field)?.from : undefined;
+  const setField = (field: Filled) => (value: Scale) =>
+    setOwn((before) => ({ ...before, [field]: value }));
+  // Life Mirror's stress and mood, with the switch on and where they came: shown and told alike.
+  const shared = SHARED_FIELDS.flatMap((field) => {
+    const value = own[field] ?? given(field)?.value;
+    return lifeMirrorOn && value !== undefined ? [{ field, value }] : [];
+  });
   const [soreness, setSoreness] = useState<Scale>(String(initial?.soreness ?? 2) as Scale);
   const [joints, setJoints] = useState<Joint[]>(initial?.jointDiscomfort ?? []);
   const [timePressure, setTimePressure] = useState(initial?.timePressure ?? false);
@@ -99,7 +118,7 @@ export function ReadinessSheet({
     words: readonly string[],
     value: Scale,
     onChange: (value: Scale) => void,
-    from?: { field: LifeField; at: string | undefined },
+    from?: { field: Filled; at: string | undefined },
   ) => (
     <div>
       <p className={formStyles.label}>{label}</p>
@@ -118,21 +137,22 @@ export function ReadinessSheet({
     </div>
   );
 
-  /** The check-in as told: Life Mirror's own carried, and the source of each value it gave. */
+  /** The check-in as told: Life Mirror's stress and mood as shown, and where each value came from. */
   const told = (readiness: Readiness): Readiness => {
-    const stress = sharedOf('stress');
-    const mood = sharedOf('mood');
+    const carried: Partial<Record<SharedField, number>> = {};
     const from: Partial<Record<Filled, string>> = {};
     for (const field of LIFE_FIELDS) {
       const at = fromOf(field);
       if (at) from[field] = at;
     }
-    if (stress?.from) from.stress = stress.from;
-    if (mood?.from) from.mood = mood.from;
+    for (const { field, value } of shared) {
+      carried[field] = Number(value);
+      const at = fromOf(field);
+      if (at) from[field] = at;
+    }
     return {
       ...readiness,
-      ...(stress ? { stress: stress.value } : {}),
-      ...(mood ? { mood: mood.value } : {}),
+      ...carried,
       ...(Object.keys(from).length > 0 ? { fromLifeMirror: from } : {}),
     };
   };
@@ -177,6 +197,14 @@ export function ReadinessSheet({
         field: 'motivation',
         at: fromOf('motivation'),
       })}
+      {shared.map(({ field, value }) => (
+        <Fragment key={field}>
+          {scale(SHARED[field].label, SHARED[field].words, value, setField(field), {
+            field,
+            at: fromOf(field),
+          })}
+        </Fragment>
+      ))}
       <div>
         <p className={formStyles.label}>Unwell</p>
         <ChoiceGroup

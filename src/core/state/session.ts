@@ -1,4 +1,4 @@
-import { FILLED } from '../../engine/readiness/lifeMirror';
+import { FromLifeMirrorSchema } from '../validation/lifeMirrorLink';
 import { z } from 'zod';
 import type { LastingSwap } from '../../engine/planning/lastingSwaps';
 import type { SessionLoading } from '../../engine/loading/loading';
@@ -250,7 +250,7 @@ const ReadinessSchema = z.looseObject({
   // and one this copy cannot read is none.
   stress: z.number().int().min(1).max(5).optional().catch(undefined),
   mood: z.number().int().min(1).max(5).optional().catch(undefined),
-  fromLifeMirror: z.partialRecord(z.enum(FILLED), z.iso.datetime()).optional().catch(undefined),
+  fromLifeMirror: FromLifeMirrorSchema,
 });
 
 /** A plan the lifter emptied today (`EmptiedPlan`): its offer, and the layout it was laid out on. */

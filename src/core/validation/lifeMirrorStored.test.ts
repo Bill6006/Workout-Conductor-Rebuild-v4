@@ -63,6 +63,30 @@ describe('a check-in with Life Mirror’s', () => {
     expect(saved.readiness).toEqual({ ...told, stress: 4, fromLifeMirror: { energy: TEST_NOW } });
   });
 
+  it('keeps each source that reads: one that does not, and one this copy does not know, dropped alone', () => {
+    const saved = WorkoutRecordSchema.parse({
+      ...record(0, 'back-squat', [[5, 225, 2]]),
+      readiness: {
+        ...told,
+        stress: 4,
+        fromLifeMirror: {
+          energy: TEST_NOW,
+          sleep: 'this morning',
+          soreness: TEST_NOW,
+          stress: TEST_NOW,
+        },
+      },
+    });
+    expect(saved.readiness?.fromLifeMirror).toEqual({ energy: TEST_NOW, stress: TEST_NOW });
+    // Sources that are not a list of them at all are none, and the check-in reads as told.
+    expect(
+      WorkoutRecordSchema.parse({
+        ...record(0, 'back-squat', [[5, 225, 2]]),
+        readiness: { ...told, fromLifeMirror: 'this morning' },
+      }).readiness,
+    ).toEqual(told);
+  });
+
   it('reads as before without any of them', () => {
     expect(
       WorkoutRecordSchema.parse({ ...record(0, 'back-squat', [[5, 225, 2]]), readiness: told })

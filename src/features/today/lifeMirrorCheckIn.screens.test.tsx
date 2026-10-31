@@ -7,7 +7,8 @@ import { ReadinessSheet } from './ReadinessSheet';
 
 /**
  * Item 48 on screen: the check-in sheet fills in what today's Life Mirror check-in gave, each value
- * labelled with its time and changed with one tap, and asks the rest as always. Synthetic data only.
+ * labelled with its time and changed with one tap, Life Mirror's stress and mood shown in its own
+ * words with the switch on, and asks the rest as always. Synthetic data only.
  */
 
 const MORNING = new Date(2026, 8, 2, 7, 40).toISOString();
@@ -27,20 +28,25 @@ const chosen = (group: string) =>
   within(screen.getByRole('radiogroup', { name: group }))
     .getAllByRole('radio')
     .find((option) => option.getAttribute('aria-checked') === 'true')?.textContent;
+const option = (group: string, name: string) =>
+  within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name });
 
-function show(initial: Readiness | null, lifeMirror: LifeMirrorPrefill | null) {
+function show(initial: Readiness | null, lifeMirror: LifeMirrorPrefill | null, on = true) {
   const onSubmit = vi.fn();
   render(
     <ReadinessSheet
       open
       initial={initial}
       lifeMirror={lifeMirror}
+      lifeMirrorOn={on}
       onClose={() => undefined}
       onSubmit={onSubmit}
     />,
   );
   return onSubmit;
 }
+
+const asked = { soreness: 2, jointDiscomfort: [], timePressure: false };
 
 describe('the check-in with Life Mirror’s', () => {
   it('fills in energy, sleep and motivation, each labelled with its check-in’s time', () => {
@@ -57,27 +63,50 @@ describe('the check-in with Life Mirror’s', () => {
     expect(chosen('Unwell')).toBe('No');
   });
 
+  it('shows its stress and mood in its own words, each labelled (the review of item 48)', () => {
+    show(null, filled);
+    expect(chosen('Stress')).toBe('Wound tight');
+    expect(chosen('Mood')).toBe('Down');
+    expect(screen.getByTestId('from-life-mirror-stress')).toHaveTextContent(
+      `From Life Mirror, ${clock(AFTERNOON)}`,
+    );
+    expect(screen.getByTestId('from-life-mirror-mood')).toHaveTextContent(clock(MORNING));
+  });
+
   it('takes a tap over Life Mirror’s value, its label gone, and tells the rest as Life Mirror’s', async () => {
     const onSubmit = show(null, filled);
     const user = userEvent.setup();
-    await user.click(
-      within(screen.getByRole('radiogroup', { name: 'Energy' })).getByRole('radio', {
-        name: 'Low',
-      }),
-    );
+    await user.click(option('Energy', 'Low'));
     expect(screen.queryByTestId('from-life-mirror-energy')).toBeNull();
     expect(screen.getByTestId('from-life-mirror-sleep')).toBeInTheDocument();
     await user.click(screen.getByTestId('readiness-apply'));
     expect(onSubmit).toHaveBeenCalledWith({
+      ...asked,
       energy: 2,
-      soreness: 2,
       sleep: 2,
       motivation: 3,
-      jointDiscomfort: [],
-      timePressure: false,
       stress: 4,
       mood: 2,
       fromLifeMirror: { sleep: MORNING, motivation: MORNING, stress: AFTERNOON, mood: MORNING },
+    });
+  });
+
+  it('makes a value the lifter’s own with any tap, Life Mirror’s own value too', async () => {
+    const onSubmit = show(null, filled);
+    const user = userEvent.setup();
+    await user.click(option('Motivation', 'Okay'));
+    await user.click(option('Stress', 'Light'));
+    expect(screen.queryByTestId('from-life-mirror-motivation')).toBeNull();
+    expect(screen.queryByTestId('from-life-mirror-stress')).toBeNull();
+    await user.click(screen.getByTestId('readiness-apply'));
+    expect(onSubmit).toHaveBeenCalledWith({
+      ...asked,
+      energy: 4,
+      sleep: 2,
+      motivation: 3,
+      stress: 2,
+      mood: 2,
+      fromLifeMirror: { energy: AFTERNOON, sleep: MORNING, mood: MORNING },
     });
   });
 
@@ -97,20 +126,47 @@ describe('the check-in with Life Mirror’s', () => {
     expect(chosen('Soreness')).toBe('Sore');
     expect(screen.queryByTestId('from-life-mirror-energy')).toBeNull();
     expect(screen.getByTestId('from-life-mirror-sleep')).toHaveTextContent(clock(MORNING));
+    expect(chosen('Stress')).toBe('Wound tight');
+    expect(screen.getByTestId('from-life-mirror-stress')).toHaveTextContent(clock(AFTERNOON));
+    // Told without a mood: none shown, Life Mirror's of now not either.
+    expect(screen.queryByRole('radiogroup', { name: 'Mood' })).toBeNull();
+  });
+
+  it('with the switch off, shows and tells neither its stress nor its mood', async () => {
+    const told: Readiness = {
+      ...asked,
+      energy: 3,
+      sleep: 2,
+      motivation: 3,
+      stress: 4,
+      mood: 2,
+      fromLifeMirror: { sleep: MORNING, stress: AFTERNOON, mood: MORNING },
+    };
+    const onSubmit = show(told, null, false);
+    expect(screen.queryByRole('radiogroup', { name: 'Stress' })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Mood' })).toBeNull();
+    await userEvent.setup().click(screen.getByTestId('readiness-apply'));
+    expect(onSubmit).toHaveBeenCalledWith({
+      ...asked,
+      energy: 3,
+      sleep: 2,
+      motivation: 3,
+      fromLifeMirror: { sleep: MORNING },
+    });
   });
 
   it('asks as always with nothing from Life Mirror', async () => {
     const onSubmit = show(null, null);
     expect(chosen('Energy')).toBe('Okay');
     expect(screen.queryByTestId('from-life-mirror-energy')).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Stress' })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Mood' })).toBeNull();
     await userEvent.setup().click(screen.getByTestId('readiness-apply'));
     expect(onSubmit).toHaveBeenCalledWith({
+      ...asked,
       energy: 3,
-      soreness: 2,
       sleep: 3,
       motivation: 3,
-      jointDiscomfort: [],
-      timePressure: false,
     });
   });
 });

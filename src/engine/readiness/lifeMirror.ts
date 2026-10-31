@@ -22,13 +22,15 @@ export type LifeMirrorPrefill = Partial<Record<Filled, FilledValue>>;
 
 /**
  * Life Mirror's night on this app's sleep scale (docs/research/readiness-and-soreness.md, item 48):
- * the hours carry it, step for step (under 5 h Poor, 5-6 Short, 6-7 Okay, 7-8 Good, over 8 Great;
- * Craven 2022, 35708888: the cost of a short night is in its hours), and a broken or rough night
- * takes a step off (judgement). With the hours not asked, the quality alone; with neither, none.
+ * the hours carry it (under 5 h Poor, 5-6 Short, 6-7 Okay, 7 or more Good; Craven 2022, 35708888:
+ * the cost of a short night is in its hours, and past 7 more adds little, Life Mirror's own "good"
+ * being toward 7 to 8); Great only for a deep night of 7 or more, and a broken or rough night a
+ * step lower (judgement). With the hours not asked, the quality alone; with neither, none.
  */
 export function sleepFrom(hours?: number, quality?: number): number | undefined {
   if (hours === undefined) return quality;
-  return quality !== undefined && quality <= 2 ? Math.max(1, hours - 1) : hours;
+  const step = Math.min(hours, 4) + (hours >= 4 && quality === 5 ? 1 : 0);
+  return quality !== undefined && quality <= 2 ? Math.max(1, step - 1) : step;
 }
 
 /** The value one reading gives from the latest of these blocks that holds it. */

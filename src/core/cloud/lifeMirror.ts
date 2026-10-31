@@ -42,8 +42,24 @@ const COLUMN: Record<LifeMirrorReading, string> = {
   motivation: 'motivation',
 };
 
+/**
+ * One value taken out of a body, and only of its type: a whole number for a reading, text for the
+ * block and the times. Anything else at the path (an object, a list) is NULL, so it never leaves
+ * the database whatever Life Mirror later keeps there (the review of item 48).
+ */
+const taken = (path: string, type: 'integer' | 'text', name: string) =>
+  `CASE WHEN json_type(body, '$.${path}') = '${type}' THEN json_extract(body, '$.${path}') END AS ${name}`;
+
+/** What the query takes out of each body: the block, its times and the readings, nothing else. */
+const TAKEN = [
+  taken('block', 'text', 'block'),
+  taken('completedAt', 'text', 'completed_at'),
+  taken('updatedAt', 'text', 'body_updated_at'),
+  ...LIFE_MIRROR_READINGS.map((reading) => taken(`answers.${reading}`, 'integer', COLUMN[reading])),
+].join(', ');
+
 /** The day's check-ins, each reading taken out of its body in the database; nothing else of it. */
-export const LIFE_MIRROR_QUERY = `SELECT updated_at, json_extract(body, '$.block') AS block, json_extract(body, '$.completedAt') AS completed_at, json_extract(body, '$.updatedAt') AS body_updated_at, ${LIFE_MIRROR_READINGS.map((reading) => `json_extract(body, '$.answers.${reading}') AS ${COLUMN[reading]}`).join(', ')} FROM records WHERE app = ? AND store = ? AND deleted = 0 AND day = ? AND json_valid(body)`;
+export const LIFE_MIRROR_QUERY = `SELECT updated_at, ${TAKEN} FROM records WHERE app = ? AND store = ? AND deleted = 0 AND day = ? AND json_valid(body)`;
 
 /** One block's check-in, as much of it as Workout Conductor may use. */
 export interface LifeMirrorBlock {

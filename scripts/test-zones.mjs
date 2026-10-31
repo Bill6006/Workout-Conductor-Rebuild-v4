@@ -25,6 +25,11 @@ const FILES = [
   'src/core/state/secondRebuiltPastMidnight.store.test.ts',
   'src/core/state/checkInCarried.store.test.ts',
   'src/engine/readiness/checkInPastMidnight.test.ts',
+  // Item 48: Life Mirror read from 04:00 on this device's day, and its readings against the
+  // lifter's own of the four weeks before today.
+  'src/core/state/lifeMirror.store.test.ts',
+  'src/features/today/lifeMirrorScreens.screens.test.tsx',
+  'src/engine/readiness/lifeMirror.test.ts',
 ];
 
 for (const { zone, offset } of ZONES) {

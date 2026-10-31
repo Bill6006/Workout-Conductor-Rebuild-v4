@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readCloudState } from '../cloud/cloudSync';
 import { LIFE_MIRROR_APP, LIFE_MIRROR_QUERY, LIFE_MIRROR_STORE } from '../cloud/lifeMirror';
+import { CLOUD_TOKEN_ID } from '../cloud/model';
 import { LIFE_MIRROR_LINK_ID } from '../validation/lifeMirrorLink';
 import { createDefaultLocations } from '../validation/location';
 import { createDefaultProfile } from '../validation/profile';
@@ -14,6 +16,16 @@ import { TEST_NOW, createTestStore } from '../../test/testStore';
  */
 
 const PRIVATE = 'SYNTHETIC-PRIVATE-NOTE';
+
+/**
+ * 09:00 on TEST_NOW's day in this device's zone: Life Mirror is read from 04:00, and TEST_NOW is
+ * before it in a zone far ahead of UTC (the review of item 48).
+ */
+const NINE = (() => {
+  const nine = new Date(TEST_NOW);
+  nine.setHours(9, 0, 0, 0);
+  return nine.toISOString();
+})();
 
 /** Today's morning check-in in Life Mirror's rows, on this device's day. */
 function seedMorning(cloud: FakeCloud, now: string) {
@@ -36,7 +48,7 @@ function seedMorning(cloud: FakeCloud, now: string) {
 }
 
 async function lifter(options: { now?: string; on?: boolean; token?: boolean; url?: string } = {}) {
-  const now = options.now ?? TEST_NOW;
+  const now = options.now ?? NINE;
   const cloud = createFakeCloud();
   const handle = createTestStore({
     now: () => now,
@@ -79,11 +91,11 @@ describe('today’s Life Mirror check-in', () => {
   it('is read with the switch on: the readings it may use, each with its time', async () => {
     const handle = await lifter();
     expect(await handle.store.lifeMirrorPrefill()).toEqual({
-      energy: { value: 4, at: TEST_NOW },
-      sleep: { value: 2, at: TEST_NOW },
-      motivation: { value: 3, at: TEST_NOW },
-      stress: { value: 4, at: TEST_NOW },
-      mood: { value: 2, at: TEST_NOW },
+      energy: { value: 4, at: NINE },
+      sleep: { value: 2, at: NINE },
+      motivation: { value: 3, at: NINE },
+      stress: { value: 4, at: NINE },
+      mood: { value: 2, at: NINE },
     });
   });
 
@@ -102,7 +114,7 @@ describe('today’s Life Mirror check-in', () => {
       ).store.lifeMirrorPrefill(),
       'another database',
     ).toBeNull();
-    const early = new Date(TEST_NOW);
+    const early = new Date(NINE);
     early.setHours(3, 30, 0, 0);
     expect(
       await (await lifter({ now: early.toISOString() })).store.lifeMirrorPrefill(),
@@ -116,6 +128,20 @@ describe('today’s Life Mirror check-in', () => {
       return execute(statement);
     };
     expect(await failing.store.lifeMirrorPrefill(), 'the read failed').toBeNull();
+  });
+
+  it('heals a lost copy of the token as the app’s opening does: the next sync walks everything', async () => {
+    const handle = await lifter();
+    await handle.store.flushPendingWork();
+    const db = await handle.store.getDatabase();
+    const before = await readCloudState(db);
+    // The database's copy gone, the phone's local copy kept: the read heals it.
+    await db.delete('cloud', CLOUD_TOKEN_ID);
+    expect(await handle.store.lifeMirrorPrefill()).not.toBeNull();
+    expect(await db.get('cloud', CLOUD_TOKEN_ID)).toMatchObject({ value: 'test-token' });
+    const after = await readCloudState(db);
+    expect(after.epoch).toBe(before.epoch + 1);
+    expect(after.cursor).toBeNull();
   });
 
   it('leaves nothing private of a check-in anywhere: told, saved and kept', async () => {
@@ -132,14 +158,14 @@ describe('today’s Life Mirror check-in', () => {
         timePressure: false,
         stress: filled!.stress!.value,
         mood: filled!.mood!.value,
-        fromLifeMirror: { energy: TEST_NOW, sleep: TEST_NOW, stress: TEST_NOW, mood: TEST_NOW },
+        fromLifeMirror: { energy: NINE, sleep: NINE, stress: NINE, mood: NINE },
       },
     });
     expect(result?.ok).toBe(true);
     expect(handle.store.getSnapshot().session!.constraints.readiness).toMatchObject({
       stress: 4,
       mood: 2,
-      fromLifeMirror: { energy: TEST_NOW },
+      fromLifeMirror: { energy: NINE },
     });
     expect(JSON.stringify(handle.store.getSnapshot())).not.toContain(PRIVATE);
     const db = await handle.store.getDatabase();

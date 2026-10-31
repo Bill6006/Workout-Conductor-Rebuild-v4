@@ -61,8 +61,10 @@ export function TodayScreen() {
   const today = useTodayWorkout();
   const [selected, setSelected] = useState<Selection | null>(null);
   const [checkingIn, setCheckingIn] = useState(false);
-  // Item 48: today's Life Mirror check-in, read as the check-in opens.
-  const lifeMirror = useLifeMirrorPrefill(checkingIn);
+  // Item 48: today's Life Mirror check-in, read as the check-in opens with nothing told today
+  // (the review of item 48: a check-in told stands over it, so nothing is read for it).
+  const lifeMirror = useLifeMirrorPrefill(checkingIn && !today?.session.constraints.readiness);
+  const lifeMirrorOn = useAppSelector((state) => state.lifeMirrorLink.on);
   const [choosingPlace, setChoosingPlace] = useState(false);
   const coach = useCoach();
   // "Longer would help" beside the length control (Maintenance 34).
@@ -301,7 +303,7 @@ export function TodayScreen() {
       <Card eyebrow="Readiness" title={readiness ? 'Checked in for today' : 'Quick check-in'}>
         <p className={styles.body} data-testid="readiness-summary">
           {readiness
-            ? `Energy ${readiness.energy}/5 · soreness ${readiness.soreness}/5 · sleep ${readiness.sleep}/5 · motivation ${readiness.motivation}/5${illnessOf(readiness) === 'head' ? ' · head cold' : illnessOf(readiness) === 'body' ? ' · fever or aches' : ''}${readiness.jointDiscomfort.length ? ` · ${readiness.jointDiscomfort.join(', ')} discomfort` : ''}${readiness.timePressure ? ' · short on time' : ''}.`
+            ? `Energy ${readiness.energy}/5 · soreness ${readiness.soreness}/5 · sleep ${readiness.sleep}/5 · motivation ${readiness.motivation}/5${readiness.stress !== undefined ? ` · stress ${readiness.stress}/5` : ''}${readiness.mood !== undefined ? ` · mood ${readiness.mood}/5` : ''}${illnessOf(readiness) === 'head' ? ' · head cold' : illnessOf(readiness) === 'body' ? ' · fever or aches' : ''}${readiness.jointDiscomfort.length ? ` · ${readiness.jointDiscomfort.join(', ')} discomfort` : ''}${readiness.timePressure ? ' · short on time' : ''}.`
             : 'Thirty seconds on how you feel, your joints and your time. Low answers change what the app expects of your first sets; a cold, a sore joint or little time change the plan.'}
           {coach ? ` Fatigue ${coach.fatigue.level}: ${coach.fatigue.evidence[0]}` : ''}
         </p>
@@ -322,6 +324,7 @@ export function TodayScreen() {
         open={checkingIn}
         initial={readiness}
         lifeMirror={lifeMirror}
+        lifeMirrorOn={lifeMirrorOn}
         onClose={() => setCheckingIn(false)}
         onSubmit={(next) => {
           setCheckingIn(false);

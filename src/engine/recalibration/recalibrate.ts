@@ -4527,11 +4527,12 @@ export function lowCheckIn(
   nowIso: string,
 ): boolean {
   if (readiness === null) return false;
+  // Life Mirror's motivation is a weak hint (item 48): "the pull to do things", not training's,
+  // so low it never blocks the check on its own (the review of item 48).
+  const lowMotivation =
+    readiness.motivation <= 2 && readiness.fromLifeMirror?.motivation === undefined;
   const lowOrSore =
-    readiness.energy <= 2 ||
-    readiness.sleep <= 2 ||
-    readiness.motivation <= 2 ||
-    readiness.soreness >= 4;
+    readiness.energy <= 2 || readiness.sleep <= 2 || lowMotivation || readiness.soreness >= 4;
   const read = readCheckIn(readiness, history, nowIso);
   return lowOrSore || read.lowered || read.illness !== null;
 }
@@ -5706,7 +5707,11 @@ function execute(request: RecalibrationRequest, scope: RecalibrationScope, layer
         read.illness === null &&
         read.worse.length === 0 &&
         readiness.soreness <= 3 &&
-        CHECK_IN_ITEMS.every((item) => readiness[item] >= 3);
+        CHECK_IN_ITEMS.every((item) => readiness[item] >= 3) &&
+        // Life Mirror's own where they came (item 48): stress no heavier than its middle, mood no
+        // lower (the review of item 48: "Feeling good" beside a crushing stress).
+        (readiness.stress === undefined || readiness.stress <= 3) &&
+        (readiness.mood === undefined || readiness.mood >= 3);
       const checked = good ? 'Feeling good' : 'Checked in';
       // Short on time asks for 45 minutes, never longer than a catch-up's own shorter length (the
       // second review of round M).

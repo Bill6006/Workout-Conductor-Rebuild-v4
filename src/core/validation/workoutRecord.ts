@@ -1,4 +1,4 @@
-import { FILLED } from '../../engine/readiness/lifeMirror';
+import { FromLifeMirrorSchema } from './lifeMirrorLink';
 import { z } from 'zod';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
@@ -167,7 +167,7 @@ export const WorkoutRecordSchema = z.looseObject({
       // and one this copy cannot read is none.
       stress: z.number().int().min(1).max(5).optional().catch(undefined),
       mood: z.number().int().min(1).max(5).optional().catch(undefined),
-      fromLifeMirror: z.partialRecord(z.enum(FILLED), z.iso.datetime()).optional().catch(undefined),
+      fromLifeMirror: FromLifeMirrorSchema,
     })
     .nullable()
     .default(null),

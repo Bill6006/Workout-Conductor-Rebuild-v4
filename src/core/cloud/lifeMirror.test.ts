@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createFakeCloud } from '../../test/fakeCloud';
+import type { CloudClient } from './model';
 import {
   LIFE_MIRROR_APP,
   LIFE_MIRROR_QUERY,
@@ -51,24 +52,28 @@ describe('the question put to the shared database', () => {
   it('asks for the approved readings alone, of Life Mirror’s check-ins of the day, not deleted', () => {
     const parts = /^SELECT (.+) FROM records WHERE (.+)$/.exec(LIFE_MIRROR_QUERY);
     expect(parts).not.toBeNull();
-    const columns = parts![1]!.split(/, (?=json_extract|updated_at)/);
+    const columns = parts![1]!.split(/, (?=CASE|json_extract|updated_at)/);
     expect(columns[0]).toBe('updated_at');
+    // Each value only of its type (the review of item 48): a whole number, or text.
     const paths = columns.slice(1).map((column) => {
-      const read = /^json_extract\(body, '\$\.([\w.]+)'\) AS \w+$/.exec(column);
+      const read =
+        /^CASE WHEN json_type\(body, '\$\.([\w.]+)'\) = '(integer|text)' THEN json_extract\(body, '\$\.\1'\) END AS \w+$/.exec(
+          column,
+        );
       expect(read, column).not.toBeNull();
-      return read![1];
+      return `${read![1]} ${read![2]}`;
     });
     expect(paths.sort()).toEqual(
       [
-        'block',
-        'completedAt',
-        'updatedAt',
-        'answers.energy',
-        'answers.mood',
-        'answers.stress',
-        'answers.sleepHours',
-        'answers.sleepQuality',
-        'answers.motivation',
+        'block text',
+        'completedAt text',
+        'updatedAt text',
+        'answers.energy integer',
+        'answers.mood integer',
+        'answers.stress integer',
+        'answers.sleepHours integer',
+        'answers.sleepQuality integer',
+        'answers.motivation integer',
       ].sort(),
     );
     expect(parts![2]).toBe(
@@ -106,6 +111,62 @@ describe('Life Mirror’s check-ins, read from the shared database', () => {
         at: '2026-09-02T11:40:00.000Z',
         readings: { energy: 4, mood: 3, stress: 2, sleepHours: 2, sleepQuality: 4, motivation: 3 },
       },
+    ]);
+  });
+
+  it('bring back nothing kept where a reading or a time should be, whatever it is', async () => {
+    // Life Mirror's shapes may change: an object at a reading's place stays in the database.
+    const cloud = createFakeCloud();
+    cloud.seed(
+      checkIn('1', {
+        block: { name: 'morning', note: 'SYNTHETIC-PRIVATE-BLOCK' },
+        completedAt: { at: '2026-09-02T11:40:00.000Z', note: 'SYNTHETIC-PRIVATE-TIME' },
+        updatedAt: ['SYNTHETIC-PRIVATE-LIST'],
+        answers: {
+          energy: { value: 4, note: 'SYNTHETIC-PRIVATE-READING' },
+          mood: 'SYNTHETIC-PRIVATE-TEXT',
+          stress: true,
+          motivation: 3,
+        },
+      }),
+    );
+    const raw = await cloud.client.execute({
+      sql: LIFE_MIRROR_QUERY,
+      args: [LIFE_MIRROR_APP, LIFE_MIRROR_STORE, DAY],
+    });
+    expect(JSON.stringify(raw.rows)).not.toContain('SYNTHETIC-PRIVATE');
+    expect(raw.rows[0]).toMatchObject({
+      block: null,
+      completed_at: null,
+      body_updated_at: null,
+      energy: null,
+      mood: null,
+      stress: null,
+      motivation: 3,
+    });
+  });
+
+  it('read each row on their own terms, whatever the database answers', async () => {
+    // The query's type check keeps a fraction in the database; the read never leans on it.
+    const client: CloudClient = {
+      execute: async () => ({
+        rows: [
+          {
+            updated_at: '2026-09-02T11:00:00.000Z',
+            block: 'morning',
+            completed_at: null,
+            body_updated_at: '2026-09-02T11:41:00.000Z',
+            energy: 2.5,
+            mood: 3,
+          },
+        ],
+        rowsAffected: 0,
+      }),
+      batch: async () => [],
+      close: () => undefined,
+    };
+    expect(await readLifeMirrorDay(client, DAY)).toEqual([
+      { block: 'morning', at: '2026-09-02T11:41:00.000Z', readings: { mood: 3 } },
     ]);
   });
 

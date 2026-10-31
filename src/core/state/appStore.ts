@@ -5500,6 +5500,9 @@ export class AppStore {
     try {
       const db = await this.getDatabase();
       const resolved = await resolveToken(db, this.storage, now);
+      // A copy of the token healed here may have lost more: the next sync walks everything, as
+      // when the app opens (the review of item 48).
+      if (resolved.recover) await restartPull(db).catch(() => undefined);
       const url = await resolveCloudUrl(db, this.storage, now);
       if (!resolved.token || url !== DEFAULT_CLOUD_URL) return null;
       const client = await withinBound(this.cloudClientFor(resolved.token, url));

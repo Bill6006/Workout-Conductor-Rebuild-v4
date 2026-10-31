@@ -174,20 +174,36 @@ export function createFakeCloud(): FakeCloud {
         }));
       return { rows, rowsAffected: 0 };
     }
-    if (sql.startsWith('SELECT updated_at, json_extract(body')) {
+    if (/^SELECT updated_at, (?:CASE WHEN json_type\(body|json_extract\(body)/.test(sql)) {
       // Life Mirror's check-ins (item 48): each column the query names taken out of the body, as
       // SQLite's json_extract does (an object as its JSON text, true and false as 1 and 0, nothing
-      // as NULL), and a body that is not JSON skipped, as json_valid skips it. Nothing else of a
-      // body is returned.
+      // as NULL), a column guarded by its json_type NULL where the type differs (SQLite's names,
+      // as far as JSON.parse keeps them: 4.0 reads as an integer here), and a body that is not
+      // JSON skipped, as json_valid skips it. Nothing else of a body is returned.
       const [app, store, day] = [text(args[0]), text(args[1]), text(args[2])];
-      const columns = [...sql.matchAll(/json_extract\(body, '\$\.([\w.]+)'\) AS (\w+)/g)].map(
-        (match) => ({ path: (match[1] as string).split('.'), name: match[2] as string }),
-      );
+      const columns = [
+        ...sql.matchAll(
+          /(?:CASE WHEN json_type\(body, '\$\.([\w.]+)'\) = '(\w+)' THEN )?json_extract\(body, '\$\.([\w.]+)'\)(?: END)? AS (\w+)/g,
+        ),
+      ].map((match) => ({
+        typed:
+          match[1] === undefined ? null : { path: match[1].split('.'), type: match[2] as string },
+        path: (match[3] as string).split('.'),
+        name: match[4] as string,
+      }));
       const extracted = (value: unknown): CloudValue => {
         if (value === undefined || value === null) return null;
         if (typeof value === 'boolean') return value ? 1 : 0;
         if (typeof value === 'object') return JSON.stringify(value);
         return value as CloudValue;
+      };
+      const typeOf = (value: unknown): string | null => {
+        if (value === undefined) return null;
+        if (value === null) return 'null';
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        if (typeof value === 'number') return Number.isInteger(value) ? 'integer' : 'real';
+        if (typeof value === 'string') return 'text';
+        return Array.isArray(value) ? 'array' : 'object';
       };
       const rows = [...records.values()]
         .filter(
@@ -200,8 +216,7 @@ export function createFakeCloud(): FakeCloud {
           } catch {
             return [];
           }
-          const read: Record<string, unknown> = { updated_at: row.updated_at };
-          for (const { path, name } of columns) {
+          const at = (path: readonly string[]): unknown => {
             let value: unknown = body;
             for (const part of path) {
               value =
@@ -209,7 +224,12 @@ export function createFakeCloud(): FakeCloud {
                   ? (value as Record<string, unknown>)[part]
                   : undefined;
             }
-            read[name] = extracted(value);
+            return value;
+          };
+          const read: Record<string, unknown> = { updated_at: row.updated_at };
+          for (const { typed, path, name } of columns) {
+            read[name] =
+              typed === null || typeOf(at(typed.path)) === typed.type ? extracted(at(path)) : null;
           }
           return [read];
         });

@@ -65,20 +65,25 @@ _Added 2026-10-31 for item 48. EB = evidence-based, PJ = product judgement._
 
 - **The night.** Life Mirror asks hours (under 5, 5-6, 6-7, 7-8, over 8) and quality (Broken,
   Rough, Fair, Sound, Deep); this app's sleep runs Poor, Short, Okay, Good, Great.
-  - The hours carry it, step for step: the cost of a short night is in its hours, small and mostly
-    for the lower body and for repeated short nights (Craven 2022 35708888; Reilly 1994 8112265;
-    Knowles 2018 29422383). EB for the direction; the step-for-step match is PJ.
-  - A broken or rough night takes a step off: self-reported sleep tracks training load and recovery
-    as a questionnaire item (Saw 2016 26423706), but no study sets its size. PJ.
+  - The hours carry it up to 7: under 5 Poor, 5-6 Short, 6-7 Okay, 7 or more Good. The cost of a
+    short night is in its hours, small and mostly for the lower body and for repeated short nights
+    (Craven 2022 35708888; Reilly 1994 8112265; Knowles 2018 29422383). EB for the direction; the
+    steps are PJ. Past 7 hours there is no short-night cost left to show, so more hours alone never
+    make a night Great (the review of item 48; PJ).
+  - Great only for a deep night (Deep) of 7 hours or more, and a broken or rough night a step lower:
+    self-reported sleep tracks training load and recovery as a questionnaire item (Saw 2016
+    26423706), but no study sets its size. PJ.
   - With the hours not asked (a retired reading or a short check-in), the quality alone. PJ.
 - **Stress and mood** join energy, sleep and motivation against the lifter's own four weeks, never
   the scale's middle, since this app does not ask them and a person's baseline is what the
   evidence compares against (Hopkins 2000 10907753; life stress slows recovery, Stults-Kolehmainen
   2014 24343323; mental fatigue costs reps, Solon-Junior 2026 42168782). Stress is worse above
   its usual. They act as the others do: two items clearly worse lower what the app expects of the
-  first sets, never the plan.
+  first sets, never the plan. Shown on the check-in in Life Mirror's words wherever it gave them,
+  labelled and changeable, and "Feeling good" needs them at their middle or better, as the others
+  (the review of item 48; PJ).
 - **Motivation** stays a weak hint: Life Mirror asks "the pull to do things", not training. It is
   one item among five and never acts alone (single items are not validated; Jeffries 2020
-  32957081).
+  32957081): low on its own it keeps neither the reserve check off the day nor a set off the plan.
 - **Uncertainty:** the night's conversion and the stress threshold are judgement; the logs will show
   whether the lowered expectation follows the first sets.
