@@ -13,7 +13,7 @@ _Last updated: 2026-10-31_
 | Phase gate | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 37 YELLOW (custom equipment presets, `docs/reports/maintenance-37.md`). Maintenance 36 YELLOW (the schedule watch, `docs/reports/maintenance-36.md`). Maintenance 35 YELLOW (item 48, Life Mirror's daily check-in, `docs/reports/maintenance-35.md`). Maintenance 34 YELLOW (time intelligence, `docs/reports/maintenance-34.md`). The app chooses the day's workout YELLOW (2026-10-31, `docs/reports/catch-up-decision.md`). The harder-variation fix YELLOW (2026-10-31, `docs/reports/harder-variation-fix.md`). Maintenance 33 YELLOW (the recovery and readiness core). Maintenance 32 YELLOW (round N: item 11). Maintenance 31 YELLOW (round M: items 12, 32). Install the app and the launcher icon YELLOW (2026-10-24, `docs/reports/install-and-launcher-icon.md`). Maintenance 30 YELLOW (round L: items 6, 30, 31). Maintenance 29 YELLOW (round K: items 7, 8, 10, 14). Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
 | Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Work in progress | On the owner's word of 2026-10-31, each chunk reviewed, reverted, verified and shipped live before the next: the harder-variation fix, the catch-up decision, Maintenance 34 (time intelligence), Maintenance 35 (item 48, Life Mirror's daily check-in, behind a switch that stays off), Maintenance 36 (the schedule watch) and Maintenance 37 (custom equipment presets) live; next, the final reconciliation of the approved backlog and the one consolidated phone review |
+| Work in progress | On the owner's word of 2026-10-31, each chunk reviewed, reverted, verified and shipped live before the next: the harder-variation fix, the catch-up decision, Maintenance 34 (time intelligence), Maintenance 35 (item 48, Life Mirror's daily check-in, behind a switch that stays off), Maintenance 36 (the schedule watch) and Maintenance 37 (custom equipment presets) live, and the approved backlog reconciled (`docs/reports/backlog-reconciliation.md`): every agreed item is live. Next: the owner's one consolidated phone review (`docs/reports/consolidated-phone-review.md`) |
 | Latest commit | `696d587` Revert tools: Maintenance 37's run, its entries settled. Before it: `5ba2575` Maintenance 37: the review's fixes, and what the revert run asked for; `90f160c` Maintenance 37: custom equipment presets |
 | Latest deployment | `696d587` deployed by Deploy Pages run 41246882231 (success), its checks as the branch's CI run 41245170228: unit 3909 passed + 5 skipped by design, the browser suite 443 passed + 14 skipped by design. Live marker `shortCommit` `696d587`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed. Before it: `8a4292d`, run 41239957729 |
 | Test totals | Unit: 3909 passed + 5 skipped by design (648 files), and the day rules in two more zones; in UTC in CI. Browser/mobile: 443 passed + 14 skipped by design locally (`npm run verify`), in UTC on a day the schedule does not tick, and in CI. Reverts, every table on the final code, every entry caught: M23 to M26 1,190, M27 193, M28 81 (UTC), M29 32, M30 121, M31 347, M32 322, M33 170, the install button and icons 54, the harder-variation fix 24, the catch-up decision 9, Maintenance 34 136, item 48 64, Maintenance 36 58, Maintenance 37 32 (`docs/reports/maintenance-31.md`, The complete revert run) |
@@ -29,7 +29,8 @@ not a rule until the evidence backs it. Product and screen choices follow ordina
 owner, 2026-10-09).
 
 - None: every agreed item is live. The custom equipment presets, the last, are live in
-  Maintenance 37 (below).
+  Maintenance 37 (below). Item by item, with the two things left for the owner to settle:
+  `docs/reports/backlog-reconciliation.md`.
 
 The owner's answers to the proposal's five decisions and item 11's seven questions (2026-10-17) are
 in the reports of the rounds that build them.
@@ -75,8 +76,9 @@ Item 48, not approved on 2026-10-09, came back in scope on 2026-10-11 and is liv
 ## Waiting for the owner's phone acceptance
 
 The owner, 2026-10-11: no gate pauses the agreed work, and none is GREEN without the owner's review.
-Once every agreed item is live, one consolidated phone review closes all of these, without repeating
-what the owner has already passed:
+Every agreed item is live, and one consolidated phone review closes all of these without repeating
+what the owner has already passed: `docs/reports/consolidated-phone-review.md`, on build
+`696d587`. The gates it closes:
 
 - **Install the app, and the launcher icon** (2026-10-24): phone review 1 passed the install;
   phone review 2 (2026-10-25) saw the angled icon arrive as an update, in place. The fourth
@@ -757,7 +759,8 @@ Phase 7: [docs/screenshots/phase-7](docs/screenshots/phase-7) · Phase 6: [docs/
 
 ## Next concrete action
 
-Maintenance 34 (time intelligence), Maintenance 35 (item 48), Maintenance 36 (the schedule watch)
-and Maintenance 37 (custom equipment presets) are live: every agreed item is. Next, in the
-owner's order of 2026-10-31: the final reconciliation of the approved backlog, and the one
-consolidated phone review (Waiting for the owner's phone acceptance).
+Every agreed item is live, and the approved backlog is reconciled
+(`docs/reports/backlog-reconciliation.md`): nothing agreed is waiting, and two things wait for
+the owner's decision. Next: the owner's one consolidated phone review
+(`docs/reports/consolidated-phone-review.md`) on build `696d587`. Nothing more is built until the
+owner's word.

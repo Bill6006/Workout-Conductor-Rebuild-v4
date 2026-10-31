@@ -28,8 +28,10 @@ first:
   Pages run 41239957729; the live marker reads `8a4292d`. Live suite from the owner's machine: 438 passed + 19 skipped by design; one storage test on the 360 px project missed a line of the cloud card once after a page load and passed 3 of 3 alone, and the 10 PWA tests that wait on it were run after it (5 passed, 5 skipped by design).
 - **Live: `696d587`, custom equipment presets** (Maintenance 37, `docs/reports/maintenance-37.md`):
   Deploy Pages run 41246882231; the live marker reads `696d587`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed.
-- **Next, the final reconciliation** of the approved backlog, and the one consolidated phone
-  review.
+- **Done: the final reconciliation** (`docs/reports/backlog-reconciliation.md`): every agreed
+  item is live, and two things wait for the owner's decision.
+- **Next: the owner's one consolidated phone review** (`docs/reports/consolidated-phone-review.md`).
+  Stop here: nothing else is agreed, so build nothing more until the owner's word.
 - **Custom equipment presets, as the owner defined them (2026-10-31):** Home and Full gym stay built
   in and protected (no rename, no delete); unlimited custom presets, each a name and any combination
   of supported equipment, shown beside Home and Full gym when a place is set up or edited, and
@@ -319,10 +321,11 @@ and evidence status, not as scattered constants.
 - the Maintenance 30 Proposed items (a move's load at a place that does it another way; a loaded calf
   raise at home);
 - Maintenance 25's two Proposed storage protections;
-- Maintenance 21's Proposed 28;
+- Maintenance 21's Proposed 28 (built since, in Maintenance 22, section 28, GREEN);
 - anything else marked Proposed in the reports.
 
-**Before declaring the queue done,** reconcile it: every item in this table, every item in
+**Before declaring the queue done** (done on 2026-10-31: `docs/reports/backlog-reconciliation.md`),
+reconcile it: every item in this table, every item in
 `PROJECT_STATUS.md`'s "Agreed and waiting", and the cloud prompt's list must be live, or named with
 the reason it is not.
 
@@ -373,7 +376,8 @@ The exact list is `PROJECT_STATUS.md`, "Waiting for the owner's phone acceptance
 - the older open review issues (Maintenance 21, 17, 16, 15, 14, 11, 10, 9, 8, 5, 4).
 
 Add every new round as it ships. When the whole approved queue is live, write **one consolidated,
-shortest-possible phone review**. It closes all of these without repeating tests the owner already
+shortest-possible phone review** (written on 2026-10-31: `docs/reports/consolidated-phone-review.md`).
+It closes all of these without repeating tests the owner already
 passed (Maintenance 26 is GREEN). Only the owner can check:
 - the real phone and the installed app's update;
 - vibration and the screen staying on;
