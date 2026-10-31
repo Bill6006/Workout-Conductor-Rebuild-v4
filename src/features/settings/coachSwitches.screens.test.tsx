@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { COACH_SWITCHES_ID } from '../../core/validation/coachSwitches';
+import { COACH_SWITCHES_ID, parseCoachSwitches } from '../../core/validation/coachSwitches';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
 import { Providers, TEST_NOW, createTestStore } from '../../test/testStore';
@@ -41,6 +41,14 @@ describe('the Coaching switches', () => {
         'true',
       );
     }
+  });
+
+  it('reads the schedule watch on in a record kept before it, and in one that does not say', () => {
+    // A record Maintenance 34's copy kept: no word of the schedule watch.
+    const before = { id: COACH_SWITCHES_ID, tooSoon: true, longer: false, goalsTime: true };
+    expect(parseCoachSwitches(before)).toMatchObject({ longer: false, scheduleWatch: true });
+    expect(parseCoachSwitches({ ...before, scheduleWatch: 'yes' })?.scheduleWatch).toBe(true);
+    expect(parseCoachSwitches({ ...before, scheduleWatch: false })?.scheduleWatch).toBe(false);
   });
 
   it('turn one kind off, kept, the others on', async () => {

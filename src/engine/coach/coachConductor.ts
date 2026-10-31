@@ -2667,8 +2667,10 @@ const andWords = (names: readonly string[]) =>
  * The schedule watch's one card (Maintenance 36; the approved proposal, part 2: "If it's clearly
  * worse than normal week-to-week noise, show one card with the old schedule one tap away. If not,
  * stay silent."): before a workout starts, the lifts down since the change, by about how much,
- * and the schedule before it one tap away. Not now keeps it away until what it found changes: its
- * source names the change and the lifts, so the same finding never comes back, and another does.
+ * and the schedule before it one tap away, under the card, never cut with the Why lines. Not now
+ * keeps it away for that change: its recommendation, the schedule before, is the same whatever lift
+ * falls or recovers since (the review of Maintenance 36). Below a same-day recovery card, which is
+ * about the workout on the screen.
  */
 function scheduleWatchSignals(input: CoachInput): CoachSignal[] {
   if (input.status !== 'preview' || input.switches?.scheduleWatch === false) return [];
@@ -2690,10 +2692,10 @@ function scheduleWatchSignals(input: CoachInput): CoachSignal[] {
       domain: 'recovery',
       headline: `${andWords(names)} down since the schedule changed`,
       why: [
-        `Your first sets since ${shortDay(finding.at)} against the weeks before, each against what it asked: ${andWords(falls)} under.`,
-        'Still under after three days or more without hard sets for them: more than a hard week.',
-        `The schedule before: ${plural(from.weeklyFrequency)} a week, on ${dayList(from.availableDays)}.`,
+        `Your first sets in the four weeks after the change on ${shortDay(finding.at)}: ${andWords(falls)} under the weeks before.`,
+        `Still under after ${RULES.watchEasierDays.value} days or more without hard sets for them: more than a hard week.`,
       ],
+      footnote: `The schedule before: ${plural(from.weeklyFrequency)} a week, on ${dayList(from.availableDays)}.`,
       action: {
         kind: 'schedule',
         weeklyFrequency: from.weeklyFrequency,
@@ -2702,11 +2704,8 @@ function scheduleWatchSignals(input: CoachInput): CoachSignal[] {
         label: 'Go back to it',
       },
       confidence: 'medium',
-      severity: 2,
-      source: `${WATCH_SOURCE}|${finding.at}|${finding.lifts
-        .map((lift) => lift.exerciseId)
-        .sort()
-        .join(',')}`,
+      severity: 1,
+      source: `${WATCH_SOURCE}|${finding.at}`,
       untilNew: true,
     },
   ];

@@ -17,6 +17,7 @@ import { interpretFatigue } from '../recovery/fatigue';
 import { generateWorkout } from '../workoutGenerator/generate';
 import {
   WATCH_SOURCE,
+  conductCoach,
   declineKey,
   gatherSignals,
   isDeclined,
@@ -27,9 +28,9 @@ import {
 
 /**
  * Maintenance 36, the schedule watch's card: before a workout starts, one card names the lifts down
- * since the change and the schedule before it, one tap away; never in a workout, never with its
- * switch off; Not now keeps it away until what it found changes. The lifter moved from three days
- * a week to five on Monday 7 September. Synthetic data only.
+ * since the change, with the schedule before it under the card, one tap away; never in a workout,
+ * never with its switch off; Not now keeps it away for that change. The lifter moved from three
+ * days a week to five on Monday 7 September. Synthetic data only.
  */
 
 const base = { ...createDefaultProfile('2026-08-01T12:00:00.000Z'), bodyweight: 185 };
@@ -74,10 +75,10 @@ describe('the schedule watch’s card', () => {
       'Barbell Bench Press and Back Squat down since the schedule changed',
     );
     expect(signal!.why).toEqual([
-      'Your first sets since Sep 7 against the weeks before, each against what it asked: Barbell Bench Press about 7% and Back Squat about 7% under.',
-      'Still under after three days or more without hard sets for them: more than a hard week.',
-      'The schedule before: 3 days a week, on Mon, Wed and Fri.',
+      'Your first sets in the four weeks after the change on Sep 7: Barbell Bench Press about 7% and Back Squat about 7% under the weeks before.',
+      'Still under after 3 days or more without hard sets for them: more than a hard week.',
     ]);
+    expect(signal!.footnote).toBe('The schedule before: 3 days a week, on Mon, Wed and Fri.');
     expect(signal!.action).toEqual({
       kind: 'schedule',
       weeklyFrequency: 3,
@@ -86,6 +87,8 @@ describe('the schedule watch’s card', () => {
       label: 'Go back to it',
     });
     expect(signal!.domain).toBe('recovery');
+    // Below a same-day "too soon" card (severity 2), which is about the workout on the screen.
+    expect(signal!.severity).toBe(1);
     // One of the approved proposal's new cards: the owner's card limits hold it (decision 5).
     expect(isNudge(signal!)).toBe(true);
   });
@@ -98,17 +101,27 @@ describe('the schedule watch’s card', () => {
     expect(card(input(DOWN, { switches: { tooSoon: false, goalsTime: false } }))).toBeDefined();
   });
 
-  it('stays away after Not now until what it found changes', () => {
+  it('keeps the schedule before on the card a lifter shown two Why lines sees', () => {
+    const shown = conductCoach(input())!;
+    expect(shown.signal.source).toBe(card(input())!.source);
+    expect(shown.signal.why).toHaveLength(2);
+    expect(shown.signal.footnote).toContain('Mon, Wed and Fri');
+  });
+
+  it('stays away after Not now for that change, whatever lift falls since', () => {
     const shown = card(input())!;
     const declines = {
       id: 'coach-declines' as const,
       declines: { [declineKey(shown)]: { count: 1, lastAt: WATCH_NOW } },
     };
-    // Weeks on, the same finding stays away.
+    // Weeks on, the same change's card stays away, a third lift down too.
     expect(isDeclined(declines, shown, '2026-10-30T12:00:00.000Z')).toBe(true);
-    // A third lift down too is another finding: it shows.
     const more = card(input({ ...DOWN, [ROW]: [8, 125, 2] }))!;
     expect(more.headline).toContain('Barbell Row');
-    expect(isDeclined(declines, more, WATCH_NOW)).toBe(false);
+    expect(isDeclined(declines, more, WATCH_NOW)).toBe(true);
+    // Another change, an hour later, is another card.
+    const later = new Date(Date.parse(MOVE.at) + 3_600_000).toISOString();
+    const other = card(input(DOWN, { scheduleMove: { ...MOVE, at: later } }))!;
+    expect(isDeclined(declines, other, WATCH_NOW)).toBe(false);
   });
 });

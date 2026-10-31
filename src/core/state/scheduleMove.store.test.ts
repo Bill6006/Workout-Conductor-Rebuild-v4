@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SCHEDULE_MOVE_ID } from '../validation/scheduleMove';
+import { SCHEDULE_MOVE_ID, parseScheduleMove } from '../validation/scheduleMove';
 import { createDefaultLocations } from '../validation/location';
 import { createDefaultProfile } from '../validation/profile';
 import { TEST_NOW, createTestStore } from '../../test/testStore';
@@ -47,6 +47,8 @@ describe('the schedule watch’s record', () => {
       at: when,
       from: { weeklyFrequency: before.weeklyFrequency, availableDays: before.availableDays },
       to: { weeklyFrequency: 5, availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'] },
+      // The default schedule was never set by hand: no time it was set.
+      since: null,
       watched: true,
     };
     expect(handle.store.getSnapshot().scheduleMove).toEqual(expected);
@@ -79,6 +81,23 @@ describe('the schedule watch’s record', () => {
     });
   });
 
+  it('is kept for a change of the days alone', async () => {
+    const handle = await lifter();
+    const profile = handle.store.getSnapshot().profile!;
+    const days = profile.schedule.availableDays.includes('sat')
+      ? (['mon', 'tue', 'thu'] as const)
+      : (['tue', 'thu', 'sat'] as const);
+    await handle.store.saveProfile({
+      ...profile,
+      schedule: { ...profile.schedule, availableDays: [...days] },
+    });
+    expect(handle.store.getSnapshot().scheduleMove).toMatchObject({
+      from: { availableDays: profile.schedule.availableDays },
+      to: { availableDays: [...days] },
+      watched: true,
+    });
+  });
+
   it('is not kept for a change of anything else', async () => {
     const handle = await lifter();
     const profile = handle.store.getSnapshot().profile!;
@@ -97,6 +116,20 @@ describe('the schedule watch’s record', () => {
     expect(handle.store.getSnapshot().scheduleMove).toBeNull();
     const db = await handle.store.getDatabase();
     expect(await db.get('meta', SCHEDULE_MOVE_ID)).toBeUndefined();
+  });
+
+  it('leaves a change alone where its flag is missing or does not read', () => {
+    const kept = {
+      id: SCHEDULE_MOVE_ID,
+      at: TEST_NOW,
+      from: { weeklyFrequency: 3, availableDays: ['mon', 'wed', 'fri'] },
+      to: { weeklyFrequency: 4, availableDays: ['mon', 'tue', 'thu', 'fri'] },
+    };
+    expect(parseScheduleMove({ ...kept, watched: true })?.watched).toBe(true);
+    expect(parseScheduleMove({ ...kept, watched: 'yes' })?.watched).toBe(false);
+    // A flag missing is the quiet side too: only another writer leaves it out.
+    expect(parseScheduleMove(kept)?.watched).toBe(false);
+    expect(parseScheduleMove({ ...kept, to: undefined })).toBeNull();
   });
 
   it('is never written over where the record kept does not read', async () => {

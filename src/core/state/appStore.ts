@@ -205,7 +205,7 @@ import {
   type ScheduleDays,
   type ScheduleMove,
 } from '../validation/scheduleMove';
-import { nextScheduleMove } from '../../engine/planning/scheduleWatch';
+import { nextScheduleMove, type WatchedSchedule } from '../../engine/planning/scheduleWatch';
 import { readLifeMirrorDay } from '../cloud/lifeMirror';
 import { lifeMirrorPrefill, type LifeMirrorPrefill } from '../../engine/readiness/lifeMirror';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
@@ -5515,7 +5515,7 @@ export class AppStore {
    */
   private async recordScheduleMove(
     before: ScheduleDays,
-    after: ScheduleDays,
+    after: WatchedSchedule,
     back: boolean,
   ): Promise<void> {
     const run = this.scheduleMoveQueue.then(async () => {

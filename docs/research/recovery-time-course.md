@@ -85,42 +85,58 @@ not, stay silent." Its numbers are in `src/engine/rules/ruleTable.ts` (`watch...
 the citations were checked again on PubMed on 2026-10-31.
 
 - **A change** is a change of the sessions a week or the days, from Settings or the coach's card.
-  The app keeps the last one: when, the schedule before, the schedule after. Two changes within a
-  week are one (PJ: the days are often set again while a week settles), and one undone within the
-  week is none.
-- **What is read:** each lift's first working set of each session, read as a max (the formula and
-  limits above) and against what it asked, as the first-set check reads it: the plan's own change
-  (a deload, a new range, a load step) lifted as asked is never a fall. Days ill or after a short
-  night are left out, as for the learned windows.
-- **The weeks:** the four weeks before the change against the weeks since (EB: about 5% detectable
-  with 4 sessions a side). Nothing is said in the first four weeks after a change, or after eight
-  (PJ: a later fall is no longer the change's). A side with fewer than 4 sessions of a lift runs to
-  eight weeks before; a lift with fewer than 4 on either side is not read.
-- **A fall** is the mean, over every pair of sessions, of how the set after did against the set
-  before, in logs (block means). It must clear z × e × √(1/n after + 1/n before), z = 1.645
-  (one-sided 95%: 4.7% at 4 and 4 with e = 4%). e is 4% (EB), or from ten sessions before the
-  change the lift's own spread around its trend, never under 4% (the research's PJ, with a floor:
-  a steady spread is not trusted to make the watch quicker to speak, while a wide one keeps a noisy
-  lifter from being told a fall the noise made).
-- **Still there after easier days:** the sets that came three days or more after the lift's muscles
-  last had hard sets (sets of 3 or fewer in reserve), alone against the weeks before, must clear
-  the same bar for their own count. A fall that clears after a weekend is a hard week passing, not
-  the schedule (EB direction: a six-day overload dip cleared in 3 days, 27093538; size PJ). With no
-  such sets the watch waits, and says nothing.
-- **Two lifts or more** must fall (PJ: one can be a niggle or a new variation). The muscle average
-  is not used: two lifts are the simpler and stricter test.
-- **A break** longer than three weeks around the change leaves the lift out: strength holds about
-  three weeks (McMaster 2013, 23529287), so the break, not the schedule, would explain a fall.
-- **The card** (before a workout starts, under the owner's card limits): the lifts and about how far
-  each fell, that they are still down after easier days, and the schedule before, with "Go back to
-  it". Not now keeps it away until what it found changes (another lift falls). The way back is a
-  change the watch leaves alone, so it never offers back the schedule that was falling. Settings,
-  Coaching, "After a schedule change" turns it off.
-- **Not built:** a stall check (it needs 8-12 weeks, above), and the muscle average.
-- **Uncertainty:** for a lifter steadier than 4% the watch errs to silence. It reads every session
-  from the fourth week to the eighth, so it looks more than once; the two lifts and the easier days
-  hold back most false alarms that brings. The easier-days rule waits on a lifter who never has
-  three days off a lift's muscles; a fall then goes unsaid.
+  The app keeps the last one: when, the schedule before, the schedule after, and when that one was
+  set. Two changes within a week are one (PJ: the days are often set again while a week settles),
+  and one undone within the week is none. A schedule set again since without a record of its own
+  leaves the watch nothing to compare.
+- **What is read:** the compound lifts' first working set of each session, read as a max as the
+  first-set check reads it (12 reps or fewer, 3 or fewer in reserve). Isolation lifts are left out:
+  their max reads poorly, and each lift read is one more chance of a coincidence (below). Where the
+  plan asked the same range and reserve of both sets compared, they are compared as lifted, whatever
+  the loads: a load the plan lowered after missed sets is the fall itself. Where it asked another
+  range or reserve (a deload week, a new split's range, a day's reserve), each is read against its
+  own ask, so the plan's own change lifted as asked is never a fall. Days ill or after a short night
+  are left out, as for the learned windows.
+- **The four weeks after against the weeks before** (EB: about 5% detectable with 4 sessions a side).
+  The weeks before are the four before the change, eight where four hold fewer than 4 sessions of a
+  lift; a lift with fewer than 4 on either side, or a break of more than three weeks around the
+  change (strength holds about three weeks, McMaster 2013, 23529287), is not read. The four weeks
+  after are read once, when they are over, and stay as read.
+- **A fall** is the mean, over every pair of sessions that reads, of how the set after did against
+  the set before, in logs (block means); its noise is e × √(1/n after + 1/n before) for the sets that
+  paired. e is 4% (EB), or from ten sessions before the change the lift's own spread around its
+  trend, never under 4% (the research's PJ, with a floor: a steady spread is not trusted to make the
+  watch quicker to speak, while a wide one keeps a noisy lifter from being told a fall the noise
+  made).
+- **Clearly worse than the noise:** the compound lifts read must fall together, their mean fall
+  beyond z × √(the sum of their noises squared) ÷ their number, z = 1.645 (one-sided 95%), and two or
+  more must each fall beyond z × their own noise (4.7% at 4 sessions a side). One test for the lifts
+  together holds the chance of a false finding the same however many lifts are read (the review of
+  Maintenance 36: with each lift tested alone, two coincidences among twenty lifts read were likely,
+  and a default rotation was told a false fall 44% of the time in simulation).
+- **Still there after easier days:** after the four weeks, each of those lifts' first set that came
+  three days or more after its muscles' last hard sets (sets of 3 or fewer in reserve), counted from
+  the day each session began, together still under the weeks before beyond their noise. Fresh sets,
+  after the four weeks: a fall that clears is a hard stretch passing, not the schedule (EB direction:
+  a six-day overload dip cleared in 3 days, 27093538; size PJ). With no such sets the watch waits,
+  and after eight weeks it says nothing.
+- **Measured in simulation** (`src/engine/planning/scheduleWatch.simulation.test.ts`), with the
+  research's noise, 4% a session, and the watch read daily from week 4 to week 8: a false finding
+  for 0 to 1.2% of 500 lifters (upper and lower body twice a week, full body three times, each lift
+  once a week, a fifth of the noise shared by the day, a stalled lifter, a 1% a month trend); a
+  lasting 8% fall in every lift found for 99.7 to 100% of 300 lifters, in the upper-body lifts
+  alone 98%, and a 6% fall twice a week 98%.
+- **The card** (before a workout starts, under the owner's card limits, below a same-day recovery
+  card): the lifts and about how far each fell, that they are still down after easier days, and,
+  under the card, never cut, the schedule before, with "Go back to it". Not now keeps it away for
+  that change: the schedule it offers is the same whatever lift falls or recovers since. The way
+  back is a change the watch leaves alone, so it never offers back the schedule that was falling.
+  Settings, Coaching, "After a schedule change" turns it off.
+- **Not built:** a stall check (it needs 8-12 weeks, above); the muscle average as a separate rule
+  (the lifts' mean fall is its place); matching the time of day (30704301): a change that moves the
+  sessions from evenings to mornings can read as a fall.
+- **Uncertainty:** for a lifter steadier than 4% the watch errs to silence. The easier-days rule
+  waits on a lifter who never has three days off a lift's muscles; a fall then goes unsaid.
 
 ## Owner questions
 1. "Too soon": warn, ease automatically, or block?

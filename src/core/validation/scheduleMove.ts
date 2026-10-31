@@ -27,10 +27,16 @@ export const ScheduleMoveSchema = z.looseObject({
   /** The schedule it made: the watch reads only while the schedule is still this one. */
   to: ScheduleDaysSchema,
   /**
-   * False for a change the watch leaves alone: the card's own way back, or a change undone within
-   * the week. A flag that does not read leaves it alone too, the quiet side.
+   * When that schedule was set, as the profile keeps it: a schedule set again since without a
+   * record of its own is not the one the record made (the review of Maintenance 36). None
+   * where the profile kept none; one that does not read matches no schedule.
    */
-  watched: z.boolean().catch(false).default(true),
+  since: z.iso.datetime().nullable().catch(null).default(null),
+  /**
+   * False for a change the watch leaves alone: the card's own way back, or a change undone within
+   * the week. A flag missing or that does not read leaves it alone too, the quiet side.
+   */
+  watched: z.boolean().catch(false).default(false),
 });
 
 export type ScheduleMove = z.infer<typeof ScheduleMoveSchema>;

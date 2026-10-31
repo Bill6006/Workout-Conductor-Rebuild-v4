@@ -641,7 +641,11 @@ export function liftReads(
   return lifts;
 }
 
-/** Calendar days since any of a lift's prime movers last had hard work before a session began. */
+/**
+ * Calendar days since any of a lift's prime movers last had hard work before a session began,
+ * from the day that work's session began, as the app counts a workout's day (the review of
+ * Maintenance 36: a session past midnight belongs to the day it began).
+ */
 function easierDaysBefore(
   exercise: CatalogExercise,
   first: FirstRead,
@@ -652,7 +656,7 @@ function easierDaysBefore(
     for (const item of index.windows.get(muscle) ?? []) {
       if (item.time >= first.start) break;
       if (latest === null || item.time > latest.time)
-        latest = { time: item.time, at: item.window.at };
+        latest = { time: item.time, at: item.record.startedAt };
     }
   }
   return latest === null ? null : localDaysBetween(latest.at, first.record.startedAt);

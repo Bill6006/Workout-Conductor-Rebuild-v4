@@ -1,3 +1,4 @@
+import { getExercise } from '../../catalog/exercises/catalog';
 import {
   SCHEDULE_MOVE_ID,
   scheduleMoved,
@@ -12,12 +13,11 @@ import { RULES } from '../rules/ruleTable';
 
 /**
  * The schedule watch (Maintenance 36; the approved proposal, part 2, docs/research/
- * recovery-time-course.md, Schedule watch): the weeks after a change of the sessions a week or the
- * days, set against the weeks before. Each lift's first sets after the change are read against its
- * first sets before, each set against what it asked (`againstEarlier`), so the plan's own change
- * lifted as asked is never a fall. Two lifts or more clearly under the weeks before, beyond
- * week-to-week noise, and still under after a few easier days, are a finding; anything less is
- * silence. Declines only: a stall cannot be told from noise in so few weeks.
+ * recovery-time-course.md, Schedule watch): the four weeks after a change of the sessions a week or
+ * the days, set against the weeks before, on the compound lifts' first sets. The lifts together
+ * clearly under the weeks before, beyond week-to-week noise, two or more of them each, and still
+ * under in their first sets after a few easier days once those four weeks are over: a finding.
+ * Anything less is silence. Declines only: a stall cannot be told from noise in so few weeks.
  */
 
 const DAY_MS = 86_400_000;
@@ -27,7 +27,7 @@ export interface WatchedLift {
   exerciseId: string;
   /** How far under, as a share: 0.06 is 6% under the weeks before. */
   fall: number;
-  /** Its first sets read before the change and after it. */
+  /** Its first sets read before the change and in the four weeks after it. */
   before: number;
   after: number;
 }
@@ -40,6 +40,9 @@ export interface ScheduleWatchFinding {
   lifts: WatchedLift[];
 }
 
+/** A schedule as the watch reads it: its sessions and days, and when they were last set. */
+export type WatchedSchedule = ScheduleDays & { since?: string | undefined };
+
 /**
  * The record a schedule change writes (`saved`, the one kept before it). The card's own way back is
  * never watched, so it never offers back the schedule that was falling. A change and another within
@@ -49,7 +52,7 @@ export interface ScheduleWatchFinding {
 export function nextScheduleMove(
   saved: ScheduleMove | null,
   before: ScheduleDays,
-  after: ScheduleDays,
+  after: WatchedSchedule,
   now: string,
   back: boolean,
 ): ScheduleMove {
@@ -58,37 +61,64 @@ export function nextScheduleMove(
     availableDays: [...schedule.availableDays],
   });
   const to = days(after);
-  if (back) return { id: SCHEDULE_MOVE_ID, at: now, from: days(before), to, watched: false };
+  const since = after.since ?? null;
+  if (back) return { id: SCHEDULE_MOVE_ID, at: now, from: days(before), to, since, watched: false };
   if (
     saved !== null &&
     saved.watched &&
     Date.parse(now) - Date.parse(saved.at) < RULES.watchMergeDays.value * DAY_MS
   ) {
-    return { ...saved, to, watched: scheduleMoved(saved.from, after) };
+    return { ...saved, to, since, watched: scheduleMoved(saved.from, after) };
   }
-  return { id: SCHEDULE_MOVE_ID, at: now, from: days(before), to, watched: true };
+  return { id: SCHEDULE_MOVE_ID, at: now, from: days(before), to, since, watched: true };
+}
+
+/** An ask's range and reserve, its load left out: an ask is `load|low-high|reserve`. */
+const shapeOf = (ask: string) => ask.slice(ask.indexOf('|') + 1);
+
+/**
+ * How one set did against an earlier one, as a share (0.92 is 8% under). Where the plan asked the
+ * same range and reserve of both, they are set against each other as lifted, whatever the loads: a
+ * load the plan lowered after missed sessions is the very fall the watch looks for, and one it
+ * raised, lifted, is none (the review of Maintenance 36). Where it asked another range or reserve (a
+ * deload week, a new split's range, a day's reserve), each is read against its own ask
+ * (`againstEarlier`). Null where one has an ask and the other none.
+ */
+export function watchShare(read: AskedRead, earlier: AskedRead): number | null {
+  if ((read.ask === null) !== (earlier.ask === null) || earlier.lifted <= 0) return null;
+  if (read.ask === null || shapeOf(read.ask) === shapeOf(earlier.ask as string)) {
+    return read.lifted / earlier.lifted;
+  }
+  return againstEarlier(read, earlier);
 }
 
 /**
  * How a lift's sets did against the sets before, as a share under (0.06 is 6% under): the mean over
- * every pair of how each did against each, in logs, so a block of sessions is set against a block
- * (block means). Null with no pair that reads.
+ * every pair that reads (`watchShare`), in logs, so a block of sessions is set against a block
+ * (block means); with the sets on each side that paired, which the noise is read for. Null with no
+ * pair that reads.
  */
 export function fallAgainst(
   after: readonly AskedRead[],
   before: readonly AskedRead[],
-): number | null {
+): { fall: number; after: number; before: number } | null {
   let sum = 0;
   let count = 0;
-  for (const read of after) {
-    for (const earlier of before) {
-      const share = againstEarlier(read, earlier);
-      if (share === null || share <= 0) continue;
+  const pairedAfter = new Set<number>();
+  const pairedBefore = new Set<number>();
+  after.forEach((read, at) => {
+    before.forEach((earlier, from) => {
+      const share = watchShare(read, earlier);
+      if (share === null || share <= 0) return;
       sum += Math.log(share);
       count += 1;
-    }
-  }
-  return count === 0 ? null : 1 - Math.exp(sum / count);
+      pairedAfter.add(at);
+      pairedBefore.add(from);
+    });
+  });
+  return count === 0
+    ? null
+    : { fall: 1 - Math.exp(sum / count), after: pairedAfter.size, before: pairedBefore.size };
 }
 
 /** The fall the noise could make: z × the session's error × √(1/n after + 1/n before). */
@@ -152,63 +182,128 @@ function brokenOff(reads: readonly LiftRead[]): boolean {
   return false;
 }
 
+/** A fall with its noise: the session's error × √(1/n after + 1/n before), for the sets paired. */
+interface Fall {
+  fall: number;
+  noise: number;
+}
+
 /**
- * The watch on the last change (`move`), read `now`: nothing in the first four weeks after it, or
- * after eight, or for a change it leaves alone, or once the schedule is no longer the one the change
- * made (`current`: changed since without a record, the watch has nothing to compare). Each lift with four first sets or more on each side
- * is read: its fall against the weeks before must clear the noise (`sessionError`), and so must the
- * fall of its sets after three days or more without hard sets for its muscles alone (still there
- * after easier days, not a hard week passing). A lift with a break longer than strength holds around
- * the change is not read: the break would explain a fall. Two lifts or more make a finding.
+ * Whether falls side by side clear the noise of their mean: the mean of the lifts' falls against
+ * z × √(the sum of their noises squared) ÷ their count. One test for the lifts together, however
+ * many are read (the review of Maintenance 36: two coincidences among twenty lifts read were likely).
+ */
+function clearsTogether(falls: readonly Fall[]): boolean {
+  const mean = falls.reduce((sum, item) => sum + item.fall, 0) / falls.length;
+  const noise = Math.sqrt(falls.reduce((sum, item) => sum + item.noise ** 2, 0)) / falls.length;
+  return mean > RULES.watchZ.value * noise;
+}
+
+/** A compound lift as the watch measured it over the four weeks after the change. */
+interface Measured extends Fall {
+  exerciseId: string;
+  before: readonly LiftRead[];
+  /** Its sets before and in the four weeks after that paired. */
+  pairedBefore: number;
+  pairedAfter: number;
+  error: number;
+  /** Its sets after those four weeks, oldest first. */
+  later: readonly LiftRead[];
+}
+
+/**
+ * The watch on the last change (`move`), read `now`, while the schedule is still the one it made
+ * (`current`, set when the record says: a schedule set again since without a record of its own
+ * leaves nothing to compare). Nothing after eight weeks, or for a change it leaves alone, and
+ * nothing before the four weeks after the change are over: it speaks only on sets after them.
+ *
+ * The compound lifts with four first sets or more that pair in the four weeks after the change and
+ * before it (the weeks before running to eight where four hold too few), and no break longer than
+ * strength holds around it, are each measured: the four weeks after against the weeks before,
+ * against the noise (`sessionError`). The four weeks are read once and stay as read: the lifts together must
+ * clear the noise of their mean, and two or more must each clear their own. Then, from fresh sets:
+ * each of those lifts' first set after the four weeks that came three days or more after its muscles
+ * last had hard sets, together still under beyond their noise. A fall that clears after easier days
+ * is a hard stretch passing, not the schedule.
  */
 export function scheduleWatch(
   move: ScheduleMove | null,
-  current: ScheduleDays,
+  current: WatchedSchedule,
   history: readonly WorkoutRecord[],
   now: string,
 ): ScheduleWatchFinding | null {
   if (move === null || !move.watched || scheduleMoved(move.to, current)) return null;
+  if ((move.since ?? null) !== (current.since ?? null)) return null;
   const at = Date.parse(move.at);
   const end = Date.parse(now);
   if (!Number.isFinite(at) || !Number.isFinite(end)) return null;
-  if (end - at < RULES.watchBlockDays.value * DAY_MS) return null;
   if (end - at > RULES.watchLongestDays.value * DAY_MS) return null;
-  const lifts: WatchedLift[] = [];
+  const blockEnd = at + RULES.watchBlockDays.value * DAY_MS;
+  const least = RULES.watchSessions.value;
+  const measured: Measured[] = [];
   for (const [exerciseId, reads] of liftReads(history)) {
+    // Compound lifts only: an isolation lift's max reads poorly, and every lift read is another
+    // chance of a coincidence (the review of Maintenance 36).
+    if (getExercise(exerciseId)?.compound !== true) continue;
     const before = readsBefore(reads, at);
     const after = reads.filter((read) => {
       const time = Date.parse(read.at);
-      return time > at && time <= end;
+      return time > at && time <= blockEnd;
     });
-    const least = RULES.watchSessions.value;
-    if (before.length < least || after.length < least) continue;
     if (brokenOff([...before, ...after])) continue;
-    const earlier = before.map((read) => read.read);
     const error = sessionError(before);
-    const fall = fallAgainst(
-      after.map((read) => read.read),
-      earlier,
+    const read = fallAgainst(
+      after.map((item) => item.read),
+      before.map((item) => item.read),
     );
-    if (fall === null || fall <= fallThreshold(after.length, before.length, error)) continue;
-    const easier = after.filter(
+    if (read === null || read.after < least || read.before < least) continue;
+    measured.push({
+      exerciseId,
+      fall: read.fall,
+      noise: fallThreshold(read.after, read.before, error) / RULES.watchZ.value,
+      before,
+      pairedBefore: read.before,
+      pairedAfter: read.after,
+      error,
+      later: reads.filter((item) => {
+        const time = Date.parse(item.at);
+        return time > blockEnd && time <= end;
+      }),
+    });
+  }
+  if (measured.length < RULES.watchLifts.value || !clearsTogether(measured)) return null;
+  // Two or more of them each clearly under: the sets after easier days below are read for those
+  // alone, and two or more must have one.
+  const falling = measured.filter((lift) => lift.fall > RULES.watchZ.value * lift.noise);
+  const still: Fall[] = [];
+  for (const lift of falling) {
+    const first = lift.later.find(
       (read) => read.easierDays === null || read.easierDays >= RULES.watchEasierDays.value,
     );
-    if (easier.length === 0) continue;
-    const still = fallAgainst(
-      easier.map((read) => read.read),
-      earlier,
+    if (!first) continue;
+    const read = fallAgainst(
+      [first.read],
+      lift.before.map((item) => item.read),
     );
-    if (still === null || still <= fallThreshold(easier.length, before.length, error)) continue;
-    lifts.push({ exerciseId, fall, before: before.length, after: after.length });
+    if (read === null) continue;
+    still.push({
+      fall: read.fall,
+      noise: fallThreshold(read.after, read.before, lift.error) / RULES.watchZ.value,
+    });
   }
-  if (lifts.length < RULES.watchLifts.value) return null;
-  lifts.sort((a, b) => b.fall - a.fall);
+  if (still.length < RULES.watchLifts.value || !clearsTogether(still)) return null;
+  falling.sort((a, b) => b.fall - a.fall);
   return {
     at: move.at,
     from: {
       weeklyFrequency: move.from.weeklyFrequency,
       availableDays: [...move.from.availableDays],
     },
-    lifts,
+    lifts: falling.map((lift) => ({
+      exerciseId: lift.exerciseId,
+      fall: lift.fall,
+      before: lift.pairedBefore,
+      after: lift.pairedAfter,
+    })),
   };
 }

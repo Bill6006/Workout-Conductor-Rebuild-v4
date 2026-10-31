@@ -33,7 +33,7 @@ const KINDS: readonly { kind: CoachSwitch; label: string; description: string }[
     kind: 'scheduleWatch',
     label: 'After a schedule change',
     description:
-      'A card when two lifts or more fall clearly in the weeks after a change of your days, with the schedule before it one tap away.',
+      'A card when your lifts fall clearly in the weeks after a change of your days or sessions a week, with the schedule before it one tap away.',
   },
 ];
 
