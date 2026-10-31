@@ -9,7 +9,7 @@ import type {
   RecalibrationTrigger,
   SessionConstraints,
 } from './types';
-import { allEntries, type GeneratedWorkout } from '../workout/types';
+import { allEntries, type GeneratedWorkout, type WorkoutEntry } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
 import { at, describeWorkout, profileOf, session } from '../../test/clockDays';
 
@@ -71,6 +71,17 @@ function unpinnedThenShorter(
   from: string,
   comfortId: string,
 ) {
+  return unpinnedThen(records, spec, from, comfortId, { type: 'duration', choice: 45 });
+}
+
+/** What comes in for comfort for `from`, pinned and unpinned, then `last`. */
+function unpinnedThen(
+  records: ReturnType<typeof session>[],
+  spec: CatchUpSpec,
+  from: string,
+  comfortId: string,
+  last: RecalibrationTrigger,
+) {
   const { plan, request } = dayOf(records, spec);
   const lift = allEntries(plan.blocks).find((entry) => entry.exerciseId === from);
   expect(lift, lifts(plan)).toBeDefined();
@@ -105,9 +116,10 @@ function unpinnedThenShorter(
   const loose = allEntries(unpinned.workout.blocks).find((entry) => entry.id === came!.id);
   expect(loose?.locked).toBe(false);
   expect(loose?.replacedFrom).toBe(from);
-  return succeeded(
-    recalibrate(request({ type: 'duration', choice: 45 }, unpinned.workout, unpinned.constraints)),
-  );
+  return {
+    before: loose!,
+    after: succeeded(recalibrate(request(last, unpinned.workout, unpinned.constraints))),
+  };
 }
 
 describe('what came in for comfort, pinned and unpinned, stays through a length picked', () => {
@@ -117,7 +129,7 @@ describe('what came in for comfort, pinned and unpinned, stays through a length 
       muscles: [{ muscle: 'traps', sets: 3, minRir: 1, why: 'behind' }],
       sitOut: [],
     };
-    const after = unpinnedThenShorter(
+    const { after } = unpinnedThenShorter(
       [session(at(3, 18), [['barbell-row', 3]])],
       spec,
       'dumbbell-shrug',
@@ -132,7 +144,7 @@ describe('what came in for comfort, pinned and unpinned, stays through a length 
   it('in a second workout with nothing behind: the farmer carry in for the wrist curl', () => {
     const sitOut: MuscleId[] = ['lats', 'upper-back', 'biceps'];
     const spec: CatchUpSpec = { kind: 'second', muscles: [], sitOut };
-    const after = unpinnedThenShorter(
+    const { after } = unpinnedThenShorter(
       [
         session(at(3, 18), [['leg-press', 3]]),
         session(at(9, 9), [
@@ -148,5 +160,33 @@ describe('what came in for comfort, pinned and unpinned, stays through a length 
       allEntries(after.workout.blocks).map((entry) => entry.exerciseId),
       `${after.summary.headline} ${lifts(after.workout)}`,
     ).toContain('farmer-carry');
+  });
+});
+
+describe('what came in for comfort, pinned and unpinned, takes the day’s settings', () => {
+  it('"Make it easier" eases the farmer carry in for the dumbbell shrug, as every lift not begun', () => {
+    const spec: CatchUpSpec = {
+      kind: 'catch-up',
+      muscles: [{ muscle: 'traps', sets: 3, minRir: 1, why: 'behind' }],
+      sitOut: [],
+    };
+    const { before, after } = unpinnedThen(
+      [session(at(3, 18), [['barbell-row', 3]])],
+      spec,
+      'dumbbell-shrug',
+      'farmer-carry',
+      { type: 'intensity', direction: 'easier' },
+    );
+    const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
+    const eased = allEntries(after.workout.blocks).find((entry) => entry.id === before.id)!;
+    const details = `${after.summary.headline} ${lifts(after.workout)}`;
+    expect(eased.exerciseId, details).toBe('farmer-carry');
+    // A set fewer, or a rep more in reserve, as "easier" asks of every lift not begun.
+    expect(
+      working(eased).length < working(before).length ||
+        Math.min(...working(eased).map((set) => set.targetRir)) >
+          Math.min(...working(before).map((set) => set.targetRir)),
+      details,
+    ).toBe(true);
   });
 });

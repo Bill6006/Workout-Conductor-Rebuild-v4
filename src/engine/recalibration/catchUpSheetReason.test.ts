@@ -104,6 +104,44 @@ describe('the swap sheet gives the refusal’s own reason, the fourteenth review
     expect(sheet.emptyReason).toMatch(/one set/i);
   });
 
+  it('the leg curl, its one alternative refused for the glutes: the sheet gives that reason', () => {
+    // The back squat gives the glutes their sets, so the Romanian deadlift for the leg curl would
+    // give them more than they lack. The one alternative ranked, the sheet says why it is refused,
+    // not the line for alternatives refused for reasons of their own.
+    const plan = generateWorkout({
+      profile: profileOf(),
+      location: gym,
+      history: records,
+      now: NOW,
+      duration: 'default',
+      constraints: { catchUp: lower },
+    });
+    const curl = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'leg-curl')!;
+    expect(curl, lifts(plan)).toBeDefined();
+    const ranked = rankAlternatives({
+      current: requireExercise(curl.exerciseId),
+      context: contextFor({ profile: profileOf(), location: gym }, constraints),
+      otherExercises: allEntries(plan.blocks)
+        .filter((other) => other.id !== curl.id)
+        .map((other) => requireExercise(other.exerciseId)),
+      plannedSets: { sets: curl.sets.length, restSeconds: curl.restSeconds },
+      limit: 1,
+    });
+    expect(ranked.candidates.map((candidate) => candidate.exercise.id)).toEqual([
+      'dumbbell-romanian-deadlift',
+    ]);
+    const sheet = swapsOffered(
+      ranked,
+      { constraints, completed: emptyCompleted(), history: records, timestamp: NOW },
+      plan,
+      curl,
+    );
+    expect(sheet.candidates).toEqual([]);
+    expect(sheet.emptyReason).toBe(
+      'Dumbbell Romanian Deadlift would give the glutes more than they lack today.',
+    );
+  });
+
   it('the back squat, two of its three sets done, "Uncomfortable": the headline names its one set left', () => {
     const plan = generateWorkout({
       profile: profileOf(),

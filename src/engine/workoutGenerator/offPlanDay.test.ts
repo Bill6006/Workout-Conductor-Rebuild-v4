@@ -879,6 +879,14 @@ describe('a slot two catch-up muscles share, the fourth review of round M', () =
     swaps: [{ from, to, setAt: at(1), until: at(30) }],
   });
 
+  /** Whether one lift of the plan works every one of these muscles directly. */
+  const oneForAll = (workout: GeneratedWorkout, muscles: string[]) =>
+    allEntries(workout.blocks).some((entry) =>
+      muscles.every((muscle) =>
+        (requireExercise(entry.exerciseId).primaryMuscles as string[]).includes(muscle),
+      ),
+    );
+
   it('a lasting swap to a lift for one of them waits: the glutes keep their sets', () => {
     const workout = build(
       both('quads', 'glutes'),
@@ -889,6 +897,10 @@ describe('a slot two catch-up muscles share, the fourth review of round M', () =
     expect(directSets(workout, 'quads'), lifts(workout)).toBeGreaterThan(0);
     // Before: "front-squat x3" alone, and "Why this workout" named the quads only.
     expect(directSets(workout, 'glutes'), lifts(workout)).toBeGreaterThan(0);
+    // The slot the two share keeps a lift for both (the leg press); the swap-in for the quads alone
+    // waits, rather than leaving the glutes to a lift of their own.
+    expect(oneForAll(workout, ['quads', 'glutes']), lifts(workout)).toBe(true);
+    expect(lifts(workout)).not.toContain('front-squat');
   });
 
   it('... and the forearms theirs, the hammer curl swapped for a dumbbell curl', () => {
@@ -900,6 +912,8 @@ describe('a slot two catch-up muscles share, the fourth review of round M', () =
     );
     expect(directSets(workout, 'biceps'), lifts(workout)).toBeGreaterThan(0);
     expect(directSets(workout, 'forearms'), lifts(workout)).toBeGreaterThan(0);
+    expect(oneForAll(workout, ['biceps', 'forearms']), lifts(workout)).toBe(true);
+    expect(lifts(workout)).not.toContain('dumbbell-curl');
   });
 
   it('a lift swapped out for weeks gives them no slot to share where it was the one for both', () => {

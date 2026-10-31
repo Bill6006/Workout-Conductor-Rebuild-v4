@@ -141,4 +141,57 @@ describe('what comes in for a lift begun counts its sets done, the twelfth revie
       `${shorter.summary.headline} ${lifts(after)} -> ${lifts(shorter.workout)}`,
     ).toEqual([]);
   });
+
+  it('a set added by hand to the back squat, two of its four done: what comes in counts the two', () => {
+    // Two sets owed, so the lift itself has sets for a stand-in, but the quads and the glutes have
+    // one set left of their three, which no lift takes: "Uncomfortable" stops it at its sets done.
+    // Counted without the squat's own sets done, a stand-in came in for the one set left.
+    const plan = generateWorkout({
+      profile: profileOf(),
+      location: gym,
+      history: records,
+      now: NOW,
+      duration: 'default',
+      constraints: { catchUp: spec },
+    });
+    const planned = allEntries(plan.blocks).find((entry) => entry.exerciseId === 'back-squat')!;
+    const added = succeeded(
+      recalibrate(request({ type: 'sets', entryId: planned.id, workingDelta: 1 }, plan)),
+    );
+    const squat = allEntries(added.workout.blocks).find((entry) => entry.id === planned.id)!;
+    expect(working(squat).length, lifts(added.workout)).toBe(4);
+    const completed: CompletedWork = {
+      ...emptyCompleted(),
+      startedAt: NOW,
+      elapsedSeconds: 600,
+      sets: working(squat)
+        .slice(0, 2)
+        .map((set, index) => ({
+          entryId: squat.id,
+          exerciseId: squat.exerciseId,
+          setIndex: set.index,
+          kind: 'working' as const,
+          reps: 5,
+          weight: set.targetWeight,
+          rir: 2,
+          completedAt: at(9, 18, index * 4),
+        })),
+    };
+    const after = succeeded(
+      recalibrate(
+        request({ type: 'uncomfortable', entryId: squat.id }, added.workout, {
+          completed,
+          currentEntryId: squat.id,
+          constraints: added.constraints,
+        }),
+      ),
+    ).workout;
+    expect(
+      allEntries(after.blocks)
+        .filter((entry) => !isStopped(entry) && working(entry).length < CATCH_UP.MIN_SETS)
+        .map((entry) => `${entry.exerciseId} x${working(entry).length}`),
+      lifts(after),
+    ).toEqual([]);
+    expect(directSets(after, 'quads'), lifts(after)).toBeLessThanOrEqual(3);
+  });
 });

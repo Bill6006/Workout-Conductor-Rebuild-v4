@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ensureProfile, skipWarmupIfShown } from './helpers';
+import { ensureProfile, skipWarmupIfShown, takeFullSessionIfOffered } from './helpers';
 
 /**
  * Maintenance 23, round E: bodyweight lifts and effort. A chin-up warms up with one set of a few
@@ -83,6 +83,9 @@ async function seedChinUps(page: Page): Promise<void> {
   await page.reload();
   await expect(page.getByTestId('start-workout')).toBeVisible();
   await backUp(page);
+  // On a day the schedule does not tick, the history makes a catch-up the day's offer (round M):
+  // these are tests of the day's usual plan.
+  await takeFullSessionIfOffered(page);
 }
 
 type Session = { workout: { blocks: { kind: string; entries: Record<string, unknown>[] }[] } };
@@ -293,6 +296,8 @@ async function seedIncline(page: Page): Promise<void> {
   await page.reload();
   await expect(page.getByTestId('start-workout')).toBeVisible();
   await backUp(page);
+  // As for the chin-ups: on a day not ticked the history makes a catch-up the day's offer.
+  await takeFullSessionIfOffered(page);
 }
 
 test.describe('a chin-up warms up at bodyweight', () => {

@@ -429,6 +429,29 @@ describe('a hard start laid over the plan (Maintenance 26, the sixth pass of ite
     expect(knee.result!.summary.headline).not.toMatch(/fewer sets|extra rep/);
   });
 
+  it('lays the lighter option alone on its own muscle only, with no hard start (Maintenance 33)', () => {
+    // "Lighter" from the "too soon" card on a muscle of the plan's lifts still to come, no hard
+    // start: its lifts take a set fewer or a rep more in reserve; every other lift keeps its plan.
+    const session = underWay(base, gym, 'default');
+    const muscle = requireExercise(toCome(session)[0]!.exerciseId).primaryMuscles[0]!;
+    const lighter = run(session, { type: 'lighter', muscle });
+    const before = new Map(toCome(session).map((entry) => [entry.id, entry]));
+    let own = 0;
+    let others = 0;
+    for (const entry of toCome(lighter)) {
+      const plan = before.get(entry.id)!;
+      if (requireExercise(entry.exerciseId).primaryMuscles.includes(muscle)) {
+        own += 1;
+        expect(working(entry)).not.toEqual(working(plan));
+      } else {
+        others += 1;
+        expect(working(entry), entry.exerciseId).toEqual(working(plan));
+      }
+    }
+    expect(own).toBeGreaterThan(0);
+    expect(others).toBeGreaterThan(0);
+  });
+
   it('leaves a hard start as it is under a low check-in, either way round (Maintenance 33)', () => {
     // A low check-in lowers what the app expects of the first sets, never the plan: the hard start
     // eases the rest on its own, before the check-in or after it.
@@ -1354,9 +1377,12 @@ describe('a hard start laid over the plan (Maintenance 26, the sixth pass of ite
     const shape = (entry: WorkoutEntry) =>
       working(entry).map((set) => [set.targetReps, set.targetRir]);
     const before = entryIn(undone, (entry) => entry.id === lift.id);
+    // "Make it harder" asks every other lift kept for a set more and a rep less in reserve; a low
+    // or sore check-in changes no plan since Maintenance 33.
     for (const trigger of [
       { type: 'loading' },
       { type: 'readiness', readiness: sore },
+      { type: 'intensity', direction: 'harder' },
       { type: 'max', exerciseId: lift.exerciseId },
     ] as const) {
       const after = entryIn(run(undone, trigger), (entry) => entry.id === lift.id);

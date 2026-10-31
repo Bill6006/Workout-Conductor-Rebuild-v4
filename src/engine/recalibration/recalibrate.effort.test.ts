@@ -273,14 +273,16 @@ describe('Make it harder or easier through a rebuild', () => {
 
   it('the lift in front keeps its sets when the coach added it, the lifter set its reps, or it stands in', () => {
     const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
-    const low = run({ type: 'readiness', readiness: tired });
+    // "Make it easier" takes a set from every lift, as a low check-in did before Maintenance 33; a
+    // check-in takes none since. "Make it harder" then asks the planned sets back.
+    const low = withIntensity('easier');
     const [first, second] = allEntries(low.workout.blocks) as [WorkoutEntry, WorkoutEntry];
     const backWith = (change: (entry: WorkoutEntry, other: WorkoutEntry) => void) => {
       const workout = structuredClone(low.workout);
       const [lift, other] = allEntries(workout.blocks) as [WorkoutEntry, WorkoutEntry];
       change(lift, other);
       const back = run(
-        { type: 'readiness', readiness: fine },
+        { type: 'intensity', direction: 'harder' },
         {
           workout,
           constraints: low.constraints,
@@ -291,6 +293,10 @@ describe('Make it harder or easier through a rebuild', () => {
       return working(entryOf(back.workout, lift.exerciseId));
     };
     const cut = working(first);
+    // Nothing set on it: the lift in front takes the planned sets back.
+    const planned = working(entryOf(plan(), first.exerciseId)).length;
+    expect(cut.length).toBeLessThan(planned);
+    expect(backWith(() => {})).toHaveLength(planned);
     expect(
       backWith((lift) => {
         // As the coach adds one: locked, outside the plan's places.
@@ -333,11 +339,13 @@ describe('Make it harder or easier through a rebuild', () => {
       currentEntryId: lift.id,
       sets: [],
     };
+    // "Make it easier", the lift in front not begun: settled to the easier day, a set fewer.
     const low = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'intensity', direction: 'easier' },
       { workout, completed: started, currentEntryId: lift.id },
     );
     const settled = entryOf(low.workout, lift.exerciseId);
+    expect(working(settled)).toHaveLength(working(lift).length - 1);
     expect(settled.sets.filter((set) => set.kind === 'drop')).toHaveLength(1);
     expect(settled.sets.at(-1)?.kind).toBe('drop');
     // Make it harder, the lift in front not begun: a rep less in reserve on it too.
@@ -446,6 +454,81 @@ describe('Make it harder or easier through a rebuild', () => {
     expect(working(restored)[0]!.targetRir).toBe(plainRir);
   });
 
+  it("Make it easier reaches the lift in front, a pinned lift and one swapped in, at the plan's own count", () => {
+    // Since Maintenance 33 a check-in takes no set: "Make it easier" is the day's setting that takes
+    // one, from each lift kept as from a lift not begun.
+    const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
+    const counted = (workout: GeneratedWorkout, exerciseId: string) =>
+      working(entryOf(workout, exerciseId)).length;
+    const before = plan();
+    const easierPlan = withIntensity('easier').workout;
+    const [first, second, third] = allEntries(before.blocks) as [
+      WorkoutEntry,
+      WorkoutEntry,
+      WorkoutEntry,
+    ];
+    // The lift in front, started, nothing logged.
+    const inFront = run(
+      { type: 'intensity', direction: 'easier' },
+      {
+        workout: before,
+        completed: { startedAt: NOW, elapsedSeconds: 60, currentEntryId: first.id, sets: [] },
+        currentEntryId: first.id,
+      },
+    );
+    expect(counted(easierPlan, first.exerciseId)).toBe(counted(before, first.exerciseId) - 1);
+    expect(counted(inFront.workout, first.exerciseId)).toBe(counted(easierPlan, first.exerciseId));
+    // A lift pinned before Start.
+    const pinnedPlan = structuredClone(before);
+    allEntries(pinnedPlan.blocks)[1]!.pinned = true;
+    const pinned = run({ type: 'intensity', direction: 'easier' }, { workout: pinnedPlan });
+    expect(counted(pinned.workout, second.exerciseId)).toBe(counted(before, second.exerciseId) - 1);
+    // A lift swapped in: locked in the plan's place.
+    const swap = run(
+      { type: 'replace', entryId: third.id, exerciseId: 'machine-shoulder-press' },
+      { workout: before },
+    );
+    const swappedIn = entryOf(swap.workout, 'machine-shoulder-press');
+    expect(swappedIn.locked).toBe(true);
+    const easier = run(
+      { type: 'intensity', direction: 'easier' },
+      { workout: swap.workout, constraints: swap.constraints },
+    );
+    expect(working(entryOf(easier.workout, 'machine-shoulder-press'))).toHaveLength(
+      working(swappedIn).length - 1,
+    );
+  });
+
+  it('Make it harder at 15 minutes fits the lift in front to the time like a lift not begun', () => {
+    // The bench press in front, nothing logged: "Make it harder" asks a set more of it, and the fit
+    // to the 15 minutes trims it as it trims a lift not begun, so the rest of the plan has room.
+    const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
+    const plan15 = generateWorkout({
+      profile,
+      location: gym,
+      history: [],
+      now: NOW,
+      duration: 15,
+      constraints: { templateId: 'push-arms' },
+    });
+    const first = allEntries(plan15.blocks)[0]!;
+    const harder = run(
+      { type: 'intensity', direction: 'harder' },
+      {
+        workout: plan15,
+        completed: { startedAt: NOW, elapsedSeconds: 60, currentEntryId: first.id, sets: [] },
+        currentEntryId: first.id,
+      },
+    );
+    const lift = entryOf(harder.workout, first.exerciseId);
+    expect(working(lift)).toHaveLength(working(first).length);
+    expect(working(lift)[0]!.targetRir).toBe(
+      moved(first.exerciseId, working(first)[0]!.targetRir, -1),
+    );
+    expect(allEntries(harder.workout.blocks).length).toBeGreaterThan(1);
+    expect(harder.workout.duration.overByMinutes).toBeLessThanOrEqual(1);
+  });
+
   it('the lift in front keeps the sets you set by hand, and a sore day keeps the plan', () => {
     const working = (entry: WorkoutEntry) => entry.sets.filter((set) => set.kind === 'working');
     const before = plan();
@@ -456,14 +539,20 @@ describe('Make it harder or easier through a rebuild', () => {
       currentEntryId: first.id,
       sets: [],
     };
-    // A set added by hand to the lift in front, then a head cold: the count is yours, and stays.
+    // A set added by hand to the lift in front, then "Make it easier", which takes a set from every
+    // other lift kept: the count is yours, and stays.
     const added = run(
       { type: 'sets', entryId: first.id, workingDelta: 1 },
       { workout: before, completed: started, currentEntryId: first.id },
     );
     const low = run(
-      { type: 'readiness', readiness: cold },
-      { workout: added.workout, completed: started, currentEntryId: first.id },
+      { type: 'intensity', direction: 'easier' },
+      {
+        workout: added.workout,
+        constraints: added.constraints,
+        completed: started,
+        currentEntryId: first.id,
+      },
     );
     expect(working(entryOf(low.workout, first.exerciseId))).toHaveLength(working(first).length + 1);
     // Sore (Maintenance 33): soreness alone never counts, so the plan stays, and the words say
@@ -939,22 +1028,37 @@ describe('a check-in and the sets the lifter or the fit to time set', () => {
 
   it('never raises a lift the fit trimmed, and a restore never takes a set away', () => {
     const before = plan();
-    // The lift in front, trimmed by the fit to time to two working sets: no mark says so.
+    // The bench press in front, trimmed by the fit to time to two working sets: no mark says so.
+    // "Make it easier" asks a set fewer than its four, still more than the two it has: it keeps two.
     const trimmed = structuredClone(before);
     const lift = allEntries(trimmed.blocks)[0]!;
     const cutOff = working(lift).slice(2);
     lift.sets = lift.sets.filter((set) => !cutOff.includes(set));
-    const low = run({ type: 'readiness', readiness: cold }, { workout: trimmed, ...at(lift) });
+    const low = run({ type: 'intensity', direction: 'easier' }, { workout: trimmed, ...at(lift) });
     const lowLift = entryOf(low.workout, lift.exerciseId);
+    expect(
+      working(entryOf(withIntensity('easier').workout, lift.exerciseId)).length,
+    ).toBeGreaterThan(2);
     expect(working(lowLift)).toHaveLength(2);
-    expect(working(lowLift)[0]!.targetRir).toBe(floored(working(lift)[0]!.targetRir));
-    // Sore after the head cold: the plan asks the same sets, so the lift keeps its two.
-    const sore = run(
-      { type: 'readiness', readiness: { ...fine, soreness: 4 } },
-      { workout: low.workout, constraints: low.constraints, ...at(lift) },
+    expect(working(lowLift)[0]!.targetRir).toBe(
+      moved(lift.exerciseId, working(lift)[0]!.targetRir, 1),
     );
-    expect(working(entryOf(sore.workout, lift.exerciseId))).toHaveLength(2);
-    // Back to fine with more sets than the plan asks: they stay.
+    // The incline press in front, trimmed to two of its three, then a head cold: the plan asks the
+    // same sets, the reserve up to the floor, so the lift keeps its two.
+    const trimmedIncline = structuredClone(before);
+    const incline = allEntries(trimmedIncline.blocks)[1]!;
+    const inclineOff = working(incline).slice(2);
+    incline.sets = incline.sets.filter((set) => !inclineOff.includes(set));
+    const colder = run(
+      { type: 'readiness', readiness: cold },
+      { workout: trimmedIncline, ...at(incline) },
+    );
+    const coldIncline = entryOf(colder.workout, incline.exerciseId);
+    expect(working(entryOf(before, incline.exerciseId)).length).toBeGreaterThan(2);
+    expect(working(incline)[0]!.targetRir).toBeLessThan(2);
+    expect(working(coldIncline)).toHaveLength(2);
+    expect(working(coldIncline)[0]!.targetRir).toBe(2);
+    // Back to the planned effort, "Make it harder", with more sets than the plan asks: they stay.
     const more = structuredClone(low.workout);
     const heavy = entryOf(more, lift.exerciseId);
     const top = working(heavy).at(-1)!;
@@ -963,13 +1067,13 @@ describe('a check-in and the sets the lifter or the fit to time set', () => {
       heavy.sets.push({ ...top, index: Math.max(...heavy.sets.map((set) => set.index)) + 1 });
     }
     const back = run(
-      { type: 'readiness', readiness: fine },
+      { type: 'intensity', direction: 'harder' },
       { workout: more, constraints: low.constraints, ...at(lift) },
     );
     expect(working(entryOf(back.workout, lift.exerciseId))).toHaveLength(planned + 1);
   });
 
-  it('keeps a set taken off by hand, on a low check-in and on the way back', () => {
+  it('keeps a set taken off by hand through Make it easier and back', () => {
     const before = plan();
     const first = allEntries(before.blocks)[0]!;
     const removed = run(
@@ -979,12 +1083,13 @@ describe('a check-in and the sets the lifter or the fit to time set', () => {
     const count = working(first).length - 1;
     expect(working(entryOf(removed.workout, first.exerciseId))).toHaveLength(count);
     const low = run(
-      { type: 'readiness', readiness: tired },
+      { type: 'intensity', direction: 'easier' },
       { workout: removed.workout, constraints: removed.constraints, ...at(first) },
     );
     expect(working(entryOf(low.workout, first.exerciseId))).toHaveLength(count);
+    // "Make it harder" asks the planned sets back on the lifts kept: the count set by hand stays.
     const back = run(
-      { type: 'readiness', readiness: fine },
+      { type: 'intensity', direction: 'harder' },
       { workout: low.workout, constraints: low.constraints, ...at(first) },
     );
     expect(working(entryOf(back.workout, first.exerciseId))).toHaveLength(count);

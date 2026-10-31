@@ -405,8 +405,14 @@ describe('a phone that lost its database, and writes the cloud copy refuses', ()
         batch: () => new Promise<never>(() => undefined),
         close: () => undefined,
       };
-      const run = syncOnce(db, silent, context(), { pull: true });
+      let settled = false;
+      const run = syncOnce(db, silent, context(), { pull: true }).finally(() => {
+        settled = true;
+      });
       await vi.advanceTimersByTimeAsync(CLOUD_REQUEST_TIMEOUT_MS);
+      // Read before the outcome is awaited: with no bound the sync waits for good, which fails
+      // here as an expectation rather than as the test's time-out.
+      await vi.waitFor(() => expect(settled).toBe(true), { timeout: 5_000 });
       expect(await run).toMatchObject({
         ran: true,
         error: 'no answer within 30 seconds',

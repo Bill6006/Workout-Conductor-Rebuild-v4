@@ -109,8 +109,10 @@ describe('a phone whose data is on its way back from the cloud copy', () => {
       // Setup waits its turn behind the sync.
       await vi.advanceTimersByTimeAsync(1_000);
       expect(done).toBe(false);
-      // The copy's request gives up, the sync fails, and setup saves.
+      // The copy's request gives up, the sync fails, and setup saves. Read before setup is awaited:
+      // with no bound it waits for good, which fails here as an expectation, not a time-out.
       await vi.advanceTimersByTimeAsync(CLOUD_REQUEST_TIMEOUT_MS);
+      await vi.waitFor(() => expect(done).toBe(true), { timeout: 5_000 });
       expect(await setup).toBe('saved');
       await sync;
       store.stopCloud();
@@ -158,6 +160,9 @@ describe('a phone whose data is on its way back from the cloud copy', () => {
       await vi.advanceTimersByTimeAsync(CLOUD_REQUEST_TIMEOUT_MS);
       expect(done).toBe(false);
       await vi.advanceTimersByTimeAsync(CLOUD_REQUEST_TIMEOUT_MS);
+      // Read before setup is awaited: with no bound it waits for good (an expectation, not a
+      // time-out).
+      await vi.waitFor(() => expect(done).toBe(true), { timeout: 5_000 });
       expect(await setup).toBe('saved');
       expect(reached).toBe(2);
       await Promise.all([running, second]);
@@ -177,13 +182,19 @@ describe('a phone whose data is on its way back from the cloud copy', () => {
       handle.storage.setItem(TOKEN_MIRROR_KEY, 'restoring-token-never-real');
       const { store } = handle;
       await store.hydrate();
-      const sync = store.syncNow({ pull: true, force: true });
+      let synced = false;
+      const sync = store.syncNow({ pull: true, force: true }).finally(() => {
+        synced = true;
+      });
       store.skipRestoring();
       const setup = store.completeOnboarding(
         createDefaultProfile(TEST_NOW, GYM_LOCATION_ID),
         createDefaultLocations({ gymAccess: true }, TEST_NOW),
       );
       await vi.advanceTimersByTimeAsync(CLOUD_REQUEST_TIMEOUT_MS);
+      // Read before the sync is awaited: with no bound on the driver it waits for good (an
+      // expectation, not a time-out).
+      await vi.waitFor(() => expect(synced).toBe(true), { timeout: 5_000 });
       expect(await sync).toMatchObject({ ran: true, error: 'no answer within 30 seconds' });
       expect(await setup).toBe('saved');
       expect(store.getSnapshot().cloud.lastError).toBe('no answer within 30 seconds');

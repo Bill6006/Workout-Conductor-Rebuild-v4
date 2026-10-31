@@ -74,4 +74,29 @@ describe('a straight day after a session on the structure whose top set was skip
     expect(sets.every((set) => set[2] === 'straight')).toBe(true);
     expect(Math.max(...sets.map((set) => set[0] as number))).toBeLessThanOrEqual(185);
   });
+
+  it('a straight day of the lifter’s own since: a catch-up reads that day, not the back-offs’ load', () => {
+    // 7 days ago on the structure; 3 days ago straight at 170 for 5, 5, 5 at 2, not at the
+    // back-offs' load. The session the target reads ran no top set, so the catch-up reads it as any
+    // straight day does (5 lb up), never the back-offs' load off the top set it would carry (165).
+    const straightDay = record(
+      3,
+      BENCH,
+      [
+        [5, 170, 2],
+        [5, 170, 2],
+        [5, 170, 2],
+      ],
+      [4, 6],
+      2,
+    );
+    const history = [structured(7, [5, 190, 1], backOffsAt(180)), straightDay];
+    const sets = shape(bench(plan(history, undefined, { catchUp })));
+    expect(sets).toEqual(shape(bench(plan([straightDay], undefined, { catchUp }))));
+    expect(sets).toEqual([
+      [175, 2, 'straight'],
+      [175, 2, 'straight'],
+      [175, 2, 'straight'],
+    ]);
+  });
 });

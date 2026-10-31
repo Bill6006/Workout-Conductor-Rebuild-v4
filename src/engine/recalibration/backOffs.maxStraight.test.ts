@@ -100,6 +100,34 @@ describe('a max entered on a lift straight after a session on the structure, the
     const after = entryOf(entered.workout, DB_BENCH);
     expect(shape(after)).toEqual(shape(before));
   });
+
+  it('a max that takes the top set past the dumbbells here makes the day one at the back-offs’ load', () => {
+    // On the structure before: a top set of 95 and back-offs of 90, the dumbbells going to 100. A
+    // max of 150 moves the top set toward it, past what the place loads: the day runs straight at the
+    // back-offs' load, and is saved as a day at that load, which the next top set reads past.
+    const location = {
+      ...home,
+      loading: {
+        dumbbells: { kind: 'dumbbells' as const, ranges: [{ from: 5, to: 100, step: 5 }] },
+      },
+    };
+    const history = [
+      structured(DB_BENCH, 'push-arms', 7, [5, 85, 1], backOffsAt(80)),
+      structured(DB_BENCH, 'push-arms', 3, [5, 90, 1], backOffsAt(85)),
+    ];
+    const workout = plan(history, undefined, {}, location);
+    const before = entryOf(workout, DB_BENCH);
+    expect(shape(before)[0]).toEqual([95, 1, 'top']);
+    expect(before.atBackOffs).toBeUndefined();
+    const entered = run({ type: 'max', exerciseId: DB_BENCH }, workout, {
+      history,
+      location,
+      maxes: maxOf(DB_BENCH, 150),
+    });
+    const after = entryOf(entered.workout, DB_BENCH);
+    expect(shape(after).every((set) => set[2] === 'straight')).toBe(true);
+    expect(after.atBackOffs).toBe(true);
+  });
 });
 
 describe('a lift at the back-offs’ load swapped for another, the fourth review of round N', () => {
