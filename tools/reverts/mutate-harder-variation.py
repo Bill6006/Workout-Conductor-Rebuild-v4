@@ -23,20 +23,23 @@ for _flag in sys.argv[1:]:
 
 COACH = "src/engine/coach/coachConductor.ts"
 LIST = "src/engine/alternatives/entryAlternatives.ts"
+RANK = "src/engine/alternatives/rankAlternatives.ts"
 
 T_HARDER = "src/engine/coach/coachConductor.harderVariation.test.ts"
 T_LOADING = "src/engine/coach/coachConductor.loading.test.ts"
 T_SCREEN = "src/features/today/harderVariation.screens.test.tsx"
+T_BUTTONS = "src/engine/coach/coachConductor.sheetButtons.test.ts"
+T_DELOAD = "src/engine/coach/coachConductor.placeAndDeload.test.ts"
 
 # (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
 MUTATIONS = [
     # The coach offers a harder variation only where the lift's sheet lists one.
     ("H1 the button only where the sheet has a harder variation", COACH,
-     "      const harder =\n        !repsAtCeiling &&\n        block !== undefined &&\n",
-     "      const harder =\n        !repsAtCeiling &&\n        true ||\n        block !== undefined &&\n",
+     "      const harder =\n        !setLever &&\n        !inDeloadWeek(input) &&\n",
+     "      const harder =\n        !setLever &&\n        true ||\n        !inDeloadWeek(input) &&\n",
      [T_HARDER, T_SCREEN], None),
     ("H2 no card at all with no lever to offer", COACH,
-     "      if (repsAtCeiling || harder) {", "      if (true) {", [T_HARDER, T_SCREEN], None),
+     "      if (setLever || harder) {", "      if (true) {", [T_HARDER, T_SCREEN], None),
     ("H3 a variation is the same movement", LIST,
      "      candidate.exercise.movementPattern === current.movementPattern &&\n", "", [T_HARDER], None),
     ("H4 harder: heavier per pound than the lift", LIST,
@@ -46,23 +49,65 @@ MUTATIONS = [
     ("H6 the sheet ranks harder variations first for a held lift", LIST,
      "        ...(cap ? { capLimited: cap } : {}),\n", "", [T_HARDER, T_SCREEN], None),
     ("H7 the coach reads the sheet's own list: the day's pain and place", COACH,
-     "          constraints: input.constraints,\n          completed: input.completed,\n          history: input.history,\n          now: input.now,\n          ...(input.routes ? { coachRoutes: input.routes } : {}),\n        }).length > 0;",
-     "          constraints: { ...input.constraints, avoidExerciseIds: [], painJoints: [] },\n          completed: input.completed,\n          history: input.history,\n          now: input.now,\n          ...(input.routes ? { coachRoutes: input.routes } : {}),\n        }).length > 0;",
+     "          constraints: input.constraints,\n          completed: input.completed,\n          history: input.history,\n          now: input.now,\n          ...(input.routes ? { coachRoutes: input.routes } : {}),\n        }).some(",
+     "          constraints: { ...input.constraints, avoidExerciseIds: [], painJoints: [] },\n          completed: input.completed,\n          history: input.history,\n          now: input.now,\n          ...(input.routes ? { coachRoutes: input.routes } : {}),\n        }).some(",
      [T_HARDER], None),
     ("H8 the coach reads the place the plan trains at", COACH,
-     "          profile: input.profile,\n          location: input.location,\n          workout: input.workout,\n          block,\n",
-     "          profile: input.profile,\n          location: undefined,\n          workout: input.workout,\n          block,\n",
+     "        harderAlternatives({\n          profile: input.profile,\n          location: input.location,\n",
+     "        harderAlternatives({\n          profile: input.profile,\n          location: undefined,\n",
      [T_HARDER, T_LOADING], None),
     ("H9 the list leaves out what today's plan has already", LIST,
      "          (other) => other.id !== entry.id && !stoppedBefore(workout.blocks, entry).includes(other),",
      "          (other) => false,", [T_HARDER], None),
     ("H10 the reps at the top read so, sets set by hand too", COACH,
      "            atCeiling\n              ? 'The reps are already at the top of the range.'\n",
-     "            repsAtCeiling\n              ? 'The reps are already at the top of the range.'\n",
+     "            setLever\n              ? 'The reps are already at the top of the range.'\n",
      [T_HARDER], None),
     ("H11 the set is offered at the top of the reps", COACH,
-     "      const repsAtCeiling = atCeiling && !entry.manual?.sets;",
-     "      const repsAtCeiling = false;", [T_HARDER, T_LOADING], None),
+     "      const setLever = atCeiling && !entry.manual?.sets && !leanDown && !offPlanToday(input);",
+     "      const setLever = false;", [T_HARDER, T_LOADING], None),
+    # The review of the fix, 2026-10-31.
+    ("H12 no set more while losing fat", COACH,
+     "      const setLever = atCeiling && !entry.manual?.sets && !leanDown && !offPlanToday(input);",
+     "      const setLever = atCeiling && !entry.manual?.sets && !offPlanToday(input);",
+     [T_BUTTONS], None),
+    ("H13 no set more on a day off the plan", COACH,
+     "      const setLever = atCeiling && !entry.manual?.sets && !leanDown && !offPlanToday(input);",
+     "      const setLever = atCeiling && !entry.manual?.sets && !leanDown;",
+     [T_BUTTONS], None),
+    ("H14 never a lift swapped away today", COACH,
+     "          ...dayExclusions(input),\n          ...swappedOutIds(",
+     "          ...swappedOutIds(", [T_BUTTONS], None),
+    ("H15 never a lift swapped out for four weeks", COACH,
+     "          ...swappedOutIds(\n            input.swaps ?? [],",
+     "          ...swappedOutIds(\n            [],", [T_BUTTONS], None),
+    ("H16 harder on the same weights only", LIST,
+     "      loadingKeyFor(candidate.exercise) === cap.key &&\n", "", [T_BUTTONS], None),
+    ("H17 the ranking's bonus on the same weights only", RANK,
+     "        (cap.key === undefined || loadingKeyFor(candidate) === cap.key)", "        true",
+     [T_BUTTONS], None),
+    ("H18 a held lift names its weights", LIST,
+     "{ currentRatio: ratio, key: loadingKeyFor(exercise) }", "{ currentRatio: ratio, key: '' }",
+     [T_HARDER, T_BUTTONS], None),
+    ("H19 a button into the sheet only where it lists something", COACH,
+     "  if (sheetOf(input, entry).candidates.length === 0) return null;\n", "", [T_BUTTONS], None),
+    ("H20 a safety card says what to do with nothing to swap in", COACH,
+     "          ...(swap ? [] : [NO_SWAP_HERE]),\n", "", [T_BUTTONS], 0),
+    ("H21 the route passes over a variation the sheet lists none of", COACH,
+     "        return {\n          action: null,\n          explain: 'Step 2, a variation of the same pattern, has none that fits here.',\n          blocked: true,\n        };",
+     "        return {\n          action: null,\n          explain: 'Step 2, a variation of the same pattern, has none that fits here.',\n        };",
+     [T_DELOAD], None),
+    ("H22 ... each step passed over in turn", COACH,
+     "    while (offer.blocked && shown.step + 1 < ROUTE_STEPS.length) {",
+     "    if (offer.blocked && shown.step + 1 < ROUTE_STEPS.length) {", [T_DELOAD], None),
+    ("H23 a strategy's Open alternatives only where the sheet lists one", COACH,
+     "      return sheetAction(input, entry, 'Open alternatives');",
+     "      return { kind: 'alternatives', entryId: entry.id, label: 'Open alternatives' };",
+     [T_BUTTONS], None),
+    ("H24 the route done offers a different exercise only where the sheet lists one", COACH,
+     "          ? (variety ?? sheetAction(input, entry, 'Pick a different exercise', ref))",
+     "          ? (variety ?? { kind: 'alternatives', entryId: entry.id, label: 'Pick a different exercise', route: ref })",
+     [T_BUTTONS], None),
 ]
 
 

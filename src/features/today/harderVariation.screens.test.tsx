@@ -137,5 +137,8 @@ describe('"A harder variation" on Today', () => {
     await waitFor(() => expect(screen.getByTestId('coach-headline')).toBeInTheDocument());
     const seen = await cardsUntil(HEADLINE);
     expect(seen).not.toContain(HEADLINE);
+    // Every card was seen: the walk ended on the quiet line, with nothing left to put away.
+    expect(screen.queryByTestId('coach-dismiss')).not.toBeInTheDocument();
+    expect(seen.length).toBeLessThan(10);
   });
 });

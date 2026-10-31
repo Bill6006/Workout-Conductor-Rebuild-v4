@@ -807,14 +807,36 @@ describe('a load the coach offers is one the place makes', () => {
       ),
       'stall: route',
     );
+    // The variation step is passed over too: the incline press's sheet here lists only an Arnold
+    // press, another movement, so its button would open on no variation (the review of the harder
+    // variation fix, 2026-10-31). The deload is the step offered.
+    expect(card?.action).toMatchObject({
+      kind: 'recalibrate',
+      route: { exerciseId: incline, step: 2 },
+    });
+    expect(card?.why.at(-1)).toMatch(
+      /^Step 1, a new rep range, needs weights this place does not make\. Step 2, a variation of the same pattern, has none that fits here\. Step 3: /,
+    );
+  });
+
+  it('keeps the variation step where the lift’s sheet lists a variation of its pattern', () => {
+    // The dumbbell bench press at the light home: its sheet lists push-ups, the same movement.
+    const press = 'dumbbell-bench-press';
+    const workout = withLift(planAt(lightHome), press, {});
+    const [card] = bySource(
+      gatherSignals(
+        inputFor(workout, lightHome, {
+          stalls: [stall(press, 'stalled-at-effort')],
+          routes: routeAt(press, 1),
+        }),
+      ),
+      'stall: route',
+    );
     expect(card?.action).toMatchObject({
       kind: 'alternatives',
       label: 'Swap for a variation',
-      route: { exerciseId: incline, step: 1 },
+      route: { exerciseId: press, step: 1 },
     });
-    expect(card?.why.at(-1)).toMatch(
-      /^Step 1, a new rep range, needs weights this place does not make\. Step 2: /,
-    );
   });
 
   it('keeps the new rep range where the weights stand only a little short', () => {

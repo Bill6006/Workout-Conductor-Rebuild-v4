@@ -1933,6 +1933,11 @@ REANCHORED = {
     "34z2 ... says fewer sets only when a set was cut": (
         "        fewer ? 'fewer sets' : '',\n        easier\n",
         "        'fewer sets',\n        easier\n", None),
+    # The harder-variation fix's review (2026-10-31) passes over each step in turn, a variation the
+    # lift's sheet lists none of among them: the step passed over is the loop now.
+    "35k4 a step passed over offers the next one": (
+        "    while (offer.blocked && shown.step + 1 < ROUTE_STEPS.length) {\n      passed.push(offer.explain);\n      shown = { ...shown, step: shown.step + 1 };\n      offer = routeAction(input, entry, shown);\n    }\n    if (passed.length > 0) {\n      offer = { action: offer.action, explain: [...passed, offer.explain].join(' ') };\n    }\n",
+        "", None),
 }
 
 table = [

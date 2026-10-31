@@ -2,6 +2,7 @@ import { allExercises, exerciseEquipmentLabel } from '../../catalog/exercises/ca
 import type { CatalogExercise, Joint, StressLevel } from '../../catalog/exercises/exerciseSchema';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import { startRatio } from '../progression/startingLoad';
+import { loadingKeyFor } from '../loading/loading';
 import { movementPatternName } from '../../catalog/movementPatterns/movementPatterns';
 import { muscleName } from '../../catalog/muscles/muscles';
 import {
@@ -33,8 +34,13 @@ export interface RankingSignals {
   recentPainJoints?: ReadonlySet<Joint>;
   /** The coach route for the current lift is at its variation step. */
   routeWantsVariation?: boolean;
-  /** The current lift is held at the heaviest weight the place has; a variation that is heavier per pound scores. */
-  capLimited?: { currentRatio: number };
+  /**
+   * The current lift is held at the heaviest weight the place has; a variation on the same weights
+   * (`key`, the place's record they come from) that is heavier per pound scores. A load ratio says
+   * nothing across weights with their own heaviest: a barbell row held at 135 lb is heavier for its
+   * lifter than a dumbbell row at the 50 lb dumbbells (the review of the fix, 2026-10-31).
+   */
+  capLimited?: { currentRatio: number; key?: string };
 }
 
 export interface AlternativeRequest {
@@ -197,7 +203,11 @@ export function rankAlternatives(request: AlternativeRequest): AlternativeResult
     const cap = request.signals?.capLimited;
     if (cap) {
       const ratio = startRatio(candidate);
-      if (ratio !== null && ratio < cap.currentRatio - 1e-6) {
+      if (
+        ratio !== null &&
+        ratio < cap.currentRatio - 1e-6 &&
+        (cap.key === undefined || loadingKeyFor(candidate) === cap.key)
+      ) {
         contributions.push([12, 'still heavy with the weights you have']);
       }
     }

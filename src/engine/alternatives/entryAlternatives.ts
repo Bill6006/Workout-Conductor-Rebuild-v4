@@ -3,6 +3,7 @@ import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import type { LocationProfile } from '../../core/validation/location';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { loadingKeyFor } from '../loading/loading';
 import { startRatio } from '../progression/startingLoad';
 import { contextFor, swapsOffered } from '../recalibration/recalibrate';
 import type { CompletedWork, SessionConstraints } from '../recalibration/types';
@@ -100,23 +101,25 @@ export function entryAlternatives(input: EntryAlternativesInput): AlternativeRes
 
 /**
  * A lift held at the heaviest weight here, with a load to measure it by: its load ratio, which a
- * harder variation is under. Undefined otherwise.
+ * harder variation is under, and the weights it is held on (`loadingKeyFor`), which a harder
+ * variation shares. Undefined otherwise.
  */
 export function capLimitedOf(
   entry: WorkoutEntry,
   exercise: CatalogExercise,
-): { currentRatio: number } | undefined {
+): { currentRatio: number; key: string } | undefined {
   if (!entry.progression?.capped) return undefined;
   const ratio = startRatio(exercise);
-  return ratio === null ? undefined : { currentRatio: ratio };
+  return ratio === null ? undefined : { currentRatio: ratio, key: loadingKeyFor(exercise) };
 }
 
 /**
  * The harder variations a lift held at the heaviest weight here has on its sheet: the alternatives
- * listed that are variations of it, the same movement (as the coach route reads a variation), and
- * heavier per pound, as the ranking's own "still heavy with the weights you have" reads them. A
- * rear delt fly is heavier per pound than a row, but no variation of it. Empty when the lift is not
- * held there, or the sheet lists none.
+ * listed that are variations of it, the same movement (as the coach route reads a variation), on
+ * the same weights, and heavier per pound, as the ranking's own "still heavy with the weights you
+ * have" reads them. A rear delt fly is heavier per pound than a row, but no variation of it; a
+ * dumbbell row is no harder than a barbell row held at the plates' heaviest. Empty when the lift is
+ * not held there, or the sheet lists none.
  */
 export function harderAlternatives(input: EntryAlternativesInput): AlternativeCandidate[] {
   const current = requireExercise(input.entry.exerciseId);
@@ -126,6 +129,7 @@ export function harderAlternatives(input: EntryAlternativesInput): AlternativeCa
     const ratio = startRatio(candidate.exercise);
     return (
       candidate.exercise.movementPattern === current.movementPattern &&
+      loadingKeyFor(candidate.exercise) === cap.key &&
       ratio !== null &&
       ratio < cap.currentRatio - 1e-6
     );

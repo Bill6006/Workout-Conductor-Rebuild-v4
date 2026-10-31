@@ -72,7 +72,8 @@ import {
   computeWeeklyVolume,
 } from '../volume/weeklyVolume';
 import { checkExerciseFit, isBlocked } from '../conflicts/conflictEngine';
-import { harderAlternatives } from '../alternatives/entryAlternatives';
+import { entryAlternatives, harderAlternatives } from '../alternatives/entryAlternatives';
+import type { AlternativeResult } from '../alternatives/rankAlternatives';
 import { preferredIdsOf } from '../conflicts/context';
 import { barWeightFor, startRatio } from '../progression/startingLoad';
 import {
@@ -591,6 +592,42 @@ function dayExclusions(input: CoachInput): string[] {
 }
 
 /**
+ * A lift's alternatives sheet as the lifter would open it: the same list (`entryAlternatives`).
+ * The coach offers a button into it only where it lists something (the owner, 2026-10-31: "do not
+ * show a dead-end button").
+ */
+function sheetOf(input: CoachInput, entry: WorkoutEntry): AlternativeResult {
+  const block = input.workout.blocks.find((one) => one.entries.includes(entry));
+  if (!block) return { candidates: [], emptyReason: null };
+  return entryAlternatives({
+    profile: input.profile,
+    location: input.location,
+    workout: input.workout,
+    block,
+    entry,
+    constraints: input.constraints,
+    completed: input.completed,
+    history: input.history,
+    now: input.now,
+    ...(input.routes ? { coachRoutes: input.routes } : {}),
+  });
+}
+
+/** A button into a lift's sheet, or none where the sheet lists nothing. */
+function sheetAction(
+  input: CoachInput,
+  entry: WorkoutEntry,
+  label: string,
+  route?: RouteRef,
+): CoachAction | null {
+  if (sheetOf(input, entry).candidates.length === 0) return null;
+  return { kind: 'alternatives', entryId: entry.id, label, ...(route ? { route } : {}) };
+}
+
+/** A safety card's line where its lift's sheet has nothing to swap in. */
+const NO_SWAP_HERE = 'Nothing here swaps in for it today: skip it, or stop the set if it bites.';
+
+/**
  * Whether the day's catch-up or second workout turns down a swap the coach would offer
  * (`catchUpRefusal`, as the swap and its sheet read it): an offer is a swap the day takes (the
  * twenty-first review of round M: the four-week swaps offered taps the swap refused).
@@ -698,14 +735,16 @@ function safetySignals(input: CoachInput): CoachSignal[] {
     });
     if (loaded) {
       const name = requireExercise(loaded.exerciseId).name;
+      const swap = sheetAction(input, loaded, `Swap ${name}`);
       signals.push({
         domain: 'safety',
         headline: `Protect your ${jointLabel(joint)}: ${name} loads it`,
         why: [
           `You reported ${jointLabel(joint)} pain this session.`,
           `${name} puts ${requireExercise(loaded.exerciseId).jointStress[joint]} stress on it.`,
+          ...(swap ? [] : [NO_SWAP_HERE]),
         ],
-        action: { kind: 'alternatives', entryId: loaded.id, label: `Swap ${name}` },
+        action: swap,
         confidence: 'high',
         severity: 3,
         source: 'session pain',
@@ -735,6 +774,7 @@ function safetySignals(input: CoachInput): CoachSignal[] {
     if (first) {
       const exercise = requireExercise(first.exerciseId);
       const joint = jointLabel(report.joint);
+      const swap = sheetAction(input, first, `Swap ${exercise.name}`);
       signals.push({
         domain: 'safety',
         headline: `${joint.charAt(0).toUpperCase()}${joint.slice(1)} pain last time: ${exercise.name} loads it`,
@@ -745,8 +785,9 @@ function safetySignals(input: CoachInput): CoachSignal[] {
               ? ''
               : `, and ${others.length === 1 ? 'one more exercise' : `${others.length} more exercises`} today ${others.length === 1 ? 'does' : 'do'} too`
           }.`,
+          ...(swap ? [] : [NO_SWAP_HERE]),
         ],
-        action: { kind: 'alternatives', entryId: first.id, label: `Swap ${exercise.name}` },
+        action: swap,
         confidence: 'high',
         severity: 2,
         source: RATING_PAIN_SOURCE,
@@ -760,14 +801,17 @@ function safetySignals(input: CoachInput): CoachSignal[] {
     );
     if (watch) {
       const name = requireExercise(watch.exerciseId).name;
+      const swap = sheetAction(input, watch, `Swap ${name}`);
       signals.push({
         domain: 'safety',
         headline: `Watch your ${jointLabel(joint)} on ${name}`,
         why: [
           `${jointLabel(joint)} is a flagged pain area in your profile.`,
-          `${name} carries moderate stress there; swap it now, or stop the set if it bites.`,
+          swap
+            ? `${name} carries moderate stress there; swap it now, or stop the set if it bites.`
+            : `${name} carries moderate stress there, and nothing here swaps in for it: stop the set if it bites.`,
         ],
-        action: { kind: 'alternatives', entryId: watch.id, label: `Swap ${name}` },
+        action: swap,
         confidence: 'medium',
         severity: 1,
         source: 'profile limitations',
@@ -1171,7 +1215,7 @@ function actionForInsight(input: CoachInput, insight: StrategyInsight): CoachAct
     }
     case 'open-alternatives':
       if (!entry || !untouched) return null;
-      return { kind: 'alternatives', entryId: entry.id, label: 'Open alternatives' };
+      return sheetAction(input, entry, 'Open alternatives');
     case 'hold':
     default:
       return null;
@@ -1525,10 +1569,29 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
       // exercise whose sets were already changed today is not offered another one.
       const ceiling = entryPushedToEffort(entry) ? EFFORT_REPS_CEILING : 20;
       const atCeiling = top >= ceiling;
-      const repsAtCeiling = atCeiling && !entry.manual?.sets;
+      // A set more is the lever only where the plan takes one (the review of the fix, 2026-10-31):
+      // not while losing fat, as the extra set's own offer holds, and not on a day off the plan,
+      // which adds no work.
+      const setLever = atCeiling && !entry.manual?.sets && !leanDown && !offPlanToday(input);
       const block = input.workout.blocks.find((one) => one.entries.includes(entry));
+      // Never one the coach's own rules keep out of every offer: a lift swapped away today, or out
+      // for four weeks (the nineteenth and twentieth reviews of round M). A deload week holds the
+      // card back whatever it offers, so nothing is looked for there.
+      const keptOut = (): Set<string> =>
+        new Set([
+          ...dayExclusions(input),
+          ...swappedOutIds(
+            input.swaps ?? [],
+            sessionConflictContext(input.profile, input.location, {
+              excludeExerciseIds: dayExclusions(input),
+              painJoints: input.constraints.painJoints,
+            }),
+            preferredIdsOf(input.profile),
+          ),
+        ]);
       const harder =
-        !repsAtCeiling &&
+        !setLever &&
+        !inDeloadWeek(input) &&
         block !== undefined &&
         harderAlternatives({
           profile: input.profile,
@@ -1541,8 +1604,8 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
           history: input.history,
           now: input.now,
           ...(input.routes ? { coachRoutes: input.routes } : {}),
-        }).length > 0;
-      if (repsAtCeiling || harder) {
+        }).some((candidate) => !keptOut().has(candidate.exercise.id));
+      if (setLever || harder) {
         const capped: CoachSignal = {
           domain: 'progression',
           headline: `${exercise.name}: at the heaviest weight here (${progression.capped.at} ${units})`,
@@ -1550,11 +1613,11 @@ function progressionSignals(input: CoachInput): CoachSignal[] {
             atCeiling
               ? 'The reps are already at the top of the range.'
               : `The reps go up instead, to ${top} this session.`,
-            repsAtCeiling
+            setLever
               ? 'One more working set adds volume the weight cannot.'
               : 'A harder variation keeps the same weight heavy.',
           ],
-          action: repsAtCeiling
+          action: setLever
             ? {
                 kind: 'recalibrate',
                 trigger: { type: 'sets', entryId: entry.id, workingDelta: 1 },
@@ -2023,12 +2086,7 @@ function routeAction(
     return {
       action:
         entry && usable
-          ? (variety ?? {
-              kind: 'alternatives',
-              entryId: entry.id,
-              label: 'Pick a different exercise',
-              route: ref,
-            })
+          ? (variety ?? sheetAction(input, entry, 'Pick a different exercise', ref))
           : null,
       explain: passedOver(route)
         ? 'The steps taken did not move the max, and the others were passed over where the weights could not give them: change the exercise for this pattern for a block.'
@@ -2074,6 +2132,22 @@ function routeAction(
       };
     }
     case 'variation':
+      // A variation the lift's sheet does not list cannot be taken: the step is passed over, as a
+      // rep range or a deload the weights cannot give is (the review of the fix, 2026-10-31).
+      if (
+        entry &&
+        usable &&
+        !variety &&
+        !sheetOf(input, entry).candidates.some(
+          (candidate) => candidate.exercise.movementPattern === exercise.movementPattern,
+        )
+      ) {
+        return {
+          action: null,
+          explain: 'Step 2, a variation of the same pattern, has none that fits here.',
+          blocked: true,
+        };
+      }
       return {
         action:
           entry && usable
@@ -2179,14 +2253,19 @@ function plateauSignals(input: CoachInput, policy: CoachingPolicy): CoachSignal[
       applied: [],
       exhausted: false,
     };
-    // A step the weights here cannot give (only a new rep range or a deload can be one) is passed
-    // over: the next step is offered, and taking it moves the route on (Maintenance 24).
+    // A step the weights here cannot give (a new rep range or a deload), or a variation the place
+    // has none of, is passed over: the next step is offered, and taking it moves the route on
+    // (Maintenance 24; the review of the fix, 2026-10-31: each step passed over in turn).
     let shown = route;
     let offer = routeAction(input, entry, route);
-    if (offer.blocked) {
-      shown = { ...route, step: route.step + 1 };
-      const next = routeAction(input, entry, shown);
-      offer = { action: next.action, explain: `${offer.explain} ${next.explain}` };
+    const passed: string[] = [];
+    while (offer.blocked && shown.step + 1 < ROUTE_STEPS.length) {
+      passed.push(offer.explain);
+      shown = { ...shown, step: shown.step + 1 };
+      offer = routeAction(input, entry, shown);
+    }
+    if (passed.length > 0) {
+      offer = { action: offer.action, explain: [...passed, offer.explain].join(' ') };
     }
     if (offer.taken) continue;
     signals.push({
