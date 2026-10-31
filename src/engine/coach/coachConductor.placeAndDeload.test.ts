@@ -986,9 +986,12 @@ describe('a deload week holds back what pushes for more', () => {
   });
 
   it('holds back a harder variation at the heaviest weight here', () => {
+    // The curl, whose sheet at this home lists a harder variation, the incline curl: the coach offers
+    // one only where the sheet does (the owner, 2026-10-31), and the incline press's lists only an
+    // Arnold press, another movement.
     const workout = withLift(
       planAt(lightHome),
-      incline,
+      'dumbbell-curl',
       { targetWeight: 20 },
       { mode: 'weight', capped: { at: 20 } },
     );

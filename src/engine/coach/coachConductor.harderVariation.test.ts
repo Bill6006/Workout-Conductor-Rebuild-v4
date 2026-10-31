@@ -34,30 +34,41 @@ function rowAtTheCap(
   top = 8,
   others: string[] = [],
 ): { blocks: WorkoutBlock[]; row: WorkoutEntry } {
+  return liftAtTheCap('dumbbell-row', 50, ['upper-back', 'lats'], top, others);
+}
+
+/** A lift held at `at`, its reps at `low`-`top`, with other lifts beside it. */
+function liftAtTheCap(
+  exerciseId: string,
+  at: number,
+  chosenFor: WorkoutEntry['chosenFor'],
+  top = 8,
+  others: string[] = [],
+): { blocks: WorkoutBlock[]; row: WorkoutEntry } {
   const row: WorkoutEntry = {
     id: 'e-row',
-    exerciseId: 'dumbbell-row',
+    exerciseId,
     role: 'primary-hypertrophy',
     sets: [1, 2, 3].map((index) => ({
       index,
       kind: 'working' as const,
       targetReps: [top - 2, top] as [number, number],
-      targetWeight: 50,
+      targetWeight: at,
       targetRir: 2,
       restSeconds: 90,
     })),
     restSeconds: 90,
     warmupSets: 1,
     dropSet: false,
-    chosenFor: ['upper-back', 'lats'],
+    chosenFor,
     locked: false,
     pinned: false,
     progression: {
       mode: 'weight',
       sessions: 2,
       setsAdvice: 0,
-      capped: { at: 50 },
-      evidence: ['Held at the heaviest weight here (50 lb): the reps go up instead.'],
+      capped: { at },
+      evidence: [`Held at the heaviest weight here (${at} lb): the reps go up instead.`],
       confidence: 'medium',
     } as WorkoutEntry['progression'],
   };
@@ -65,7 +76,7 @@ function rowAtTheCap(
     {
       id: 'b-row',
       kind: 'straight',
-      label: 'A Dumbbell Row',
+      label: `A ${exerciseId}`,
       entries: [row],
       rounds: 3,
       restBetweenRoundsSeconds: 90,
@@ -258,5 +269,19 @@ describe('"A harder variation" only where the sheet lists one', () => {
       trigger: { type: 'sets', entryId: row.id, workingDelta: 1 },
       label: 'Add a set',
     });
+  });
+});
+
+describe('a harder variation is heavier per pound than the lift', () => {
+  it('counts the incline curl for a curl at its heaviest weight, never the hammer or reverse curl', () => {
+    // The sheet lists all three: the same movement, at a load ratio under, equal to and over the
+    // curl's. Only one under it keeps the same dumbbells heavy.
+    const { blocks, row: curl } = liftAtTheCap('dumbbell-curl', 20, ['biceps']);
+    const input = coachInput(blocks, home);
+    expect(sheetOf(input, curl).candidates.map((one) => one.exercise.id)).toEqual(
+      expect.arrayContaining(['incline-dumbbell-curl', 'hammer-curl', 'reverse-curl']),
+    );
+    expect(harderOf(input, curl).map((one) => one.exercise.id)).toEqual(['incline-dumbbell-curl']);
+    expect(cappedCard(input)?.action).toMatchObject({ kind: 'alternatives' });
   });
 });
