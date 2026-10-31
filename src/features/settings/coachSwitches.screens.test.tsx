@@ -8,8 +8,8 @@ import { Providers, TEST_NOW, createTestStore } from '../../test/testStore';
 import { CoachSwitchesRows } from './CoachSwitchesRows';
 
 /**
- * Maintenance 34, Settings: the Coaching group's three kinds of advice, each on until turned off,
- * and kept as turned. Synthetic data only.
+ * Maintenance 34, Settings: the Coaching group's kinds of advice, each on until turned off, and kept
+ * as turned; the schedule watch's card with them since Maintenance 36. Synthetic data only.
  */
 
 async function seeded() {
@@ -30,7 +30,12 @@ async function seeded() {
 describe('the Coaching switches', () => {
   it('are each on until turned off', async () => {
     await seeded();
-    for (const name of ['"Too soon" warnings', '"Longer would help"', 'Goals and time']) {
+    for (const name of [
+      '"Too soon" warnings',
+      '"Longer would help"',
+      'Goals and time',
+      'After a schedule change',
+    ]) {
       expect(screen.getByRole('switch', { name: new RegExp(name) })).toHaveAttribute(
         'aria-checked',
         'true',
@@ -55,6 +60,7 @@ describe('the Coaching switches', () => {
       longer: false,
       tooSoon: true,
       goalsTime: true,
+      scheduleWatch: true,
     });
   });
 });

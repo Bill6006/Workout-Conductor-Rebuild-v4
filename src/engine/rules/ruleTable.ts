@@ -407,6 +407,68 @@ export const RULES = {
     'judgement',
     "The card comes back only on a material change (Nahum-Shani 2018, 27663578): the weeks' time moved by a quarter or more (the nudges report: above noise).",
   ),
+
+  // The schedule watch (Maintenance 36): the weeks after a schedule change against the weeks before.
+  watchError: rule(
+    0.04,
+    'share of a max',
+    'research',
+    "A session's max varies about 4% from one session to the next: the 1RM's test-retest CV 4.2% (Grgic 2020, 32681399), the load at one rep in reserve 2.7-6.2% (Lovegrove 2022, 36135029).",
+  ),
+  watchOwnSessions: rule(
+    10,
+    'sessions of a lift before the change',
+    'judgement',
+    'From ten sessions a lift\'s own spread around its trend is read, never under 4% (the recovery report: "after about 10 sessions, use the person\'s own SD around their trend").',
+  ),
+  watchZ: rule(
+    1.645,
+    'standard errors',
+    'research',
+    "A fall clearly beyond that noise, one-sided at 95%: the recovery report's 90% column, 4.7% with 4 sessions of a lift on each side (block means; Weir 2005, 15705040).",
+  ),
+  watchBlockDays: rule(
+    28,
+    'days',
+    'research',
+    'Four weeks against four detect about a 5% fall with 4 sessions of a lift on each side (the recovery report); nothing is said in the first four weeks after a change.',
+  ),
+  watchLongestDays: rule(
+    56,
+    'days',
+    'direction research, size judgement',
+    "With fewer than 4 sessions of a lift in four weeks the weeks run to 8 (the recovery report: 6-8 weeks); past 8 weeks after the change, a fall is no longer the change's to answer for (judgement).",
+  ),
+  watchSessions: rule(
+    4,
+    'sessions of a lift on each side',
+    'research',
+    'Fewer cannot tell a 5% fall from the noise (the recovery report: about 5% with 4 sessions in each block, about 4% with 8).',
+  ),
+  watchLifts: rule(
+    2,
+    'lifts',
+    'judgement',
+    'One lift\'s fall can be its own (a niggle, a new variation); two or more falling together is the schedule\'s (the recovery report: "the fall shows in 2 or more lifts").',
+  ),
+  watchEasierDays: rule(
+    3,
+    'days',
+    'direction research, size judgement',
+    "Still there after three days without hard sets for the lift's muscles: a six-day overload dip cleared in 3 days (Raeder 2016, 27093538), while nonfunctional overreaching lasts weeks (Fry 2006, 16888042).",
+  ),
+  watchBreakDays: rule(
+    21,
+    'days',
+    'research',
+    'Strength holds about 3 weeks without training (McMaster 2013, 23529287): a lift with a longer break around the change is not read, as the break would explain a fall.',
+  ),
+  watchMergeDays: rule(
+    7,
+    'days',
+    'judgement',
+    'A change and another within the week are one change: the days are often set again while a new week settles, and the schedule to go back to is the one trained before.',
+  ),
 } as const satisfies Record<string, Rule>;
 
 export type RuleId = keyof typeof RULES;

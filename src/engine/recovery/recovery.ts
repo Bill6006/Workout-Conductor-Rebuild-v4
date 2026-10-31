@@ -1,7 +1,7 @@
 import { getExercise } from '../../catalog/exercises/catalog';
 import type { CatalogExercise } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS, type MuscleId } from '../../catalog/muscles/muscles';
-import { addLocalDays, localDayKey } from '../../core/time/localDate';
+import { addLocalDays, localDayKey, localDaysBetween } from '../../core/time/localDate';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
 import type { LearnedResets } from '../learned/resets';
 import { illnessOf, readCheckIn } from '../readiness/checkIn';
@@ -598,6 +598,64 @@ export function againstRested(
   return shares.length % 2 === 1
     ? (shares[middle] as number)
     : ((shares[middle - 1] as number) + (shares[middle] as number)) / 2;
+}
+
+/**
+ * A lift's first set as the schedule watch reads it (Maintenance 36): when the session began, the set
+ * read as a max and against what it asked, and the calendar days since any of the lift's prime
+ * movers last had hard work (null where none had before it).
+ */
+export interface LiftRead {
+  at: string;
+  read: AskedRead;
+  easierDays: number | null;
+}
+
+const liftReadsKept = new WeakMap<ExposureIndex, ReadonlyMap<string, readonly LiftRead[]>>();
+
+/**
+ * Every lift's first sets, oldest first, as the schedule watch reads them: each session's first
+ * working set on a day the body was not off (as the learning reads them), with the days of easier
+ * work before it, so a set after a few easier days can be told from one inside a hard stretch.
+ */
+export function liftReads(
+  history: readonly WorkoutRecord[],
+): ReadonlyMap<string, readonly LiftRead[]> {
+  const index = exposureIndex(history);
+  const kept = liftReadsKept.get(index);
+  if (kept) return kept;
+  const lifts = new Map<string, readonly LiftRead[]>();
+  for (const [exerciseId, firsts] of index.firsts) {
+    const exercise = getExercise(exerciseId);
+    if (!exercise) continue;
+    lifts.set(
+      exerciseId,
+      firsts.map((first) => ({
+        at: first.record.startedAt,
+        read: first.read,
+        easierDays: easierDaysBefore(exercise, first, index),
+      })),
+    );
+  }
+  liftReadsKept.set(index, lifts);
+  return lifts;
+}
+
+/** Calendar days since any of a lift's prime movers last had hard work before a session began. */
+function easierDaysBefore(
+  exercise: CatalogExercise,
+  first: FirstRead,
+  index: ExposureIndex,
+): number | null {
+  let latest: { time: number; at: string } | null = null;
+  for (const muscle of exercise.primaryMuscles) {
+    for (const item of index.windows.get(muscle) ?? []) {
+      if (item.time >= first.start) break;
+      if (latest === null || item.time > latest.time)
+        latest = { time: item.time, at: item.window.at };
+    }
+  }
+  return latest === null ? null : localDaysBetween(latest.at, first.record.startedAt);
 }
 
 /**

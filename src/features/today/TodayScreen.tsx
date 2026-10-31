@@ -200,9 +200,14 @@ export function TodayScreen() {
         void store.takeCoachSwap(action).catch(failed('The swap could not be kept'));
         break;
       case 'schedule':
-        // The schedule moved to the real week (item 46); the profile save rebuilds the plan.
+        // The schedule moved to the real week (item 46), or back to the one before a change the
+        // watch found falling (Maintenance 36); the profile save rebuilds the plan.
         void store
-          .moveSchedule(action.weeklyFrequency, action.availableDays)
+          .moveSchedule(
+            action.weeklyFrequency,
+            action.availableDays,
+            action.back ? { back: true } : {},
+          )
           .catch(failed('The schedule could not be saved'));
         break;
       case 'settings':

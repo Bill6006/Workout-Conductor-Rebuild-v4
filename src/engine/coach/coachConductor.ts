@@ -52,6 +52,8 @@ import { goalsTimeChanged, goalsTimeReading } from '../planning/goalsTime';
 import { timePattern } from '../planning/timeAnswers';
 import type { TimeOffers } from '../../core/validation/timeOffers';
 import type { CoachSwitches } from '../../core/validation/coachSwitches';
+import type { ScheduleMove } from '../../core/validation/scheduleMove';
+import { scheduleWatch } from '../planning/scheduleWatch';
 import type { FatigueSignal } from '../recovery/fatigue';
 import { painPatterns } from '../recovery/painPattern';
 import { lastPainReport, painSourceLine } from '../recovery/painReport';
@@ -170,7 +172,14 @@ type CoachActionBase =
    * Moves the schedule to the week the lifter trains (Maintenance 27, item 46): its sessions a week
    * and its days; the split follows the new number.
    */
-  | { kind: 'schedule'; weeklyFrequency: number; availableDays: Weekday[]; label: string }
+  | {
+      kind: 'schedule';
+      weeklyFrequency: number;
+      availableDays: Weekday[];
+      label: string;
+      /** The schedule watch's way back (Maintenance 36): the change it makes is never watched. */
+      back?: true;
+    }
   /**
    * Opens Settings at the schedule, where the lifter sets their days and their Default length
    * (Maintenance 34, the honest goals-versus-time card): nothing changes until they change it.
@@ -369,8 +378,10 @@ export interface CoachInput {
    * the pattern of the answers, and its reading put away.
    */
   timeOffers?: TimeOffers;
-  /** The kinds of card the lifter turned off in Settings (Maintenance 34); absent, all on. */
-  switches?: Pick<CoachSwitches, 'tooSoon' | 'goalsTime'>;
+  /** The kinds of card the lifter turned off in Settings (Maintenance 34); each absent is on. */
+  switches?: Partial<Pick<CoachSwitches, 'tooSoon' | 'goalsTime' | 'scheduleWatch'>>;
+  /** The last change of the schedule, for the schedule watch (Maintenance 36); absent, none. */
+  scheduleMove?: ScheduleMove | null;
   /** Offers already taken this session (see `acceptKey`): they are not made twice. */
   accepted?: readonly string[];
   /** The rest now: when it ends, or what is left of it while paused (Maintenance 25). */
@@ -1050,6 +1061,9 @@ export const TOO_SOON_SOURCE = 'too-soon';
 /** The honest goals-versus-time card's source (Maintenance 34). */
 export const GOALS_TIME_SOURCE = 'goals-time';
 
+/** The schedule watch's card's source (Maintenance 36), with the change and the lifts it found. */
+export const WATCH_SOURCE = 'schedule watch';
+
 /**
  * The honest goals-versus-time card (Maintenance 34; the approved proposal: "Compare the weekly sets
  * your real time delivers with what your goal needs; if clearly below for several weeks, one plain
@@ -1094,11 +1108,11 @@ function goalsTimeSignals(input: CoachInput): CoachSignal[] {
 
 /**
  * The approved proposal's new cards (Maintenance 33: "too soon"; Maintenance 34's honest
- * goals-versus-time card), held to the owner's card limits (decision 5): at most one new card a day
- * and three a week. A card the lifter has seen shows on as before; the limits hold back only one not
- * yet seen.
+ * goals-versus-time card; Maintenance 36's schedule watch), held to the owner's card limits
+ * (decision 5): at most one new card a day and three a week. A card the lifter has seen shows on as
+ * before; the limits hold back only one not yet seen.
  */
-export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE, GOALS_TIME_SOURCE];
+export const NUDGE_SOURCES: readonly string[] = [TOO_SOON_SOURCE, GOALS_TIME_SOURCE, WATCH_SOURCE];
 
 export function isNudge(signal: Pick<CoachSignal, 'source'>): boolean {
   return NUDGE_SOURCES.some(
@@ -2643,6 +2657,61 @@ function scheduleSignals(input: CoachInput): CoachSignal[] {
   ];
 }
 
+/** Names as words: "A", "A and B", "A, B and C". */
+const andWords = (names: readonly string[]) =>
+  names.length <= 1
+    ? (names[0] ?? '')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+
+/**
+ * The schedule watch's one card (Maintenance 36; the approved proposal, part 2: "If it's clearly
+ * worse than normal week-to-week noise, show one card with the old schedule one tap away. If not,
+ * stay silent."): before a workout starts, the lifts down since the change, by about how much,
+ * and the schedule before it one tap away. Not now keeps it away until what it found changes: its
+ * source names the change and the lifts, so the same finding never comes back, and another does.
+ */
+function scheduleWatchSignals(input: CoachInput): CoachSignal[] {
+  if (input.status !== 'preview' || input.switches?.scheduleWatch === false) return [];
+  const finding = scheduleWatch(
+    input.scheduleMove ?? null,
+    input.profile.schedule,
+    input.history,
+    input.now,
+  );
+  if (!finding) return [];
+  const names = finding.lifts.map((lift) => getExercise(lift.exerciseId)?.name ?? lift.exerciseId);
+  const falls = finding.lifts.map(
+    (lift, at) => `${names[at]} about ${Math.round(lift.fall * 100)}%`,
+  );
+  const { from } = finding;
+  const plural = (count: number) => `${count} ${count === 1 ? 'day' : 'days'}`;
+  return [
+    {
+      domain: 'recovery',
+      headline: `${andWords(names)} down since the schedule changed`,
+      why: [
+        `Your first sets since ${shortDay(finding.at)} against the weeks before, each against what it asked: ${andWords(falls)} under.`,
+        'Still under after three days or more without hard sets for them: more than a hard week.',
+        `The schedule before: ${plural(from.weeklyFrequency)} a week, on ${dayList(from.availableDays)}.`,
+      ],
+      action: {
+        kind: 'schedule',
+        weeklyFrequency: from.weeklyFrequency,
+        availableDays: from.availableDays,
+        back: true,
+        label: 'Go back to it',
+      },
+      confidence: 'medium',
+      severity: 2,
+      source: `${WATCH_SOURCE}|${finding.at}|${finding.lifts
+        .map((lift) => lift.exerciseId)
+        .sort()
+        .join(',')}`,
+      untilNew: true,
+    },
+  ];
+}
+
 export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
   const policy = rawInput.policy ?? coachingPolicy(rawInput.profile.experience);
   // Stalls are read once: the plateau routes and the style offer both start from them.
@@ -2664,6 +2733,7 @@ export function gatherSignals(rawInput: CoachInput): CoachSignal[] {
     ...coverageSignals(input),
     ...goalsTimeSignals(input),
     ...scheduleSignals(input),
+    ...scheduleWatchSignals(input),
     ...tipSignals(input),
     ...pushSignals(input),
   ]

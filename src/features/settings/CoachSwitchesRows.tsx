@@ -29,6 +29,12 @@ const KINDS: readonly { kind: CoachSwitch; label: string; description: string }[
     description:
       'A card after three weeks of your goals’ muscles under 4 sets a week at short lengths.',
   },
+  {
+    kind: 'scheduleWatch',
+    label: 'After a schedule change',
+    description:
+      'A card when two lifts or more fall clearly in the weeks after a change of your days, with the schedule before it one tap away.',
+  },
 ];
 
 export function CoachSwitchesRows() {

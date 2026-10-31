@@ -198,6 +198,14 @@ import {
   parseLifeMirrorLink,
   type LifeMirrorLink,
 } from '../validation/lifeMirrorLink';
+import {
+  SCHEDULE_MOVE_ID,
+  parseScheduleMove,
+  scheduleMoved,
+  type ScheduleDays,
+  type ScheduleMove,
+} from '../validation/scheduleMove';
+import { nextScheduleMove } from '../../engine/planning/scheduleWatch';
 import { readLifeMirrorDay } from '../cloud/lifeMirror';
 import { lifeMirrorPrefill, type LifeMirrorPrefill } from '../../engine/readiness/lifeMirror';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
@@ -467,6 +475,11 @@ export interface AppState {
   coachSwitches: CoachSwitches;
   /** Whether today's check-in reads Life Mirror's (item 48): off until the lifter turns it on. */
   lifeMirrorLink: LifeMirrorLink;
+  /**
+   * The last change of the schedule, for the schedule watch (Maintenance 36): when, and the
+   * schedules before and after it; null before the first.
+   */
+  scheduleMove: ScheduleMove | null;
   /** A planned deload week, kept in the meta store and backed up; null when none. */
   deloadWeek: DeloadWeek | null;
   /** Maxes the lifter entered by hand, kept in the meta store and backed up. */
@@ -982,12 +995,14 @@ export class AppStore {
   private timeOffersVersion = 0;
   private switchesVersion = 0;
   private lifeMirrorVersion = 0;
+  private scheduleMoveVersion = 0;
   private resetsQueue: Promise<unknown> = Promise.resolve();
   private declinesQueue: Promise<unknown> = Promise.resolve();
   private shownQueue: Promise<unknown> = Promise.resolve();
   private timeOffersQueue: Promise<unknown> = Promise.resolve();
   private switchesQueue: Promise<unknown> = Promise.resolve();
   private lifeMirrorQueue: Promise<unknown> = Promise.resolve();
+  private scheduleMoveQueue: Promise<unknown> = Promise.resolve();
   /** "Longer would help" worked out for the inputs it read (`longerOfferFor`): kept while they hold. */
   private longerKept: { refs: readonly unknown[]; offer: LongerOffer | null } | null = null;
   /**
@@ -1090,6 +1105,7 @@ export class AppStore {
       timeOffers: emptyTimeOffers(),
       coachSwitches: defaultCoachSwitches(),
       lifeMirrorLink: defaultLifeMirrorLink(),
+      scheduleMove: null,
       deloadWeek: null,
       strengthMaxes: emptyMaxes(),
       coachFocus: null,
@@ -1213,6 +1229,7 @@ export class AppStore {
     const timeOffersSeen = this.timeOffersVersion;
     const switchesSeen = this.switchesVersion;
     const lifeMirrorSeen = this.lifeMirrorVersion;
+    const scheduleMoveSeen = this.scheduleMoveVersion;
     const mediaSeen = this.mediaVersion;
     const barcodesSeen = this.barcodesVersion;
     try {
@@ -1240,6 +1257,7 @@ export class AppStore {
         timeOffersRaw,
         switchesRaw,
         lifeMirrorRaw,
+        scheduleMoveRaw,
       ] = await Promise.all([
         db.getAll<Identified>('profile'),
         db.getAll<Identified>('locations'),
@@ -1260,6 +1278,7 @@ export class AppStore {
         db.get<Identified>('meta', TIME_OFFERS_ID),
         db.get<Identified>('meta', COACH_SWITCHES_ID),
         db.get<Identified>('meta', LIFE_MIRROR_LINK_ID),
+        db.get<Identified>('meta', SCHEDULE_MOVE_ID),
       ]);
       const deviceId = ensureDeviceId(this.storage);
       // Finds the token in either of its copies and heals the other. A copy that
@@ -1290,6 +1309,7 @@ export class AppStore {
           timeOffersRaw,
           switchesRaw,
           lifeMirrorRaw,
+          scheduleMoveRaw,
         ].every((record) => record === undefined);
       await noteDatabaseBirth(db, this.now(), empty).catch(() => null);
       // A barcode the database lost comes back from the phone's second copy.
@@ -1359,6 +1379,10 @@ export class AppStore {
           this.lifeMirrorVersion === lifeMirrorSeen
             ? (parseLifeMirrorLink(lifeMirrorRaw) ?? defaultLifeMirrorLink())
             : this.state.lifeMirrorLink,
+        scheduleMove:
+          this.scheduleMoveVersion === scheduleMoveSeen
+            ? parseScheduleMove(scheduleMoveRaw)
+            : this.state.scheduleMove,
         learnedResets:
           this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
         deloadWeek: parseDeloadWeek(deloadRaw, this.now()),
@@ -3676,7 +3700,7 @@ export class AppStore {
 
   // ---------------------------------------------------------------- durable data
 
-  async saveProfile(profile: UserProfile): Promise<SaveReceipt> {
+  async saveProfile(profile: UserProfile, options: { back?: boolean } = {}): Promise<SaveReceipt> {
     const previous = this.state.profile;
     const next = alignLegacyStyle(
       normalizeProfile(UserProfileSchema.parse({ ...profile, updatedAt: this.now() })),
@@ -3684,6 +3708,14 @@ export class AppStore {
     const db = await this.getDatabase();
     const receipt = await putVerified(db, 'profile', next, { now: this.now });
     this.setState({ profile: next, lastReceipt: receipt, error: null });
+    // A change of the sessions a week or the days (Maintenance 36): the schedule watch's record,
+    // whichever way the change came. One that cannot be written leaves the watch quiet: the
+    // schedule is then no longer the one its last record made.
+    if (previous && scheduleMoved(previous.schedule, next.schedule)) {
+      await this.recordScheduleMove(previous.schedule, next.schedule, options.back === true).catch(
+        () => undefined,
+      );
+    }
     if (!this.state.session) {
       this.ensureSession();
       return receipt;
@@ -5232,20 +5264,28 @@ export class AppStore {
   /**
    * Moves the schedule to the week the lifter trains (Maintenance 27, item 46): the sessions a week
    * and the days, set now, so the real week is read afresh from here; the plan is rebuilt under it,
-   * the split following the new number, like any profile change.
+   * the split following the new number, like any profile change. With `back`, the schedule
+   * watch's way back (Maintenance 36): the change it makes is never watched.
    */
-  async moveSchedule(weeklyFrequency: number, availableDays: readonly Weekday[]): Promise<void> {
+  async moveSchedule(
+    weeklyFrequency: number,
+    availableDays: readonly Weekday[],
+    options: { back?: boolean } = {},
+  ): Promise<void> {
     const profile = this.state.profile;
     if (!profile) throw new Error('Finish setup first.');
-    await this.saveProfile({
-      ...profile,
-      schedule: {
-        ...profile.schedule,
-        weeklyFrequency,
-        availableDays: [...availableDays],
-        since: this.now(),
+    await this.saveProfile(
+      {
+        ...profile,
+        schedule: {
+          ...profile.schedule,
+          weeklyFrequency,
+          availableDays: [...availableDays],
+          since: this.now(),
+        },
       },
-    });
+      options,
+    );
   }
 
   /**
@@ -5466,6 +5506,30 @@ export class AppStore {
       this.setState({ coachSwitches: next });
     });
     this.switchesQueue = run.catch(() => undefined);
+    await run;
+  }
+
+  /**
+   * Keeps the schedule watch's record of a change (Maintenance 36, `nextScheduleMove`), one change
+   * at a time, from the record as saved.
+   */
+  private async recordScheduleMove(
+    before: ScheduleDays,
+    after: ScheduleDays,
+    back: boolean,
+  ): Promise<void> {
+    const run = this.scheduleMoveQueue.then(async () => {
+      const db = await this.getDatabase();
+      const raw = await db.get<Identified>('meta', SCHEDULE_MOVE_ID);
+      const saved = raw === undefined ? null : parseScheduleMove(raw);
+      // A record that does not read is never written over.
+      if (raw !== undefined && saved === null) return;
+      const next = nextScheduleMove(saved, before, after, this.now(), back);
+      await putVerified(db, 'meta', next, { now: this.now });
+      this.scheduleMoveVersion += 1;
+      this.setState({ scheduleMove: next });
+    });
+    this.scheduleMoveQueue = run.catch(() => undefined);
     await run;
   }
 

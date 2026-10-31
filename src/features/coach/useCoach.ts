@@ -48,6 +48,8 @@ export type CoachParts = Pick<
   timeOffers?: AppState['timeOffers'];
   /** The kinds of coaching turned off in Settings (Maintenance 34). */
   coachSwitches?: AppState['coachSwitches'];
+  /** The last change of the schedule, for the schedule watch (Maintenance 36). */
+  scheduleMove?: AppState['scheduleMove'];
 };
 
 /**
@@ -114,6 +116,7 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
     reserveEstimate: parts.readEstimate ?? null,
     ...(parts.timeOffers ? { timeOffers: parts.timeOffers } : {}),
     ...(parts.coachSwitches ? { switches: parts.coachSwitches } : {}),
+    scheduleMove: parts.scheduleMove ?? null,
   });
   return { card, fatigue, strategy, policy };
 }
@@ -141,6 +144,7 @@ export function useCoach(): CoachContext | null {
   const readEstimate = useAppSelector((state) => state.readEstimate);
   const timeOffers = useAppSelector((state) => state.timeOffers);
   const coachSwitches = useAppSelector((state) => state.coachSwitches);
+  const scheduleMove = useAppSelector((state) => state.scheduleMove);
   const store = useAppStore();
   const minute = useNow();
   // The minute clock, brought to a running rest's end when it comes, so an offer about the rest
@@ -170,6 +174,7 @@ export function useCoach(): CoachContext | null {
           readEstimate,
           timeOffers,
           coachSwitches,
+          scheduleMove,
         },
         nowEpoch,
       ),
@@ -190,6 +195,7 @@ export function useCoach(): CoachContext | null {
       readEstimate,
       timeOffers,
       coachSwitches,
+      scheduleMove,
       nowEpoch,
     ],
   );

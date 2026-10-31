@@ -30,6 +30,8 @@ const FILES = [
   'src/core/state/lifeMirror.store.test.ts',
   'src/features/today/lifeMirrorScreens.screens.test.tsx',
   'src/engine/readiness/lifeMirror.test.ts',
+  // Maintenance 36: the schedule watch's easier days, counted on this device's calendar.
+  'src/engine/planning/scheduleWatch.test.ts',
 ];
 
 for (const { zone, offset } of ZONES) {
