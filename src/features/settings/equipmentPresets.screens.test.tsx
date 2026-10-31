@@ -62,7 +62,9 @@ describe('Settings, Equipment presets', () => {
     await user.click(await screen.findByTestId('new-preset'));
     await user.type(within(sheet()).getByLabelText('Name'), 'Hotel gym');
     await user.click(within(sheet()).getByRole('button', { name: 'Full gym preset' }));
-    await user.click(within(sheet()).getByRole('button', { name: 'Barbell + plates', pressed: true }));
+    await user.click(
+      within(sheet()).getByRole('button', { name: 'Barbell + plates', pressed: true }),
+    );
     await user.click(within(sheet()).getByTestId('preset-save'));
     const row = await screen.findByTestId('own-preset');
     expect(row).toHaveTextContent('Hotel gym');
@@ -99,8 +101,54 @@ describe('Settings, Equipment presets', () => {
       within(screen.getByTestId('own-preset')).getByRole('button', { name: 'Edit' }),
     );
     await user.click(within(sheet()).getByRole('button', { name: 'Delete' }));
+    await user.click(within(sheet()).getByTestId('preset-delete-confirm'));
     await waitFor(() => expect(screen.queryByTestId('own-preset')).toBeNull());
     expect(store.getSnapshot().equipmentPresets).toEqual([]);
+  });
+
+  it('asks before it deletes, Keep it keeping it; once deleted, New preset has the focus', async () => {
+    const store = await lifter();
+    await store.saveEquipmentPreset({ name: 'Hotel gym', equipment: ['barbell'] });
+    show(store, '#/settings/presets');
+    const user = userEvent.setup();
+    const row = await screen.findByTestId('own-preset');
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    await user.click(within(sheet()).getByRole('button', { name: 'Delete' }));
+    expect(within(sheet()).getByTestId('preset-delete-question')).toHaveTextContent(
+      'Delete Hotel gym? The places you filled from it stay as they are.',
+    );
+    await user.click(within(sheet()).getByRole('button', { name: 'Keep it' }));
+    expect(within(sheet()).queryByTestId('preset-delete-question')).toBeNull();
+    expect(store.getSnapshot().equipmentPresets).toHaveLength(1);
+    await user.click(within(sheet()).getByRole('button', { name: 'Delete' }));
+    await user.click(within(sheet()).getByTestId('preset-delete-confirm'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(store.getSnapshot().equipmentPresets).toEqual([]);
+    expect(screen.getByTestId('new-preset')).toHaveFocus();
+  });
+
+  it('stays open while it saves, whatever closes it, and closes once the save is done', async () => {
+    const store = await lifter();
+    let finish: () => void = () => undefined;
+    const saving = vi.spyOn(store, 'saveEquipmentPreset').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve(undefined as never);
+        }),
+    );
+    show(store, '#/settings/presets');
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('new-preset'));
+    await user.type(within(sheet()).getByLabelText('Name'), 'Hotel gym');
+    await user.click(within(sheet()).getByTestId('preset-save'));
+    expect(within(sheet()).getByTestId('preset-save')).toHaveTextContent('Saving');
+    await user.click(within(sheet()).getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => {
+      finish();
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(saving).toHaveBeenCalledTimes(1);
   });
 });
 

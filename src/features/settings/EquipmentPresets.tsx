@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '../../components/Button/Button';
 import { Field } from '../../components/Form/Field';
 import formStyles from '../../components/Form/Form.module.css';
@@ -19,6 +19,7 @@ const items = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}`;
 export function EquipmentPresets() {
   const presets = useAppSelector((state) => state.equipmentPresets);
   const [editing, setEditing] = useState<EquipmentPreset | 'new' | null>(null);
+  const newButton = useRef<HTMLButtonElement>(null);
   return (
     <div data-testid="equipment-presets">
       <p className={styles.body}>
@@ -46,7 +47,12 @@ export function EquipmentPresets() {
           </li>
         ))}
       </ul>
-      <Button variant="secondary" data-testid="new-preset" onClick={() => setEditing('new')}>
+      <Button
+        ref={newButton}
+        variant="secondary"
+        data-testid="new-preset"
+        onClick={() => setEditing('new')}
+      >
         New preset
       </Button>
       {editing !== null ? (
@@ -54,6 +60,12 @@ export function EquipmentPresets() {
           key={editing === 'new' ? 'new' : editing.id}
           preset={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
+          // The preset gone, its row and its Edit with it: the next step is a new one (the review of
+          // the presets: focus was lost).
+          onDeleted={() => {
+            setEditing(null);
+            newButton.current?.focus();
+          }}
         />
       ) : null}
     </div>
@@ -61,70 +73,103 @@ export function EquipmentPresets() {
 }
 
 /** One preset made or changed: its name and its equipment; a preset of the lifter's own deleted. */
-function PresetSheet({ preset, onClose }: { preset: EquipmentPreset | null; onClose: () => void }) {
+function PresetSheet({
+  preset,
+  onClose,
+  onDeleted,
+}: {
+  preset: EquipmentPreset | null;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
   const store = useAppStore();
   const [name, setName] = useState(preset?.name ?? '');
   const [equipment, setEquipment] = useState<string[]>(() => [...(preset?.equipment ?? [])]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [working, setWorking] = useState<'saving' | 'deleting' | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
-  async function run(work: () => Promise<unknown>, fallback: string) {
-    setBusy(true);
-    setError(null);
+  async function save() {
+    setWorking('saving');
+    setNameError(null);
     try {
-      await work();
+      await store.saveEquipmentPreset({ ...(preset ? { id: preset.id } : {}), name, equipment });
       onClose();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : fallback);
+      setNameError(caught instanceof Error ? caught.message : 'Could not save it.');
     } finally {
-      setBusy(false);
+      setWorking(null);
     }
   }
 
+  async function remove() {
+    if (!preset) return;
+    setWorking('deleting');
+    setDeleteError(null);
+    try {
+      await store.deleteEquipmentPreset(preset.id);
+      onDeleted();
+    } catch (caught) {
+      setDeleteError(caught instanceof Error ? caught.message : 'Could not delete it.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  const busy = working !== null;
   return (
     <Sheet
       open
       title={preset ? `Edit ${preset.name}` : 'New preset'}
-      onClose={onClose}
+      // Never closed while it saves or deletes: its finish closes it (the review of the presets: one
+      // closed early closed the next preset's sheet when it finished).
+      onClose={busy ? () => undefined : onClose}
       footer={
-        <>
-          {preset ? (
+        confirming && preset ? (
+          <>
+            <Button variant="secondary" disabled={busy} onClick={() => setConfirming(false)}>
+              Keep it
+            </Button>
             <Button
-              variant="secondary"
+              variant="primary"
               disabled={busy}
-              onClick={() =>
-                void run(() => store.deleteEquipmentPreset(preset.id), 'Could not delete it.')
-              }
+              data-testid="preset-delete-confirm"
+              onClick={() => void remove()}
             >
-              Delete
+              {working === 'deleting' ? 'Deleting…' : 'Delete preset'}
             </Button>
-          ) : (
-            <Button variant="secondary" disabled={busy} onClick={onClose}>
-              Cancel
+          </>
+        ) : (
+          <>
+            {preset ? (
+              <Button variant="secondary" disabled={busy} onClick={() => setConfirming(true)}>
+                Delete
+              </Button>
+            ) : (
+              <Button variant="secondary" disabled={busy} onClick={onClose}>
+                Cancel
+              </Button>
+            )}
+            <Button
+              variant="primary"
+              disabled={busy}
+              data-testid="preset-save"
+              onClick={() => void save()}
+            >
+              {working === 'saving' ? 'Saving…' : 'Save preset'}
             </Button>
-          )}
-          <Button
-            variant="primary"
-            disabled={busy}
-            data-testid="preset-save"
-            onClick={() =>
-              void run(
-                () =>
-                  store.saveEquipmentPreset({
-                    ...(preset ? { id: preset.id } : {}),
-                    name,
-                    equipment,
-                  }),
-                'Could not save it.',
-              )
-            }
-          >
-            {busy ? 'Saving…' : 'Save preset'}
-          </Button>
-        </>
+          </>
+        )
       }
     >
-      <Field label="Name" htmlFor="preset-name" error={error ?? undefined}>
+      {confirming && preset ? (
+        <p className={styles.body} role="alert" data-testid="preset-delete-question">
+          Delete {preset.name}? The places you filled from it stay as they are.
+          {deleteError ? ` ${deleteError}` : ''}
+        </p>
+      ) : null}
+      <Field label="Name" htmlFor="preset-name" error={nameError ?? undefined}>
         <input
           id="preset-name"
           className={formStyles.input}

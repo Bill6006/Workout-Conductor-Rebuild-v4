@@ -42,6 +42,15 @@ export function parseEquipmentPreset(raw: unknown): EquipmentPreset | null {
   return result.success ? result.data : null;
 }
 
+/** The presets that read among stored records, in the order they are shown. */
+export function presetsFrom(records: readonly unknown[]): EquipmentPreset[] {
+  return sortPresets(
+    records
+      .map((record) => parseEquipmentPreset(record))
+      .filter((preset): preset is EquipmentPreset => preset !== null),
+  );
+}
+
 /** The presets in the order they are shown: by name, as a person reads them. */
 export function sortPresets(presets: readonly EquipmentPreset[]): EquipmentPreset[] {
   return [...presets].sort(
@@ -50,13 +59,24 @@ export function sortPresets(presets: readonly EquipmentPreset[]): EquipmentPrese
   );
 }
 
+/**
+ * A name as the buttons show it, for comparing: its case aside, and a "preset" at its end left off,
+ * as the button adds one (the review of the presets: "Hotel gym" and "Hotel gym preset" were two
+ * buttons alike).
+ */
+const nameKey = (name: string) =>
+  name
+    .trim()
+    .replace(/\s*preset$/i, '')
+    .trim();
 const sameName = (a: string, b: string) =>
-  a.trim().localeCompare(b.trim(), undefined, { sensitivity: 'base' }) === 0;
+  nameKey(a).localeCompare(nameKey(b), undefined, { sensitivity: 'base' }) === 0;
 
 /**
- * Why a name cannot be a preset's, or null where it can: none, too long, a built-in's (with or
- * without "preset"), or another custom preset's, case aside. `editing` is the preset being renamed,
- * whose own name is free to keep.
+ * Why a name cannot be a preset's, or null where it can: none, too long, a built-in's, or another
+ * custom preset's, case and a "preset" at the end aside. `editing` is the preset being changed: its
+ * own name is free to keep, and a name it already has is never refused, even where two devices
+ * gave two presets the same one (the review of the presets).
  */
 export function presetNameProblem(
   name: string,
@@ -68,11 +88,11 @@ export function presetNameProblem(
   if (!LocationProfileSchema.shape.name.safeParse(trimmed).success) {
     return 'Keep the name to 40 characters.';
   }
-  const builtIn = BUILT_IN_PRESETS.find(
-    (preset) => sameName(trimmed, preset.name) || sameName(trimmed, `${preset.name} preset`),
-  );
+  const builtIn = BUILT_IN_PRESETS.find((preset) => sameName(trimmed, preset.name));
   if (builtIn) return `${builtIn.name} is built in; choose another name.`;
-  if (presets.some((preset) => preset.id !== editing && sameName(preset.name, trimmed))) {
+  const own = presets.find((preset) => preset.id === editing);
+  if (own && sameName(own.name, trimmed)) return null;
+  if (presets.some((preset) => sameName(preset.name, trimmed))) {
     return 'A preset already has that name.';
   }
   return null;

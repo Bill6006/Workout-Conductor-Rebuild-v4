@@ -55,6 +55,19 @@ describe('a preset’s name', () => {
     );
   });
 
+  it('is never another preset’s with “preset” after it either: two buttons alike', () => {
+    expect(presetNameProblem('Hotel gym preset', own)).toBe('A preset already has that name.');
+    expect(presetNameProblem('Hotel gym', [preset('c', 'Hotel gym Preset')])).toBe(
+      'A preset already has that name.',
+    );
+  });
+
+  it('never refuses a preset the name it has, even one two devices gave two presets', () => {
+    const twins = [preset('a', 'Hotel gym'), preset('b', 'Hotel gym')];
+    expect(presetNameProblem('Hotel gym', twins, `${PRESET_ID_PREFIX}a`)).toBeNull();
+    expect(presetNameProblem('Hotel Gym', twins, `${PRESET_ID_PREFIX}b`)).toBeNull();
+  });
+
   it('is never another preset’s, but a preset keeps its own', () => {
     expect(presetNameProblem(' work GYM ', own)).toBe('A preset already has that name.');
     expect(presetNameProblem('Work gym', own, `${PRESET_ID_PREFIX}b`)).toBeNull();

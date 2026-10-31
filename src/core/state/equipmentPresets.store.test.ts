@@ -13,9 +13,9 @@ import { TEST_NOW, createTestStore } from '../../test/testStore';
  * no place changes when a preset does. Synthetic data only.
  */
 
-async function lifter(cloud = createFakeCloud()) {
+async function lifter(cloud = createFakeCloud(), clock: () => string = () => TEST_NOW) {
   const handle = createTestStore({
-    now: () => TEST_NOW,
+    now: clock,
     minOverlayMs: 0,
     cloudClient: async () => cloud.client,
     isOnline: () => true,
@@ -64,8 +64,10 @@ describe('custom equipment presets', () => {
   });
 
   it('are renamed and changed in place, keeping when they were made', async () => {
-    const { store } = await lifter();
+    let now = TEST_NOW;
+    const { store } = await lifter(createFakeCloud(), () => now);
     const made = await store.saveEquipmentPreset({ name: 'Hotel gym', equipment: ['barbell'] });
+    now = new Date(Date.parse(TEST_NOW) + 3_600_000).toISOString();
     const changed = await store.saveEquipmentPreset({
       id: made.id,
       name: 'Hotel gym, Denver',
@@ -75,7 +77,8 @@ describe('custom equipment presets', () => {
       id: made.id,
       name: 'Hotel gym, Denver',
       equipment: ['adjustable-dumbbells'],
-      createdAt: made.createdAt,
+      createdAt: TEST_NOW,
+      updatedAt: now,
     });
     expect(store.getSnapshot().equipmentPresets).toEqual([changed]);
   });
@@ -143,6 +146,95 @@ describe('custom equipment presets', () => {
     const kept = store.getSnapshot().locations.find((place) => place.id === 'gym')!;
     expect(kept.equipment).toEqual(made.equipment);
     expect(kept.loading).toEqual(loading);
+  });
+
+  it('keep what a newer copy’s catalog added when this one changes them', async () => {
+    const { store } = await lifter();
+    const db = await store.getDatabase();
+    const id = `${PRESET_ID_PREFIX}newer`;
+    await db.put('meta', {
+      id,
+      name: 'Hotel gym',
+      equipment: ['barbell', 'equipment-a-later-copy-knows'],
+      createdAt: TEST_NOW,
+      updatedAt: TEST_NOW,
+    });
+    await store.hydrate();
+    const renamed = await store.saveEquipmentPreset({
+      id,
+      name: 'Hotel gym, Denver',
+      equipment: ['barbell'],
+    });
+    expect(renamed.equipment).toEqual(['barbell', 'equipment-a-later-copy-knows']);
+  });
+
+  it('let a preset keep the name it has, even one two devices gave two presets', async () => {
+    const { store } = await lifter();
+    const db = await store.getDatabase();
+    for (const id of ['phone', 'tablet']) {
+      await db.put('meta', {
+        id: `${PRESET_ID_PREFIX}${id}`,
+        name: 'Hotel gym',
+        equipment: ['barbell'],
+        createdAt: TEST_NOW,
+        updatedAt: TEST_NOW,
+      });
+    }
+    await store.hydrate();
+    const changed = await store.saveEquipmentPreset({
+      id: `${PRESET_ID_PREFIX}phone`,
+      name: 'Hotel gym',
+      equipment: ['adjustable-dumbbells'],
+    });
+    expect(changed.equipment).toEqual(['adjustable-dumbbells']);
+  });
+
+  it('are read again from the store after each change: one a sync brought meanwhile is listed', async () => {
+    const { store } = await lifter();
+    const db = await store.getDatabase();
+    // Written by a pull, with no read of the store since.
+    await db.put('meta', {
+      id: `${PRESET_ID_PREFIX}pulled`,
+      name: 'Work gym',
+      equipment: ['barbell'],
+      createdAt: TEST_NOW,
+      updatedAt: TEST_NOW,
+    });
+    await store.saveEquipmentPreset({ name: 'Hotel gym', equipment: ['barbell'] });
+    expect(store.getSnapshot().equipmentPresets.map((preset) => preset.name)).toEqual([
+      'Hotel gym',
+      'Work gym',
+    ]);
+  });
+
+  it('keep an edit to one deleted meanwhile, as a new preset', async () => {
+    const { store } = await lifter();
+    const made = await store.saveEquipmentPreset({ name: 'Hotel gym', equipment: ['barbell'] });
+    const db = await store.getDatabase();
+    // Deleted on another device, the deletion pulled, while its sheet was open here.
+    await db.delete('meta', made.id);
+    const kept = await store.saveEquipmentPreset({
+      id: made.id,
+      name: 'Hotel gym',
+      equipment: ['adjustable-dumbbells'],
+    });
+    expect(kept.id).not.toBe(made.id);
+    expect(store.getSnapshot().equipmentPresets).toEqual([kept]);
+  });
+
+  it('never keep the app from opening when a meta record does not read', async () => {
+    const { store } = await lifter();
+    const made = await store.saveEquipmentPreset({ name: 'Hotel gym', equipment: ['barbell'] });
+    const db = await store.getDatabase();
+    const getAll = db.getAll.bind(db);
+    db.getAll = (async (name: Parameters<typeof db.getAll>[0]) => {
+      if (name === 'meta') throw new Error('Failed to read large IndexedDB value');
+      return getAll(name);
+    }) as typeof db.getAll;
+    await store.hydrate();
+    expect(store.getSnapshot().error).toBeNull();
+    expect(store.getSnapshot().profile).not.toBeNull();
+    expect(store.getSnapshot().equipmentPresets).toEqual([made]);
   });
 
   it('come from another device with the cloud copy', async () => {

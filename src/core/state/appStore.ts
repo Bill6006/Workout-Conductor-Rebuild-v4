@@ -212,10 +212,11 @@ import {
   isPresetId,
   parseEquipmentPreset,
   presetNameProblem,
+  presetsFrom,
   sortPresets,
   type EquipmentPreset,
 } from '../validation/equipmentPreset';
-import { normalizeEquipment } from '../../catalog/equipment/equipment';
+import { ALL_EQUIPMENT_IDS, normalizeEquipment } from '../../catalog/equipment/equipment';
 import { readLifeMirrorDay } from '../cloud/lifeMirror';
 import { lifeMirrorPrefill, type LifeMirrorPrefill } from '../../engine/readiness/lifeMirror';
 import { explanationOnce } from '../../engine/workoutGenerator/fittingLog';
@@ -1299,11 +1300,13 @@ export class AppStore {
         db.get<Identified>('meta', COACH_SWITCHES_ID),
         db.get<Identified>('meta', LIFE_MIRROR_LINK_ID),
         db.get<Identified>('meta', SCHEDULE_MOVE_ID),
-        db.getAll<Identified>('meta'),
+        // Guarded: a meta record that does not read (a value too large to read back) leaves the
+        // presets as they were, never the app unopened (the review of the presets).
+        db.getAll<Identified>('meta').catch(() => null),
       ]);
       // The lifter's own presets, each its own record; one that does not read is left out, and
       // never written over.
-      const presetsRaw = metaRecords.filter((record) => isPresetId(record.id));
+      const presetsRaw = metaRecords?.filter((record) => isPresetId(record.id)) ?? null;
       const deviceId = ensureDeviceId(this.storage);
       // Finds the token in either of its copies and heals the other. A copy that
       // could not be healed must not stop the app from opening.
@@ -1320,7 +1323,7 @@ export class AppStore {
           customExercises.length +
           customInstructions.length +
           savedRaw.length +
-          presetsRaw.length ===
+          (presetsRaw?.length ?? 1) ===
           0 &&
         [
           routesRaw,
@@ -1409,12 +1412,8 @@ export class AppStore {
             ? parseScheduleMove(scheduleMoveRaw)
             : this.state.scheduleMove,
         equipmentPresets:
-          this.presetsVersion === presetsSeen
-            ? sortPresets(
-                presetsRaw
-                  .map((record) => parseEquipmentPreset(record))
-                  .filter((preset): preset is EquipmentPreset => preset !== null),
-              )
+          this.presetsVersion === presetsSeen && presetsRaw !== null
+            ? presetsFrom(presetsRaw)
             : this.state.equipmentPresets,
         learnedResets:
           this.resetsVersion === resetsSeen ? parseResets(resetsRaw) : this.state.learnedResets,
@@ -5554,38 +5553,54 @@ export class AppStore {
     equipment: readonly string[];
   }): Promise<EquipmentPreset> {
     const run = this.presetsQueue.then(async () => {
-      const problem = presetNameProblem(input.name, this.state.equipmentPresets, input.id ?? null);
-      if (problem) throw new Error(problem);
       const db = await this.getDatabase();
       const now = this.now();
       let saved: EquipmentPreset | null = null;
       if (input.id !== undefined) {
         const raw = await db.get<Identified>('meta', input.id);
         saved = raw === undefined ? null : parseEquipmentPreset(raw);
-        if (saved === null) throw new Error('That preset could not be read; it is left as it is.');
+        // Gone, deleted here or on another device while it was open: kept as a new one, so what
+        // was typed is never lost (the review of the presets). One that does not read stays.
+        if (raw !== undefined && saved === null) {
+          throw new Error('That preset could not be read; it is left as it is.');
+        }
       }
+      const problem = presetNameProblem(input.name, this.state.equipmentPresets, input.id ?? null);
+      if (problem) throw new Error(problem);
       const next = EquipmentPresetSchema.parse({
         ...(saved ?? {}),
         id:
           saved?.id ??
           `${PRESET_ID_PREFIX}${now.replace(/\D/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`,
         name: input.name.trim(),
-        equipment: normalizeEquipment(input.equipment),
+        // The catalog's in its order, and anything a newer copy's catalog has that this one does not
+        // kept as it was (the review of the presets: a rename here dropped it).
+        equipment: [
+          ...normalizeEquipment(input.equipment),
+          ...(saved?.equipment ?? []).filter((id) => !ALL_EQUIPMENT_IDS.includes(id)),
+        ],
         createdAt: saved?.createdAt ?? now,
         updatedAt: now,
       });
       await putVerified(db, 'meta', next, { now: this.now });
       this.presetsVersion += 1;
-      this.setState({
-        equipmentPresets: sortPresets([
-          ...this.state.equipmentPresets.filter((preset) => preset.id !== next.id),
-          next,
-        ]),
-      });
+      this.setState({ equipmentPresets: await this.presetsOnDisk(db, next) });
       return next;
     });
     this.presetsQueue = run.catch(() => undefined);
     return run;
+  }
+
+  /**
+   * The presets as stored now, after a write: a pull that came while the app read the store is
+   * in them, which the list from before the write lacked (the review of the presets). A store that
+   * does not read leaves the list as it was, with `kept` written.
+   */
+  private async presetsOnDisk(db: Database, kept?: EquipmentPreset): Promise<EquipmentPreset[]> {
+    const records = await db.getAll<Identified>('meta').catch(() => null);
+    if (records !== null) return presetsFrom(records.filter((record) => isPresetId(record.id)));
+    const others = this.state.equipmentPresets.filter((preset) => preset.id !== kept?.id);
+    return sortPresets(kept ? [...others, kept] : others);
   }
 
   /** Deletes one of the lifter's own presets; the places filled from it stay as they are. */
@@ -5595,9 +5610,7 @@ export class AppStore {
       const db = await this.getDatabase();
       await deleteVerified(db, 'meta', id);
       this.presetsVersion += 1;
-      this.setState({
-        equipmentPresets: this.state.equipmentPresets.filter((preset) => preset.id !== id),
-      });
+      this.setState({ equipmentPresets: await this.presetsOnDisk(db) });
     });
     this.presetsQueue = run.catch(() => undefined);
     await run;
