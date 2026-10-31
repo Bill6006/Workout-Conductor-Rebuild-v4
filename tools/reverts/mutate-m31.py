@@ -295,7 +295,8 @@ MUTATIONS = [
     ("G8 no lift to push weighed off the plan", GENERATE,
      "    !offPlan &&\n", "", [T_SESSION], 0),
     ("G9 nor its extra session put in", GENERATE,
-     "    !offPlan &&\n", "", [T_SESSION], 1),
+     "    constraints.pushProbe !== true &&\n    !offPlan &&\n",
+     "    constraints.pushProbe !== true &&\n", [T_SESSION], None),
     ("G10 Why this workout says what it is for", GENERATE,
      "    ...(spec && (catchUp !== null || spec.kind === 'second') ? catchUpLines(spec, blocks) : []),\n",
      "", [T_SESSION, T_RESTS], None),
@@ -437,9 +438,9 @@ MUTATIONS = [
      "    const spent: MuscleId[] = [];", [T_DAY], None),
     ("V6 every lift counts against its muscles' sets", GENERATE,
      "    for (const left of shares) left.sets -= prescription.sets;\n", "", [T_DAY], None),
-    ("V7 the split's rotation passes a catch-up by", VOLUME,
-     "      .filter((id): id is string => Boolean(id) && !OFF_ROTATION.has(id as string)),",
-     "      .filter((id): id is string => Boolean(id)),", [T_DAY], None),
+    # V7 went (the fresh review before shipping): the split's template is chosen from the history
+    # with catch-ups and second workouts left out (templateFor, F7 and F8), so the recent templates
+    # it reads never hold one, and its revert of the exposure's own filter changes no plan.
     ("V8 today's direct sets", WEEK,
      "    if (field === 'today') muscles[muscle].todayDirect += sets;\n", "", [T_DAY], None),
     ("V9 the 48 hours before today", WEEK,
@@ -491,9 +492,9 @@ MUTATIONS = [
     ("X1 the lift in front keeps the catch-up's sets through a day's setting", ENGINE,
      "    const sets = Math.min(own, Math.max(room, Math.min(own, working)));",
      "    const sets = own;", [T_OFF], None),
-    ("X2 ... and its reserve", ENGINE,
-     "    const rir = Math.max(hold?.minRir ?? 0, pushed ? pushRir(after.rir) : after.rir);",
-     "    const rir = pushed ? pushRir(after.rir) : after.rir;", [T_OFF], None),
+    # X2 went (the fresh review before shipping): every rebuild holds the lifts it keeps to the
+    # offer's dose (holdToOffer, the seventeenth review: H91 and H92), and each lift a day's setting
+    # settles is one it holds, so the settle's own hold of the reserve changes no plan.
     ("X3 what comes in for a lift keeps the catch-up's reserve", ENGINE,
      "  return Math.max(shift, hold.minRir - prescriptionToday(request, exercise, role).rir);",
      "  return shift;", [T_OFF], None),
@@ -589,8 +590,10 @@ MUTATIONS = [
      "    const sets = Math.min(own, working, room);", [T_OFF], None),
 
     # The fourth review of round M.
-    ("Y1 the lift to push, giving its place up, gives catch-up muscles no slot", GENERATE,
-     "            exercise.id !== push?.exercise.id &&\n", "", [T_OFF], None),
+    # Y1 went (the fresh review before shipping): a slot two muscles would share through the lift to
+    # push, which the day does not pick, is filled with a lift for one of them, and the other takes a
+    # slot of its own right after it (the sixth to ninth reviews' slot for a muscle a lift misses):
+    # the same plan, at the rack and at the gym.
     ("Y3 a swap-in for fewer of a shared slot's muscles waits", GENERATE,
      "      if (trains && covers(next, trains) < covers(pick, trains)) continue;",
      "      if (trains && covers(next, trains) === 0) continue;", [T_OFF], None),
@@ -703,9 +706,13 @@ MUTATIONS = [
      None),
 
     # The thirteenth review of round M.
+    # Since the fifteenth review what comes in for comfort is locked as the lifter's pick (H56, H57);
+    # one pinned and unpinned is kept as it came in, which the unpinned test reaches (the fresh
+    # review before shipping: the lock alone kept the thirteenth review's own case).
     ("H20 what comes in for comfort stays through a rebuild", ENGINE,
      "    if (keptAsPicked(entry, request)) lockedIds.add(entry.id);",
-     "    if (entry.locked || entry.pinned) lockedIds.add(entry.id);", [T_COMFORT_KEPT], None),
+     "    if (entry.locked || entry.pinned) lockedIds.add(entry.id);",
+     [T_COMFORT_KEPT, T_COMFORT_UNPINNED], None),
     ("H21 a lift begun with one set owed: nothing comes in for it", ENGINE,
      "  if (\n    offPlanSpec(request.constraints, workout) !== null &&\n    doneHere > 0 &&\n    owed < CATCH_UP.MIN_SETS\n  ) {\n    return undefined;\n  }\n",
      "", [T_ONE_OWED], None),
@@ -757,14 +764,15 @@ MUTATIONS = [
      [T_EMPTIED], None),
 
     # The fourteenth review of round M.
+    # As for H20 (above): the lock keeps the reviews' own cases, and the unpinned test reaches these.
     ("H38 what came in for comfort stays through a length picked", ENGINE,
      "    allEntries(request.workout.blocks).some((entry) => keptAsPicked(entry, request));",
      "    allEntries(request.workout.blocks).some((entry) => entry.locked || entry.pinned);",
-     [T_COMFORT_LENGTH], None),
+     [T_COMFORT_LENGTH, T_COMFORT_UNPINNED], None),
     ("H39 the day's settings reach what came in for comfort", ENGINE,
      "      (entry.id === request.currentEntryId || keptAsPicked(entry, request)) &&",
      "      (entry.id === request.currentEntryId || entry.pinned || entry.locked) &&",
-     [T_COMFORT_EASIER], None),
+     [T_COMFORT_EASIER, T_COMFORT_UNPINNED], None),
     ("H40 ... in a catch-up only what came in for another", ENGINE,
      "  return offPlanSpec(request.constraints, request.workout) !== null;\n}",
      "  return false;\n}", [T_COMFORT_KEPT, T_COMFORT_LENGTH, T_COMFORT_EASIER, T_COMFORT_UNPINNED],
@@ -793,9 +801,10 @@ MUTATIONS = [
      [T_SWAP_BACK_OVER], None),
     ("H49 ... picking up no more than they have left", ENGINE, "  const count = Math.min(owed, room);",
      "  const count = owed;", [T_SWAP_BACK_ROOM], None),
-    ("H50 a lift done says so on its sheet", ENGINE,
-     "  if (working.length > 0 && done === working.length) return doneWords(current.name);",
-     "  if (false) return doneWords(current.name);", [T_SHEET_DONE], None),
+    # H50 went (the fresh review before shipping): a lift with every set done is said done before
+    # any refusal is read, by the sheet (the twenty-second review's own check) and by the swap
+    # (its "nothing is left to swap"), and the coach offers no swap for a lift begun, so the
+    # refusal's own check of it changes nothing the lifter sees (the whole suite passes without it).
     ("H51 the way back to an emptied catch-up is the catch-up again", ENGINE,
      "    validateWorkout(next, { ...request, constraints }, context);",
      "    validateWorkout(next, request, context);", [T_BACK_TO_EMPTIED], None),
@@ -1329,7 +1338,14 @@ for name, rel, old, new, tests, nth in MUTATIONS:
         # A compile error, or a failure that is only a time-out, is no catch (as
         # mutate-install-icon.py reads it): WRONG FAILURE, to run again alone or mend.
         asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
-        wrong = summary is None or (re.search(r"Test timed out", out) is not None and not asserted)
+        # A test file that did not load (a syntax error) is a failed file with no test failed.
+        files = re.search(r"Test Files\s+(.*)", out)
+        unloaded = files is not None and "failed" in files.group(1) and "failed" not in line
+        wrong = (
+            summary is None
+            or unloaded
+            or (re.search(r"Test timed out", out) is not None and not asserted)
+        )
         killed = "failed" in line and not wrong
         if utc:
             # As the CI runner: the tests in UTC, then the day rules' tests in two zones.

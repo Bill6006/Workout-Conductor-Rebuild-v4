@@ -566,7 +566,7 @@ MUTATIONS = [
      BACKOFFS, "  const from = top.asked?.weight ?? top.weight;", "  const from = top.weight;",
      [T_CAPPED], None),
     ("N132 ... straight at it", BACKOFFS, "    if (!STRAIGHT_MODES.includes(top.mode)) {",
-     "    if (targetTakesBackOffs(top)) {", [T_CAPPED], None),
+     "    if (targetTakesBackOffs(top)) {", [T_CAPPED, T_HELD], None),
     ("N133 the session the target read, on the structure", BACKOFFS,
      "  if (from === null || !ran) return null;",
      "  if (from === null || !ranOnTopSet(input.exerciseId, input.history)) return null;",
@@ -843,8 +843,8 @@ MUTATIONS = [
      "  backOffAt: z.number().min(0).optional().catch(undefined),",
      "  backOffAt: z.number().min(0).optional(),", [T_PLAN], None),
     ("N225 an unreadable hand weight of the back-offs dropped alone", SCHEMA,
-     "      backOffs: z.number().min(0).optional().catch(undefined),",
-     "      backOffs: z.number().min(0).optional(),", [T_PLAN], 0),
+     "      // the top set.\n      backOffs: z.number().min(0).optional().catch(undefined),",
+     "      // the top set.\n      backOffs: z.number().min(0).optional(),", [T_PLAN], None),
     ("N226 a max with reps set by hand at another range reads a straight day as every plan does", ENGINE,
      [("            const main = mainLiftTarget({",
        "            const main = {\n              target: targetFor(prescription, topSetRead(exercise.id, from.history, from.profile).history),\n              straight: undefined,\n            };\n            const unused = ({"),
@@ -1229,7 +1229,14 @@ for name, rel, old, new, tests, nth in MUTATIONS:
         # A compile error, or a failure that is only a time-out, is no catch (as
         # mutate-install-icon.py reads it): WRONG FAILURE, to run again alone or mend.
         asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
-        wrong = summary is None or (re.search(r"Test timed out", out) is not None and not asserted)
+        # A test file that did not load (a syntax error) is a failed file with no test failed.
+        files = re.search(r"Test Files\s+(.*)", out)
+        unloaded = files is not None and "failed" in files.group(1) and "failed" not in line
+        wrong = (
+            summary is None
+            or unloaded
+            or (re.search(r"Test timed out", out) is not None and not asserted)
+        )
         killed = "failed" in line and not wrong
         if utc:
             # As the CI runner: the tests in UTC, then the day rules' tests in two zones.

@@ -409,9 +409,12 @@ MUTATIONS = [
      "  checkInAfterStart: z.literal(true).optional(),", [T_CHECK_AFTER_START_STORED], None),
     ("W13 a preview made again keeps Lighter", STORE,
      "      (today.lighter?.length ?? 0) > 0 ||\n", "", [T_LIGHTER_PREVIEW], None),
+    # Without a hard start, a lift swapped back unmarked is eased by the pick-up's own easing too
+    # (lighterPickedUp, the fourth review: Z35, Z36); under one, the swap back's is the only one, which
+    # the hard start's test reaches (the fresh review before shipping).
     ("W14 a lift swapped back owes its sets eased as Lighter eased them", ENGINE,
      "  const eased = exercise.primaryMuscles.some((muscle) => lighter.has(muscle));",
-     "  const eased = false;", [T_LIGHTER_SWAP_BACK], None),
+     "  const eased = false;", [T_LIGHTER_SWAP_BACK, T_HARD_LIGHTER_BACK], None),
     ("W15 too soon reads today's first set as the rules read the log", COACH,
      "      rir: readLoggedReserve(first, input.reserveEstimate ?? null),",
      "      rir: first.rir,", [T_FIRST_SET_READ], None),
@@ -482,9 +485,9 @@ MUTATIONS = [
      [T_LAYERS_SCHEMA], None),
     ("Z22 ... and the record a stop keeps", SCHEMA,
      "      record: EasedRecordSchema.optional().catch(undefined),\n", "", [T_LAYERS_SCHEMA], None),
-    ("Z23 ... as many sets as the stand-in's record had still to come", ENGINE,
-     "  const planned = spec ? Math.min(Math.max(count, standIn), room) : Math.max(count, standIn);",
-     "  const planned = count;", [T_STANDIN_BACK], None),
+    # Z23 went (the fresh review before shipping): the swap back's record is kept for good, so no
+    # rebuild gives it back, and a saved copy, the one step that reads it, does every set of the plan
+    # again (withoutStops), whatever count the record holds: its test shows the copy whole either way.
     # The fourth review of Maintenance 33.
     ("Z24 every plan of the day keeps the day's check-in", STORE,
      "    this.setSession(this.withDayCheckIn(made, checkIn === undefined ? before : checkIn));",
@@ -692,7 +695,14 @@ for name, rel, old, new, tests, nth in MUTATIONS:
         # A compile error, or a failure that is only a time-out, is no catch (as
         # mutate-install-icon.py reads it): WRONG FAILURE, to run again alone or mend.
         asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
-        wrong = summary is None or (re.search(r"Test timed out", out) is not None and not asserted)
+        # A test file that did not load (a syntax error) is a failed file with no test failed.
+        files = re.search(r"Test Files\s+(.*)", out)
+        unloaded = files is not None and "failed" in files.group(1) and "failed" not in line
+        wrong = (
+            summary is None
+            or unloaded
+            or (re.search(r"Test timed out", out) is not None and not asserted)
+        )
         killed = "failed" in line and not wrong
         if utc:
             # As the CI runner: the tests in UTC, then the day rules' tests in two zones.

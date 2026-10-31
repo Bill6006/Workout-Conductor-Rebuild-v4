@@ -347,7 +347,11 @@ for name, rel, old, new, tests, nth in MUTATIONS:
             summary = re.search(r"Tests\s+(.*)", out)
             line = summary.group(1).strip() if summary else "no summary (compile error?)"
             asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
+            files = re.search(r"Test Files\s+(.*)", out)
             if summary is None:
+                verdict = "WRONG FAILURE"
+            elif files is not None and "failed" in files.group(1) and "failed" not in line:
+                # A test file that did not load (a syntax error): no catch.
                 verdict = "WRONG FAILURE"
             elif "failed" not in line:
                 verdict = "SURVIVED"

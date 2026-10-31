@@ -1368,6 +1368,30 @@ SUPERSEDED = {
         "pick-up)"),
     "42x2 a check-in that changed the plan names the hard start with what changed": (
         "Maintenance 33 carries the rule in its check-in words, where its old store test no longer reaches it: the same revert runs as the M33 table's Y8 with the ease layer's test"),
+    # Maintenance 33's decision 1: a check-in's one change to the plan is a head cold's floor (a sore
+    # joint and time pressure aside). It takes no set and adds no rep, so these have no case left.
+    "34z3 ... and an extra rep only when the reserve moved": (
+        "unreachable since Maintenance 33's decision 1: a check-in takes no set, so its words never "
+        "name fewer sets (34z2 guards that) and name the reserve exactly where the reserve moved, "
+        "which leaves the revert nothing to tell apart; its anchor had drifted onto the hard start's "
+        "words, where the revert no longer compiled"),
+    "34z5 ... both ways: the effort back on a day still cut (fifth re-check)": (
+        "unreachable since Maintenance 33's decision 1: a check-in's one adjustment is the illness "
+        "floor, the same for a head cold as for a fever, so the effort comes back only where a "
+        "check-in takes the floor off (restored), and no check-in leaves the day cut while it does"),
+    "34z11 ... and a lift stopped for it is no cut": (
+        "unreachable since Maintenance 33's decision 1: a check-in takes no set, so its words name "
+        "fewer sets for no lift, stopped or not, and a hard start stops none; counted or not, a "
+        "stopped lift changes no word (34z8 and 34z9 guard the sore joint's words)"),
+    "42j a hard start and a check-in take the larger of each part": (
+        "unreachable since Maintenance 33's decision 1: a check-in adds no rep in reserve (a head "
+        "cold's floor is carried apart, as rirFloor), so the larger of the two reps and their sum "
+        "are the same rep; 42i guards the hard start's own"),
+    "42z63 the reason is said only where the ease did something": (
+        "unreachable since Maintenance 33's decision 1: a lift keeping the ease shows fewer sets "
+        "than its record only where the ease took them (no check-in takes a set, and a count set by "
+        "hand is read as shown), so a swap of it always says the set the ease took; the empty "
+        "reason came only from a set a low check-in had taken"),
 }
 
 # Moved by this round's code: the same revert, anchored where the code now is (old, new, nth).
@@ -1904,6 +1928,11 @@ REANCHORED = {
         "      if (easeEntry(entry, block, take, reserve, exercise, request, take, why, !hard)) {",
         "      if (!hard && easeEntry(entry, block, take, reserve, exercise, request, take, why, !hard)) {",
         None),
+    # Maintenance 33 wrote the check-in's words over lines of their own, a head cold's floor among
+    # them; the hard start's words kept the one line this revert had found first.
+    "34z2 ... says fewer sets only when a set was cut": (
+        "        fewer ? 'fewer sets' : '',\n        easier\n",
+        "        'fewer sets',\n        easier\n", None),
 }
 
 table = [
@@ -1953,7 +1982,14 @@ for name, rel, old, new, tests, nth in table:
         # A compile error, or a failure that is only a time-out, is no catch (as
         # mutate-install-icon.py reads it): WRONG FAILURE, to run again alone or mend.
         asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
-        wrong = summary is None or (re.search(r"Test timed out", out) is not None and not asserted)
+        # A test file that did not load (a syntax error) is a failed file with no test failed.
+        files = re.search(r"Test Files\s+(.*)", out)
+        unloaded = files is not None and "failed" in files.group(1) and "failed" not in line
+        wrong = (
+            summary is None
+            or unloaded
+            or (re.search(r"Test timed out", out) is not None and not asserted)
+        )
         killed = "failed" in line and not wrong
         verdict = "WRONG FAILURE" if wrong else "KILLED" if killed else "SURVIVED"
         results.append((name, verdict, line))

@@ -470,7 +470,14 @@ for name, rel, old, new, tests, nth in MUTATIONS:
         # A compile error, or a failure that is only a time-out, is no catch (as
         # mutate-install-icon.py reads it): WRONG FAILURE, to run again alone or mend.
         asserted = re.search(r"AssertionError|TestingLibraryElementError|expected .* to ", out)
-        wrong = summary is None or (re.search(r"Test timed out", out) is not None and not asserted)
+        # A test file that did not load (a syntax error) is a failed file with no test failed.
+        files = re.search(r"Test Files\s+(.*)", out)
+        unloaded = files is not None and "failed" in files.group(1) and "failed" not in line
+        wrong = (
+            summary is None
+            or unloaded
+            or (re.search(r"Test timed out", out) is not None and not asserted)
+        )
         killed = "failed" in line and not wrong
         if utc:
             # As the CI runner: the tests in UTC, then the day rules' tests in two zones.
