@@ -16,10 +16,10 @@ first:
 
 - **Live: `73ddfff`, the harder-variation fix** (`docs/reports/harder-variation-fix.md`): Deploy
   Pages run 41198579203; the live marker reads `73ddfff`. Live suite from the owner's machine: 438 passed + 19 skipped by design; one storage test on the 360 px phone failed once on a navigation race and passed 3 of 3 alone.
-- **Next, the catch-up decision** (the owner: the app chooses the day's one workout; no Full session,
-  Catch-up instead or Go easy instead on Today): built, reviewed, reverted and verified on the local
-  branch `local/catch-up-decision`; its report waits at `docs/reports/catch-up-decision.md` with it.
-- **Then Maintenance 34** (time intelligence), built on the local branch `local/m34-wip` (never
+- **Live: `1152a15`, the catch-up decision** (`docs/reports/catch-up-decision.md`; the owner: the app
+  chooses the day's one workout; no Full session, Catch-up instead or Go easy instead on Today):
+  Deploy Pages run 41204102489; the live marker reads `1152a15`. Live suite from the owner's machine: 438 passed + 19 skipped by design; two coach tests on the desktop project timed out once under load (a page load and a click) and passed 3 of 3 alone, and the 10 PWA tests that wait on them were run after them (5 passed, 5 skipped by design).
+- **Next, Maintenance 34** (time intelligence), built on the local branch `local/m34-wip` (never
   pushed: work in progress), then item 48, the schedule watch, custom equipment presets, and the
   final reconciliation with one consolidated phone review.
 - **Custom equipment presets, as the owner defined them (2026-10-31):** Home and Full gym stay built
