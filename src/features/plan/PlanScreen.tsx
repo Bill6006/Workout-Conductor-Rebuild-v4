@@ -10,6 +10,7 @@ import { durationLabel } from '../../engine/duration/duration';
 import { formatWindow, inDeloadWindow, recommendDeload } from '../../engine/planning/deload';
 import { swapIsPast } from '../../engine/planning/lastingSwaps';
 import { describeFocus, planWeek, recoveryBalance } from '../../engine/planning/weeklyPlan';
+import { splitOrderLine } from '../../engine/planning/splitOrder';
 import { interpretFatigue } from '../../engine/recovery/fatigue';
 import { dayRecovery } from '../../engine/recovery/recovery';
 import { muscleCoverage } from '../../engine/scoring/analytics';
@@ -54,13 +55,21 @@ export function PlanScreen() {
     state.session && localDayKey(state.session.createdAt) === localDayKey(nowIso)
       ? state.session.duration
       : 'default';
+  // The split's order kept with today's plan (Maintenance 38): the week as the plan builds it.
+  const order =
+    state.session && localDayKey(state.session.createdAt) === localDayKey(nowIso)
+      ? (state.session.constraints.splitOrder ?? null)
+      : null;
   const week = useMemo(
     () =>
       profile
-        ? planWeek(profile, location, state.history, nowIso, state.learnedResets, todayLength)
+        ? planWeek(profile, location, state.history, nowIso, state.learnedResets, todayLength, {
+            order,
+          })
         : [],
-    [profile, location, state.history, nowIso, state.learnedResets, todayLength],
+    [profile, location, state.history, nowIso, state.learnedResets, todayLength, order],
   );
+  const orderLine = order ? splitOrderLine(order, week) : null;
   const coverage = useMemo(
     () =>
       profile
@@ -142,6 +151,11 @@ export function PlanScreen() {
             ))}
           </ol>
         )}
+        {orderLine ? (
+          <p className={styles.status} data-testid="split-order">
+            {orderLine}
+          </p>
+        ) : null}
         {/* The week's priority muscles in a line; every muscle's bars are on Progress, their one
             home (Maintenance 25), and the link is there with or without priorities. */}
         <div className={styles.priority} data-testid="weekly-targets">

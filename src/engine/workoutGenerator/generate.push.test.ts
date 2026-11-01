@@ -1,3 +1,4 @@
+import { localDayKey } from '../../core/time/localDate';
 import { describe, expect, it } from 'vitest';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { createDefaultLocations } from '../../core/validation/location';
@@ -270,6 +271,46 @@ describe("the week's extra exposure", () => {
     expect(thursday?.templateId).toBe('pull-arms');
     expect(benchIn(thursday!)).toBeUndefined();
     expect(thursday!.explanation.reasons).toContain(
+      'No extra Barbell Bench Press today: the next session has its own place for it.',
+    );
+  });
+
+  it('reads the next session in the split’s order, where the order moves it', () => {
+    // The same Thursday, the split's order giving Friday the lower day (Maintenance 38, the review:
+    // the rotation's push day there had moved on, and Friday had no place for the bench press).
+    const daily = profileWith(['mon', 'tue', 'thu', 'fri']);
+    const monday = '2026-09-07T12:00:00.000Z';
+    const history: WorkoutRecord[] = [];
+    const thursday = new Date(Date.parse(monday) + 3 * 24 * HOUR).toISOString();
+    for (const offset of [0, 1]) {
+      const now = new Date(Date.parse(monday) + offset * 24 * HOUR).toISOString();
+      history.push(
+        done(
+          generateWorkout({ profile: daily, location: gym, history, now, duration: 'default' }),
+          now,
+        ),
+      );
+    }
+    const day = (iso: string, offset: number) =>
+      localDayKey(new Date(Date.parse(iso) + offset * 24 * HOUR).toISOString());
+    const splitOrder = {
+      days: [
+        { day: day(thursday, 0), templateId: 'pull-arms', was: 'pull-arms' },
+        { day: day(thursday, 1), templateId: 'lower', was: 'push-arms' },
+      ],
+      spared: [],
+      fewer: [],
+    };
+    const workout = generateWorkout({
+      profile: daily,
+      location: gym,
+      history,
+      now: thursday,
+      duration: 'default',
+      constraints: { splitOrder },
+    });
+    expect(workout.templateId).toBe('pull-arms');
+    expect(workout.explanation.reasons).not.toContain(
       'No extra Barbell Bench Press today: the next session has its own place for it.',
     );
   });

@@ -27,6 +27,7 @@ import {
 } from '../../engine/volume/weeklyVolume';
 import type { LoggedExercise, SessionRating, WorkoutRecord } from '../validation/workoutRecord';
 import { checkInDayOf, type CompletionSummary, type WorkoutSession } from './session';
+import { keepingOrder } from '../../engine/planning/orderKept';
 import { painNextLine } from '../../engine/recovery/painReport';
 import { dayRecovery, recoveryWindows } from '../../engine/recovery/recovery';
 import {
@@ -163,7 +164,7 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
     .filter((entry) => !entry.sets.some((set) => set.kind === 'working' && set.completed))
     .filter((entry) => !handed.has(entry.entryId ?? ''))
     .map((entry) => entry.exerciseId);
-  return {
+  const record: WorkoutRecord = {
     id: `w-${options.now.replace(/\D/g, '').slice(0, 14)}`,
     startedAt,
     completedAt: options.now,
@@ -198,6 +199,9 @@ export function buildWorkoutRecord(session: WorkoutSession, options: RecordOptio
     ...(workout.fitCut && workout.fitCut.length > 0 ? { fitCut: [...workout.fitCut] } : {}),
     prs: [],
   };
+  // The split's order it was trained in, where it trained the day the order gave it: the order holds
+  // for its week (Maintenance 38, `heldOrder`).
+  return keepingOrder(record, session.constraints.splitOrder);
 }
 
 function nextImplication(record: WorkoutRecord, muscles: readonly MuscleId[]): string {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MuscleId } from '../../catalog/muscles/muscles';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { addLocalDays, localWeekday } from '../time/localDate';
@@ -42,6 +42,14 @@ import {
  *    before an upper day. (Until Maintenance 34 this was a strength lifter on Wednesday the 9th: the
  *    sets the week's need carries since then made that week's Thursday a pull day, focus or none.)
  */
+
+// The split's order held off (Maintenance 38): what these weeks test is the coach focus the week
+// model reads as the store applies it, and the order moves their sessions (splitOrder's own tests
+// read the order the week model reads).
+vi.mock('../../engine/planning/splitOrder', async (original) => ({
+  ...(await original<typeof import('../../engine/planning/splitOrder')>()),
+  splitOrder: () => null,
+}));
 
 const schedule = createDefaultProfile(at(0)).schedule;
 

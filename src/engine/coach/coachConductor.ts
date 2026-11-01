@@ -23,6 +23,8 @@ import type {
 } from '../recalibration/types';
 import type { LastingSwap } from '../planning/lastingSwaps';
 import { plannedWorkouts, tooSoonAhead, type PlannedSession } from '../planning/weeklyPlan';
+import { createFocus } from '../planning/focus';
+import { splitOrder } from '../planning/splitOrder';
 import { activePush } from '../planning/pushLift';
 import type { LearnedResets } from '../learned/resets';
 import { dayList, scheduleFit } from '../planning/scheduleFit';
@@ -2571,8 +2573,8 @@ function crowdedDays(
   proposal: { weeklyFrequency: number; availableDays: readonly Weekday[] },
 ): ReturnType<typeof tooSoonAhead> {
   const resets = input.resets ?? null;
-  const refs = [input.profile, input.location, input.history, resets];
-  const key = `${proposal.weeklyFrequency}|${proposal.availableDays.join()}|${input.history.length}|${input.now.slice(0, 13)}`;
+  const refs = [input.profile, input.location, input.history, resets, input.swaps];
+  const key = `${proposal.weeklyFrequency}|${proposal.availableDays.join()}|${input.history.length}|${input.now.slice(0, 13)}|${input.focus ?? ''}`;
   if (crowdedKept?.key === key && crowdedKept.refs.every((ref, at) => ref === refs[at])) {
     return crowdedKept.days;
   }
@@ -2584,8 +2586,28 @@ function crowdedDays(
       availableDays: [...proposal.availableDays],
     },
   };
+  // The moved week in the split's best order for those days (Maintenance 38, the owner: the split
+  // is reordered automatically where that is meaningfully better): the days it names are those no
+  // order spares. Both read with the coach focus and the lasting swaps, as every plan of the store
+  // does (the review of Maintenance 38: without the quads' focus, the card named the hamstrings and
+  // glutes on a Wednesday where the week the store would build worked only the triceps too soon).
+  const focus = input.focus ? createFocus(input.focus, input.now) : null;
+  const swaps = input.swaps ?? [];
+  const order = splitOrder({
+    profile: moved,
+    location: input.location,
+    history: input.history,
+    now: input.now,
+    resets,
+    focus,
+    swaps,
+  });
   const days = tooSoonAhead(
-    plannedWorkouts(moved, input.location, input.history, input.now, resets),
+    plannedWorkouts(moved, input.location, input.history, input.now, resets, 'default', {
+      order,
+      focus,
+      swaps,
+    }),
     input.history,
     resets,
   );

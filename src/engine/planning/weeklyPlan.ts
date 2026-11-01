@@ -13,9 +13,12 @@ import {
   type RecoveryContext,
 } from '../recovery/recovery';
 import { computeExposure } from '../volume/weeklyVolume';
-import { allEntries, pushMarkOf, type DurationChoice } from '../workout/types';
+import { allEntries, pushMarkOf, type DurationChoice, type SplitOrder } from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
 import { expectedLength } from './expectedLengths';
+import { keepingOrder } from './orderKept';
+import { focusSatisfiedBy, type CoachFocus } from './focus';
+import type { LastingSwap } from './lastingSwaps';
 
 /**
  * Weekly planning: the upcoming sessions the generator would produce on the
@@ -88,6 +91,15 @@ export interface PlannedWorkout {
   workout: ReturnType<typeof generateWorkout>;
 }
 
+/** What the plans of the week ahead read besides the history, as today's plan does. */
+export interface PlannedOptions {
+  /** The split's order for these days (Maintenance 38): each day planned with its template. */
+  order?: SplitOrder | null;
+  /** The coach focus, held until a planned session trains its muscle, as a saved session clears it. */
+  focus?: CoachFocus | null;
+  swaps?: readonly LastingSwap[];
+}
+
 /**
  * The sessions of the week ahead as the plan would build them (the days ticked from today, up to
  * the sessions a week), each built on the ones before it.
@@ -100,12 +112,14 @@ export function plannedWorkouts(
   resets: LearnedResets | null = null,
   /** Today's plan's own length (Maintenance 34): the Default without one. */
   todayLength: DurationChoice = 'default',
+  options: PlannedOptions = {},
 ): PlannedWorkout[] {
   const available = new Set(profile.schedule.availableDays);
   // The device's day: a workout counts on the day it began (Maintenance 28, item 1).
   const trainedToday = history.some((record) => localDayKey(record.startedAt) === localDayKey(now));
   const planned: PlannedWorkout[] = [];
   let simulated: WorkoutRecord[] = [...history];
+  let focus = options.focus ?? null;
   for (
     let offset = 0;
     offset < 7 && planned.length < profile.schedule.weeklyFrequency;
@@ -128,9 +142,18 @@ export function plannedWorkouts(
           ? todayLength
           : expectedLength(history, weekday, now, profile.schedule.typicalDurationMinutes),
       resets,
+      constraints: {
+        ...(options.order ? { splitOrder: options.order } : {}),
+        ...(options.swaps && options.swaps.length > 0 ? { swaps: options.swaps } : {}),
+        ...(focus ? { focusMuscle: focus.muscle } : {}),
+      },
     });
     planned.push({ date, weekday, offset, workout });
-    simulated = [...simulated, syntheticRecord(date, workout)];
+    // A day the split's order gives keeps the order, as the workout trained on it does: the days
+    // after the order's read its week in the rotation's own days (Maintenance 38).
+    const record = keepingOrder(syntheticRecord(date, workout), options.order);
+    simulated = [...simulated, record];
+    if (focus && focusSatisfiedBy(focus, record)) focus = null;
   }
   return planned;
 }
@@ -148,6 +171,8 @@ export function planWeek(
    * Default while today's plan ran at 15 minutes): the Default without one.
    */
   todayLength: DurationChoice = 'default',
+  /** The split's order kept with today's plan (Maintenance 38), and what every plan reads. */
+  options: PlannedOptions = {},
 ): PlannedSession[] {
   const sessions: PlannedSession[] = [];
   for (const { date, weekday, offset, workout } of plannedWorkouts(
@@ -157,6 +182,7 @@ export function planWeek(
     now,
     resets,
     todayLength,
+    options,
   )) {
     const counts = new Map<MuscleId, number>();
     for (const entry of allEntries(workout.blocks)) {
@@ -212,7 +238,10 @@ export function tooSoonAhead(
 }
 
 /** A planned day as the record it would leave, every working set at its target's reserve. */
-function liftedAsPlanned(date: string, workout: ReturnType<typeof generateWorkout>): WorkoutRecord {
+export function liftedAsPlanned(
+  date: string,
+  workout: ReturnType<typeof generateWorkout>,
+): WorkoutRecord {
   const record = syntheticRecord(date, workout);
   return {
     ...record,

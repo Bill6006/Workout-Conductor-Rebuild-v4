@@ -12,7 +12,13 @@ import type { LocationProfile } from '../../core/validation/location';
 import type { SessionLoading } from '../loading/loading';
 import type { UserProfile } from '../../core/validation/profile';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
-import type { DurationChoice, EmptiedPlan, GeneratedWorkout, SetKind } from '../workout/types';
+import type {
+  DurationChoice,
+  EmptiedPlan,
+  GeneratedWorkout,
+  SetKind,
+  SplitOrder,
+} from '../workout/types';
 
 /**
  * Types for the central Recalibration Engine. A typed request carries the
@@ -252,6 +258,12 @@ export interface SessionConstraints {
    */
   carry?: Partial<Record<MuscleId, number>>;
   /**
+   * The split's order for the week ahead (Maintenance 38, `splitOrder`), read at today's length:
+   * every rebuild plans the day in it, and one of a plan not begun reads it again at the length it
+   * builds (`WeekAgain`). Absent on a session saved before, and where the rotation's order stands.
+   */
+  splitOrder?: SplitOrder;
+  /**
    * A catch-up on a day not ticked, or a second workout on a day trained (Maintenance 31, items 12
    * and 32): what the day offers, with no muscles when nothing calls for one. Absent on a session
    * saved before, and on a day that offers neither.
@@ -295,6 +307,18 @@ export interface SessionConstraints {
   };
 }
 
+/**
+ * The week read again for today's plan not yet begun, at the length a rebuild builds it (Maintenance
+ * 38, the review: the order read with today at the Default stood at 15 minutes, where the rotation's
+ * week was better). The caller reads it as a fresh plan of the day does.
+ */
+export interface WeekAgain {
+  /** The split's order with today at this length, or none. */
+  order(length: DurationChoice): SplitOrder | null;
+  /** The week's need in this order (Maintenance 34), or none. */
+  need(order: SplitOrder | null): Partial<Record<MuscleId, number>> | null;
+}
+
 export interface RecalibrationRequest {
   trigger: RecalibrationTrigger;
   workout: GeneratedWorkout;
@@ -322,6 +346,8 @@ export interface RecalibrationRequest {
    * or the other way. A plan not begun is built whole, as the full session taken is.
    */
   offerChanged?: boolean;
+  /** Today's plan not yet begun: the week read again at a rebuild's length (Maintenance 38). */
+  weekAgain?: WeekAgain;
 }
 
 export type ChangeKind = 'added' | 'removed' | 'replaced' | 'adjusted';

@@ -98,6 +98,13 @@ const wednesdayTicked: Partial<UserProfile> = {
   schedule: { ...schedule, availableDays: [...schedule.availableDays, 'wed'], weeklyFrequency: 5 },
 };
 /**
+ * Wednesday ticked on days whose split's order keeps the rotation's session there (Maintenance 38):
+ * on Monday to Friday the order moves the pull day or the lower day these tests read.
+ */
+const wednesdayKept: Partial<UserProfile> = {
+  schedule: { ...schedule, availableDays: ['mon', 'tue', 'wed', 'thu', 'sat'], weeklyFrequency: 5 },
+};
+/**
  * Three sessions a week, Monday, Wednesday and Friday, the full body, upper and lower sessions in
  * turn: upper last Friday and lower on Monday make this Wednesday's first workout the full body one.
  */
@@ -545,11 +552,11 @@ describe('the day’s offer, the second review of round M', () => {
   it('a deload pull day done in full leaves the lats nothing more', async () => {
     const pushMonday = [benchAt('w-monday', daysBefore(2), 3, 'push-arms')];
     // The same pull day in a normal week leaves the lats nothing (baseline).
-    const normal = await withRecords(pushMonday, wednesdayTicked);
+    const normal = await withRecords(pushMonday, wednesdayKept);
     expect(session(normal).workout.templateId).toBe('pull-arms');
     await doTheWorkout(normal);
     expect(session(normal).constraints.catchUp?.sitOut).toContain('lats');
-    const handle = await withRecords(pushMonday, wednesdayTicked);
+    const handle = await withRecords(pushMonday, wednesdayKept);
     await handle.store.planDeloadWeek({
       recommended: true,
       window: { startsAt: daysBefore(1), endsAt: daysBefore(-6) },
@@ -733,9 +740,8 @@ describe('the day’s offer, the third review of round M', () => {
   });
 
   it('the lower day done in full with a favourite front squat leaves the glutes nothing', async () => {
-    const ticked: Partial<UserProfile> = {
-      schedule: { ...schedule, availableDays: [...schedule.availableDays, 'wed'] },
-    };
+    // On days whose split's order keeps the lower day here (Maintenance 38).
+    const ticked = wednesdayKept;
     const pushMonday = benchAt('w-mon', daysBefore(2), 3, 'push-arms');
     const pullTuesday = {
       ...benchAt('w-tue', daysBefore(1), 3, 'pull-arms'),

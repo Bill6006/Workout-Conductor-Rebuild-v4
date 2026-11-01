@@ -201,17 +201,7 @@ export function recoveryWindows(
     // shortens the recovery the hard one still needs (the fresh review before shipping).
     const newest = latestEnding(index.windows.get(muscle) ?? []);
     if (newest) {
-      const window = { ...newest.window, reasons: [...newest.window.reasons] };
-      const shift = learned.get(muscle)?.shift ?? 0;
-      if (shift !== 0) {
-        const hours = withinBounds(window.prior + shift, window.prior);
-        if (hours !== window.hours) {
-          window.reasons.push(
-            `your own sessions: ${Math.abs(hours - window.hours)} h ${hours < window.hours ? 'less' : 'more'}`,
-          );
-          window.hours = hours;
-        }
-      }
+      const window = shifted(newest.window, learned);
       if (layer) {
         window.hours += RECOVERY.SHORT_NIGHT_HOURS;
         window.reasons.push(`${layer}: ${RECOVERY.SHORT_NIGHT_HOURS} h more`);
@@ -220,6 +210,49 @@ export function recoveryWindows(
     }
   }
   return windows;
+}
+
+/** A window moved by what the muscle's own sessions taught, a copy: the estimate stays as it was. */
+function shifted(
+  estimate: RecoveryWindow,
+  learned: ReadonlyMap<MuscleId, LearnedWindow>,
+): RecoveryWindow {
+  const window = { ...estimate, reasons: [...estimate.reasons] };
+  const shift = learned.get(window.muscle)?.shift ?? 0;
+  if (shift !== 0) {
+    const hours = withinBounds(window.prior + shift, window.prior);
+    if (hours !== window.hours) {
+      window.reasons.push(
+        `your own sessions: ${Math.abs(hours - window.hours)} h ${hours < window.hours ? 'less' : 'more'}`,
+      );
+      window.hours = hours;
+    }
+  }
+  return window;
+}
+
+/**
+ * The windows each of these sessions sets on its own, read after the history as `recoveryWindows`
+ * reads them (a lift new to the lifter by the history and the sessions before it), each moved by
+ * what the lifter's own sessions taught: for a caller that weighs the same planned sessions in
+ * another order (the split's order, Maintenance 38). Planned days carry no check-in, so no
+ * whole-body layer.
+ */
+export function windowsOfEach(
+  history: readonly WorkoutRecord[],
+  sessions: readonly WorkoutRecord[],
+  context: Pick<RecoveryContext, 'learned' | 'resets'> = {},
+): Map<MuscleId, RecoveryWindow>[] {
+  const lifts = liftTimesOf([...history, ...sessions]);
+  const learned = context.learned ?? learnedWindows(history, context.resets ?? null);
+  return sessions.map((record) => {
+    const windows = new Map<MuscleId, RecoveryWindow>();
+    for (const muscle of MUSCLE_IDS) {
+      const window = windowFrom(record, muscle, lifts);
+      if (window) windows.set(muscle, shifted(window, learned));
+    }
+    return windows;
+  });
 }
 
 /** Of a muscle's windows, the one that ends latest (its start plus its hours); the newer on a tie. */

@@ -41,8 +41,10 @@ import { TEST_NOW, createTestStore } from '../../test/testStore';
 
 const DAY = 86_400_000;
 const schedule = createDefaultProfile(TEST_NOW).schedule;
+// Monday to Thursday and Saturday since Maintenance 38: the pull day these tests read stays
+// Wednesday's in the split's order there (`src/test/startedMain.ts`).
 const everyDay: Partial<UserProfile> = {
-  schedule: { ...schedule, availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'], weeklyFrequency: 5 },
+  schedule: { ...schedule, availableDays: ['mon', 'tue', 'wed', 'thu', 'sat'], weeklyFrequency: 5 },
   programStyle: 'hybrid',
 };
 

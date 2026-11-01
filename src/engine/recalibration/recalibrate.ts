@@ -12,6 +12,7 @@ import { allExercises, requireExercise } from '../../catalog/exercises/catalog';
 import { holdById, targetText } from '../workout/setText';
 import type { CatalogExercise, Joint, TrainingRole } from '../../catalog/exercises/exerciseSchema';
 import type { WorkoutRecord } from '../../core/validation/workoutRecord';
+import { localDayKey } from '../../core/time/localDate';
 import { muscleName, muscleVerb, type MuscleId } from '../../catalog/muscles/muscles';
 import { rankAlternatives, type AlternativeResult } from '../alternatives/rankAlternatives';
 import {
@@ -24,6 +25,7 @@ import {
 } from '../conflicts/conflictEngine';
 import { preferredIdsOf } from '../conflicts/context';
 import { CATCH_UP, offPlanFloor, type CatchUpSpec } from '../planning/catchUp';
+import { copyOrder } from '../planning/orderKept';
 import { parsePushLine, pushDay, pushLine, pushRir } from '../planning/pushLift';
 import {
   estimateWorkout,
@@ -147,6 +149,7 @@ import {
   type ProgressionMode,
   type RackNote,
   type SetPrescription,
+  type SplitOrder,
   type WorkoutBlock,
   type WorkoutEntry,
 } from '../workout/types';
@@ -440,6 +443,8 @@ function cloneConstraints(constraints: SessionConstraints): SessionConstraints {
     ...(constraints.swappedAway ? { swappedAway: [...constraints.swappedAway] } : {}),
     // The week's need the plan was made with goes with it through every change (Maintenance 34).
     ...(constraints.carry ? { carry: { ...constraints.carry } } : {}),
+    // So does the split's order (Maintenance 38), until a change holds the day at another template.
+    ...(constraints.splitOrder ? { splitOrder: copyOrder(constraints.splitOrder) } : {}),
     // The day's own choices a saved workout loaded keeps aside go with it through every change (the
     // twenty-third review of round M).
     ...(constraints.dayChoices
@@ -738,6 +743,11 @@ function rebuild(
     request,
     constraints,
   );
+  // A plan not begun, with nothing of it kept, reads the split's order again at the length it takes
+  // (the review of Maintenance 38), a check-in short on time's too; where today's session moves with
+  // the order, the plan is built whole in it.
+  const whole =
+    (!started && keep.length === 0 && orderAgain(request, choice, constraints)) || scope === 'full';
   // A layout made again opens the slots the lifter's changes closed: they were the plan's (the
   // eighteenth review of round M).
   if (scope === 'full') delete constraints.closedSlots;
@@ -746,7 +756,7 @@ function rebuild(
     keepBlocks: request.workout.blocks,
     excludeExerciseIds: constraints.avoidExerciseIds,
     painJoints: constraints.painJoints,
-    templateId: scope === 'full' ? undefined : request.workout.templateId,
+    templateId: whole ? undefined : request.workout.templateId,
     targetMinutesOverride,
     generalWarmupMinutesOverride: started ? (options.resume ? 1.5 : 0) : undefined,
     hardCap,
@@ -775,6 +785,8 @@ function rebuild(
     ...(constraints.swappedAway ? { awayIds: constraints.swappedAway } : {}),
     ...emptiedLayoutsFor(constraints),
     ...carryOf(constraints),
+    // The split's order kept with the plan (Maintenance 38): a plan built whole plans the day in it.
+    ...(orderHeld(constraints, request, whole) ? { splitOrder: constraints.splitOrder } : {}),
     sessionLoading: request.loading,
     swaps: request.swaps,
   };
@@ -819,6 +831,58 @@ function carryOf(
     ...(constraints.carry ? { carry: { ...constraints.carry } } : {}),
     ...((constraints.lighter?.length ?? 0) > 0 ? { carryHold: [...constraints.lighter!] } : {}),
   };
+}
+
+/**
+ * Whether the split's order kept with the plan still holds it (Maintenance 38): a plan built whole
+ * plans the day in it, and one kept at the day's template (begun, or a lift kept) holds it while
+ * the order gives the day that template. Otherwise the order goes from the plan: today's session is
+ * no longer the one it gives the day, so the week's sessions would no longer be the rotation's.
+ */
+function orderHeld(
+  constraints: SessionConstraints,
+  request: RecalibrationRequest,
+  whole: boolean,
+): boolean {
+  const order = constraints.splitOrder;
+  if (!order) return false;
+  const today = order.days.find((day) => day.day === localDayKey(request.timestamp));
+  if (whole || today === undefined || today.templateId === request.workout.templateId) {
+    return true;
+  }
+  delete constraints.splitOrder;
+  return false;
+}
+
+/** The template an order gives a day, or null where it has none for it. */
+const orderedOn = (order: SplitOrder | null | undefined, day: string) =>
+  order?.days.find((item) => item.day === day)?.templateId ?? null;
+
+/**
+ * The split's order read again at the length a plan not begun is rebuilt at (Maintenance 38, the
+ * review), kept with the plan, and the week's need with it where the order moved: read for the
+ * order before, it asked today for what the week in it gave another day. True where today's
+ * session moves with the order.
+ */
+function orderAgain(
+  request: RecalibrationRequest,
+  choice: DurationChoice,
+  constraints: SessionConstraints,
+): boolean {
+  const again = request.weekAgain;
+  if (!again) return false;
+  const before = constraints.splitOrder;
+  const order = again.order(choice);
+  if (order) constraints.splitOrder = order;
+  else delete constraints.splitOrder;
+  const days = (from: SplitOrder | null | undefined) =>
+    (from?.days ?? []).map((day) => `${day.day}:${day.templateId}:${day.was}`).join();
+  if (days(before) === days(order)) return false;
+  const need = again.need(order);
+  if (need) constraints.carry = need;
+  else delete constraints.carry;
+  const today = localDayKey(request.timestamp);
+  return orderedOn(before, today) !== orderedOn(order, today);
 }
 
 /** The line a change says where the sets the week's need gave came off (Maintenance 34). */

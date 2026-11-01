@@ -7,7 +7,7 @@ import { TIME_OFFERS_ID } from '../validation/timeOffers';
 import { GOALS_TIME_SOURCE } from '../../engine/coach/coachConductor';
 import { todaysNeedOf, weekModel } from '../../engine/planning/weekModel';
 import { interpretFatigue } from '../../engine/recovery/fatigue';
-import { allEntries, type DurationChoice } from '../../engine/workout/types';
+import { allEntries, type DurationChoice, type SplitOrder } from '../../engine/workout/types';
 import { record } from '../../test/records';
 import { TEST_NOW, createTestStore } from '../../test/testStore';
 
@@ -198,7 +198,7 @@ describe('the week’s need in the plan', () => {
     await handle.store.setCoachFocus('quads');
     const snapshot = handle.store.getSnapshot();
     const profile = snapshot.profile!;
-    const owed = (focus: typeof snapshot.coachFocus) => {
+    const owed = (focus: typeof snapshot.coachFocus, order: SplitOrder | null = null) => {
       const week = weekModel({
         profile,
         location: snapshot.locations.find((place) => place.id === profile.currentLocationId),
@@ -206,6 +206,7 @@ describe('the week’s need in the plan', () => {
         now: TEST_NOW,
         resets: snapshot.learnedResets,
         focus,
+        order,
       });
       return Object.fromEntries(
         MUSCLE_IDS.map((muscle) => [muscle, todaysNeedOf(week.muscles[muscle])] as const)
@@ -215,7 +216,10 @@ describe('the week’s need in the plan', () => {
     };
     // The focus moves the week's sessions ahead, and so what today owes.
     expect(owed(snapshot.coachFocus)).not.toEqual(owed(null));
-    expect(session(handle).constraints.carry).toEqual(owed(snapshot.coachFocus));
+    // ... in the split's order the plan keeps (Maintenance 38), as the store builds the week.
+    expect(session(handle).constraints.carry).toEqual(
+      owed(snapshot.coachFocus, session(handle).constraints.splitOrder ?? null),
+    );
   });
 
   it('keeps what a short plan’s time fit cut with the workout saved', async () => {

@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultProfile } from '../../core/validation/profile';
 import { RECORD_NOW, record } from '../../test/records';
 import { interpretFatigue } from '../recovery/fatigue';
-import { formatWindow, inDeloadWindow, nextWindow, recommendDeload, windowIsPast } from './deload';
+import {
+  deloadInWeek,
+  formatWindow,
+  inDeloadWindow,
+  nextWindow,
+  recommendDeload,
+  windowIsPast,
+} from './deload';
 
 const profile = createDefaultProfile(RECORD_NOW);
 
@@ -91,6 +98,19 @@ describe('deload week', () => {
     expect(inDeloadWindow(window, local(18))).toBe(false);
     expect(windowIsPast(window, local(19))).toBe(true);
     expect(formatWindow(window)).toBe('Fri, Sep 11 to Thu, Sep 17');
+  });
+
+  it('holds a day of the week ahead where it starts within it and has not ended (Maintenance 38)', () => {
+    const local = (day: number, hour = 0) => new Date(2026, 8, day, hour).toISOString();
+    const week = (from: number) => ({ startsAt: local(from), endsAt: local(from + 7) });
+    // Thursday Sep 10 at noon: the week ahead is Thursday to Wednesday.
+    const now = local(10, 12);
+    expect(deloadInWeek(week(10), now)).toBe(true);
+    expect(deloadInWeek(week(16), now)).toBe(true);
+    expect(deloadInWeek(week(17), now)).toBe(false);
+    expect(deloadInWeek(week(3), now)).toBe(false);
+    expect(deloadInWeek(week(4), now)).toBe(true);
+    expect(deloadInWeek(null, now)).toBe(false);
   });
 
   it("reads the device's day, late in the evening too (Maintenance 28, item 1)", () => {

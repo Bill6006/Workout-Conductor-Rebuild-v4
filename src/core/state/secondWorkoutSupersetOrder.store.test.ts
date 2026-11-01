@@ -17,22 +17,23 @@ import { doToday, lifterStore, sessionOf } from '../../test/lifterDays';
  *
  * The lifter (synthetic): the default profile, supersets on, every day's plan done in full at 8:00
  * from Monday the 31st of August, the days not ticked taking their catch-up; on Wednesday the 9th
- * the catch-up is cut short after two lifts and the second workout done. On Tuesday the 22nd, the
- * lower day is cut short after its first two lifts. At 18:00 the second
- * workout leads with the calves, traps, rear delts and lats, the quads, hamstrings and glutes taking
- * what is left. Its blocks: calf raise + shrug, rear-delt fly + LEG CURL (the hamstrings' remainder),
- * pull-up (the lats, missed), leg press (the remainder). "Why this workout" says it leads with what
- * was missed, "calves, traps, rear delts and lats". (Until Maintenance 34 this was Tuesday the 15th:
- * the sets the week's need carries since then left the lats a week later behind instead.)
+ * the catch-up is cut short after two lifts and the second workout done. On Wednesday the 16th,
+ * with nothing behind to catch up, the day's plan is the lower day, cut short after its first two
+ * lifts. At 18:00 the second workout leads with the calves, the quads, hamstrings and glutes taking
+ * what is left. On b826d24 its blocks were calf raise + LEG CURL (the hamstrings' remainder), leg
+ * press: a lift for what is left beside the first for what was missed. "Why this workout" says it
+ * leads with what was missed. (Until Maintenance 34 this was Tuesday the 15th, and until Maintenance
+ * 38 Tuesday the 22nd, with the calves, traps, rear delts and lats behind: the sets the week's need
+ * carries, then the split's order, changed the weeks before it.)
  */
 
 async function secondAfterLowerCutShort() {
   const lifter = await lifterStore(at(0, 7));
-  for (let day = 0; day <= 22; day += 1) {
+  for (let day = 0; day <= 16; day += 1) {
     lifter.clock.now = at(day, 8);
     lifter.store.refreshSession();
     if (allEntries(sessionOf(lifter).workout.blocks).length === 0) continue;
-    const cut = day === 9 || day === 22;
+    const cut = day === 9 || day === 16;
     await doToday(lifter, cut ? { lifts: 2, endedEarly: true } : {});
     if (!cut) continue;
     lifter.clock.now = at(day, 18);
@@ -58,7 +59,7 @@ describe('a second workout with supersets on', () => {
     expect(spec.kind).toBe('second');
     expect(second.workout.templateId).toBe('second-workout');
     const why = new Map(spec.muscles.map((item) => [item.muscle as string, item.why as string]));
-    expect(why.get('lats')).toBe('behind');
+    expect(why.get('calves')).toBe('behind');
     expect(why.get('hamstrings')).toBe('remainder');
     expect(second.workout.explanation.reasons[0]).toMatch(/^A second workout today: it leads with/);
     // The lifts in the order the lifter does them: each block, a superset's two in turn.
@@ -66,9 +67,9 @@ describe('a second workout with supersets on', () => {
       (block) =>
         `${block.entries.map((entry) => `${entry.exerciseId} [${entry.chosenFor.join(', ')}]`).join(' + ')}`,
     );
-    // Every lift for what is left comes after the last lift for what was missed. On b826d24:
-    // ["missed", "missed", "missed", "left"] by block, the second block's superset carrying the leg
-    // curl for the hamstrings' remainder before the pull-up for the lats.
+    // Every lift for what is left comes after the last lift for what was missed. On b826d24 the
+    // first block's superset carried the leg curl for the hamstrings' remainder beside the calf
+    // raise.
     const remainderLifts = allEntries(second.workout.blocks).filter((entry) =>
       entry.chosenFor.every((muscle) => why.get(muscle) === 'remainder'),
     );

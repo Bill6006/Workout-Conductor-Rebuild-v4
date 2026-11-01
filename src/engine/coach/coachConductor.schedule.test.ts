@@ -178,6 +178,16 @@ describe('the moved week read for recovery', () => {
     );
   });
 
+  it('reads the moved days of four sessions as the plan will train them (Maintenance 38)', () => {
+    // Trained Monday to Thursday: no order of the moved week's sessions is better there, and the card
+    // names the rotation's own Wednesday. The order it reads is the store's (coachConductor's
+    // `crowdedDays`, splitOrder.card.test.ts).
+    const signal = card({ ...input(base), history: weeks(['mon', 'tue', 'wed', 'thu']) });
+    expect(signal?.footnote).toBe(
+      'On Wed the plan would work the biceps and triceps hard again when they may not have recovered; the coach offers a lighter option that day.',
+    );
+  });
+
   it('says nothing where the moved days leave each muscle its recovery', () => {
     // Mon and Tue: the split follows to upper and lower, a day for each.
     const signal = card({ ...input(base), history: weeks(['mon', 'tue']) });

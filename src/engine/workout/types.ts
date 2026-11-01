@@ -30,6 +30,31 @@ export const MAX_BACK_OFF_DROP = 0.2;
 export const CATCH_UP_TEMPLATE_IDS = { 'catch-up': 'catch-up', second: 'second-workout' } as const;
 
 /**
+ * A day of the split's order across the lifter's days (Maintenance 38, the owner's decision of
+ * 2026-10-31: "Keep my available training days fixed and reorder the split only when another order
+ * is meaningfully better for recovery, performance, frequency, and my goals"): the local day, the
+ * template the order gives it, and the template the split's own rotation gave it.
+ */
+export type SplitOrderDay = {
+  day: string;
+  templateId: string;
+  was: string;
+};
+
+/**
+ * The split's order for the week ahead, and what it spares: the muscles it keeps out of their
+ * windows the whole week (`spared`), and those it brings back inside them on fewer days (`fewer`).
+ * A plain type, so a workout record keeps one as it is (`WorkoutRecord.splitOrder`).
+ */
+export type SplitOrder = {
+  days: SplitOrderDay[];
+  spared: MuscleId[];
+  fewer: MuscleId[];
+  /** The days ticked and the sessions a week it was read for (`scheduleOf`): none, none held. */
+  schedule?: string;
+};
+
+/**
  * A plan the lifter's own hand emptied today (the twentieth review of round M): the day's offer it
  * was for (`offerKey`) and the layout it was laid out on (its template).
  */

@@ -109,6 +109,13 @@ export function coachContextOf(parts: CoachParts, nowEpoch: number | null): Coac
       now,
       parts.learnedResets ?? null,
       localDayKey(session.createdAt) === localDayKey(now) ? session.duration : 'default',
+      // The split's order kept with today's plan (Maintenance 38).
+      {
+        order:
+          localDayKey(session.createdAt) === localDayKey(now)
+            ? (session.constraints.splitOrder ?? null)
+            : null,
+      },
     ),
     focus: parts.coachFocus?.muscle ?? null,
     swaps: parts.lastingSwaps.filter((swap) => !swapIsPast(swap, now)),

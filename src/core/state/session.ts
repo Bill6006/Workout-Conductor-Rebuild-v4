@@ -5,6 +5,7 @@ import type { SessionLoading } from '../../engine/loading/loading';
 import type { PersonalRecord } from '../../engine/scoring/personalRecords';
 import { PersonalRecordSchema, ReserveCheckLogSchema } from '../validation/workoutRecord';
 import { CatchUpSpecSchema } from '../validation/catchUpSpec';
+import { SplitOrderSchema } from '../validation/splitOrder';
 import { getExercise } from '../../catalog/exercises/catalog';
 import { JOINTS } from '../../catalog/exercises/exerciseSchema';
 import { MUSCLE_IDS } from '../../catalog/muscles/muscles';
@@ -331,6 +332,9 @@ const ConstraintsSchema = z.looseObject({
   // The eighteenth review of round M: each dropped alone when unreadable.
   closedSlots: z.array(z.number().int().min(0)).optional().catch(undefined),
   swappedAway: z.array(z.string()).optional().catch(undefined),
+  // Maintenance 38, the split's order: a session saved before has none; one that fails to read is
+  // dropped, and the day plans in the rotation's order.
+  splitOrder: SplitOrderSchema.optional().catch(undefined),
 });
 
 const CompletedSchema = z.looseObject({

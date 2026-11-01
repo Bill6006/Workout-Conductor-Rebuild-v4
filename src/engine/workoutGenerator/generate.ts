@@ -79,6 +79,7 @@ import {
   withSwapsBack,
   type OutgrownBy,
 } from './loadedVersions';
+import { keepingOrder } from '../planning/orderKept';
 import { styleInfo } from '../planning/styles';
 import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
 import {
@@ -132,6 +133,7 @@ import {
   type GeneratedWorkout,
   type MusclePriority,
   type SetPrescription,
+  type SplitOrder,
   type StoppedWork,
   type TimeBreakdown,
   type WorkoutBlock,
@@ -329,6 +331,12 @@ export interface GenerationConstraints {
   unavailableEquipment?: readonly string[];
   painJoints?: readonly Joint[];
   templateId?: string;
+  /**
+   * The split's order across the lifter's days (Maintenance 38, `splitOrder`): a day it holds is
+   * planned with its template, after a catch-up's and a template a rebuild keeps, and "Why this
+   * workout" says so where it is not the one the rotation gave. The days ahead read it too.
+   */
+  splitOrder?: SplitOrder;
   /**
    * A catch-up on a day not ticked, or a second workout on a day trained (Maintenance 31, items 12
    * and 32): the session is built from these muscles alone. One with no muscles plans as usual.
@@ -1672,12 +1680,135 @@ function adjustPrescription(
   };
 }
 
+/**
+ * The template the split's order gives the day (Maintenance 38), while it is one of the split's
+ * templates for the profile as it is: an order kept from before a change of the sessions a week
+ * gives none.
+ */
+function orderedTemplate(
+  profile: UserProfile,
+  order: SplitOrder | undefined,
+  now: string,
+): Template | undefined {
+  const day = order?.days.find((item) => item.day === localDayKey(now));
+  return day ? splitFor(profile).find((candidate) => candidate.id === day.templateId) : undefined;
+}
+
+/**
+ * What the split's order spares, in words (Maintenance 38): the muscles it keeps out of their
+ * windows the whole week, then those it brings back inside them on fewer days (the review: a muscle
+ * still worked hard too soon on one day was said never to be). Null where it spares none.
+ */
+export function orderWords(order: Pick<SplitOrder, 'spared' | 'fewer'>): string | null {
+  const clause = (muscles: readonly MuscleId[], fewer: boolean) => {
+    const one = muscles.length === 1;
+    const windows = one ? 'its recovery window' : 'their recovery windows';
+    return `the ${musclesInWords(muscles)} ${one ? 'is' : 'are'} ${fewer ? '' : 'not '}worked hard again inside ${windows}${fewer ? ' on fewer days' : ''}`;
+  };
+  const parts = [
+    ...(order.spared.length > 0 ? [clause(order.spared, false)] : []),
+    ...(order.fewer.length > 0 ? [clause(order.fewer, true)] : []),
+  ];
+  return parts.length > 0 ? parts.join(', and ') : null;
+}
+
+/** How the order's line of "Why this workout" reads around its words (`orderedLines`). */
+const ORDER_LINE = { mark: ': in this order ', end: ' in the week ahead.' } as const;
+
+/**
+ * What "Why this workout" says where the split's order gives the day another template than the
+ * rotation did (Maintenance 38): the session it stands in for, and what the order spares. Nothing
+ * where the day's template is the rotation's, or not the order's.
+ */
+function orderedLines(order: SplitOrder | undefined, now: string, template: Template): string[] {
+  const day = order?.days.find((item) => item.day === localDayKey(now));
+  if (!order || !day || day.templateId !== template.id || day.was === day.templateId) return [];
+  const was = TEMPLATES.find((candidate) => candidate.id === day.was);
+  const words = orderWords(order);
+  if (!was || !words) return [];
+  return [
+    `${template.title} today in place of ${was.title}${ORDER_LINE.mark}${words}${ORDER_LINE.end}`,
+  ];
+}
+
+/**
+ * The lines of a plan without the split's order's (Maintenance 38): a copy saved of a day the order
+ * moved is no day of it when loaded (the review: "Lower body today in place of Upper body" came back
+ * with a copy loaded on a Saturday).
+ */
+export function withoutOrderLines(reasons: readonly string[]): string[] {
+  return reasons.filter(
+    (line) => !(line.includes(ORDER_LINE.mark) && line.endsWith(ORDER_LINE.end)),
+  );
+}
+
+/** A plan with none of the split's order's lines (`withoutOrderLines`). */
+export function withoutOrderLinesIn(workout: GeneratedWorkout): GeneratedWorkout {
+  const reasons = withoutOrderLines(workout.explanation.reasons);
+  return reasons.length === workout.explanation.reasons.length
+    ? workout
+    : { ...workout, explanation: { ...workout.explanation, reasons } };
+}
+
 /** A catch-up's or a second workout's template takes no place in the split's rotation (round M). */
 const OFF_ROTATION_IDS: ReadonlySet<string> = new Set(Object.values(CATCH_UP_TEMPLATE_IDS));
 
 /** Whether a record is a catch-up or a second workout. */
 const offRotation = (record: WorkoutRecord) =>
   typeof record.templateId === 'string' && OFF_ROTATION_IDS.has(record.templateId);
+
+/**
+ * The split's sessions as the rotation reads them (Maintenance 38, the review): a week trained through
+ * in the split's order is read with each session on the day the rotation gave it, so the order only
+ * changes which day a session falls on, never which sessions the weeks after hold. Read as trained,
+ * an order changed the sessions of the weeks after, and over sixteen weeks a muscle lost up to five
+ * sessions. A week not trained through in its order is read as trained. Only the choice of the day's
+ * session reads this; recovery, the loads and the lifts read what was done, when it was done.
+ */
+function inRotationPlace(records: readonly WorkoutRecord[]): WorkoutRecord[] {
+  const dayOf = (record: WorkoutRecord) => {
+    const day = record.splitOrder?.days.find((item) => item.day === localDayKey(record.startedAt));
+    return day && day.templateId === record.templateId ? day : null;
+  };
+  const keyOf = (order: SplitOrder) =>
+    order.days.map((day) => `${day.day}:${day.templateId}:${day.was}`).join();
+  // The days of each order trained in it.
+  const trained = new Map<string, Set<string>>();
+  for (const record of records) {
+    const day = dayOf(record);
+    if (!day || !record.splitOrder) continue;
+    const key = keyOf(record.splitOrder);
+    trained.set(key, (trained.get(key) ?? new Set<string>()).add(day.day));
+  }
+  // The k-th session of a template the order moved goes to the day the rotation gave its k-th.
+  return records.map((record) => {
+    const order = record.splitOrder;
+    const day = dayOf(record);
+    if (!order || !day || day.was === day.templateId) return record;
+    const done = trained.get(keyOf(order));
+    if (!order.days.every((item) => done?.has(item.day))) return record;
+    const nth = order.days.filter(
+      (item) => item.templateId === day.templateId && item.day < day.day,
+    ).length;
+    const place = order.days.filter((item) => item.was === day.templateId)[nth];
+    if (!place) return record;
+    const shift = (iso: string | null) =>
+      iso === null
+        ? null
+        : addLocalDays(
+            iso,
+            Math.round(
+              (Date.parse(`${place.day}T12:00:00`) - Date.parse(`${day.day}T12:00:00`)) /
+                86_400_000,
+            ),
+          );
+    return {
+      ...record,
+      startedAt: shift(record.startedAt)!,
+      completedAt: shift(record.completedAt),
+    };
+  });
+}
 
 /**
  * The template a day would get from this history (the choice `generateWorkout` makes). The split's
@@ -1692,7 +1823,7 @@ function templateFor(
   now: string,
   focus: MuscleId | null,
 ): Template {
-  const rotation = history.filter((record) => !offRotation(record));
+  const rotation = inRotationPlace(history.filter((record) => !offRotation(record)));
   const volume = computeWeeklyVolume(rotation, now);
   const exposure = computeExposure(rotation, now);
   const priorities = computeMusclePriorities(profile, volume, exposure);
@@ -1840,6 +1971,8 @@ function sessionsAhead(input: GenerationInput, history: readonly WorkoutRecord[]
         pushProbe: true,
         ...(swaps ? { swaps } : {}),
         ...(focus ? { focusMuscle: focus } : {}),
+        // The days ahead in the split's order (Maintenance 38), as the plan builds them.
+        ...(input.constraints?.splitOrder ? { splitOrder: input.constraints.splitOrder } : {}),
       },
     });
     out.push({
@@ -1850,7 +1983,9 @@ function sessionsAhead(input: GenerationInput, history: readonly WorkoutRecord[]
         dropSets: entry.sets.filter((set) => set.kind === 'drop').length,
       })),
     });
-    past = [...past, plannedRecord(workout, at, null)];
+    // A day of the split's order keeps it, as the workout trained on it would (the re-check of
+    // Maintenance 38's review).
+    past = [...past, keepingOrder(plannedRecord(workout, at, null), input.constraints?.splitOrder)];
   }
   return out;
 }
@@ -1953,9 +2088,11 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     (constraints.templateId
       ? TEMPLATES.find((candidate) => candidate.id === constraints.templateId)
       : undefined) ??
-    // The split's rotation reads no catch-up or second workout (`templateFor`); with none in the
-    // history the choice is the one made from today's own reading.
-    (history.some(offRotation)
+    orderedTemplate(profile, constraints.splitOrder, now) ??
+    // The split's rotation reads no catch-up or second workout, and a week trained in the split's
+    // order in its own days (`templateFor`); with neither in the history the choice is the one made
+    // from today's own reading.
+    (history.some((record) => offRotation(record) || record.splitOrder !== undefined)
       ? templateFor(profile, history, now, focus)
       : chooseTemplate(profile, priorities, exposure, loads, focus));
   const pushPlace = (slots: readonly Slot[]) =>
@@ -1985,13 +2122,19 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     const plain = generateWorkout({ ...input, constraints: { ...constraints, pushProbe: true } });
     const waits = (why: string) =>
       withReason(plain, `No extra ${push.exercise.name} today: ${why}.`);
-    const today = plannedRecord(plain, now, {
-      exerciseId: push.exercise.id,
-      sets: push.extraSets,
-    });
+    const today = keepingOrder(
+      plannedRecord(plain, now, { exerciseId: push.exercise.id, sets: push.extraSets }),
+      constraints.splitOrder,
+    );
     if (daysToNextSession(profile, now) < PUSH_LIFT.NEXT_SESSION_DAYS) {
       const next = addLocalDays(now, 1);
-      if (pushPlace(templateFor(profile, [...history, today], next, focus).slots)) {
+      // Tomorrow's session as the split's order has it, where the order moves it (the review of
+      // Maintenance 38: the rotation's push day there had moved to Thursday, Tuesday's lower day
+      // had no place for the bench press).
+      const tomorrow =
+        orderedTemplate(profile, constraints.splitOrder, next) ??
+        templateFor(profile, [...history, today], next, focus);
+      if (pushPlace(tomorrow.slots)) {
         return waits('the next session has its own place for it');
       }
     }
@@ -2892,14 +3035,17 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
     // A rebuild keeping the day's extra weighed nothing before: it plans the days after now.
     ahead ??= sessionsAhead(input, [
       ...history,
-      plannedRecord(
-        {
-          locationId: location?.id ?? null,
-          templateId: template.id,
-          blocks: entries.map((entry) => straightBlock(entry, exerciseOf)),
-        },
-        now,
-        null,
+      keepingOrder(
+        plannedRecord(
+          {
+            locationId: location?.id ?? null,
+            templateId: template.id,
+            blocks: entries.map((entry) => straightBlock(entry, exerciseOf)),
+          },
+          now,
+          null,
+        ),
+        constraints.splitOrder,
       ),
     ]);
     const { trims } = pushCap({
@@ -3598,6 +3744,7 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   const reasons: string[] = [
     ...(spec && (catchUp !== null || spec.kind === 'second') ? catchUpLines(spec, blocks) : []),
     `Goal ${goalLabel(profile.goals.primary)}${profile.goals.secondary !== 'none' ? ` with ${goalLabel(profile.goals.secondary)}` : ''}: ${template.title.toLowerCase()} session, ${styleLine(profile)}.`,
+    ...orderedLines(constraints.splitOrder, now, template),
     `Priority muscles today: ${topPriorities.map((priority) => priority.reason).join('; ')}.`,
     `Built for ${location?.name ?? 'your place'} from the equipment saved there, every pick checked by the conflict engine.`,
   ];

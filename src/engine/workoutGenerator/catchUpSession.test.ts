@@ -4,7 +4,7 @@ import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile, type UserProfile } from '../../core/validation/profile';
 import type { CatchUpSpec } from '../planning/catchUp';
 import { allEntries } from '../workout/types';
-import { generateWorkout, sameOffer, sessionDose } from './generate';
+import { firstSessionDose, generateWorkout, sameOffer, sessionDose } from './generate';
 import { describeWorkout } from '../../test/clockDays';
 import { RECORD_NOW, record } from '../../test/records';
 
@@ -188,6 +188,30 @@ describe('a muscle’s usual sets in one session', () => {
 
   it('follows the style: Foundation plans fewer', () => {
     expect(sessionDose(profile({ programStyle: 'foundation' }), 'quads')).toBeLessThan(10);
+  });
+});
+
+describe('the day’s first workout, what a second workout reads what is left of', () => {
+  it('counts a lift that works a muscle only secondarily at half, as the week counts it', () => {
+    // Four sets of front squat: the quads' 4, the glutes' 2 (the third review of round M: counted in
+    // full, a lower day done in full left the glutes a remainder the week had not asked for).
+    const first = record(0, 'front-squat', [
+      [5, 185, 2],
+      [5, 185, 2],
+      [5, 185, 2],
+      [5, 185, 2],
+    ]);
+    expect(firstSessionDose(profile(), first, 'quads')).toBe(4);
+    expect(firstSessionDose(profile(), first, 'glutes')).toBe(2);
+    expect(firstSessionDose(profile(), first, 'chest')).toBe(0);
+    // The sets it was to have, where it planned more than were done.
+    const planned = {
+      ...first,
+      entries: first.entries.map((entry) => ({ ...entry, plannedSets: 5 })),
+    };
+    expect(firstSessionDose(profile(), planned, 'glutes')).toBe(2.5);
+    // With no first workout, a session's usual sets.
+    expect(firstSessionDose(profile(), undefined, 'quads')).toBe(sessionDose(profile(), 'quads'));
   });
 });
 

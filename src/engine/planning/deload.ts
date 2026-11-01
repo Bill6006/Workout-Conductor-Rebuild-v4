@@ -72,6 +72,20 @@ export function inDeloadWindow(window: DeloadWindow | null | undefined, now: str
   return at >= Date.parse(days.startsAt) && at < Date.parse(days.endsAt);
 }
 
+/**
+ * Whether a window holds a day of the week ahead, today's and the six after it, the days the plan
+ * reads (Maintenance 38, the review: a deload planned from tomorrow left today's session reordered
+ * against plans the deload makes lighter).
+ */
+export function deloadInWeek(window: DeloadWindow | null | undefined, now: string): boolean {
+  if (!window) return false;
+  const days = onDeviceDays(window);
+  return (
+    Date.parse(days.startsAt) < Date.parse(dayStart(now, 7)) &&
+    Date.parse(days.endsAt) > Date.parse(now)
+  );
+}
+
 export function windowIsPast(window: DeloadWindow, now: string): boolean {
   return Date.parse(now) >= Date.parse(onDeviceDays(window).endsAt);
 }

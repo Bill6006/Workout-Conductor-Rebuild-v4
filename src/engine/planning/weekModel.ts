@@ -8,9 +8,15 @@ import type { LearnedResets } from '../learned/resets';
 import { focusSatisfiedBy, type CoachFocus } from './focus';
 import type { LastingSwap } from './lastingSwaps';
 import { INDIRECT_SET_WEIGHT, computeExposure, weeklyTargets } from '../volume/weeklyVolume';
-import { allEntries, type DurationChoice, type GeneratedWorkout } from '../workout/types';
+import {
+  allEntries,
+  type DurationChoice,
+  type GeneratedWorkout,
+  type SplitOrder,
+} from '../workout/types';
 import { generateWorkout } from '../workoutGenerator/generate';
 import { expectedLength } from './expectedLengths';
+import { keepingOrder } from './orderKept';
 
 /**
  * The week model (Maintenance 31, docs/proposals/week-model-readiness-time.md part 1): one picture
@@ -178,6 +184,8 @@ export function weekModel(input: {
    * 2026-10-31); the Default without one.
    */
   todayLength?: DurationChoice;
+  /** The split's order for the week ahead (Maintenance 38): each day planned with its template. */
+  order?: SplitOrder | null;
 }): WeekModel {
   const { profile, location, history, now } = input;
   const week = localWeekKey(now);
@@ -224,6 +232,7 @@ export function weekModel(input: {
       constraints: {
         ...(input.swaps && input.swaps.length > 0 ? { swaps: input.swaps } : {}),
         ...(focus ? { focusMuscle: focus.muscle } : {}),
+        ...(input.order ? { splitOrder: input.order } : {}),
       },
     });
     for (const entry of allEntries(workout.blocks)) {
@@ -231,7 +240,9 @@ export function weekModel(input: {
       credit(muscles, entry.exerciseId, sets, 'planned');
       if (own) credit(muscles, entry.exerciseId, sets, 'plannedToday');
     }
-    const planned = plannedRecord(date, workout);
+    // A day of the split's order keeps it, as Plan's week and the workouts trained in it do (the
+    // re-check of Maintenance 38's review: the days after the order planned another session here).
+    const planned = keepingOrder(plannedRecord(date, workout), input.order);
     simulated = [...simulated, planned];
     if (focus && focusSatisfiedBy(focus, planned)) focus = null;
   }

@@ -9,12 +9,16 @@ import { TEST_NOW, createTestStore } from './testStore';
  * The fourteenth review of round N: the store as the thirteenth pass's tests set it up. The main
  * lift (barbell row) on a pull day, Hybrid, five days a week, after two straight sessions at 135:
  * planned at 140 × 4-6 at 1, back-offs 3 × 135 at 2. Synthetic data only.
+ *
+ * Monday to Thursday and Saturday since Maintenance 38: on Monday to Friday the split's order puts
+ * push on this Wednesday, since Friday's push day would work the biceps 48 h after the pull day's,
+ * and these tests read the pull day. On these days the rotation's order stands.
  */
 
 const DAY = 86_400_000;
 const schedule = createDefaultProfile(TEST_NOW).schedule;
 const everyDay: Partial<UserProfile> = {
-  schedule: { ...schedule, availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'], weeklyFrequency: 5 },
+  schedule: { ...schedule, availableDays: ['mon', 'tue', 'wed', 'thu', 'sat'], weeklyFrequency: 5 },
   programStyle: 'hybrid',
 };
 

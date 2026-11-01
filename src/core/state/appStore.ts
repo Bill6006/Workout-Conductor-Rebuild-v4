@@ -118,6 +118,7 @@ import type {
   RecalibrationRequest,
   RecalibrationResult,
   RecalibrationTrigger,
+  WeekAgain,
 } from '../../engine/recalibration/types';
 import {
   currentPosition,
@@ -135,6 +136,7 @@ import {
   type EmptiedPlan,
   type GeneratedWorkout,
   type SetPrescription,
+  type SplitOrder,
   type WorkoutEntry,
 } from '../../engine/workout/types';
 import { prescribeFor } from '../../engine/progression/roles';
@@ -158,6 +160,8 @@ import {
   offerKey,
   sameOffer,
   secondOnAnotherDay,
+  withoutOrderLines,
+  withoutOrderLinesIn,
   withSwapLines,
 } from '../../engine/workoutGenerator/generate';
 import {
@@ -167,6 +171,7 @@ import {
   type CatchUpSpec,
 } from '../../engine/planning/catchUp';
 import { todaysNeedOf, weekModel } from '../../engine/planning/weekModel';
+import { splitOrder } from '../../engine/planning/splitOrder';
 import { choiceMinutes } from '../../engine/planning/expectedLengths';
 import { longerOffer, nextLonger, type LongerOffer } from '../../engine/planning/longerOffer';
 import {
@@ -267,6 +272,7 @@ import { preferredIdsOf } from '../../engine/conflicts/context';
 import { swapBackCovers } from '../../engine/workoutGenerator/loadedVersions';
 import {
   DELOAD_WEEK_ID,
+  deloadInWeek,
   inDeloadWindow,
   onDeviceDays,
   windowIsPast,
@@ -1537,9 +1543,13 @@ export class AppStore {
     const now = this.now();
     const deload = this.deloadToday(now);
     const focus = this.state.coachFocus?.muscle ?? null;
+    // The split's order for the week ahead (Maintenance 38): the rotation's sessions in another
+    // order where one is meaningfully better for recovery, kept with the plan for every rebuild and
+    // every reading of the week.
+    const order = this.orderFor(profile, now, 'default');
     // What the day offers (Maintenance 31): a catch-up on a day not ticked, a second workout on a
     // day trained. A deload week holds back everything that pushes for more, as the coach does.
-    const catchUp = this.catchUpFor(profile, now, deload !== null);
+    const catchUp = this.catchUpFor(profile, now, deload !== null, order);
     // The full session the lifter took today stays theirs through the day's later plans.
     const before = current ?? carry;
     const day = before ? dayChoicesOf(before.constraints) : null;
@@ -1562,7 +1572,7 @@ export class AppStore {
     // The week's need on a day of the plan (Maintenance 34): what today owes each muscle once the
     // sessions after it are counted at the lengths the lifter trains them. A day off the plan builds
     // its catch-up or second workout from the week already, and a deload week carries nothing.
-    const owed = catchUp === null && deload === null ? this.weekNeed(profile, now) : null;
+    const owed = catchUp === null && deload === null ? this.weekNeed(profile, now, order) : null;
     // Built afresh each time, a plan the lifter emptied too: the generator lays each layout emptied
     // for this offer out empty and says where it was built (the twenty-second review of round M: the
     // old plan handed back kept the lines of the place it was emptied at).
@@ -1581,6 +1591,7 @@ export class AppStore {
         ...(keepFull ? {} : emptiedLayoutsFor({ catchUp, emptied: marked })),
         ...(away.length > 0 ? { awayIds: away } : {}),
         ...(owed ? { carry: owed } : {}),
+        ...(order ? { splitOrder: order } : {}),
       },
       maxes: this.state.strengthMaxes,
       resets: this.state.learnedResets,
@@ -1600,6 +1611,7 @@ export class AppStore {
         ...(away.length > 0 ? { swappedAway: [...away] } : {}),
         // Kept with the plan: every rebuild carries it (Maintenance 34).
         ...(owed ? { carry: { ...owed } } : {}),
+        ...(order ? { splitOrder: order } : {}),
       },
     };
     // The day's check-in holds on it, as on every plan of the day.
@@ -1726,7 +1738,11 @@ export class AppStore {
    * lifter trains them, with the coach focus and the lasting swaps every plan reads. To the half set
    * a synergist counts for; none where today owes a muscle less than a set. Null when it owes none.
    */
-  private weekNeed(profile: UserProfile, now: string): Partial<Record<MuscleId, number>> | null {
+  private weekNeed(
+    profile: UserProfile,
+    now: string,
+    order: SplitOrder | null,
+  ): Partial<Record<MuscleId, number>> | null {
     const week = weekModel({
       profile,
       location: this.currentLocation(),
@@ -1735,6 +1751,7 @@ export class AppStore {
       resets: this.state.learnedResets,
       focus: this.state.coachFocus,
       swaps: this.activeSwaps(),
+      order,
     });
     const owed: Partial<Record<MuscleId, number>> = {};
     for (const muscle of MUSCLE_IDS) {
@@ -1745,17 +1762,80 @@ export class AppStore {
   }
 
   /**
+   * The split's order for the week ahead (Maintenance 38, `splitOrder`): read from the plans the
+   * store builds, with the coach focus and the lasting swaps, today at its own length (the review:
+   * read at the Default, it stood at 15 minutes, where the rotation's week was better). A deload
+   * keeps the rotation's order wherever it holds a day of the week, today's or a later one: its
+   * sessions are lighter than the plans the order is read from (the review: planned from tomorrow,
+   * it left today reordered).
+   */
+  private orderFor(
+    profile: UserProfile,
+    now: string,
+    todayLength: DurationChoice,
+  ): SplitOrder | null {
+    if (deloadInWeek(this.state.deloadWeek, now)) return null;
+    return splitOrder({
+      profile,
+      location: this.currentLocation(),
+      history: this.state.readHistory,
+      now,
+      resets: this.state.learnedResets,
+      focus: this.state.coachFocus,
+      swaps: this.activeSwaps(),
+      todayLength,
+    });
+  }
+
+  /**
+   * Whether today's plan not yet begun reads the split's order again with a deload week gone that
+   * held a later day of the week ahead (Maintenance 38): it kept the rotation's order while the
+   * deload stood.
+   */
+  private orderReturns(week: DeloadWeek): boolean {
+    const { session, profile } = this.state;
+    const now = this.now();
+    if (!session || !profile || session.status !== 'preview' || this.fromEarlierDay(session)) {
+      return false;
+    }
+    if (!deloadInWeek(week, now) || session.constraints.deload !== null) return false;
+    return this.orderFor(profile, now, session.duration) !== null;
+  }
+
+  /**
+   * The week read again for today's plan not yet begun at the length a rebuild builds it
+   * (Maintenance 38, the review): the split's order there, and the week's need in it, as a fresh
+   * plan of the day reads them (`ensureSession`). None for a plan begun, done, or of another day.
+   */
+  private weekAgainFor(session: WorkoutSession, profile: UserProfile): WeekAgain | undefined {
+    if (session.status !== 'preview' || this.fromEarlierDay(session)) return undefined;
+    const now = this.now();
+    // Read again only where the order's days move, which a day off the plan or a deload week never
+    // sees: neither has an order that today's length moves.
+    return {
+      order: (length) => this.orderFor(profile, now, length),
+      need: (order) => this.weekNeed(profile, now, order),
+    };
+  }
+
+  /**
    * What the day offers (Maintenance 31): a catch-up on a day not ticked, a second workout on a day
    * trained, built from the week model, with no muscles when nothing calls for one; null on a day
    * that offers neither. A deload week holds back the catch-up, as it does everything that pushes
    * for more, and keeps a second workout going easy on what was done (the review of round M).
    */
-  private catchUpFor(profile: UserProfile, now: string, deload: boolean): CatchUpSpec | null {
+  private catchUpFor(
+    profile: UserProfile,
+    now: string,
+    deload: boolean,
+    order: SplitOrder | null,
+  ): CatchUpSpec | null {
     const history = this.state.readHistory;
     const kind = catchUpKind(profile, history, now);
     if (!kind || (deload && kind === 'catch-up')) return null;
     // The week's sessions ahead as the store will build them: with the coach focus and the lasting
-    // swaps every plan reads (the fresh review before shipping).
+    // swaps every plan reads (the fresh review before shipping), in the split's order (Maintenance
+    // 38).
     const week = weekModel({
       profile,
       location: this.currentLocation(),
@@ -1764,6 +1844,7 @@ export class AppStore {
       resets: this.state.learnedResets,
       focus: this.state.coachFocus,
       swaps: this.activeSwaps(),
+      order,
     });
     // What is left of a muscle trained today is read from the day's first workout, one with a set
     // done past the warm-ups (the reviews of round M).
@@ -1793,7 +1874,11 @@ export class AppStore {
   ): WorkoutSession['constraints'] {
     const constraints = session.constraints;
     if (session.status !== 'preview' || this.fromEarlierDay(session)) return constraints;
-    const catchUp = this.catchUpFor(profile, this.now(), constraints.deload !== null);
+    const now = this.now();
+    // The split's order read again with it (Maintenance 38): one made for the schedule before a save
+    // of the days would plan them in an order read for other days.
+    const order = this.orderFor(profile, now, session.duration);
+    const catchUp = this.catchUpFor(profile, now, constraints.deload !== null, order);
     // A saved workout loaded is read as itself: the offer read again is the day's, kept aside for
     // the plans after it (the twenty-third review of round M).
     const kept = constraints.dayChoices;
@@ -1809,7 +1894,9 @@ export class AppStore {
     const next = { ...constraints };
     delete next.catchUp;
     delete next.fullSession;
+    delete next.splitOrder;
     if (catchUp) next.catchUp = catchUp;
+    if (order) next.splitOrder = order;
     if (catchUp && constraints.fullSession && constraints.catchUp?.kind === catchUp.kind) {
       next.fullSession = true;
     }
@@ -1927,6 +2014,7 @@ export class AppStore {
       resets: this.state.learnedResets,
       reason,
       timestamp: this.now(),
+      weekAgain: this.weekAgainFor(session, profile),
       ...overrides,
     };
   }
@@ -3383,8 +3471,9 @@ export class AppStore {
       locationId: session.workout.locationId,
       duration: session.duration,
       // The plan under a hard start's ease, with no marks: the ease of today is no part of a plan
-      // for another day (Maintenance 26, the sixth and seventh passes of item 42).
-      workout: planUnderTheEase(this.planWithoutIllness(session)),
+      // for another day (Maintenance 26, the sixth and seventh passes of item 42). Nor is the split's
+      // order's line: the order is the week's from today (Maintenance 38, the review).
+      workout: withoutOrderLinesIn(planUnderTheEase(this.planWithoutIllness(session))),
       // The catch-up or second workout it was laid out for, so a copy loaded is that plan again (the
       // twenty-third review of round M).
       ...(own ? { catchUp: own } : {}),
@@ -3469,11 +3558,12 @@ export class AppStore {
       id: `wk-${localDayKey(now)}-saved-${saved.id}`,
       generatedAt: now,
       recalibration: { version: 1, lastTrigger: null },
-      // Its lines about kept swaps say what is true now, not when it was saved.
+      // Its lines about kept swaps say what is true now, not when it was saved; a line of the split's
+      // order it was saved with says nothing of the day it is loaded on (Maintenance 38, the review).
       explanation: {
         ...fresh.explanation,
         reasons: withSwapLines(
-          fresh.explanation.reasons,
+          withoutOrderLines(fresh.explanation.reasons),
           fresh.blocks,
           this.activeSwaps(),
           this.favourites(),
@@ -4660,8 +4750,15 @@ export class AppStore {
     const db = await this.getDatabase();
     await putVerified(db, 'meta', week, { now: this.now });
     this.setState({ deloadWeek: week });
-    // Today's plan changes only when the week covers today.
-    if (inDeloadWindow(week, this.now())) await this.regeneratePreview();
+    // Today's plan changes only when the week covers today (Maintenance 24), or holds a later day of
+    // the week ahead where today's plan is in the split's order, which a deload week keeps to the
+    // rotation's (Maintenance 38, the review).
+    if (
+      inDeloadWindow(week, this.now()) ||
+      (deloadInWeek(week, this.now()) && this.state.session?.constraints.splitOrder !== undefined)
+    ) {
+      await this.regeneratePreview();
+    }
     return week;
   }
 
@@ -4672,8 +4769,11 @@ export class AppStore {
       await deleteVerified(db, 'meta', DELOAD_WEEK_ID);
     }
     this.setState({ deloadWeek: null });
-    // Today's plan changes only when the week covered today.
-    if (week && inDeloadWindow(week, this.now())) await this.regeneratePreview();
+    // Today's plan changes only when the week covered today (Maintenance 24), or held a later day of
+    // the week ahead where today's plan would now read the split's order (Maintenance 38).
+    if (week && (inDeloadWindow(week, this.now()) || this.orderReturns(week))) {
+      await this.regeneratePreview();
+    }
   }
 
   /**
@@ -4712,7 +4812,10 @@ export class AppStore {
       marks.some((plan) => plan.offer === oldOffer && plan.layout === layout);
     if (!emptiedWhole || layout === null) return session;
     const now = this.now();
-    const offer = this.catchUpFor(profile, now, this.deloadToday(now) !== null);
+    const deload = this.deloadToday(now) !== null;
+    // In the order the fresh plan reads it in (`ensureSession`), not the one before: a focus set or
+    // a swap stopped can move it, and with it the offer (the review of Maintenance 38).
+    const offer = this.catchUpFor(profile, now, deload, this.orderFor(profile, now, 'default'));
     if (!offer || offer.kind !== was.kind) return session;
     const newOffer = offerKey({ catchUp: offer });
     if (newOffer === '' || newOffer === oldOffer || marks.some((plan) => plan.offer === newOffer)) {
@@ -4782,6 +4885,10 @@ export class AppStore {
     // So is the week's need: the fresh plan's, read from the week as it stands now (Maintenance 34).
     delete today.carry;
     if (fresh.constraints.carry) today.carry = { ...fresh.constraints.carry };
+    // And the split's order (Maintenance 38): the fresh plan's, read from the week as it stands now,
+    // or none, as in a deload week planned now.
+    delete today.splitOrder;
+    if (fresh.constraints.splitOrder) today.splitOrder = fresh.constraints.splitOrder;
     // A catch-up or second workout the lifter's changes emptied stays so when the preview is built
     // again for the same offer (the sixteenth review of round M: a coach focus set brought a new
     // catch-up of other lifts for the same muscles): made again as every later plan the same day is,
@@ -4830,6 +4937,8 @@ export class AppStore {
         resets: this.state.learnedResets,
         reason: "Today's choices kept",
         timestamp: this.now(),
+        // At the length kept, the split's order and the week's need read again (Maintenance 38).
+        weekAgain: this.weekAgainFor(fresh, profile),
       });
     } catch (error) {
       result = {
@@ -5434,13 +5543,20 @@ export class AppStore {
     if (pending && localDayKey(pending.at) === localDayKey(now)) return null;
     const next = nextLonger(session.duration, profile.schedule.typicalDurationMinutes);
     if (!next) return null;
-    // Today's plan at the next length, by the rebuild its tap runs; none where that fails.
+    // Today's plan at the next length, by the rebuild its tap runs; none where that fails, and none
+    // where the split's order read at that length is another (Maintenance 38, the review): the week
+    // the offer reads is not the one the tap would give.
+    const days = (order: SplitOrder | undefined) =>
+      (order?.days ?? []).map((day) => `${day.day}:${day.templateId}`).join();
     const trial = ((): WorkoutSession['workout'] | null => {
       try {
         const result = this.engine(
           this.calibrationRequest({ type: 'duration', choice: next }, session, profile, 'Longer'),
         );
-        return result.ok ? result.workout : null;
+        if (!result.ok) return null;
+        return days(result.constraints.splitOrder) === days(constraints.splitOrder)
+          ? result.workout
+          : null;
       } catch {
         return null;
       }
@@ -5454,6 +5570,7 @@ export class AppStore {
       focus: this.state.coachFocus,
       swaps: this.activeSwaps(),
       todayLength: session.duration,
+      order: constraints.splitOrder ?? null,
     });
     const windows = recoveryWindows(
       history,
