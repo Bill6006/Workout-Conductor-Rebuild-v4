@@ -18,6 +18,11 @@ import {
   type WorkoutEntry,
 } from '../../engine/workout/types';
 import { holdById, stoppedText } from '../../engine/workout/setText';
+import {
+  prioritiesToday,
+  priorityLine,
+  withPriorityLine,
+} from '../../engine/workout/todaysPriorities';
 import { keyedLines } from '../../core/screen/keyedLines';
 import styles from './TodayScreen.module.css';
 
@@ -46,6 +51,8 @@ interface WorkoutPreviewCardProps {
   onShowBarcode?: () => void;
   /** Sets logged this session, not skipped, as `entryId:setIndex`: what a stopped exercise counts. */
   logged?: ReadonlySet<string>;
+  /** Sets done or skipped this session, as `entryId:setIndex`: a skipped set trains nothing. */
+  done?: ReadonlySet<string>;
   /**
    * The day's one line on a catch-up or a second workout (Maintenance 31), which only says what the
    * plan is (the owner, 2026-10-31: the app chooses the day's workout, never the lifter); a rest
@@ -191,12 +198,22 @@ export function WorkoutPreviewCard({
   onStart,
   onShowBarcode,
   logged = NONE_LOGGED,
+  done = NONE_LOGGED,
   dayNote = null,
   longer = null,
   restToday = false,
 }: WorkoutPreviewCardProps) {
   const { duration } = workout;
   const fitted = duration.choice !== 'default' || (endBy?.on ?? false);
+  // Today's priority muscles read from the plan and the log on the screen, for the chips and the
+  // line alike: a copy or a session saved before, or a set skipped since, never shows another
+  // (the owner, 2026-11-01; the review).
+  const log = { logged, done };
+  const priorities = prioritiesToday(workout.musclePriorities, workout.blocks, log);
+  const reasons = withPriorityLine(
+    workout.explanation.reasons,
+    priorityLine(workout.musclePriorities, workout.blocks, log),
+  );
   const estimateLabel =
     duration.overByMinutes > 1
       ? `about ${duration.estimatedMinutes} min, ${Math.round(duration.overByMinutes)} over`
@@ -353,7 +370,7 @@ export function WorkoutPreviewCard({
       ) : null}
 
       <div className={styles.focus} aria-label="Muscle priorities">
-        {workout.musclePriorities.slice(0, 4).map((priority) => (
+        {priorities.slice(0, 4).map((priority) => (
           <span key={priority.muscle} className={styles.focusChip} title={priority.reason}>
             {muscleName(priority.muscle)}
           </span>
@@ -411,7 +428,7 @@ export function WorkoutPreviewCard({
       <details className={styles.why}>
         <summary className={styles.whySummary}>Why this workout</summary>
         <ul className={styles.whyList}>
-          {keyedLines(workout.explanation.reasons).map(({ key, line }) => (
+          {keyedLines(reasons).map(({ key, line }) => (
             <li key={key}>{line}</li>
           ))}
           {keyedLines(workout.explanation.fittingSteps).map(({ key, line }) => (

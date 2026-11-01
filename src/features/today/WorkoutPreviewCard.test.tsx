@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { requireExercise } from '../../catalog/exercises/catalog';
 import { createDefaultLocations } from '../../core/validation/location';
 import { createDefaultProfile } from '../../core/validation/profile';
 import type { ChangeSummary } from '../../engine/recalibration/types';
@@ -165,5 +166,91 @@ describe('a stopped exercise on Today', () => {
     expect(within(row).getByTestId('entry-meta').textContent).toBe(
       'Stopped before its working sets',
     );
+  });
+});
+
+describe('today’s priority muscles (the owner, 2026-11-01)', () => {
+  /** A lower day: its session trains neither the biceps nor the triceps that lead the week. */
+  const lowerDayCard = () =>
+    generateWorkout({
+      profile: { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
+      location: gym,
+      history: [],
+      now: TEST_NOW,
+      duration: 'default',
+      constraints: { templateId: 'lower' },
+    });
+  const chipsShown = () =>
+    Array.from(screen.getByLabelText('Muscle priorities').children).map((chip) => chip.textContent);
+  const lineShown = () => screen.getByText(/^Priority muscles today: /).textContent;
+
+  it('reads the line from the plan on the screen, never the text a copy saved before holds', () => {
+    // The review: a copy, or a session, saved before this fix holds the week's top three. Shown,
+    // the line is read from the plan and agrees with the chips.
+    const workout = lowerDayCard();
+    workout.explanation.reasons = workout.explanation.reasons.map((reason) =>
+      reason.startsWith('Priority muscles today: ')
+        ? 'Priority muscles today: Biceps: goal priority; Triceps: goal priority; Chest: not trained yet this cycle.'
+        : reason,
+    );
+    renderCard(workout, new Set());
+    expect(lineShown()).toMatch(
+      /^Priority muscles today: Glutes: [^;]+; Hamstrings: [^;]+; Quads: /,
+    );
+    expect(screen.queryByText(/Biceps: goal priority/)).toBeNull();
+    expect(chipsShown()).toEqual(['Glutes', 'Hamstrings', 'Quads', 'Abs']);
+  });
+
+  it('takes off a muscle whose sets were all skipped, the chips and the line alike', () => {
+    const workout = lowerDayCard();
+    const skipped = new Set(
+      allEntries(workout.blocks)
+        .filter((entry) => requireExercise(entry.exerciseId).primaryMuscles.includes('hamstrings'))
+        .flatMap((entry) =>
+          entry.sets
+            .filter((set) => set.kind === 'working')
+            .map((set) => `${entry.id}:${set.index}`),
+        ),
+    );
+    expect(skipped.size).toBeGreaterThan(0);
+    const handle = createTestStore();
+    render(
+      <Providers store={handle.store}>
+        <WorkoutPreviewCard
+          workout={workout}
+          defaultEstimatedMinutes={60}
+          location={gym}
+          onSelect={() => undefined}
+          onDurationChange={() => undefined}
+          logged={new Set()}
+          done={skipped}
+          summary={null}
+        />
+      </Providers>,
+    );
+    expect(chipsShown()).not.toContain('Hamstrings');
+    expect(lineShown()).not.toContain('Hamstrings');
+    expect(lineShown()).toMatch(/^Priority muscles today: Glutes: [^;]+; Quads: /);
+  });
+
+  it('shows only the muscles the session trains, in the week’s order', () => {
+    // Bigger arms as a goal: the biceps and triceps lead the week, and the lower day trains neither.
+    const workout = generateWorkout({
+      profile: { ...createDefaultProfile(TEST_NOW), bodyweight: 185 },
+      location: gym,
+      history: [],
+      now: TEST_NOW,
+      duration: 'default',
+      constraints: { templateId: 'lower' },
+    });
+    expect(workout.musclePriorities[0]?.muscle).toBe('biceps');
+    renderCard(workout, new Set());
+    const chips = screen.getByLabelText('Muscle priorities');
+    expect(Array.from(chips.children).map((chip) => chip.textContent)).toEqual([
+      'Glutes',
+      'Hamstrings',
+      'Quads',
+      'Abs',
+    ]);
   });
 });

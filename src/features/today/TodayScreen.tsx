@@ -233,6 +233,7 @@ export function TodayScreen() {
       <WorkoutPreviewCard
         workout={workout}
         logged={logged}
+        done={done}
         defaultEstimatedMinutes={defaultEstimatedMinutes}
         location={location}
         onChangeLocation={() => setChoosingPlace(true)}

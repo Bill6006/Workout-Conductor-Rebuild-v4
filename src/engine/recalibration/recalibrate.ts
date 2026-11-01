@@ -26,6 +26,7 @@ import {
 import { preferredIdsOf } from '../conflicts/context';
 import { CATCH_UP, offPlanFloor, type CatchUpSpec } from '../planning/catchUp';
 import { copyOrder } from '../planning/orderKept';
+import { priorityLine, withPriorityLine } from '../workout/todaysPriorities';
 import { parsePushLine, pushDay, pushLine, pushRir } from '../planning/pushLift';
 import {
   estimateWorkout,
@@ -4469,11 +4470,15 @@ function refresh(
           /: [0-9]+ exercises? in about [0-9]+ min/,
           `: ${exercisesCount(count)} in about ${Math.round(time.totalMinutes)} min`,
         );
-  // The catch-up's lines name only what a lift went in for as the change leaves the plan.
+  // The catch-up's lines name only what a lift went in for as the change leaves the plan, and
+  // today's priority muscles only those it still trains (the owner, 2026-11-01).
   workout.explanation = {
     ...workout.explanation,
     time,
-    reasons: offPlan ? withCatchUpLines(reasons, spec, workout.blocks) : reasons,
+    reasons: withPriorityLine(
+      offPlan ? withCatchUpLines(reasons, spec, workout.blocks) : reasons,
+      priorityLine(workout.musclePriorities, workout.blocks),
+    ),
     summary,
   };
   keepOrderLines(workout);

@@ -80,6 +80,7 @@ import {
   type OutgrownBy,
 } from './loadedVersions';
 import { keepingOrder } from '../planning/orderKept';
+import { priorityLine } from '../workout/todaysPriorities';
 import { styleInfo } from '../planning/styles';
 import { fitWeight, loadingFor, type Loading, type SessionLoading } from '../loading/loading';
 import {
@@ -3740,12 +3741,13 @@ export function generateWorkout(input: GenerationInput): GeneratedWorkout {
   }
 
   const anchorExercise = anchor ? exerciseOf(anchor.exerciseId) : undefined;
-  const topPriorities = priorities.slice(0, 3);
+  // The week's priorities among the muscles today's session trains (the owner, 2026-11-01).
+  const prioritiesLine = priorityLine(priorities, blocks);
   const reasons: string[] = [
     ...(spec && (catchUp !== null || spec.kind === 'second') ? catchUpLines(spec, blocks) : []),
     `Goal ${goalLabel(profile.goals.primary)}${profile.goals.secondary !== 'none' ? ` with ${goalLabel(profile.goals.secondary)}` : ''}: ${template.title.toLowerCase()} session, ${styleLine(profile)}.`,
     ...orderedLines(constraints.splitOrder, now, template),
-    `Priority muscles today: ${topPriorities.map((priority) => priority.reason).join('; ')}.`,
+    ...(prioritiesLine ? [prioritiesLine] : []),
     `Built for ${location?.name ?? 'your place'} from the equipment saved there, every pick checked by the conflict engine.`,
   ];
   // What leads: the lift to push, else the day's extra swapped or stood in for, else the main lift
