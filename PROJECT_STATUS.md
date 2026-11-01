@@ -1,6 +1,6 @@
 # Workout Conductor - Project Status
 
-_Last updated: 2026-10-31_
+_Last updated: 2026-11-01_
 
 | Item                   | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -9,14 +9,14 @@ _Last updated: 2026-10-31_
 | Actions                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/actions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Commits                | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/commits/main                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Master issue           | https://github.com/Bill6006/Workout-Conductor-Rebuild-v4/issues/1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Current phase | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 21, 25, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 and 37 YELLOW at their review gates. The agreed backlog is being built round after round without pausing at the gates (the owner, 2026-10-11) |
-| Phase gate | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 37 YELLOW (custom equipment presets, `docs/reports/maintenance-37.md`). Maintenance 36 YELLOW (the schedule watch, `docs/reports/maintenance-36.md`). Maintenance 35 YELLOW (item 48, Life Mirror's daily check-in, `docs/reports/maintenance-35.md`). Maintenance 34 YELLOW (time intelligence, `docs/reports/maintenance-34.md`). The app chooses the day's workout YELLOW (2026-10-31, `docs/reports/catch-up-decision.md`). The harder-variation fix YELLOW (2026-10-31, `docs/reports/harder-variation-fix.md`). Maintenance 33 YELLOW (the recovery and readiness core). Maintenance 32 YELLOW (round N: item 11). Maintenance 31 YELLOW (round M: items 12, 32). Install the app and the launcher icon YELLOW (2026-10-24, `docs/reports/install-and-launcher-icon.md`). Maintenance 30 YELLOW (round L: items 6, 30, 31). Maintenance 29 YELLOW (round K: items 7, 8, 10, 14). Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
+| Current phase | Plan built: Phases 0 to 7 GREEN, Phase 8 YELLOW and ready for final Android acceptance (reopened by the owner in Maintenance 25, item 6); Maintenance 1 to 3, 6, 7, 12, 13, 18, 19, 20, 22, 23, 24, and 26 GREEN; 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 21, 25, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37 and 38 YELLOW at their review gates. The agreed backlog is being built round after round without pausing at the gates (the owner, 2026-10-11) |
+| Phase gate | No gate pauses the agreed work (the owner, 2026-10-11): every round ships and stays YELLOW until the owner's one consolidated phone review. Maintenance 38 YELLOW (the split's order across the days, `docs/reports/maintenance-38.md`). Maintenance 37 YELLOW (custom equipment presets, `docs/reports/maintenance-37.md`). Maintenance 36 YELLOW (the schedule watch, `docs/reports/maintenance-36.md`). Maintenance 35 YELLOW (item 48, Life Mirror's daily check-in, `docs/reports/maintenance-35.md`). Maintenance 34 YELLOW (time intelligence, `docs/reports/maintenance-34.md`). The app chooses the day's workout YELLOW (2026-10-31, `docs/reports/catch-up-decision.md`). The harder-variation fix YELLOW (2026-10-31, `docs/reports/harder-variation-fix.md`). Maintenance 33 YELLOW (the recovery and readiness core). Maintenance 32 YELLOW (round N: item 11). Maintenance 31 YELLOW (round M: items 12, 32). Install the app and the launcher icon YELLOW (2026-10-24, `docs/reports/install-and-launcher-icon.md`). Maintenance 30 YELLOW (round L: items 6, 30, 31). Maintenance 29 YELLOW (round K: items 7, 8, 10, 14). Maintenance 28 YELLOW (round J: items 1, 3, 4). Maintenance 27 YELLOW (round I). Maintenance 26 **GREEN** from the owner on 2026-10-10. Maintenance 25 YELLOW (round G, issue #26), with Phase 8 YELLOW and ready for final Android acceptance. Maintenance 21 YELLOW (issue #22). Maintenance 4, 5, 8, 9, 10, 11, 14, 15, 16, and 17 YELLOW (reviews still open). The exact list: Waiting for the owner's phone acceptance |
 | Current branch         | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Latest completed phase | Phase 6 (GREEN from the owner on 2026-09-03)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Work in progress | On the owner's word of 2026-10-31, each chunk reviewed, reverted, verified and shipped live before the next: the harder-variation fix, the catch-up decision, Maintenance 34 (time intelligence), Maintenance 35 (item 48, Life Mirror's daily check-in, behind a switch that stays off), Maintenance 36 (the schedule watch) and Maintenance 37 (custom equipment presets) live, and the approved backlog reconciled (`docs/reports/backlog-reconciliation.md`): every agreed item is live. Next: the owner's one consolidated phone review (`docs/reports/consolidated-phone-review.md`) |
-| Latest commit | `696d587` Revert tools: Maintenance 37's run, its entries settled. Before it: `5ba2575` Maintenance 37: the review's fixes, and what the revert run asked for; `90f160c` Maintenance 37: custom equipment presets |
-| Latest deployment | `696d587` deployed by Deploy Pages run 41246882231 (success), its checks as the branch's CI run 41245170228: unit 3909 passed + 5 skipped by design, the browser suite 443 passed + 14 skipped by design. Live marker `shortCommit` `696d587`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed. Before it: `8a4292d`, run 41239957729 |
-| Test totals | Unit: 3909 passed + 5 skipped by design (648 files), and the day rules in two more zones; in UTC in CI. Browser/mobile: 443 passed + 14 skipped by design locally (`npm run verify`), in UTC on a day the schedule does not tick, and in CI. Reverts, every table on the final code, every entry caught: M23 to M26 1,190, M27 193, M28 81 (UTC), M29 32, M30 121, M31 347, M32 322, M33 170, the install button and icons 54, the harder-variation fix 24, the catch-up decision 9, Maintenance 34 136, item 48 64, Maintenance 36 58, Maintenance 37 32 (`docs/reports/maintenance-31.md`, The complete revert run) |
+| Work in progress | On the owner's word of 2026-10-31, each chunk reviewed, reverted, verified and shipped live before the next: the harder-variation fix, the catch-up decision, Maintenance 34 (time intelligence), Maintenance 35 (item 48, Life Mirror's daily check-in, behind a switch that stays off), Maintenance 36 (the schedule watch), Maintenance 37 (custom equipment presets) and, on the owner's two decisions of the same day, Maintenance 38 (the split's order across the days, decided by the app) live, and the approved backlog reconciled (`docs/reports/backlog-reconciliation.md`): every agreed item is live, and nothing is left to settle (the gym barcode stays on the phone). Next: the owner's one consolidated phone review (`docs/reports/consolidated-phone-review.md`) |
+| Latest commit | `615d663` Revert tools: Maintenance 38's table, every entry caught. Before it: `c1706c3` Maintenance 38: the split's order across the days |
+| Latest deployment | `615d663` deployed by Deploy Pages run 41286697850 (success), its checks as the branch's CI run 41284915536: unit 3987 passed + 5 skipped by design, the browser suite 443 passed + 14 skipped by design. Live marker `shortCommit` `615d663`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed. Before it: `696d587`, run 41246882231 |
+| Test totals | Unit: 3987 passed + 5 skipped by design (658 files), and the day rules in two more zones; in UTC locally and in CI. Browser/mobile: 443 passed + 14 skipped by design locally (`npm run verify`), and in UTC in CI. Reverts, every entry caught: M23 to M26 1,190, M27 193, M28 81 (UTC), M29 32, M30 121, M31 347, M32 322, M33 170, the install button and icons 54, the harder-variation fix 24, the catch-up decision 9, Maintenance 34 136, item 48 64, Maintenance 36 58, Maintenance 37 32 (every table, `docs/reports/maintenance-31.md`, The complete revert run), Maintenance 38 98, and on its code the older tables' 156 entries on the lines it changed (`docs/reports/maintenance-38.md`, Reverts) |
 | Build marker           | Under Settings, About this app (since Maintenance 25; before, under every screen's header): `Build <sha> · <UTC time> · Phase 8`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ## Agreed and waiting
@@ -28,9 +28,9 @@ the uncertainty and the reason for each final rule are written down; a number in
 not a rule until the evidence backs it. Product and screen choices follow ordinary judgement (the
 owner, 2026-10-09).
 
-- None: every agreed item is live. The custom equipment presets, the last, are live in
-  Maintenance 37 (below). Item by item, with the two things left for the owner to settle:
-  `docs/reports/backlog-reconciliation.md`.
+- None: every agreed item is live, and nothing is left to settle. The owner decided the last two
+  on 2026-10-31: the split's order, decided by the app, is live in Maintenance 38 (below), and the
+  gym barcode stays on the phone. Item by item: `docs/reports/backlog-reconciliation.md`.
 
 The owner's answers to the proposal's five decisions and item 11's seven questions (2026-10-17) are
 in the reports of the rounds that build them.
@@ -78,12 +78,14 @@ Item 48, not approved on 2026-10-09, came back in scope on 2026-10-11 and is liv
 The owner, 2026-10-11: no gate pauses the agreed work, and none is GREEN without the owner's review.
 Every agreed item is live, and one consolidated phone review closes all of these without repeating
 what the owner has already passed: `docs/reports/consolidated-phone-review.md`, on build
-`696d587`. The gates it closes:
+`615d663`. The gates it closes:
 
 - **Install the app, and the launcher icon** (2026-10-24): phone review 1 passed the install;
   phone review 2 (2026-10-25) saw the angled icon arrive as an update, in place. The fourth
   artwork's icon, reaching toward the tile's edges, arrives the same way: its five phone steps
   (`docs/reports/install-and-launcher-icon.md`, Review on the phone), not yet run.
+- **Maintenance 38** (the split's order across the days): its three phone steps
+  (`docs/reports/maintenance-38.md`, Review on the phone), not yet run.
 - **Maintenance 37** (custom equipment presets): its four phone steps
   (`docs/reports/maintenance-37.md`, Review on the phone), not yet run.
 - **Maintenance 36** (the schedule watch): its one phone step (`docs/reports/maintenance-36.md`,
@@ -105,7 +107,8 @@ what the owner has already passed: `docs/reports/consolidated-phone-review.md`, 
 - **Maintenance 27** (round I: items 43, 41, 44, 45, 46, 47, 49): its phone steps
   (`docs/reports/maintenance-27.md`), not yet run.
 - **Maintenance 25** (issue #26): round G steps 1-7 and 9-11 (step 8 replaced by Maintenance 26,
-  already passed); one decision to settle: the gym barcode in the cloud copy.
+  already passed). Its one decision, settled by the owner on 2026-10-31: the gym barcode stays
+  on the phone.
 - **Phase 8**: acceptance steps 12-19 on the installed app (`docs/reports/maintenance-25.md`).
 - **Maintenance 21** (issue #22), **17** (#18), **16** (#17), **15** (#16), **14** (#15), **11**
   (#12), **10** (#11), **9** (#10), **8** (#9), **5** (#6) and **4** (#5): review issues still
@@ -230,6 +233,23 @@ what the owner has already passed: `docs/reports/consolidated-phone-review.md`, 
 - Accessibility: axe sweep over every screen, the active workout, and the details sheet (no serious or critical findings); subtle text raised to 4.5:1; tab list fixed.
 - Zoom and width sweep: 360, 375, 412, 430 px at 100, 115, 130, 150 percent, as desktop page zoom and as phone text scaling; bottom navigation and set rows shrink correctly.
 - Demonstration coverage test, database version 4 with a backups store, Phase 8 report (`docs/reports/phase-8.md`), and the cutover report against the acceptance rules (`docs/cutover-report.md`).
+
+## Maintenance 38: the split's order across the days (YELLOW)
+
+- The owner's decision of 2026-10-31: "Split reordering should NOT be an owner preference question. Use the best available research and Workout Conductor's existing recovery/readiness model to decide automatically. Keep my available training days fixed and reorder the split only when another order is meaningfully better for recovery, performance, frequency, and my goals. If no ordering is clearly better, keep the current split."
+- The days stay the lifter's and the sessions the rotation's. The app's own "too soon" check
+  reads every order of the week ahead. Another is taken only where no muscle comes back inside
+  its window more often and one at least less often, the day after the week is no worse, and the
+  week built in it keeps every muscle's sessions and the sets its goal needs. An order trained in
+  holds for its week, and the rotation keeps its own days after it. The default week keeps the
+  rotation's order in 13 of the 14 weeks read.
+- Reviewed once, fresh: two HIGH, six MEDIUM and two LOW, all fixed but one LOW kept as a known
+  limit. Testing the fixes over weeks trained found an order pushing one session on week after
+  week, so an order now holds for its week. The re-check found one HIGH (a held order outlived a
+  save of other days) and one MEDIUM (the week model planned past an order's week as if it had
+  not been trained in it), both fixed with tests.
+- With it, the owner's decision on Maintenance 25's: "Keep the gym barcode phone-only. There is no need to put it in the cloud unless a future feature genuinely requires cross-device access." Nothing changes.
+- Report: `docs/reports/maintenance-38.md`.
 
 ## Maintenance 37: custom equipment presets (YELLOW)
 

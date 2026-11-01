@@ -6,8 +6,10 @@ the approved backlog and consolidated phone review." The handoff's rule for it
 `PROJECT_STATUS.md`'s "Agreed and waiting" and every item in the owner's cloud prompt must be live,
 or named with the reason it is not.
 
-**The result: every agreed item is live, and none is waiting.** The live build, `696d587`,
-carries all of them. Every round below stays YELLOW until the owner's one phone review
+**The result: every agreed item is live, and none is waiting.** The live build, `615d663`,
+carries all of them. Updated on 2026-11-01: the owner settled both things to settle on
+2026-10-31, and the split's order is live in Maintenance 38. Every round below stays YELLOW until
+the owner's one phone review
 (`docs/reports/consolidated-phone-review.md`). None is GREEN without the owner's word.
 
 ## The owner's order of 2026-10-31
@@ -37,6 +39,7 @@ Section 3 of the handoff (2026-10-17) lists seven rows. All seven are live:
 | 5 | Maintenance 35 | Item 48: Life Mirror's check-in, read-only, behind a switch | `d11fe71` | `maintenance-35.md` |
 | 6 | Maintenance 36 | The schedule watch | `8a4292d` | `maintenance-36.md` |
 | 7 | Maintenance 37 | Custom equipment presets: the owner defined them on 2026-10-31 | `696d587` | `maintenance-37.md` |
+| 8 | Maintenance 38 | The split's order across the days: the owner decided it on 2026-10-31 | `615d663` | `maintenance-38.md` |
 
 Rows 1 to 3 shipped together from the owner's machine on 2026-10-31 (Deploy Pages run
 41162608914). The cloud prompt's answers are kept in the reports of the rounds that build them:
@@ -70,19 +73,14 @@ came back in scope on 2026-10-11, and is live in Maintenance 35.
 
 Nothing agreed is waiting to be built.
 
-## Things to settle: 2
+## Things to settle: none
 
-Each is the owner's decision. Neither holds back anything built.
+The owner settled both on 2026-10-31:
 
-1. **Reordering the split across the days** (Maintenance 33, Questions for the owner). The approved
-   proposal asks the schedule card to reorder the split before it suggests a moved day. The same
-   proposal keeps the split rotation unchanged. On the default four-day split, no reordering avoids
-   an overlap, because the two upper days share the arms. The card names the days, and reordering
-   waits for the owner's word.
-2. **The gym barcode in the cloud copy** (Maintenance 25, Things to settle). It stays on the phone,
-   with a second copy there that a clearing keeps. In the cloud copy it would also come back on a
-   new phone, but every barcode picture would then go to what Life Mirror's phone downloads from
-   that database. It stays on the phone until the owner says otherwise.
+1. **Reordering the split across the days** (Maintenance 33, Questions for the owner):
+   "Split reordering should NOT be an owner preference question. Use the best available research and Workout Conductor's existing recovery/readiness model to decide automatically. Keep my available training days fixed and reorder the split only when another order is meaningfully better for recovery, performance, frequency, and my goals. If no ordering is clearly better, keep the current split." Built in Maintenance 38 (`maintenance-38.md`), live in `615d663`.
+2. **The gym barcode in the cloud copy** (Maintenance 25, Things to settle):
+   "Keep the gym barcode phone-only. There is no need to put it in the cloud unless a future feature genuinely requires cross-device access." It stays on the phone, as it was.
 
 **Pending outside this repository:** the disclosure line in Life Mirror for item 48. That is Life
 Mirror's own workstream, and this work never edits Life Mirror.
@@ -103,8 +101,8 @@ These are suggestions from the rounds' research and reviews. Each waits for the 
 - **Maintenance 34 to 37 and the catch-up decision:** each "Not taken" section gives what that round
   chose not to build, and why.
 
-**Seen in passing while the phone review was written.** Both are LOW, older than these rounds, and
-left as they are for the owner's word:
+**Seen in passing while the phone review was written, and in Maintenance 38.** All three are LOW,
+older than these rounds, and left as they are for the owner's word:
 
 - **The summary of Settings' "Learned from your log" row** names "Your habit, each lift's curve,
   how you judge reserve, pain patterns and offers declined". It leaves out Your pace (Maintenance
@@ -112,6 +110,9 @@ left as they are for the owner's word:
 - **After a lift is swapped on Today,** Why this workout still says the lift swapped out "leads as
   the primary strength lift". The line is kept as it was once its lift is gone from the plan, so it
   then names a lift the plan no longer holds.
+- **Why this workout's "Priority muscles today"** names the week's top three priorities whatever
+  today's session is, so a lower day lists the biceps, the triceps and the chest (seen in
+  Maintenance 38, whose orders can put a lower day where the rotation had an upper day).
 
 **A correction to the handoff's list:** "Maintenance 21's Proposed 28" was built in Maintenance 22,
 section 28, which is GREEN. A stopped exercise says so on Today and picks up again back at a place

@@ -28,8 +28,12 @@ first:
   Pages run 41239957729; the live marker reads `8a4292d`. Live suite from the owner's machine: 438 passed + 19 skipped by design; one storage test on the 360 px project missed a line of the cloud card once after a page load and passed 3 of 3 alone, and the 10 PWA tests that wait on it were run after it (5 passed, 5 skipped by design).
 - **Live: `696d587`, custom equipment presets** (Maintenance 37, `docs/reports/maintenance-37.md`):
   Deploy Pages run 41246882231; the live marker reads `696d587`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed.
+- **Live: `615d663`, the split's order across the days** (Maintenance 38,
+  `docs/reports/maintenance-38.md`), on the owner's decision of 2026-10-31: "Split reordering should NOT be an owner preference question. Use the best available research and Workout Conductor's existing recovery/readiness model to decide automatically. Keep my available training days fixed and reorder the split only when another order is meaningfully better for recovery, performance, frequency, and my goals. If no ordering is clearly better, keep the current split."
+  Deploy Pages run 41286697850; the live marker reads `615d663`. Live suite from the owner's
+  machine: 438 passed + 19 skipped by design, none failed. With it the owner settled the gym barcode: "Keep the gym barcode phone-only. There is no need to put it in the cloud unless a future feature genuinely requires cross-device access."
 - **Done: the final reconciliation** (`docs/reports/backlog-reconciliation.md`): every agreed
-  item is live, and two things wait for the owner's decision.
+  item is live, and nothing is left to settle.
 - **Next: the owner's one consolidated phone review** (`docs/reports/consolidated-phone-review.md`).
   Stop here: nothing else is agreed, so build nothing more until the owner's word.
 - **Custom equipment presets, as the owner defined them (2026-10-31):** Home and Full gym stay built
@@ -370,8 +374,8 @@ the reason it is not.
 
 The exact list is `PROJECT_STATUS.md`, "Waiting for the owner's phone acceptance":
 - Maintenance 30, 29, 28 and 27;
-- Maintenance 25 (issue #26), which has one decision of the owner's still open: the gym barcode in
-  the cloud copy. It is not the cloud session's to decide;
+- Maintenance 25 (issue #26), whose one decision the owner settled on 2026-10-31: the gym barcode
+  stays on the phone;
 - Phase 8 (steps 12 to 19 on the installed app);
 - the older open review issues (Maintenance 21, 17, 16, 15, 14, 11, 10, 9, 8, 5, 4).
 

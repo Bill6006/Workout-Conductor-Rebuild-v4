@@ -1333,6 +1333,9 @@ suite, PRa to PRbc; 11 in the browser, Lz1 to Lz11).
   every barcode picture to what Life Mirror's phone downloads from that database, though Life
   Mirror reads only workouts. Kept on the phone until the owner says otherwise.
 
+  _Settled by the owner on 2026-10-31: "Keep the gym barcode phone-only. There is no need to put it in the cloud unless a future feature genuinely requires cross-device access." It stays on the phone
+  (`docs/reports/maintenance-38.md`)._
+
 Every training-science choice in this round was settled from the research above.
 
 ## Proposed

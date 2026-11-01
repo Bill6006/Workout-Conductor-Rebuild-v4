@@ -112,6 +112,9 @@ the move.
   rotation unchanged; on the default four-day split no reordering avoids an overlap (two upper days
   share the arms). The card says the days; reordering waits for the owner's word.
 
+  _Settled by the owner on 2026-10-31: "Split reordering should NOT be an owner preference question. Use the best available research and Workout Conductor's existing recovery/readiness model to decide automatically. Keep my available training days fixed and reorder the split only when another order is meaningfully better for recovery, performance, frequency, and my goals. If no ordering is clearly better, keep the current split." Built in Maintenance 38
+  (`docs/reports/maintenance-38.md`)._
+
 ## How it is kept
 
 - Every new stored field is optional with a catch: the session's lighter muscles, the shown cards
