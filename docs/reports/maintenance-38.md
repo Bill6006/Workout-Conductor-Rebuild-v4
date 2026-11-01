@@ -194,7 +194,8 @@ copy of the repository. On the final code all 98 are caught.
 **Seen in passing, LOW, older than this round, and left as it is for the owner's word:** Why this
 workout's "Priority muscles today" names the week's top three priorities whatever today's session
 is, so a lower day lists the biceps, the triceps and the chest. An order that puts a lower day where
-the rotation had an upper day shows it on a day it did not before.
+the rotation had an upper day shows it on a day it did not before. _Fixed on the owner's word of
+2026-11-01: the priority-muscles fix (`docs/reports/priority-muscles-fix.md`)._
 
 ## Review on the phone
 

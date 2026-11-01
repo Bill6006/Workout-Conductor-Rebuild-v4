@@ -5,7 +5,7 @@ owner has already passed: Phases 0 to 7, and Maintenance 1 to 3, 6, 7, 12, 13, 1
 and 26, all GREEN. Only the owner marks a gate GREEN; until then every round below stays YELLOW.
 
 - **Live app:** https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
-- **The release to check:** build `615d663` (Settings, **About this app**).
+- **The release to check:** build `e3f7acf` (Settings, **About this app**).
 - **Never clear Chrome's site data or storage:** one clear wipes every app at bill6006.github.io.
 
 It comes in three parts:
@@ -331,12 +331,22 @@ the reviews it closes.
 3. **Plan**: lower, upper and full body, in that order, and under the week: "In this order the
    quads, hamstrings and glutes are not worked hard again inside their recovery windows."
 
+### 1J. The priority-muscles fix
+
+As in 1I, Settings, **Schedule**: 3 sessions a week, ticked on today and every other day after
+it, every other day off.
+
+1. **Today**: the lower day. The chips under its title read Glutes, Hamstrings, Quads, Abs. Under
+   **Why this workout**: "Priority muscles today: Glutes: ..., Hamstrings: ..., Quads: ...", and no
+   biceps or triceps.
+2. **Plan**, **Priority this week**: the biceps and the triceps, as before.
+
 ## Part 2: on your installed app, now
 
 ### 2A. The update and the launcher icon
 
 1. Open Workout Conductor from its home-screen icon. If "New version available" shows, tap Reload.
-   Settings, About this app shows the build under Verification: `615d663`.
+   Settings, About this app shows the build under Verification: `e3f7acf`.
 2. Close the app and open it again. Chrome reads the manifest as the app opens and finds the new
    icon. If it asks about the new icon (a dialog, or "Review app update" in Chrome's menu), accept
    it.
@@ -509,6 +519,7 @@ Before you train (the app chooses the day's workout, and Maintenance 31):
 
 | Gate | Closed by |
 |---|---|
+| The priority-muscles fix | 1J |
 | Maintenance 38: the split's order across the days | 1I |
 | Maintenance 37: custom equipment presets | 1H |
 | Maintenance 36: the schedule watch | 2B step 3; its card (3E step 3) needs weeks, and the tests hold it |

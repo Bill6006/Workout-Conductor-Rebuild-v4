@@ -6,7 +6,7 @@ the approved backlog and consolidated phone review." The handoff's rule for it
 `PROJECT_STATUS.md`'s "Agreed and waiting" and every item in the owner's cloud prompt must be live,
 or named with the reason it is not.
 
-**The result: every agreed item is live, and none is waiting.** The live build, `615d663`,
+**The result: every agreed item is live, and none is waiting.** The live build, `e3f7acf`,
 carries all of them. Updated on 2026-11-01: the owner settled both things to settle on
 2026-10-31, and the split's order is live in Maintenance 38. Every round below stays YELLOW until
 the owner's one phone review
@@ -101,8 +101,9 @@ These are suggestions from the rounds' research and reviews. Each waits for the 
 - **Maintenance 34 to 37 and the catch-up decision:** each "Not taken" section gives what that round
   chose not to build, and why.
 
-**Seen in passing while the phone review was written, and in Maintenance 38.** All three are LOW,
-older than these rounds, and left as they are for the owner's word:
+**Seen in passing while the phone review was written, and in Maintenance 38.** All three are LOW
+and older than these rounds. The first two are left as they are for the owner's word; the owner
+had the third fixed on 2026-11-01:
 
 - **The summary of Settings' "Learned from your log" row** names "Your habit, each lift's curve,
   how you judge reserve, pain patterns and offers declined". It leaves out Your pace (Maintenance
@@ -112,7 +113,8 @@ older than these rounds, and left as they are for the owner's word:
   then names a lift the plan no longer holds.
 - **Why this workout's "Priority muscles today"** names the week's top three priorities whatever
   today's session is, so a lower day lists the biceps, the triceps and the chest (seen in
-  Maintenance 38, whose orders can put a lower day where the rotation had an upper day).
+  Maintenance 38, whose orders can put a lower day where the rotation had an upper day). Fixed:
+  the priority-muscles fix (`priority-muscles-fix.md`), live in `e3f7acf`.
 
 **A correction to the handoff's list:** "Maintenance 21's Proposed 28" was built in Maintenance 22,
 section 28, which is GREEN. A stopped exercise says so on Today and picks up again back at a place

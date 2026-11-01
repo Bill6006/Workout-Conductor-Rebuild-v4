@@ -32,6 +32,10 @@ first:
   `docs/reports/maintenance-38.md`), on the owner's decision of 2026-10-31: "Split reordering should NOT be an owner preference question. Use the best available research and Workout Conductor's existing recovery/readiness model to decide automatically. Keep my available training days fixed and reorder the split only when another order is meaningfully better for recovery, performance, frequency, and my goals. If no ordering is clearly better, keep the current split."
   Deploy Pages run 41286697850; the live marker reads `615d663`. Live suite from the owner's
   machine: 438 passed + 19 skipped by design, none failed. With it the owner settled the gym barcode: "Keep the gym barcode phone-only. There is no need to put it in the cloud unless a future feature genuinely requires cross-device access."
+- **Live: `e3f7acf`, the priority-muscles fix** (`docs/reports/priority-muscles-fix.md`), on the
+  owner's word of 2026-11-01, "I approve that fix": "Priority muscles today" and Today's chips name only the
+  muscles today's session trains. Deploy Pages run 41311081269; the live marker reads
+  `e3f7acf`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed.
 - **Done: the final reconciliation** (`docs/reports/backlog-reconciliation.md`): every agreed
   item is live, and nothing is left to settle.
 - **Next: the owner's one consolidated phone review** (`docs/reports/consolidated-phone-review.md`).
