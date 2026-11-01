@@ -5506,13 +5506,15 @@ export class AppStore {
       return null;
     }
     const now = this.now();
+    // The place the offer reads is today's own: an edit of another left it worked out again at a
+    // later hour, on a plan the edit never changed (the review of the cross-place report).
     const refs = [
       session,
       profile,
       this.state.readHistory,
       this.state.timeOffers,
       this.state.coachSwitches,
-      this.state.locations,
+      this.currentLocation(),
       this.state.learnedResets,
       localDayKey(now),
     ];

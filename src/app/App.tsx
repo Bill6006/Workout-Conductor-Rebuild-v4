@@ -1,12 +1,13 @@
-import { useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { AppShell } from '../components/AppShell/AppShell';
 import { CalibrationOverlay } from '../components/CalibrationOverlay/CalibrationOverlay';
 import { Card } from '../components/Card/Card';
 import { UNFINISHED_NUDGE_MINUTES } from '../core/alerts/cues';
 import { lastActivityAt, useWorkoutAlerts } from '../core/alerts/useWorkoutAlerts';
 import { useWakeLock } from '../core/screen/useWakeLock';
-import { useMomentReached } from '../core/time/clock';
-import { useAppState } from '../core/state/useAppStore';
+import { useMomentReached, useNow } from '../core/time/clock';
+import { localDayKey } from '../core/time/localDate';
+import { useAppState, useAppStore } from '../core/state/useAppStore';
 import { BarcodeLayer } from '../features/barcode/BarcodeLayer';
 import { RestoringScreen } from '../features/onboarding/RestoringScreen';
 import { type RouteId } from './navigation';
@@ -15,6 +16,21 @@ import { SessionRecoveryNotice } from './SessionRecoveryNotice';
 import { ActiveScreen } from './routes';
 import { useHashRoute } from './useHashRoute';
 import { useSetupLink } from './useSetupLink';
+
+/**
+ * Today's plan is the device's day's on every tab: a new day, or the app back in front on one, puts
+ * it in place of the day before's at once (the owner's report of 2026-11-01: left on screen, it
+ * went at the next save, a Home place's among them). Alone in its own component, the minute's
+ * clock re-renders nothing else.
+ */
+function DayRefresh(): null {
+  const store = useAppStore();
+  const day = localDayKey(new Date(useNow() || 0).toISOString());
+  useEffect(() => {
+    store.refreshSession();
+  }, [store, day]);
+  return null;
+}
 
 export function App() {
   const routeId = useHashRoute();
@@ -56,6 +72,7 @@ export function App() {
 
   return (
     <AppShell activeRoute={effectiveRoute} showNav={showNav}>
+      <DayRefresh />
       {state.status === 'error' ? (
         <Card eyebrow="Storage" title="Local storage is unavailable">
           <p style={{ color: 'var(--color-text-muted)' }}>{state.error}</p>

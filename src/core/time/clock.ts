@@ -2,7 +2,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 /**
  * A tiny clock store so components can read "now" without calling impure
- * functions during render. Updates once a minute while anything subscribes.
+ * functions during render. Updates once a minute while anything subscribes, and at once when the
+ * app comes back to the front.
  */
 
 const TICK_MS = 60_000;
@@ -11,19 +12,35 @@ let snapshot = Date.now();
 let timer: ReturnType<typeof setInterval> | undefined;
 const listeners = new Set<() => void>();
 
+function tick(): void {
+  snapshot = Date.now();
+  for (const notify of listeners) notify();
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   if (!timer) {
-    timer = setInterval(() => {
-      snapshot = Date.now();
-      for (const notify of listeners) notify();
-    }, TICK_MS);
+    timer = setInterval(tick, TICK_MS);
+    // Back in front, the time is read again at once (the owner's report of 2026-11-01): the
+    // minute's timer waits while the app is in the background, so the time it last read could be
+    // the day before's, and a plan from that day stayed on screen until the next save, a Home
+    // place's among them, put the new day's in its place.
+    if (typeof window !== 'undefined') {
+      document.addEventListener('visibilitychange', tick);
+      window.addEventListener('pageshow', tick);
+      window.addEventListener('focus', tick);
+    }
   }
   return () => {
     listeners.delete(listener);
     if (listeners.size === 0 && timer) {
       clearInterval(timer);
       timer = undefined;
+      if (typeof window !== 'undefined') {
+        document.removeEventListener('visibilitychange', tick);
+        window.removeEventListener('pageshow', tick);
+        window.removeEventListener('focus', tick);
+      }
     }
   };
 }
