@@ -24,6 +24,7 @@ still pass means the rule has no test that guards it.
 | `mutate-m36.py` | Maintenance 36 (the schedule watch) | 58 |
 | `mutate-presets.py` | Maintenance 37 (custom equipment presets) | 32 |
 | `mutate-m38.py` | Maintenance 38 (the split's order across the days) | 98 |
+| `mutate-priority-muscles.py` | The priority-muscles fix | 21 |
 
 The tables are data: each row is `(name, file, old, new, tests, nth)`. From M30 on, a round's table
 is written from its `table_mNN.txt`: edit the `.txt`, then run `python3 table_mNN.py`. Never write a

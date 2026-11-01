@@ -1947,6 +1947,11 @@ REANCHORED = {
     "35k4 a step passed over offers the next one": (
         "    while (offer.blocked && shown.step + 1 < ROUTE_STEPS.length) {\n      passed.push(offer.explain);\n      shown = { ...shown, step: shown.step + 1 };\n      offer = routeAction(input, entry, shown);\n    }\n    if (passed.length > 0) {\n      offer = { action: offer.action, explain: [...passed, offer.explain].join(' ') };\n    }\n",
         "", None),
+    # The priority-muscles fix (2026-11-01): the Why list maps the reasons the card reads, the
+    # priority line read from the plan on the screen.
+    "39i ... its reasons": (
+        "keyedLines(reasons).map(({ key, line }) => (\n            <li key={key}>",
+        "keyedLines(reasons).map(({ key, line }) => (\n            <li key={line}>", None),
 }
 
 table = [
