@@ -5,7 +5,7 @@ owner has already passed: Phases 0 to 7, and Maintenance 1 to 3, 6, 7, 12, 13, 1
 and 26, all GREEN. Only the owner marks a gate GREEN; until then every round below stays YELLOW.
 
 - **Live app:** https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
-- **The release to check:** build `e3f7acf` (Settings, **About this app**).
+- **The release to check:** build `375eb5f` (Settings, **About this app**).
 - **Never clear Chrome's site data or storage:** one clear wipes every app at bill6006.github.io.
 
 It comes in three parts:
@@ -341,12 +341,21 @@ it, every other day off.
    biceps or triceps.
 2. **Plan**, **Priority this week**: the biceps and the triceps, as before.
 
+### 1K. The cross-place report's fix
+
+1. **Today**, at the Gym: note the lifts, the minutes and the coach's card.
+2. **Plan**, **Where you train**, **Edit** on Home: take off the adjustable bench, the pull-up bar
+   and the resistance bands, and **Save place**. Back on **Today**: the Gym's lifts, minutes and
+   card are exactly as in step 1.
+3. **Edit** Home again, put the three back, **Save place**: back on **Today**, still exactly as in
+   step 1.
+
 ## Part 2: on your installed app, now
 
 ### 2A. The update and the launcher icon
 
 1. Open Workout Conductor from its home-screen icon. If "New version available" shows, tap Reload.
-   Settings, About this app shows the build under Verification: `e3f7acf`.
+   Settings, About this app shows the build under Verification: `375eb5f`.
 2. Close the app and open it again. Chrome reads the manifest as the app opens and finds the new
    icon. If it asks about the new icon (a dialog, or "Review app update" in Chrome's menu), accept
    it.
@@ -515,10 +524,16 @@ Before you train (the app chooses the day's workout, and Maintenance 31):
    days or sessions a week, and only when two lifts fall clearly; **Go back to it** puts the
    schedule before it back.
 
+### 3F. The first time you open the app on a new day
+
+1. Opened from the background on a new day, Today shows the new day's date and plan straight
+   away. (The cross-place report's fix)
+
 ## What closes each gate
 
 | Gate | Closed by |
 |---|---|
+| The cross-place report's fix | 1K, 3F |
 | The priority-muscles fix | 1J |
 | Maintenance 38: the split's order across the days | 1I |
 | Maintenance 37: custom equipment presets | 1H |

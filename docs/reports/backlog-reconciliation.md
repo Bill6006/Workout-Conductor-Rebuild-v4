@@ -6,7 +6,7 @@ the approved backlog and consolidated phone review." The handoff's rule for it
 `PROJECT_STATUS.md`'s "Agreed and waiting" and every item in the owner's cloud prompt must be live,
 or named with the reason it is not.
 
-**The result: every agreed item is live, and none is waiting.** The live build, `e3f7acf`,
+**The result: every agreed item is live, and none is waiting.** The live build, `375eb5f`,
 carries all of them. Updated on 2026-11-01: the owner settled both things to settle on
 2026-10-31, and the split's order is live in Maintenance 38. Every round below stays YELLOW until
 the owner's one phone review

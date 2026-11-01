@@ -36,6 +36,11 @@ first:
   owner's word of 2026-11-01, "I approve that fix": "Priority muscles today" and Today's chips name only the
   muscles today's session trains. Deploy Pages run 41311081269; the live marker reads
   `e3f7acf`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed.
+- **Live: `375eb5f`, the cross-place report's fix** (`docs/reports/cross-place-fix.md`): a Home
+  edit seemed to change the Gym's plan; on the same day it never does, and the day before's plan
+  no longer stays on screen after the app comes back to the front. Deploy Pages run
+  41322817267; the live marker reads `375eb5f`. Live suite from the owner's machine:
+  438 passed + 19 skipped by design, none failed.
 - **Done: the final reconciliation** (`docs/reports/backlog-reconciliation.md`): every agreed
   item is live, and nothing is left to settle.
 - **Next: the owner's one consolidated phone review** (`docs/reports/consolidated-phone-review.md`).
