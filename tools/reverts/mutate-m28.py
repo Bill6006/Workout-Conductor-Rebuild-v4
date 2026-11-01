@@ -255,8 +255,8 @@ MUTATIONS = [
      "      resets,\n", "", [T_PACE], None),
     # 4aa2 and 4aa3 re-anchored in Maintenance 34: the week ahead takes today's length too.
     ("4aa2 the Plan tab plans the week with it", PLAN_SCREEN,
-     "planWeek(profile, location, state.history, nowIso, state.learnedResets, todayLength)",
-     "planWeek(profile, location, state.history, nowIso, undefined, todayLength)", [T_WEEK_RESETS], None),
+     "planWeek(profile, location, state.history, nowIso, state.learnedResets, todayLength, {",
+     "planWeek(profile, location, state.history, nowIso, undefined, todayLength, {", [T_WEEK_RESETS], None),
     ("4aa3 the coach plans the week with it", USE_COACH,
      "      now,\n      parts.learnedResets ?? null,\n      localDayKey(session.createdAt)",
      "      now,\n      undefined,\n      localDayKey(session.createdAt)", [T_WEEK_RESETS], None),

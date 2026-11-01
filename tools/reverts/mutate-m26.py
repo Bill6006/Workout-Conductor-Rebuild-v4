@@ -1872,8 +1872,8 @@ REANCHORED = {
         "", None),
     # Maintenance 33 saves the plan without the day's illness under it.
     "42w33 a saved copy keeps no marks of the ease": (
-        "      workout: planUnderTheEase(this.planWithoutIllness(session)),",
-        "      workout: this.planWithoutIllness(session),", None),
+        "      workout: withoutOrderLinesIn(planUnderTheEase(this.planWithoutIllness(session))),",
+        "      workout: withoutOrderLinesIn(this.planWithoutIllness(session)),", None),
     # Maintenance 33 reads the stop's record before the delete; the delete goes.
     "42x7 a lift closed at its logged sets keeps no record of the ease": (
         "  delete entry.eased;\n  entry.sets = entry.sets.filter((set) => isDone(entry.id, set.index));",
@@ -1935,6 +1935,15 @@ REANCHORED = {
         "        'fewer sets',\n        easier\n", None),
     # The harder-variation fix's review (2026-10-31) passes over each step in turn, a variation the
     # lift's sheet lists none of among them: the step passed over is the loop now.
+    # Maintenance 38 makes today's plan again for a deload on a later day of the week as well, where
+    # today's plan is in the split's order; a deload after today otherwise still leaves it.
+    "34s a deload week after today leaves today's plan": (
+        "      inDeloadWindow(week, this.now()) ||\n"
+        "      (deloadInWeek(week, this.now()) && this.state.session?.constraints.splitOrder !== undefined)\n",
+        "      true\n", None),
+    "34s2 ... also when cancelled": (
+        "    if (week && (inDeloadWindow(week, this.now()) || this.orderReturns(week))) {\n",
+        "    if (week) {\n", None),
     "35k4 a step passed over offers the next one": (
         "    while (offer.blocked && shown.step + 1 < ROUTE_STEPS.length) {\n      passed.push(offer.explain);\n      shown = { ...shown, step: shown.step + 1 };\n      offer = routeAction(input, entry, shown);\n    }\n    if (passed.length > 0) {\n      offer = { action: offer.action, explain: [...passed, offer.explain].join(' ') };\n    }\n",
         "", None),

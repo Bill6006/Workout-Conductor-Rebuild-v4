@@ -505,8 +505,8 @@ MUTATIONS = [
     # second one out (`extraKept`), and no template has two places for one pushable movement, so
     # `pushSwappedAway` can change nothing reachable; it stays as a guard.
     ("R44-4 the cap reads the days after", GEN,
-     "    past = [...past, plannedRecord(workout, at, null)];\n  }\n  return out;",
-     "    past = [...past, plannedRecord(workout, at, null)];\n  }\n  return out.slice(0, 0);",
+     "    past = [...past, keepingOrder(plannedRecord(workout, at, null), input.constraints?.splitOrder)];\n  }\n  return out;",
+     "    past = [...past, keepingOrder(plannedRecord(workout, at, null), input.constraints?.splitOrder)];\n  }\n  return out.slice(0, 0);",
      [T_PUSH_SIM], None),
     ("R44-4b no drop set for its muscles on the extra's day", GEN,
      "              dayExtra !== null &&\n              push !== null &&", "              false &&\n              push !== null &&",

@@ -332,7 +332,7 @@ MUTATIONS = [
 
     # The store.
     ("ST1 the day's catch-up or second workout", STORE,
-     "    const catchUp = this.catchUpFor(profile, now, deload !== null);",
+     "    const catchUp = this.catchUpFor(profile, now, deload !== null, order);",
      "    const catchUp = null as ReturnType<typeof this.catchUpFor>;", [T_STORE], None),
     ("ST2 no catch-up in a deload week", STORE,
      "    if (!kind || (deload && kind === 'catch-up')) return null;", "    if (!kind) return null;",
@@ -517,7 +517,7 @@ MUTATIONS = [
      "  if (!record) return sessionDose(profile, muscle);\n  if (record) return sessionDose(profile, muscle);\n  return record.entries.reduce(",
      [T_STORE], None),
     ("X13 ... a lift that works the muscle secondarily at half, as the week counts it", GENERATE,
-     "        ? INDIRECT_SET_WEIGHT\n", "        ? 1\n", [T_STORE], None),
+     "        ? INDIRECT_SET_WEIGHT\n", "        ? 1\n", [T_STORE, T_SESSION], None),
     ("X14 the day's first workout is one with a set done", STORE,
      "          record.startedAt <= now && localDayKey(record.startedAt) === today && trainedIn(record),",
      "          record.startedAt <= now && localDayKey(record.startedAt) === today,", [T_STORE], None),
@@ -1269,8 +1269,8 @@ MUTATIONS = [
     # F1 re-anchored in Maintenance 34: the week's need and "Longer would help" read the week with
     # the same two lines.
     ("F1 the store's week reads the coach focus and the lasting swaps", STORE,
-     "      resets: this.state.learnedResets,\n      focus: this.state.coachFocus,\n      swaps: this.activeSwaps(),\n    });\n    // What is left of a muscle trained today",
-     "      resets: this.state.learnedResets,\n    });\n    // What is left of a muscle trained today",
+     "      resets: this.state.learnedResets,\n      focus: this.state.coachFocus,\n      swaps: this.activeSwaps(),\n      order,\n    });\n    // What is left of a muscle trained today",
+     "      resets: this.state.learnedResets,\n      order,\n    });\n    // What is left of a muscle trained today",
      [T_WEEK_FOCUS], None),
     ("F2 the week's sessions ahead take the coach focus", WEEK,
      "        ...(focus ? { focusMuscle: focus.muscle } : {}),\n", "", [T_WEEK_FOCUS], None),
@@ -1283,11 +1283,11 @@ MUTATIONS = [
      "        if (offPlan && missedLift(a) !== missedLift(b)) continue;\n", "",
      [T_SUPERSET_ORDER], None),
     ("F7 the split's rotation reads no catch-up or second workout", GENERATE,
-     "    (history.some(offRotation)\n      ? templateFor(profile, history, now, focus)\n      : chooseTemplate(profile, priorities, exposure, loads, focus));",
+     "    (history.some((record) => offRotation(record) || record.splitOrder !== undefined)\n      ? templateFor(profile, history, now, focus)\n      : chooseTemplate(profile, priorities, exposure, loads, focus));",
      "    chooseTemplate(profile, priorities, exposure, loads, focus);", [T_ROTATION], None),
     ("F8 ... and so the template a day would get", GENERATE,
-     "  const rotation = history.filter((record) => !offRotation(record));",
-     "  const rotation = history;", [T_ROTATION], None),
+     "  const rotation = inRotationPlace(history.filter((record) => !offRotation(record)));",
+     "  const rotation = inRotationPlace(history);", [T_ROTATION], None),
     ("F9 a catch-up emptied whole stays so through a rebuild for an offer of its kind", STORE,
      "    const session = this.emptiedThroughRebuild(listedSession);",
      "    const session = listedSession;", [T_EMPTIED_PREVIEW], None),
