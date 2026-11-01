@@ -1,0 +1,23 @@
+# (name, file, old, new, tests, nth): old and new may be a list of (old, new) pairs.
+MUTATIONS = [
+    # Back in front, the time is read again at once (the owner's report of 2026-11-01).
+    ("X1 the clock reads the time when the page shows again", CLOCK,
+     "      document.addEventListener('visibilitychange', tick);\n", "", [T_CLOCK, T_DAY], None),
+    ("X2 ... on pageshow", CLOCK,
+     "      window.addEventListener('pageshow', tick);\n", "", [T_CLOCK], None),
+    ("X3 ... and on focus", CLOCK,
+     "      window.addEventListener('focus', tick);\n", "", [T_CLOCK], None),
+    # Today's plan is the device's day's on every tab.
+    ("X4 the app puts today's plan in place of the day before's on any tab", APP,
+     "      <DayRefresh />\n", "", [T_DAY], None),
+    ("X5 ... at the day's change", APP,
+     "  }, [store, day]);\n", "  }, [store]);\n", [T_DAY], None),
+    # The review: "Longer would help" is kept while today's own place holds, not every place.
+    ("X6 the offer kept while the place it reads holds", STORE,
+     "      this.state.coachSwitches,\n      this.currentLocation(),\n",
+     "      this.state.coachSwitches,\n      this.state.locations,\n", [T_HOME], None),
+    # The owner's regression guards the rule the report doubted: a place's save rebuilds today's
+    # plan only where it is today's place.
+    ("X7 a save of another place leaves today's plan alone", STORE,
+     "      isCurrent &&\n", "      true &&\n", [T_HOME], None),
+]
