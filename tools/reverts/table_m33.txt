@@ -105,7 +105,7 @@ MUTATIONS = [
      "          resets: context.resets,\n        })",
      "          resets: null,\n        })", [T_BADSTART], None),
     ("P4 the learned page shows the recovery windows", LEARNED,
-     "    paceSection(input),\n    recoverySection(input),", "    paceSection(input),", [T_LEARNED_PAGE], None),
+     "  { name: 'recovery', section: recoverySection },\n", "", [T_LEARNED_PAGE], None),
     ("P5 the completion says each muscle's window from that session", BUILDER,
      "    if (window.at !== completedAtIso) continue;\n", "", [T_PROGRESS], None),
     ("P6 the hard start expects a step less of a muscle inside its window", BADSTART,

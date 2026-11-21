@@ -46,9 +46,11 @@ MUTATIONS = [
      "        {workout.musclePriorities.slice(0, 4).map((priority) => (\n", [T_CARD], None),
     # The review: what the lifter sees is read from the plan and the log on the screen.
     ("P14 the card's line read from the plan on the screen, never the text saved", CARD,
-     "  const reasons = withPriorityLine(\n    workout.explanation.reasons,\n"
+     "  const reasons = withPriorityLine(\n"
+     "    withOrderLines(workout.explanation.reasons, workout.blocks),\n"
      "    priorityLine(workout.musclePriorities, workout.blocks, log),\n  );\n",
-     "  const reasons = workout.explanation.reasons;\n", [T_CARD, T_SCREENS], None),
+     "  const reasons = withOrderLines(workout.explanation.reasons, workout.blocks);\n",
+     [T_CARD, T_SCREENS], None),
     ("P15 the chips read with the day's log", CARD,
      "  const priorities = prioritiesToday(workout.musclePriorities, workout.blocks, log);\n",
      "  const priorities = prioritiesToday(workout.musclePriorities, workout.blocks);\n",
