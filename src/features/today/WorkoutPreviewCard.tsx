@@ -18,6 +18,7 @@ import {
   type WorkoutEntry,
 } from '../../engine/workout/types';
 import { holdById, stoppedText } from '../../engine/workout/setText';
+import { withOrderLines } from '../../engine/workoutGenerator/orderLines';
 import {
   prioritiesToday,
   priorityLine,
@@ -207,11 +208,12 @@ export function WorkoutPreviewCard({
   const fitted = duration.choice !== 'default' || (endBy?.on ?? false);
   // Today's priority muscles read from the plan and the log on the screen, for the chips and the
   // line alike: a copy or a session saved before, or a set skipped since, never shows another
-  // (the owner, 2026-11-01; the review).
+  // (the owner, 2026-11-01; the review). The lines on what leads are read from the plan too: a
+  // session saved before never names a lift swapped out (the owner, 2026-11-02).
   const log = { logged, done };
   const priorities = prioritiesToday(workout.musclePriorities, workout.blocks, log);
   const reasons = withPriorityLine(
-    workout.explanation.reasons,
+    withOrderLines(workout.explanation.reasons, workout.blocks),
     priorityLine(workout.musclePriorities, workout.blocks, log),
   );
   const estimateLabel =

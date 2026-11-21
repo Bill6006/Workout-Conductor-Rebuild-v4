@@ -8,7 +8,7 @@ import { overrideBias } from '../progression/overrides';
 import { recommendNextTarget } from '../progression/progression';
 import { prescribe } from '../progression/roles';
 import { requireExercise } from '../../catalog/exercises/catalog';
-import { declineName, learnedSections } from './learned';
+import { declineName, learnedSections, learnedSummary } from './learned';
 import { LEARNED_RESETS_ID, emptyResets, mergeResets, parseResets, withReset } from './resets';
 
 /**
@@ -200,6 +200,14 @@ describe('the page', () => {
       expect(one.reset).not.toBeNull();
       expect(one.evidence.length).toBeGreaterThan(40);
     }
+  });
+
+  it("gives Settings' row every section by name, in the page's order (the owner, 2026-11-02)", () => {
+    // Your pace and Your recovery were left out; the names fit the row's two lines at 360 px.
+    expect(learnedSummary()).toBe(
+      'Pace, recovery, habit, lift curves, reserve, pain and declined offers',
+    );
+    expect(learnedSummary().split(/, | and /)).toHaveLength(sections([]).length);
   });
 
   it('names a muscle whose own sessions moved its recovery window, and none after its reset', () => {

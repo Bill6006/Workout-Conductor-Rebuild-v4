@@ -10,6 +10,7 @@ import { DisclosureRow, Group, LinkRow, PlainRow } from '../../components/Group/
 import { ScreenHeader } from '../../components/Screen/Screen';
 import { useAppState } from '../../core/state/useAppStore';
 import { formatDateTime, nowIso } from '../../core/time/clock';
+import { learnedSummary } from '../../engine/learned/learned';
 import { hasGymAccess, setGymAccess } from '../profile/draft';
 import { ExercisePreferencesEditor } from '../profile/editors/ExercisePreferencesEditor';
 import { GoalsEditor } from '../profile/editors/GoalsEditor';
@@ -165,7 +166,7 @@ export function SettingsScreen() {
               <DisclosureRow
                 name="learned"
                 title="Learned from your log"
-                summary="Your habit, each lift's curve, how you judge reserve, pain patterns and offers declined, each with a reset"
+                summary={learnedSummary()}
                 linked={section === 'learned'}
               >
                 <LearnedValues />

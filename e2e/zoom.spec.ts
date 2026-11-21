@@ -89,3 +89,20 @@ test.describe('widths and zoom', () => {
     await expectWorkoutFits(page);
   });
 });
+
+test.describe("Settings' learned row (the owner, 2026-11-02)", () => {
+  test('shows every section by name, nothing cut, in a wide font too', async ({ page }) => {
+    await ensureProfile(page);
+    await page.goto('./#/settings');
+    const summary = page
+      .getByTestId('row-learned')
+      .getByText('Pace, recovery, habit, lift curves, reserve, pain and declined offers', {
+        exact: true,
+      });
+    await expect(summary).toBeVisible();
+    const cut = () => summary.evaluate((el) => el.scrollHeight > el.clientHeight + 1);
+    expect(await cut()).toBe(false);
+    await page.addStyleTag({ content: '* { font-family: Verdana, sans-serif !important; }' });
+    expect(await cut()).toBe(false);
+  });
+});

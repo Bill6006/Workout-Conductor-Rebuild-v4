@@ -425,14 +425,29 @@ function recoverySection(input: LearnedInput): LearnedSection {
   };
 }
 
+/**
+ * The page's sections in its order, each with the name Settings' row gives it: the row's summary is
+ * read from this list, so it names every section the page shows (the owner, 2026-11-02: it had left
+ * out Your pace and Your recovery). The row shows two lines of it: the names are short enough to
+ * fit them at 360 px in a wide font (the e2e zoom spec).
+ */
+const SECTIONS: readonly { name: string; section: (input: LearnedInput) => LearnedSection }[] = [
+  { name: 'pace', section: paceSection },
+  { name: 'recovery', section: recoverySection },
+  { name: 'habit', section: habitSection },
+  { name: 'lift curves', section: curveSection },
+  { name: 'reserve', section: reserveSection },
+  { name: 'pain', section: painSection },
+  { name: 'declined offers', section: declineSection },
+];
+
 export function learnedSections(input: LearnedInput): LearnedSection[] {
-  return [
-    paceSection(input),
-    recoverySection(input),
-    habitSection(input),
-    curveSection(input),
-    reserveSection(input),
-    painSection(input),
-    declineSection(input),
-  ];
+  return SECTIONS.map(({ section }) => section(input));
+}
+
+/** Settings' row on the page: each section by name, in the page's order. */
+export function learnedSummary(): string {
+  const names = SECTIONS.map(({ name }) => name);
+  const list = `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}`;
+  return `${list.charAt(0).toUpperCase()}${list.slice(1)}`;
 }

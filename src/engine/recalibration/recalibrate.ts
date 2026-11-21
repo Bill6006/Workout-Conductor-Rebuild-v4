@@ -27,7 +27,7 @@ import { preferredIdsOf } from '../conflicts/context';
 import { CATCH_UP, offPlanFloor, type CatchUpSpec } from '../planning/catchUp';
 import { copyOrder } from '../planning/orderKept';
 import { priorityLine, withPriorityLine } from '../workout/todaysPriorities';
-import { parsePushLine, pushDay, pushLine, pushRir } from '../planning/pushLift';
+import { parsePushLine, pushDay, pushRir } from '../planning/pushLift';
 import {
   estimateWorkout,
   generalWarmupMinutes,
@@ -93,6 +93,7 @@ import {
   type PostponeRefusal,
 } from '../workout/sequence';
 import { precedingWorkToday } from '../recovery/sessionContext';
+import { withOrderLines } from '../workoutGenerator/orderLines';
 import { DELOAD_LOAD_SCALE, DELOAD_RIR_DELTA } from '../planning/deload';
 import {
   closeAtLogged,
@@ -103,7 +104,6 @@ import {
   paceReason,
   pushedPrescription,
   setFloor,
-  mainLiftLine,
   mainLiftName,
   prescriptionForDay,
   rampContextFor,
@@ -1284,35 +1284,18 @@ function stillBehind(
 /**
  * The plan's lines that name the order, made true of it again (Maintenance 25): the summary names
  * the lift that comes first, and the main lift "leads" only while it does. A lift moved for busy
- * equipment, or moved by hand, would otherwise still be named first.
+ * equipment, or moved by hand, would otherwise still be named first; a lift swapped out or taken
+ * out is never named to lead (`withOrderLines`, the owner, 2026-11-02).
  */
 function keepOrderLines(workout: GeneratedWorkout): void {
-  const inPlan = allEntries(workout.blocks).filter((entry) => !isStopped(entry));
-  const first = inPlan[0];
-  if (!first) return;
-  const firstName = requireExercise(first.exerciseId).name;
-  // The line on the main lift, while that lift is in the plan: one gone keeps its line as it was.
-  // The lift to push's line leads the same way (Maintenance 27, item 44).
-  const reasons = workout.explanation.reasons.map((line) => {
-    const named = mainLiftName(line);
-    const main = inPlan.find((entry) => requireExercise(entry.exerciseId).name === named);
-    if (named !== null && main) return mainLiftLine(named, main.role, main === first);
-    const pushed = parsePushLine(line);
-    const lift = pushed
-      ? inPlan.find(
-          (entry) =>
-            pushMarkOf(entry) !== undefined &&
-            requireExercise(entry.exerciseId).name === pushed.name,
-        )
-      : undefined;
-    return pushed && lift
-      ? pushLine(pushed.name, pushed.target, pushed.extra, lift === first, pushed.heavy)
-      : line;
-  });
-  const summary = workout.explanation.summary.replace(
-    /, ([^,]+?) first(?=(?:, fitted to [^.]+)?\.$)/,
-    `, ${firstName} first`,
-  );
+  const reasons = withOrderLines(workout.explanation.reasons, workout.blocks, true);
+  const first = allEntries(workout.blocks).find((entry) => !isStopped(entry));
+  const summary = first
+    ? workout.explanation.summary.replace(
+        /, ([^,]+?) first(?=(?:, fitted to [^.]+)?\.$)/,
+        `, ${requireExercise(first.exerciseId).name} first`,
+      )
+    : workout.explanation.summary;
   workout.explanation = { ...workout.explanation, reasons, summary };
 }
 
