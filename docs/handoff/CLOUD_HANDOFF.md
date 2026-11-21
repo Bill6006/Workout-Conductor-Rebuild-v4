@@ -36,6 +36,10 @@ first:
   owner's word of 2026-11-01, "I approve that fix": "Priority muscles today" and Today's chips name only the
   muscles today's session trains. Deploy Pages run 41311081269; the live marker reads
   `e3f7acf`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed.
+- **Live: `6138e89`, the final polish** (`docs/reports/final-polish.md`): Why this workout names
+  the lift on the screen after a swap, and Settings' learned row names every section of its page.
+  Deploy Pages run 44852421061; the live marker reads `6138e89`. Live suite from the
+  owner's machine: 435 passed + 14 skipped by design; one test timed out loading the live page and passed on its own re-run.
 - **Live: `375eb5f`, the cross-place report's fix** (`docs/reports/cross-place-fix.md`): a Home
   edit seemed to change the Gym's plan; on the same day it never does, and the day before's plan
   no longer stays on screen after the app comes back to the front. Deploy Pages run

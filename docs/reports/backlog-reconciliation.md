@@ -6,7 +6,7 @@ the approved backlog and consolidated phone review." The handoff's rule for it
 `PROJECT_STATUS.md`'s "Agreed and waiting" and every item in the owner's cloud prompt must be live,
 or named with the reason it is not.
 
-**The result: every agreed item is live, and none is waiting.** The live build, `375eb5f`,
+**The result: every agreed item is live, and none is waiting.** The live build, `6138e89`,
 carries all of them. Updated on 2026-11-01: the owner settled both things to settle on
 2026-10-31, and the split's order is live in Maintenance 38. Every round below stays YELLOW until
 the owner's one phone review
@@ -102,15 +102,17 @@ These are suggestions from the rounds' research and reviews. Each waits for the 
   chose not to build, and why.
 
 **Seen in passing while the phone review was written, and in Maintenance 38.** All three are LOW
-and older than these rounds. The first two are left as they are for the owner's word; the owner
-had the third fixed on 2026-11-01:
+and older than these rounds, and the owner had each fixed: the third on 2026-11-01, the first two
+on 2026-11-02:
 
 - **The summary of Settings' "Learned from your log" row** names "Your habit, each lift's curve,
   how you judge reserve, pain patterns and offers declined". It leaves out Your pace (Maintenance
-  28) and Your recovery (Maintenance 33), though both are on the page it opens.
+  28) and Your recovery (Maintenance 33), though both are on the page it opens. Fixed: the final
+  polish (`final-polish.md`), live in `6138e89`.
 - **After a lift is swapped on Today,** Why this workout still says the lift swapped out "leads as
   the primary strength lift". The line is kept as it was once its lift is gone from the plan, so it
-  then names a lift the plan no longer holds.
+  then names a lift the plan no longer holds. Fixed: the final polish (`final-polish.md`), live in
+  `6138e89`.
 - **Why this workout's "Priority muscles today"** names the week's top three priorities whatever
   today's session is, so a lower day lists the biceps, the triceps and the chest (seen in
   Maintenance 38, whose orders can put a lower day where the rotation had an upper day). Fixed:

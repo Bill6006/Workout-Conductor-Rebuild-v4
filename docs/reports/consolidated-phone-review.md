@@ -5,7 +5,7 @@ owner has already passed: Phases 0 to 7, and Maintenance 1 to 3, 6, 7, 12, 13, 1
 and 26, all GREEN. Only the owner marks a gate GREEN; until then every round below stays YELLOW.
 
 - **Live app:** https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
-- **The release to check:** build `375eb5f` (Settings, **About this app**).
+- **The release to check:** build `6138e89` (Settings, **About this app**).
 - **Never clear Chrome's site data or storage:** one clear wipes every app at bill6006.github.io.
 
 It comes in three parts:
@@ -350,12 +350,23 @@ it, every other day off.
 3. **Edit** Home again, put the three back, **Save place**: back on **Today**, still exactly as in
    step 1.
 
+### 1L. The final polish
+
+1. **Today**, at the Gym: under **Why this workout**, one line names the main lift, "... leads as
+   the primary strength lift with full rests and warm-up ramp sets."
+2. Tap that lift on Today, and in its sheet pick one of the lifts offered (**Use ... instead**).
+   Why this workout now names the lift swapped in as the one that leads, and no line names the
+   lift swapped out as leading. Reload the page: the same.
+3. **Settings**, **What the app has learned**: the row reads "Pace, recovery, habit, lift curves,
+   reserve, pain and declined offers", none of it cut off. Open it: Your pace and Your recovery
+   are on the page, with the other five.
+
 ## Part 2: on your installed app, now
 
 ### 2A. The update and the launcher icon
 
 1. Open Workout Conductor from its home-screen icon. If "New version available" shows, tap Reload.
-   Settings, About this app shows the build under Verification: `375eb5f`.
+   Settings, About this app shows the build under Verification: `6138e89`.
 2. Close the app and open it again. Chrome reads the manifest as the app opens and finds the new
    icon. If it asks about the new icon (a dialog, or "Review app update" in Chrome's menu), accept
    it.
@@ -533,6 +544,7 @@ Before you train (the app chooses the day's workout, and Maintenance 31):
 
 | Gate | Closed by |
 |---|---|
+| The final polish | 1L |
 | The cross-place report's fix | 1K, 3F |
 | The priority-muscles fix | 1J |
 | Maintenance 38: the split's order across the days | 1I |
