@@ -5,7 +5,7 @@ owner has already passed: Phases 0 to 7, and Maintenance 1 to 3, 6, 7, 12, 13, 1
 and 26, all GREEN. Only the owner marks a gate GREEN; until then every round below stays YELLOW.
 
 - **Live app:** https://bill6006.github.io/Workout-Conductor-Rebuild-v4/
-- **The release to check:** build `6138e89` (Settings, **About this app**).
+- **The release to check:** build `f87cc7b` (Settings, **About this app**).
 - **Never clear Chrome's site data or storage:** one clear wipes every app at bill6006.github.io.
 
 It comes in three parts:
@@ -361,12 +361,20 @@ it, every other day off.
    reserve, pain and declined offers", none of it cut off. Open it: Your pace and Your recovery
    are on the page, with the other five.
 
+### 1M. The plate drawing
+
+1. **Today**, **Start workout**. On the first barbell lift, open **Plates**, tap the weight and set
+   80 lb: a long dark bar; a green 2.5, a blue 5 and a taller white 10; a dark collar; "45 lb" in
+   plain white on the bar, with nothing around it, the bar running on past it.
+2. Set 185 lb: a green 25 and a taller blue 45 against the collar. Under the set logger, the same
+   plates small.
+
 ## Part 2: on your installed app, now
 
 ### 2A. The update and the launcher icon
 
 1. Open Workout Conductor from its home-screen icon. If "New version available" shows, tap Reload.
-   Settings, About this app shows the build under Verification: `6138e89`.
+   Settings, About this app shows the build under Verification: `f87cc7b`.
 2. Close the app and open it again. Chrome reads the manifest as the app opens and finds the new
    icon. If it asks about the new icon (a dialog, or "Review app update" in Chrome's menu), accept
    it.
@@ -544,6 +552,7 @@ Before you train (the app chooses the day's workout, and Maintenance 31):
 
 | Gate | Closed by |
 |---|---|
+| The plate drawing | 1M |
 | The final polish | 1L |
 | The cross-place report's fix | 1K, 3F |
 | The priority-muscles fix | 1J |

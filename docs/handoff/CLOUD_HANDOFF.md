@@ -36,6 +36,9 @@ first:
   owner's word of 2026-11-01, "I approve that fix": "Priority muscles today" and Today's chips name only the
   muscles today's session trains. Deploy Pages run 41311081269; the live marker reads
   `e3f7acf`. Live suite from the owner's machine: 438 passed + 19 skipped by design, none failed.
+- **Live: `f87cc7b`, the plate drawing** (`docs/reports/plate-drawing.md`): the plates and the
+  bar drawn as the owner's reference draws them. Deploy Pages run 45111300899; the live marker
+  reads `f87cc7b`. Live suite from the owner's machine: 431 passed + 14 skipped by design; 5 failed and the PWA projects (10) were held back by them. Two failures timed out loading the live page. The third, a coach test on all three widths, ran in the last hour of a Sunday: it seeds its sessions 7 to 28 days back in 24-hour days, and across the 1 November clock change the oldest fell on a Monday, in the same week as the next, leaving three weeks of training where the card needs four (the app read the dates rightly; a test-clock fault, outside this change). After midnight both specs passed, 27 of 27, and the PWA projects 5 passed + 5 skipped by design.
 - **Live: `6138e89`, the final polish** (`docs/reports/final-polish.md`): Why this workout names
   the lift on the screen after a swap, and Settings' learned row names every section of its page.
   Deploy Pages run 44852421061; the live marker reads `6138e89`. Live suite from the
