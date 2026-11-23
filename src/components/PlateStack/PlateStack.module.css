@@ -1,6 +1,7 @@
-/* Maintenance 25, item 8: one end of the bar, loaded, as a lifter sees it from the side. The sleeve's
-   end on the left with the plates on it, heaviest against the collar; then the collar and the bar,
-   which carries its own weight. Metal is shaded top to bottom, plates across their thickness. */
+/* Maintenance 25, item 8: one end of the bar, loaded, as a lifter sees it from the side, drawn as
+   the owner's reference draws it (2026-11-20, measured from the picture). The sleeve on the left with
+   the plates on it, heaviest against the collar; then the collar and the bar, which carries its own
+   weight in plain white. The metal is one flat dark shade; each plate is lit from the top. */
 .stack {
   display: flex;
   flex-direction: column;
@@ -11,19 +12,20 @@
 .bar {
   display: flex;
   align-items: center;
-  justify-content: center;
+  width: 100%;
   min-width: 0;
-  min-height: 94px;
+  min-height: 41px;
 }
 
-/* The sleeve: the rod runs behind the plates and a little past the outermost one. */
+/* The sleeve: the rod runs from its rounded end behind the plates, as long as the room allows. */
 .sleeve {
   position: relative;
   display: flex;
+  flex: 2 1 auto;
+  justify-content: flex-end;
   align-items: center;
   gap: 1px;
-  min-width: 36px;
-  padding-left: 12px;
+  min-width: 12px;
 }
 
 .sleeve::before {
@@ -31,10 +33,9 @@
   top: 50%;
   left: 0;
   right: 0;
-  height: 11px;
-  border-radius: 3px 0 0 3px;
-  background: linear-gradient(180deg, #eef1f4 0%, #bcc3cb 30%, #8f98a3 62%, #5c6570 100%);
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+  height: 30px;
+  border-radius: 8px 0 0 8px;
+  background: #333542;
   content: '';
   transform: translateY(-50%);
 }
@@ -46,70 +47,51 @@
   gap: 2px;
 }
 
-/* A plate edge-on: rounded where the disc turns away, lit across its thickness. */
+/* A plate edge-on: rounded a little at its corners, lit from the top. */
 .plate {
   position: relative;
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(0, 0, 0, 0.45);
-  border-radius: 3px / 5px;
-  background:
-    linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.3) 0%,
-      rgba(255, 255, 255, 0.16) 22%,
-      rgba(255, 255, 255, 0.05) 50%,
-      rgba(0, 0, 0, 0.06) 74%,
-      rgba(0, 0, 0, 0.32) 100%
-    ),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.16)), var(--plate-fill);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-    0 2px 3px rgba(0, 0, 0, 0.45);
-  font-weight: 800;
+  border-radius: 4px;
+  background: var(--plate-fill);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   line-height: 1;
   white-space: nowrap;
 }
 
-/* The collar stops the plates; it stands proud of the sleeve. */
+/* The collar stops the plates: taller than the bar, a hairline either side. */
 .collar {
   position: relative;
   flex: 0 0 auto;
-  width: 8px;
-  height: 26px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #66707c 0%, #e2e7ec 38%, #a8b0b9 70%, #59616c 100%);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  width: 11px;
+  height: 41px;
+  margin: 0 1px;
+  background: #333542;
 }
 
-/* The bar inside the collar: narrower, knurled, with its own weight on it. */
+/* The bar inside the collar, as thick as the sleeve, its own weight on it near the collar: it runs
+   on past the weight into the room the plates leave, as the reference's runs off the screen, so it
+   never reads as a box around the weight (the review). */
 .shaft {
   position: relative;
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   align-items: center;
-  height: 7px;
-  padding: 0 10px 0 14px;
-  border-radius: 0 3px 3px 0;
-  background:
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #d6dbe1 0%, #9ba4ae 55%, #67707b 100%);
+  height: 30px;
+  padding: 0 18px 0 17.5px;
+  border-radius: 0 8px 8px 0;
+  background: #333542;
 }
 
 .barWeight {
-  padding: 3px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
-  background: #23282f;
-  color: #f3f4f6;
-  font-size: 0.72rem;
-  font-weight: 800;
+  color: #ffffff;
+  font-size: 17.5px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -143,18 +125,20 @@
 }
 
 .compactSleeve {
+  flex: 0 0 auto;
   min-width: 0;
   padding-left: 6px;
 }
 
 .compactSleeve::before {
-  height: 5px;
+  height: 8px;
+  border-radius: 3px 0 0 3px;
 }
 
 .compactCollar {
   width: 4px;
-  height: 13px;
-  margin-right: 6px;
+  height: 11px;
+  margin: 0 6px 0 1px;
 }
 
 .compactCount {

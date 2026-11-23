@@ -1,21 +1,30 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import type { UnitSystem } from '../../core/validation/profile';
 import type { PlateMathResult } from '../../engine/plateMath/plateMath';
-import { plateLook, plateRuns, platesInWords } from './plateLook';
+import { plateFill, plateLook, plateRuns, platesInWords } from './plateLook';
 import styles from './PlateStack.module.css';
 
 /**
- * The most room for the plates on the sleeve, in pixels of the full drawing. Past it, each size is
- * drawn once with its count beside it. The drawing measures the room it has as laid out and takes
- * the smaller of the two (see useSleeveRoom).
+ * The most room for the plates on the sleeve, in pixels of the full drawing: six of the reference's
+ * plates (the owner, 2026-11-20). Past it, each size is drawn once with its count beside it. The
+ * drawing measures the room it has as laid out and takes the smaller of the two (see useSleeveRoom).
  */
-const SLEEVE_ROOM = 196;
-/** The sleeve's bare end, left of the outermost plate: `.sleeve`'s left padding. */
-const SLEEVE_END = 12;
+const SLEEVE_ROOM = 224;
+/**
+ * The sleeve's bare end, left of the outermost plate (`.sleeve`'s least width), and the hairlines
+ * either side of the collar.
+ */
+const SLEEVE_END = 14;
+/** The bar's least room beside its weight: 17.5 px from the collar to the weight, 18 after it. */
+const BAR_ENDS = 36;
 /** The same for the small drawing under the set logger. */
 const COMPACT_ROOM = 120;
-/** The small drawing is the full one at this scale; its labels keep a size that can be read. */
-const COMPACT_SCALE = 0.45;
+/**
+ * The small drawing is the full one at this scale: its 45 at 40 px, as tall as the small drawing's 45
+ * was before the reference's look (the review), so the set logger keeps its height. Its labels keep
+ * a size that can be read.
+ */
+const COMPACT_SCALE = 40 / 150;
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
@@ -52,7 +61,10 @@ function layout(
   room: number,
   scale: number,
 ): { drawn: Drawn[]; grouped: boolean } {
-  const need = perSide.reduce((sum, size) => sum + plateWidth(size, units, scale) + 1, 0);
+  // The plates and the hairline between each two (the review: not one after the last too).
+  const need =
+    perSide.reduce((sum, size) => sum + plateWidth(size, units, scale), 0) +
+    Math.max(0, perSide.length - 1);
   const grouped = need > room;
   const drawn = grouped ? plateRuns(perSide) : perSide.map((size) => ({ size, count: 1 }));
   return { drawn: [...drawn].reverse(), grouped };
@@ -64,7 +76,7 @@ function plateWidth(size: number, units: UnitSystem, scale: number): number {
   // Small labels still need their room: a digit takes about 0.62 of the type size, a point 0.32.
   const label = String(size);
   const text = [...label].reduce((sum, char) => sum + (char === '.' ? 0.32 : 0.62), 0);
-  return Math.max(Math.round(look.width * 0.62), Math.ceil(text * compactFont(size) + 4));
+  return Math.max(Math.round(look.width * 0.45), Math.ceil(text * compactFont(size) + 4));
 }
 
 /** The small drawing's type: a change plate's longer weight a little smaller, to fit its plate. */
@@ -87,7 +99,7 @@ function Plate({
   const style = {
     height: `${Math.max(scale === 1 ? 0 : 17, Math.round(look.height * scale))}px`,
     width: `${plateWidth(size, units, scale)}px`,
-    '--plate-fill': look.fill,
+    '--plate-fill': plateFill(look),
     color: look.ink,
     fontSize: `${scale === 1 ? look.font : compactFont(size)}px`,
   } as CSSProperties;
@@ -116,26 +128,30 @@ function useSleeveRoom(): [(bar: HTMLDivElement | null) => void, number] {
   }, []);
   useEffect(() => {
     if (!bar || typeof ResizeObserver === 'undefined') return;
-    const shaft = bar.querySelector<HTMLElement>('[data-part="shaft"]');
-    if (!shaft) return;
+    const weight = bar.querySelector<HTMLElement>('[data-part="weight"]');
+    if (!weight) return;
     // Then whenever the drawing or the bar's weight changes width.
     const observer = new ResizeObserver(() => {
       const measured = measureRoom(bar);
       if (measured !== null) setRoom(measured);
     });
     observer.observe(bar);
-    observer.observe(shaft);
+    observer.observe(weight);
     return () => observer.disconnect();
   }, [bar]);
   return [attach, room];
 }
 
-/** The room on the sleeve as this bar is laid out; null before it is laid out. */
+/**
+ * The room on the sleeve as this bar is laid out; null before it is laid out. The bar runs on past
+ * its weight into whatever room the plates leave (the review: ended just after it, the bar read as a
+ * box around the weight), so it counts only its weight and its least ends.
+ */
 function measureRoom(bar: HTMLElement): number | null {
   const collar = bar.querySelector<HTMLElement>('[data-part="collar"]');
-  const shaft = bar.querySelector<HTMLElement>('[data-part="shaft"]');
-  if (!collar || !shaft || bar.clientWidth === 0) return null;
-  const fits = bar.clientWidth - SLEEVE_END - collar.offsetWidth - shaft.offsetWidth;
+  const weight = bar.querySelector<HTMLElement>('[data-part="weight"]');
+  if (!collar || !weight || bar.clientWidth === 0) return null;
+  const fits = bar.clientWidth - SLEEVE_END - collar.offsetWidth - (weight.offsetWidth + BAR_ENDS);
   return Math.max(0, Math.min(SLEEVE_ROOM, Math.floor(fits)));
 }
 
@@ -145,9 +161,10 @@ interface PlateStackProps {
 }
 
 /**
- * The plates on the bar (Maintenance 25, item 8): one end of the bar drawn as it is loaded, the
- * sleeve's end on the left, the plates on it with the heaviest against the collar, then the collar
- * and the bar with its own weight on it. Each plate is drawn edge-on in proportion to a real one,
+ * The plates on the bar (Maintenance 25, item 8), drawn as the owner's reference draws them (the
+ * owner, 2026-11-20): one end of the bar as it is loaded, across the panel. The sleeve on the left,
+ * the plates on it with the heaviest against the collar, then the collar and the bar, one dark shade
+ * throughout, with the bar's own weight on it in plain white. Each plate is lit from the top,
  * coloured by its weight, with the weight printed on it; the same on both sides. A line under it
  * confirms the sum. A weight these plates cannot make shows the nearest load under it and says so.
  */
@@ -195,7 +212,7 @@ export function PlateStack({ result }: PlateStackProps) {
         </span>
         <span className={styles.collar} data-part="collar" />
         <span className={styles.shaft} data-part="shaft">
-          <span className={styles.barWeight} data-testid="bar-weight">
+          <span className={styles.barWeight} data-part="weight" data-testid="bar-weight">
             {bar} {units}
           </span>
         </span>

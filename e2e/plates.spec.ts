@@ -123,6 +123,50 @@ async function expectCollarClear(panel: Locator): Promise<void> {
   await expectLabelsFit(panel.getByTestId('plate-stack'));
 }
 
+/**
+ * The look of the owner's reference (2026-11-20; the review): the bar one flat dark shade, as thick
+ * as the sleeve, its weight plain white with nothing around it and the bar running on past it; the
+ * collar 11 by 41 px; each plate lit from the top.
+ */
+async function expectReferenceLook(panel: Locator): Promise<void> {
+  const look = await panel
+    .getByTestId('plate-stack')
+    .getByRole('img')
+    .evaluate((bar) => {
+      const collar = bar.querySelector('[data-part="collar"]')!;
+      const sleeve = getComputedStyle(collar.previousElementSibling!, '::before');
+      const shaft = bar.querySelector('[data-part="shaft"]')!;
+      const weight = bar.querySelector('[data-part="weight"]')!;
+      const weightStyle = getComputedStyle(weight);
+      return {
+        sleeve: [sleeve.backgroundColor, sleeve.height],
+        collar: [
+          getComputedStyle(collar).backgroundColor,
+          collar.getBoundingClientRect().width,
+          collar.getBoundingClientRect().height,
+        ],
+        shaft: [getComputedStyle(shaft).backgroundColor, shaft.getBoundingClientRect().height],
+        weight: [
+          weightStyle.color,
+          weightStyle.backgroundColor,
+          weightStyle.borderTopWidth,
+          weightStyle.fontSize,
+        ],
+        runsOn: shaft.getBoundingClientRect().right - weight.getBoundingClientRect().right,
+        plates: Array.from(
+          bar.querySelectorAll('[data-plate]'),
+          (plate) => getComputedStyle(plate).backgroundImage,
+        ),
+      };
+    });
+  expect(look.sleeve).toEqual(['rgb(51, 53, 66)', '30px']);
+  expect(look.collar).toEqual(['rgb(51, 53, 66)', 11, 41]);
+  expect(look.shaft).toEqual(['rgb(51, 53, 66)', 30]);
+  expect(look.weight).toEqual(['rgb(255, 255, 255)', 'rgba(0, 0, 0, 0)', '0px', '17.5px']);
+  expect(look.runsOn, 'the bar runs on past its weight').toBeGreaterThan(30);
+  for (const plate of look.plates) expect(plate).toMatch(/^linear-gradient\(/);
+}
+
 test.describe('the plates at phone width', () => {
   test('pounds: the buttons on one row in both modes, every weight inside its plate, a long side counted beside it', async ({
     page,
@@ -135,20 +179,29 @@ test.describe('the plates at phone width', () => {
     await panel.getByTestId('plates-mode-default').click();
     await expectOneRow(panel, 6);
 
-    // 290: a 2.5, a 5, a 25 and two 45s a side, drawn on the panel and small under the logger.
-    await setDial(page, card, 290);
+    // 80: the reference's own load, a 2.5, a 5 and a 10 a side, in the reference's look.
+    await setDial(page, card, 80);
     await expect(panel.getByTestId('plate-stack').locator('[data-plate]')).toHaveText([
       '2.5',
       '5',
-      '25',
-      '45',
-      '45',
+      '10',
     ]);
-    await expectLabelsFit(panel.getByTestId('plate-stack'));
+    await expectReferenceLook(panel);
+
+    // 290: a 2.5, a 5, a 25 and two 45s a side, drawn on the panel and small under the logger. At
+    // 360 px the reference's plates (the owner, 2026-11-20) leave room for four beside the bar's
+    // weight: the two 45s are drawn once, their count beside them, and the drawing still fits.
+    await setDial(page, card, 290);
+    const narrow = test.info().project.name === 'android-360';
+    await expect(panel.getByTestId('plate-stack').locator('[data-plate]')).toHaveText(
+      narrow ? ['2.5', '5', '25', '45'] : ['2.5', '5', '25', '45', '45'],
+    );
+    if (narrow) await expect(panel.getByTestId('plate-count')).toHaveText('×2');
+    await expectCollarClear(panel);
     await expectLabelsFit(card.getByTestId('logger-helper'));
     await expect(panel.getByTestId('bar-weight')).toHaveText('45 lb');
 
-    // 625: six 45s and two 10s a side, the most the sleeve is drawn with one by one.
+    // 625: six 45s and two 10s a side, too many to draw one by one: each size once, its count beside.
     await setDial(page, card, 625);
     await expectCollarClear(panel);
 

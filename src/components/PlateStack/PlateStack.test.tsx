@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { requireExercise } from '../../catalog/exercises/catalog';
 import { plateMath } from '../../engine/plateMath/plateMath';
 import { PlateLine, PlateStack } from './PlateStack';
-import { plateLook, plateRuns, platesInWords } from './plateLook';
+import { plateFill, plateLook, plateRuns, platesInWords } from './plateLook';
 
 /**
  * Maintenance 25, item 8: one end of the bar drawn as it is loaded, the sleeve's end first and the
@@ -39,38 +39,81 @@ const contrast = (a: string, b: string) => {
 };
 
 describe('how a plate is drawn', () => {
-  it('stands each heavier plate taller, in a colour of its own, its number easy to read', () => {
+  it('draws each plate as the owner’s reference does, its number easy to read', () => {
+    // Measured from the reference (2026-11-20): the 2.5 and the 5 alike at 77 px, the 10 at 112;
+    // 2.5 green, 5 blue and 10 white, at their middles where the number sits.
+    expect(
+      [2.5, 5, 10].map((size) => [plateLook(size, 'lb').height, plateLook(size, 'lb').fill]),
+    ).toEqual([
+      [77, '#337a3c'],
+      [77, '#19477f'],
+      [112, '#e8e9e4'],
+    ]);
+    // The plates above it taller, up to 150 px so a heavy bar keeps the card short.
+    expect([10, 25, 35, 45].map((size) => plateLook(size, 'lb').height)).toEqual([
+      112, 128, 140, 150,
+    ]);
     for (const [units, sizes] of [
       ['lb', [45, 35, 25, 10, 5, 2.5]],
       ['kg', [25, 20, 15, 10, 5, 2.5, 1.25]],
     ] as const) {
       const looks = sizes.map((size) => plateLook(size, units));
       for (let at = 1; at < looks.length; at += 1) {
-        expect(looks[at]!.height, `${units} ${sizes[at]}`).toBeLessThan(looks[at - 1]!.height);
+        // A lighter plate is never the taller.
+        expect(looks[at]!.height, `${units} ${sizes[at]}`).toBeLessThanOrEqual(
+          looks[at - 1]!.height,
+        );
       }
-      expect(new Set(looks.map((look) => look.fill)).size).toBe(sizes.length);
+      expect(Math.max(...looks.map((look) => look.height))).toBe(150);
       for (const [at, look] of looks.entries()) {
         expect(contrast(look.fill, look.ink), `${units} ${sizes[at]}`).toBeGreaterThanOrEqual(4.5);
+        // Lit from the top: lighter at the top than at the middle, darker at the bottom.
+        expect(luminance(look.top), `${units} ${sizes[at]}`).toBeGreaterThan(luminance(look.fill));
+        expect(luminance(look.bottom), `${units} ${sizes[at]}`).toBeLessThan(luminance(look.fill));
       }
     }
+    // Lit from the top: the plate's colours from the top down, its middle where the number sits.
+    expect(plateFill(plateLook(2.5, 'lb'))).toBe(
+      'linear-gradient(180deg, #3f9d56 0%, #337a3c 50%, #233f30 100%)',
+    );
     // A size the app does not stock is still drawn, plain.
     expect(plateLook(55, 'lb').height).toBeGreaterThan(plateLook(2.5, 'lb').height);
   });
 
-  it('keeps a real plate’s proportions: the 45 the biggest, the 10 tall and thin, not a block', () => {
-    const [p45, p35, p25, p10] = [45, 35, 25, 10].map((size) => plateLook(size, 'lb')) as [
-      ReturnType<typeof plateLook>,
-      ReturnType<typeof plateLook>,
-      ReturnType<typeof plateLook>,
-      ReturnType<typeof plateLook>,
-    ];
-    // Diameters as iron plates have them: 45 lb 17.7 in, 10 lb 10.3 in.
-    expect(p10.height / p45.height).toBeCloseTo(10.3 / 17.7, 1);
-    expect(p10.height / p10.width).toBeGreaterThanOrEqual(2.5);
-    // Thickness steps down with the weight.
-    expect(p45.width).toBeGreaterThan(p35.width);
-    expect(p35.width).toBeGreaterThan(p25.width);
-    expect(p25.width).toBeGreaterThan(p10.width);
+  it('gives every plate the reference’s thickness, tall and thin, wider only for its number', () => {
+    for (const size of [45, 35, 25, 10, 5, 2.5]) {
+      expect(plateLook(size, 'lb').width).toBe(34);
+      // Its number as large as the reference's: 17.5 px.
+      expect(plateLook(size, 'lb').font).toBe(17.5);
+    }
+    // The smallest still stands over twice its thickness: a plate, not a block.
+    expect(plateLook(2.5, 'lb').height / plateLook(2.5, 'lb').width).toBeGreaterThan(2.2);
+    // 1.25 is a longer number: its plate is wider.
+    expect(plateLook(1.25, 'kg').width).toBeGreaterThan(34);
+    for (const size of [25, 20, 15, 10, 5, 2.5]) expect(plateLook(size, 'kg').width).toBe(34);
+  });
+
+  it('colours every plate as competition plates are, a pound plate as the kilo plate nearest it', () => {
+    // The reference's 2.5 green, 5 blue and 10 white; then 25 green, 35 yellow and 45 blue. In
+    // kilograms the 2.5 red, as competition change plates are (the review: a black one vanished
+    // into the dark bar and the panel).
+    expect([45, 35, 25, 10, 5, 2.5].map((size) => plateLook(size, 'lb').fill)).toEqual([
+      '#19477f',
+      '#d9ae22',
+      '#337a3c',
+      '#e8e9e4',
+      '#19477f',
+      '#337a3c',
+    ]);
+    expect([25, 20, 15, 10, 5, 2.5, 1.25].map((size) => plateLook(size, 'kg').fill)).toEqual([
+      '#b72b28',
+      '#19477f',
+      '#d9ae22',
+      '#337a3c',
+      '#e8e9e4',
+      '#b72b28',
+      '#a5acb5',
+    ]);
   });
 
   it('reads a side in runs and in words', () => {
@@ -105,6 +148,8 @@ describe('PlateStack', () => {
     expect(lastPlate.parentElement?.parentElement?.nextElementSibling).toHaveClass(/collar/);
     expect(plates[4]!.height).toBeGreaterThan(plates[2]!.height);
     expect(plates[4]!.fill).not.toBe(plates[2]!.fill);
+    // Each plate lit from the top, as the reference draws it.
+    expect(plates[0]!.fill).toBe(plateFill(plateLook(2.5, 'lb')));
     expect(screen.getByTestId('plate-caption')).toHaveTextContent(
       '290 lb = 45 lb bar + 122.5 lb of plates each side',
     );
@@ -170,11 +215,14 @@ describe('PlateStack', () => {
   });
 
   /**
-   * Lays the drawing out `across` pixels wide, its bar and weight 76 and its collar 8, as the
-   * browser would; returns a way to change the width, to tell the drawing (its ResizeObserver),
-   * and to put everything back.
+   * Lays the drawing out `across` pixels wide, the bar's weight `weight` wide (54 in a wide font, 40
+   * in the phone's own) and its collar 11, as the browser would; returns a way to change the width,
+   * to tell the drawing (its ResizeObserver), and to put everything back.
    */
-  function laidOut(initial: number): {
+  function laidOut(
+    initial: number,
+    weight = 54,
+  ): {
     widen: (across: number) => void;
     tell: () => void;
     restore: () => void;
@@ -195,7 +243,7 @@ describe('PlateStack', () => {
     const offset = vi
       .spyOn(HTMLElement.prototype, 'offsetWidth', 'get')
       .mockImplementation(function (this: HTMLElement) {
-        return this.dataset.part === 'shaft' ? 76 : this.dataset.part === 'collar' ? 8 : 0;
+        return this.dataset.part === 'weight' ? weight : this.dataset.part === 'collar' ? 11 : 0;
       });
     const client = vi
       .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
@@ -219,12 +267,13 @@ describe('PlateStack', () => {
   }
 
   it('groups plates that fit the designed sleeve but not the room this drawing has, from its first frame', () => {
-    // 360 px in a wide font: 276 px across, less the bar with its weight (76), the collar (8) and
-    // the sleeve's end (12), leaves 180. Seven 45s need 182: drawn once each, the collar covered
-    // one (the tenth review), and for one frame before the room was measured (its re-check).
+    // 360 px in a wide font: 276 px across, less the sleeve's end with the collar's hairlines (14),
+    // the collar (11), and the bar's weight (54) with its ends (36), leaves 161. Five 45s need 174:
+    // drawn once each, the collar covered one (the tenth review), and for one frame before the room
+    // was measured (its re-check).
     const layout = laidOut(276);
     try {
-      render(<PlateStack result={plateMath(bench, 675, 'lb')} />);
+      render(<PlateStack result={plateMath(bench, 495, 'lb')} />);
       expect(screen.getByRole('img')).toHaveAttribute('data-grouped', 'true');
     } finally {
       layout.restore();
@@ -234,9 +283,9 @@ describe('PlateStack', () => {
   it('follows the room as the drawing changes width', () => {
     const layout = laidOut(276);
     try {
-      render(<PlateStack result={plateMath(bench, 675, 'lb')} />);
+      render(<PlateStack result={plateMath(bench, 495, 'lb')} />);
       expect(screen.getByRole('img')).toHaveAttribute('data-grouped', 'true');
-      // Turned to landscape: room for all seven.
+      // Turned to landscape: room for all five.
       layout.widen(600);
       layout.tell();
       expect(screen.getByRole('img')).toHaveAttribute('data-grouped', 'false');
@@ -245,11 +294,24 @@ describe('PlateStack', () => {
     }
   });
 
+  it('draws five plates where they just fit, in the phone’s own font (the review)', () => {
+    // 275 px across, less 14, the collar (11), and the bar's weight (40) with its ends (36), leaves
+    // 174: five 45s need 174 (five plates and the four hairlines between them), so all five show.
+    const layout = laidOut(275, 40);
+    try {
+      render(<PlateStack result={plateMath(bench, 495, 'lb')} />);
+      expect(screen.getByRole('img')).toHaveAttribute('data-grouped', 'false');
+      expect(drawn()).toHaveLength(5);
+    } finally {
+      layout.restore();
+    }
+  });
+
   it('never draws a longer sleeve than the designed one, however wide the screen', () => {
-    // 600 px across leaves 504, but eight 45s (208 px) are still drawn once with their count.
+    // 600 px across leaves 485, but seven 45s (244 px) are still drawn once with their count.
     const layout = laidOut(600);
     try {
-      render(<PlateStack result={plateMath(bench, 765, 'lb')} />);
+      render(<PlateStack result={plateMath(bench, 675, 'lb')} />);
       expect(screen.getByRole('img')).toHaveAttribute('data-grouped', 'true');
     } finally {
       layout.restore();
@@ -271,16 +333,30 @@ describe('PlateStack', () => {
   });
 
   it('draws every plate while they fit on the sleeve, and groups only past that', () => {
-    // Seven 45s a side (675 lb) fit; eight do not.
-    render(<PlateStack result={plateMath(bench, 675, 'lb')} />);
+    // Six 45s a side (585 lb) fit; seven do not.
+    render(<PlateStack result={plateMath(bench, 585, 'lb')} />);
     expect(screen.getByRole('img')).toHaveAttribute('data-grouped', 'false');
-    expect(drawn()).toHaveLength(7);
-    render(<PlateStack result={plateMath(bench, 765, 'lb')} />);
+    expect(drawn()).toHaveLength(6);
+    render(<PlateStack result={plateMath(bench, 675, 'lb')} />);
     expect(screen.getAllByRole('img')[1]).toHaveAttribute('data-grouped', 'true');
   });
 });
 
 describe('PlateLine', () => {
+  it('draws the plates small, each wide enough for its number', () => {
+    // The 45 at 40 px, as tall as the small drawing's 45 was before, so the set logger keeps its
+    // height (the review); a plate a little wider than its number, as the reference's are.
+    render(<PlateLine result={plateMath(bench, 290, 'lb')} />);
+    const plates = drawn(screen.getByTestId('plate-line'));
+    expect(plates.map(({ size, height, width }) => [size, height, width])).toEqual([
+      [2.5, 21, 16],
+      [5, 21, 15],
+      [25, 34, 15],
+      [45, 40, 15],
+      [45, 40, 15],
+    ]);
+  });
+
   it('draws the same plates small under the logger, outermost first, then "each side"', () => {
     render(<PlateLine result={plateMath(bench, 290, 'lb')} />);
     const line = screen.getByTestId('plate-line');

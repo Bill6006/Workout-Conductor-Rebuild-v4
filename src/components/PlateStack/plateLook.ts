@@ -1,11 +1,13 @@
 import type { UnitSystem } from '../../core/validation/profile';
 
 /**
- * How a plate is drawn, seen edge-on on the bar (Maintenance 25, item 8): its height is its
- * diameter, its width its thickness, both in proportion to real plates (iron plates in pounds,
- * calibrated plates in kilograms), widened only where its printed weight needs the room. Each size
- * has its own colour, after the colour order competition plates use, and every number is printed
- * at 4.5:1 or more against its plate.
+ * How a plate is drawn, seen edge-on on the bar, as the owner's reference draws it (2026-11-20,
+ * measured from the picture; Maintenance 25, item 8, before it): every plate the same thickness,
+ * widened only where its printed weight needs the room; the change plates alike, 77 px, the 10 lb
+ * 112 px, and the plates above it taller, up to 150 px so a heavy bar keeps the card short. Each is
+ * lit from the top, lighter at the top and darker at the bottom, in the colours competition plates
+ * use (a plate in pounds takes the colour of the kilo plate nearest it, as the reference does: 2.5
+ * green, 5 blue, 10 white), and every number is printed at 4.5:1 or more against its plate's middle.
  */
 export interface PlateLook {
   /** Height (the plate's diameter) in the full drawing, in pixels. */
@@ -14,38 +16,47 @@ export interface PlateLook {
   width: number;
   /** Size of the weight printed on it, in pixels. */
   font: number;
+  /** The colour at the plate's middle, where its weight is printed. */
   fill: string;
+  /** The colour at its top, and at its bottom: lit from above. */
+  top: string;
+  bottom: string;
   ink: string;
 }
 
-const RED = { fill: '#c62f2c', ink: '#ffffff' };
-const BLUE = { fill: '#2556d4', ink: '#ffffff' };
-const YELLOW = { fill: '#efc22a', ink: '#1c1917' };
-const GREEN = { fill: '#2ea55a', ink: '#04210f' };
-const WHITE = { fill: '#e8ebef', ink: '#111827' };
-const CHROME = { fill: '#a5acb5', ink: '#111827' };
-const BLACK = { fill: '#3a4049', ink: '#ffffff' };
+// The reference's three, measured: top, middle and bottom of each plate.
+const GREEN = { top: '#3f9d56', fill: '#337a3c', bottom: '#233f30', ink: '#ffffff' };
+const BLUE = { top: '#2862a6', fill: '#19477f', bottom: '#16345a', ink: '#ffffff' };
+const WHITE = { top: '#fdfdfd', fill: '#e8e9e4', bottom: '#c7c8ca', ink: '#000000' };
+// The others lit the same way: about a fifth lighter at the top, two fifths darker at the bottom.
+const YELLOW = { top: '#f3ca3f', fill: '#d9ae22', bottom: '#826a17', ink: '#000000' };
+const RED = { top: '#d9433f', fill: '#b72b28', bottom: '#6e1a18', ink: '#ffffff' };
+const CHROME = { top: '#c3c8cf', fill: '#a5acb5', bottom: '#6f757d', ink: '#000000' };
 
-// Diameters scaled from 45 lb = 17.7 in (450 mm) to 88 px: 35 lb 15.3 in, 25 lb 12.7 in,
-// 10 lb 10.3 in, 5 lb 8.3 in, 2.5 lb 7 in; thicknesses from 1.5 in down to 0.6 in.
+/** The reference's plate: 34 px thick, its weight in 17.5 px bold. */
+const PLATE = { width: 34, font: 17.5 };
+
 const LOOKS: Record<UnitSystem, Record<string, PlateLook>> = {
   lb: {
-    '45': { height: 88, width: 25, font: 12, ...BLUE },
-    '35': { height: 76, width: 23, font: 12, ...YELLOW },
-    '25': { height: 63, width: 22, font: 11.5, ...GREEN },
-    '10': { height: 51, width: 19, font: 11, ...WHITE },
-    '5': { height: 41, width: 18, font: 10.5, ...RED },
-    '2.5': { height: 35, width: 20, font: 9.5, ...CHROME },
+    '45': { height: 150, ...PLATE, ...BLUE },
+    '35': { height: 140, ...PLATE, ...YELLOW },
+    '25': { height: 128, ...PLATE, ...GREEN },
+    '10': { height: 112, ...PLATE, ...WHITE },
+    '5': { height: 77, ...PLATE, ...BLUE },
+    '2.5': { height: 77, ...PLATE, ...GREEN },
   },
-  // Calibrated plates: 25 and 20 kg 450 mm, 15 kg 400, 10 kg 325, 5 kg 230, 2.5 kg 190, 1.25 kg 160.
+  // Calibrated plates by their diameters against the pound plates: 25 and 20 kg as the 45 lb
+  // (450 mm), 15 kg as the 35, 10 kg as the 25, 5 kg between the 5 and the 10, the change plates
+  // as the reference's. The 2.5 kg red, as competition change plates are: a black one vanished
+  // into the dark bar and the panel (the review).
   kg: {
-    '25': { height: 88, width: 25, font: 12, ...RED },
-    '20': { height: 86, width: 23, font: 12, ...BLUE },
-    '15': { height: 78, width: 22, font: 12, ...YELLOW },
-    '10': { height: 64, width: 20, font: 11, ...GREEN },
-    '5': { height: 46, width: 19, font: 10.5, ...WHITE },
-    '2.5': { height: 38, width: 19, font: 9, ...BLACK },
-    '1.25': { height: 32, width: 23, font: 8.5, ...CHROME },
+    '25': { height: 150, ...PLATE, ...RED },
+    '20': { height: 150, ...PLATE, ...BLUE },
+    '15': { height: 140, ...PLATE, ...YELLOW },
+    '10': { height: 128, ...PLATE, ...GREEN },
+    '5': { height: 92, ...PLATE, ...WHITE },
+    '2.5': { height: 77, ...PLATE, ...RED },
+    '1.25': { height: 77, width: 40, font: 15, ...CHROME },
   },
 };
 
@@ -55,8 +66,15 @@ function fallbackLook(size: number, units: UnitSystem): PlateLook {
     .map(Number)
     .sort((a, b) => b - a);
   const heaviest = sizes[0] ?? 45;
-  const height = Math.round(32 + (56 * Math.min(size, heaviest)) / heaviest);
-  return { height, width: 22, font: 10, ...CHROME };
+  const height = Math.round(77 + (73 * Math.min(size, heaviest)) / heaviest);
+  return String(size).length > 3
+    ? { height, width: 40, font: 15, ...CHROME }
+    : { height, ...PLATE, ...CHROME };
+}
+
+/** The plate lit from the top: its colours from the top down, its middle where the number sits. */
+export function plateFill(look: PlateLook): string {
+  return `linear-gradient(180deg, ${look.top} 0%, ${look.fill} 50%, ${look.bottom} 100%)`;
 }
 
 export function plateLook(size: number, units: UnitSystem): PlateLook {
