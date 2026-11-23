@@ -1392,6 +1392,19 @@ SUPERSEDED = {
         "than its record only where the ease took them (no check-in takes a set, and a count set by "
         "hand is read as shown), so a swap of it always says the set the ease took; the empty "
         "reason came only from a set a low check-in had taken"),
+    # The plate drawing (the owner, 2026-11-20): the plates as the owner's reference draws them.
+    "8c a heavier plate stands taller": (
+        "the owner's reference draws the change plates alike (the 2.5 and the 5 both 77 px): a "
+        "heavier plate is never the shorter, and the reference's heights are guarded by the plate "
+        "drawing's D1 to D5"),
+    "8d each plate size has its own colour": (
+        "the owner's reference colours a pound plate as the kilo plate nearest it, so the 2.5 and "
+        "the 25 share green and the 5 and the 45 blue, told apart by size and number; every plate's "
+        "colour is guarded by the plate drawing's D6 to D9"),
+    "8w a small plate is never too short for its weight": (
+        "unreachable since the plate drawing: the small drawing's shortest plate is the reference's "
+        "77 px change plate at 40/150, 21 px, above the 17 px floor, so the floor never acts (the "
+        "whole unit suite passed with it reverted); D17 guards the small drawing's heights"),
 }
 
 # Moved by this round's code: the same revert, anchored where the code now is (old, new, nth).
@@ -1952,6 +1965,17 @@ REANCHORED = {
     "39i ... its reasons": (
         "keyedLines(reasons).map(({ key, line }) => (\n            <li key={key}>",
         "keyedLines(reasons).map(({ key, line }) => (\n            <li key={line}>", None),
+    # The plate drawing (the owner, 2026-11-20): the sleeve holds six of the reference's plates, and
+    # a small plate is three tenths of its width before its label decides.
+    "8g past the sleeve's room a side is drawn once per size": (
+        "const SLEEVE_ROOM = 224;", "const SLEEVE_ROOM = 10000;", None),
+    "8v a small change plate keeps room for its weight": (
+        "  return Math.max(Math.round(look.width * 0.45), Math.ceil(text * compactFont(size) + 4));",
+        "  return Math.round(look.width * 0.45);", None),
+    # The bar's weight is measured for the room, the bar running on past it (the plate review).
+    "8p the bar's own weight is printed on the bar": (
+        "          <span className={styles.barWeight} data-part=\"weight\" data-testid=\"bar-weight\">\n            {bar} {units}\n",
+        "          <span className={styles.barWeight} data-part=\"weight\" data-testid=\"bar-weight\">\n", None),
 }
 
 table = [

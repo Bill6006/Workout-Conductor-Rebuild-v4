@@ -27,6 +27,7 @@ still pass means the rule has no test that guards it.
 | `mutate-priority-muscles.py` | The priority-muscles fix | 21 |
 | `mutate-cross-place.py` | The cross-place report's fix | 7 |
 | `mutate-final-polish.py` | The final polish: Why this workout after a swap, the learned row | 16 |
+| `mutate-plate-drawing.py` | The plate drawing, as the owner's reference draws it | 22 |
 
 The tables are data: each row is `(name, file, old, new, tests, nth)`. From M30 on, a round's table
 is written from its `table_mNN.txt`: edit the `.txt`, then run `python3 table_mNN.py`. Never write a
