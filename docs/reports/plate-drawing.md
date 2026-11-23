@@ -126,6 +126,13 @@ finds every anchor (Maintenance 26's: 1187 entries).
   45108736972 on `f87cc7b`: green.
 - Deploy Pages run 45111300899: the live marker reads `f87cc7b`. The live suite from the
   owner's machine: 431 passed + 14 skipped by design; 5 failed and the PWA projects (10) were held back by them. Two failures timed out loading the live page. The third, a coach test on all three widths, ran in the last hour of a Sunday: it seeds its sessions 7 to 28 days back in 24-hour days, and across the 1 November clock change the oldest fell on a Monday, in the same week as the next, leaving three weeks of training where the card needs four (the app read the dates rightly; a test-clock fault, outside this change). After midnight both specs passed, 27 of 27, and the PWA projects 5 passed + 5 skipped by design. The drawing on the live build: captured at 80 and 185 lb.
+- The coach test fixed after it, test only, on the owner's word of 2026-11-23 (`a04ea2e`): its
+  sessions are seeded the given number of calendar days back on the device, at the same time of
+  day, as the app reads a session's day. With the browser's clock and the seeding pinned to Sunday
+  2026-11-22 23:56 local, the old seeding failed as the live run did and the new one passed; the
+  coach spec 21 of 21 on the three widths, one worker, no retries; lint, the type check and the
+  privacy scan; CI run 45116463100: green. No app code changed, so it was not deployed: the live build
+  stays `f87cc7b`.
 
 ## Review on the phone
 
