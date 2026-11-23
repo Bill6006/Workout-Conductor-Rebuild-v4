@@ -189,14 +189,20 @@ test.describe('the plates at phone width', () => {
     await expectReferenceLook(panel);
 
     // 290: a 2.5, a 5, a 25 and two 45s a side, drawn on the panel and small under the logger. At
-    // 360 px the reference's plates (the owner, 2026-11-20) leave room for four beside the bar's
-    // weight: the two 45s are drawn once, their count beside them, and the drawing still fits.
+    // 412 px the five fit. At 360 px whether they fit beside the bar's weight turns on the font that
+    // draws "45 lb" (in Verdana they don't, in the runner's font they do): where they don't, the two
+    // 45s are drawn once with their count beside them, and either way the drawing fits.
     await setDial(page, card, 290);
-    const narrow = test.info().project.name === 'android-360';
-    await expect(panel.getByTestId('plate-stack').locator('[data-plate]')).toHaveText(
-      narrow ? ['2.5', '5', '25', '45'] : ['2.5', '5', '25', '45', '45'],
-    );
-    if (narrow) await expect(panel.getByTestId('plate-count')).toHaveText('×2');
+    const bar290 = panel.getByTestId('plate-stack').getByRole('img');
+    await expect(async () => {
+      const grouped = (await bar290.getAttribute('data-grouped')) === 'true';
+      if (test.info().project.name !== 'android-360') expect(grouped, 'five fit at 412 px').toBe(false);
+      expect(await bar290.locator('[data-plate]').allTextContents()).toEqual(
+        grouped ? ['2.5', '5', '25', '45'] : ['2.5', '5', '25', '45', '45'],
+      );
+      if (grouped) expect(await panel.getByTestId('plate-count').textContent()).toBe('×2');
+      else expect(await panel.getByTestId('plate-count').count()).toBe(0);
+    }).toPass({ timeout: 5_000 });
     await expectCollarClear(panel);
     await expectLabelsFit(card.getByTestId('logger-helper'));
     await expect(panel.getByTestId('bar-weight')).toHaveText('45 lb');
