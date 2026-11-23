@@ -7,10 +7,21 @@ import { ensureProfile, expectNoHorizontalOverflow, skipWarmupIfShown } from './
  * coach feedback on the completion surface.
  */
 
+/**
+ * The same time of day, `days` calendar days back on the device, as the app reads a session's day.
+ * Not `days` × 24 hours: across a clock change that lands an hour off, and in the last hour of a
+ * Sunday the session fell on the Monday, in the next session's week (the live run of 2026-11-22).
+ */
+function calendarDaysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString();
+}
+
 const STALLED_BENCH = Buffer.from(
   JSON.stringify({
     history: [28, 21, 14, 7].map((daysAgo) => ({
-      date: new Date(Date.now() - daysAgo * 86_400_000).toISOString(),
+      date: calendarDaysAgo(daysAgo),
       unit: 'lb',
       exercises: [
         {
